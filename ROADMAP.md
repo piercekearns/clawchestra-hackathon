@@ -19,6 +19,7 @@ Each item is a `type: deliverable` with `parent: pipeline-dashboard` and can be 
 | 3 | [Deliverable Priority View](roadmap/deliverable-priority-view.md) | — |
 | 4 | [Retrofit Projects to Schema](roadmap/retrofit-projects-to-schema.md) | — |
 | 5 | [Configurable OpenClaw Integration](roadmap/openclaw-integration-config.md) | Post-V2 |
+| 6 | [WebSocket Auto-Reconnection](roadmap/websocket-reconnection.md) | — |
 
 ## In-Flight
 
