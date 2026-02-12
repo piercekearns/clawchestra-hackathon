@@ -60,7 +60,7 @@ export function RoadmapItemRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="group flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-2 transition-colors hover:border-revival-accent-400 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:border-revival-accent-400"
+      className="group flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-2 transition-colors hover:border-revival-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:border-revival-accent-400 sm:flex-nowrap"
       role="button"
       tabIndex={0}
       onClick={() => onItemClick(item)}

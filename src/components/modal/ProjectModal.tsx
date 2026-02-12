@@ -21,6 +21,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     updateProjectStatus,
     roadmapItems,
     roadmapLoading,
+    roadmapError,
     reorderRoadmapItems,
     updateRoadmapItemStatus,
     modalView,
@@ -38,12 +39,19 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
+
+      // Escape from detail view → back to list first
+      if (modalView.kind === 'detail') {
+        backToList();
+        return;
+      }
+
       onClose();
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, modalView, backToList]);
 
   if (!open || !project) return null;
 
@@ -51,13 +59,13 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="h-[min(90vh,56rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-0 p-5 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+        className="h-[min(90vh,56rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-0 p-3 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 sm:p-5"
         onClick={(event) => event.stopPropagation()}
       >
         <ProjectModalHeader
@@ -78,6 +86,10 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
                     className="h-10 animate-pulse rounded-lg bg-neutral-200 dark:bg-neutral-700"
                   />
                 ))}
+              </div>
+            ) : roadmapError ? (
+              <div className="rounded-xl border border-status-danger/40 bg-status-danger/10 p-4 text-sm text-status-danger">
+                {roadmapError}
               </div>
             ) : modalView.kind === 'detail' && selectedItem ? (
               <RoadmapItemDetail

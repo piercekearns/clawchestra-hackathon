@@ -81,7 +81,7 @@ export function RoadmapItemDetail({
     <div>
       <button
         type="button"
-        className="mb-3 flex items-center gap-1 text-sm text-neutral-500 transition-colors hover:text-neutral-800 dark:hover:text-neutral-200"
+        className="mb-3 flex items-center gap-1 rounded text-sm text-neutral-500 transition-colors hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400 dark:hover:text-neutral-200"
         onClick={onBack}
       >
         <ArrowLeft className="h-4 w-4" />
@@ -115,7 +115,7 @@ export function RoadmapItemDetail({
                 key={tab}
                 type="button"
                 className={cn(
-                  'shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                  'shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400',
                   activeTab === tab
                     ? 'border-revival-accent-400 text-neutral-900 dark:text-neutral-100'
                     : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300',
@@ -130,11 +130,11 @@ export function RoadmapItemDetail({
           <div className="prose max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
             {docLoading && activeDocContent === undefined ? (
               <div className="flex flex-col gap-2">
-                {[1, 2, 3, 4].map((n) => (
+                {[95, 80, 88, 72].map((w, i) => (
                   <div
-                    key={n}
+                    key={i}
                     className="h-4 animate-pulse rounded bg-neutral-200 dark:bg-neutral-700"
-                    style={{ width: `${70 + Math.random() * 30}%` }}
+                    style={{ width: `${w}%` }}
                   />
                 ))}
               </div>

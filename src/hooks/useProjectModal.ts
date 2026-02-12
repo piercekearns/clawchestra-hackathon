@@ -18,6 +18,7 @@ interface UseProjectModalReturn {
   updateProjectStatus: (next: ProjectStatus) => void;
   roadmapItems: RoadmapItemWithDocs[];
   roadmapLoading: boolean;
+  roadmapError: string | null;
   reorderRoadmapItems: (items: RoadmapItemWithDocs[]) => void;
   updateRoadmapItemStatus: (itemId: string, status: RoadmapStatus) => void;
   modalView: ModalView;
@@ -38,6 +39,7 @@ export function useProjectModal(
   const [roadmapLoading, setRoadmapLoading] = useState(false);
   const [roadmapFilePath, setRoadmapFilePath] = useState<string | null>(null);
   const [roadmapNotes, setRoadmapNotes] = useState('');
+  const [roadmapError, setRoadmapError] = useState<string | null>(null);
   const [modalView, setModalView] = useState<ModalView>({ kind: 'list' });
   const [docContentCache, setDocContentCache] = useState<Record<string, string>>({});
   const [docLoading, setDocLoading] = useState(false);
@@ -60,11 +62,13 @@ export function useProjectModal(
       setRoadmapItems([]);
       setRoadmapFilePath(null);
       setRoadmapNotes('');
+      setRoadmapError(null);
       return;
     }
 
     let cancelled = false;
     setRoadmapLoading(true);
+    setRoadmapError(null);
 
     const load = async () => {
       try {
@@ -82,8 +86,13 @@ export function useProjectModal(
         } else {
           setRoadmapItems(roadmap.items.map((item) => ({ ...item, docs: {} })));
         }
-      } catch {
-        if (!cancelled) setRoadmapItems([]);
+      } catch (error) {
+        if (!cancelled) {
+          setRoadmapItems([]);
+          setRoadmapError(
+            error instanceof Error ? error.message : 'Could not load roadmap',
+          );
+        }
       } finally {
         if (!cancelled) setRoadmapLoading(false);
       }
@@ -199,6 +208,7 @@ export function useProjectModal(
     updateProjectStatus,
     roadmapItems,
     roadmapLoading,
+    roadmapError,
     reorderRoadmapItems,
     updateRoadmapItemStatus,
     modalView,
