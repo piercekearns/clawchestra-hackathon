@@ -199,7 +199,8 @@ export function AddProjectDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
                   onClick={async () => {
                     const picked = await chooseFolder(workspaceRoot || null);
                     if (picked) setWorkspaceRoot(picked);
@@ -327,7 +328,8 @@ export function AddProjectDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
                   onClick={async () => {
                     const picked = await chooseFolder(existingFolderPath || workspaceRoot || null);
                     if (picked) setExistingFolderPath(picked);
@@ -339,7 +341,8 @@ export function AddProjectDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
                   disabled={compatibilityLoading || !existingFolderPath.trim()}
                   onClick={() => {
                     void runCompatibility();

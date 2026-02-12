@@ -891,14 +891,14 @@ export default function App() {
         }}
       />
 
-      <div className="fixed right-4 top-20 z-[60] flex max-w-sm flex-col gap-2">
+      <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`rounded-lg border px-3 py-2 text-sm shadow-lg ${
+            className={`pointer-events-auto w-full max-w-md rounded-lg border px-3 py-2 text-sm shadow-lg backdrop-blur ${
               toast.kind === 'error'
-                ? 'border-status-danger/40 bg-status-danger/10 text-status-danger'
-                : 'border-status-active/40 bg-status-active/10 text-status-active'
+                ? 'border-status-danger/45 bg-status-danger/12 text-status-danger dark:bg-status-danger/18'
+                : 'border-revival-accent-400/45 bg-neutral-100/92 text-neutral-900 dark:bg-neutral-900/92 dark:text-neutral-100'
             }`}
           >
             {toast.message}
