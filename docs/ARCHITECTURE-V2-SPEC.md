@@ -923,7 +923,8 @@ ID derivation rule:
 2. **Initialize settings**
    - Create settings file with paths
    - Set `appSourcePath` to new location
-   - Add `~/clawdbot-sandbox/projects` to `workspaceRoots` (least-privilege default root)
+   - Add `~/repos` to `workspaceRoots` as default
+   - Legacy roots (for example `~/clawdbot-sandbox/projects`) are transitional and optional
    - Broader roots (for example `~/clawdbot-sandbox`) require explicit user approval in settings
 
 3. **Migrate catalog entries**

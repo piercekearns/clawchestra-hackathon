@@ -87,7 +87,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration
             <Input
               value={catalogRoot}
               onChange={(event) => setCatalogRoot(event.target.value)}
-              placeholder="~/clawdbot-sandbox/projects"
+              placeholder="~/Library/Application Support/Pipeline Dashboard/catalog"
             />
           </label>
 
@@ -97,7 +97,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration
               value={workspaceRootsText}
               onChange={(event) => setWorkspaceRootsText(event.target.value)}
               className="min-h-28 w-full rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-800 outline-none transition-colors hover:border-neutral-400 focus:border-revival-accent-400 focus:ring-2 focus:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500"
-              placeholder="~/projects&#10;~/clawdbot-sandbox/projects"
+              placeholder="~/repos"
             />
           </label>
 

@@ -188,7 +188,7 @@ Shows when project has `localPath` pointing to a local repository.
 
 ## File Location
 
-Projects live in: `/Users/piercekearns/clawdbot-sandbox/projects/`
+Projects are tracked from `catalogRoot` (default: `~/Library/Application Support/Pipeline Dashboard/catalog/projects`) and linked repos should live under `~/repos/` in repos-first mode.
 
 Each project is a markdown file with YAML frontmatter:
 ```markdown
