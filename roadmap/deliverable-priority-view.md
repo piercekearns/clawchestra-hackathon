@@ -2,7 +2,7 @@
 title: Deliverable Priority View
 status: up-next
 type: deliverable
-priority: 4
+priority: 5
 parent: pipeline-dashboard
 lastActivity: 2026-02-11
 tags: [ui, roadmap, hierarchy]

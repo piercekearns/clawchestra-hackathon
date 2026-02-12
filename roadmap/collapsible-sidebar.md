@@ -2,7 +2,7 @@
 title: Collapsible Sidebar
 status: up-next
 type: deliverable
-priority: 3
+priority: 4
 parent: pipeline-dashboard
 lastActivity: 2026-02-12
 tags: [ui, navigation]

@@ -1,7 +1,7 @@
 ---
 title: Retrofit Existing Projects to Schema
 status: up-next
-priority: 5
+priority: 3
 type: deliverable
 parent: pipeline-dashboard
 tags:
