@@ -1,6 +1,6 @@
 # Architecture V2 — Specification
 
-**Status:** Draft  
+**Status:** MVP shipped (Phases 1-5); V2.1 hardening pending  
 **Created:** 2026-02-11  
 **Last Updated:** 2026-02-12 (rev N+1)
 
@@ -16,6 +16,13 @@ Decouple the Pipeline Dashboard from `clawdbot-sandbox` so it can:
 
 Non-goal for this document: app rename and brand changes. Keep rename as a separate follow-up RFC after V2 migration ships.
 
+## Delivery Snapshot (2026-02-12)
+
+- MVP scope (settings foundation, catalog separation, Create New, Add Existing, migration cutover) is shipped.
+- Runtime paths are settings-backed with repos-first operation.
+- V2.1 hardening (interprocess locks/CAS/conflict handling and expanded hardening tests) is intentionally deferred.
+- Authoritative roadmap state is tracked in `roadmap/architecture-v2.md` and `roadmap/architecture-v2-1-hardening.md`.
+
 ---
 
 ## 1. The Four-Path Model
@@ -25,7 +32,7 @@ Non-goal for this document: app rename and brand changes. Keep rename as a separ
 | Setting | Purpose | Example |
 |---------|---------|---------|
 | `catalogRoot` | Where project catalog entries (markdown records) live | `~/Library/Application Support/Pipeline Dashboard/catalog` |
-| `workspaceRoots[]` | Allowed locations for creating/selecting project folders | `["~/projects", "~/clawdbot-sandbox/projects"]` |
+| `workspaceRoots[]` | Allowed locations for creating/selecting project folders | `["~/repos"]` |
 | `openclawWorkspacePath` | OpenClaw's operating context (for chat commands, optional) | `~/clawdbot-sandbox` |
 | `appSourcePath` | Where Pipeline Dashboard source lives (for source-based self-update) | `~/repos/pipeline-dashboard` |
 
@@ -1052,6 +1059,10 @@ Track rename decisions in a separate RFC after V2 migration ships.
 ## 9. Implementation Phases
 
 ### Rebased Execution Plan (2026-02-12)
+
+Note:
+- This checklist is a planning artifact and not the canonical shipped-state tracker.
+- Canonical delivery status lives in `roadmap/architecture-v2.md` and `roadmap/architecture-v2-1-hardening.md`.
 
 1. Implement settings foundation with canonical path persistence and trusted-operation model (`catalog-mutate` included).
 2. Build `CatalogMutationCoordinator` MVP path with trusted-path assertions on all linked repo writes.

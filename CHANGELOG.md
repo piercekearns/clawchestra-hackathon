@@ -10,6 +10,13 @@ Completed features and fixes, most recent first.
 
 ## 2026-02-12
 
+### Architecture V2 (MVP) ✅
+- Shipped settings-backed four-path model (`catalogRoot`, `workspaceRoots`, `openclawWorkspacePath`, `appSourcePath`)
+- Shipped Project Wizard flows for Create New and Add Existing with compatibility and retrofit logic
+- Shipped V2 migration runner and cutover hooks; removed hardcoded app/repo path assumptions
+- Finalized local cutover state to repos-first (`/Users/piercekearns/repos`) and retired legacy sandbox app copy
+- Split deferred hardening into follow-up deliverable: `Architecture V2.1 Hardening`
+
 ### Chat UX Overhaul (MVP) ✅
 - Fixed message truncation (final content no longer cut off)
 - Activity indicator stays visible throughout entire response cycle

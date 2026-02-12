@@ -27,6 +27,6 @@ Currently the gateway connection is hardcoded — the app isn't decoupled from P
 
 ## Notes
 
-- Blocked by Architecture V2 (clean up connection logic first)
+- Architecture V2 (MVP) shipped; this item is now unblocked.
 - Consider: should this be in Settings dialog or a dedicated "Connect" flow?
 - May need docs/guide for "how to connect your OpenClaw"

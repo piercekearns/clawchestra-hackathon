@@ -17,4 +17,4 @@ pnpm tauri:dev
 ## Environment variables
 
 - `VITE_GATEWAY_URL` (optional): defaults to `http://localhost:18789`
-- `PIPELINE_PROJECTS_DIR` (optional, Rust side): defaults to `/Users/piercekearns/clawdbot-sandbox/projects`
+- `PIPELINE_PROJECTS_DIR` (optional, Rust side): overrides catalog entries directory resolution when set. Default behavior uses Dashboard settings (`catalogRoot`, then `catalogRoot/projects` when present).

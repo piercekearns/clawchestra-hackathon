@@ -19,12 +19,13 @@ Each item is a `type: deliverable` with `parent: pipeline-dashboard` and can be 
 | 3 | [Deliverable Priority View](roadmap/deliverable-priority-view.md) | — |
 | 4 | [Retrofit Projects to Schema](roadmap/retrofit-projects-to-schema.md) | — |
 | 5 | [Configurable OpenClaw Integration](roadmap/openclaw-integration-config.md) | Post-V2 |
+| 6 | [Architecture V2.1 Hardening](roadmap/architecture-v2-1-hardening.md) | [SPEC](docs/ARCHITECTURE-V2-SPEC.md) |
 
 ## In-Flight
 
 | Priority | Item | Spec |
 |----------|------|------|
-| 1 | [Architecture V2](roadmap/architecture-v2.md) | [SPEC](docs/ARCHITECTURE-V2-SPEC.md) |
+| — | — | — |
 
 ## Shipped (2026-02-12)
 
@@ -35,6 +36,7 @@ Each item is a `type: deliverable` with `parent: pipeline-dashboard` and can be 
 | [Chat UX Overhaul (MVP)](roadmap/chat-ux-overhaul.md) | [PLAN](docs/plans/2026-02-12-feat-chat-ux-overhaul-plan.md) |
 | [Chat Drawer UI](roadmap/chat-drawer-ui.md) | [SPEC](docs/CHAT-DRAWER-SPEC.md) |
 | [Improve Markdown Rendering](roadmap/improve-markdown-rendering.md) | — |
+| [Architecture V2 (MVP)](roadmap/architecture-v2.md) | [SPEC](docs/ARCHITECTURE-V2-SPEC.md) |
 
 ---
 

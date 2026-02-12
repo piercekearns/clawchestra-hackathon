@@ -1,9 +1,10 @@
 ---
 title: Architecture V2
-status: in-flight
+status: shipped
 priority: 7
 type: deliverable
 parent: pipeline-dashboard
+lastActivity: 2026-02-12
 tags:
   - architecture
   - settings
@@ -11,63 +12,38 @@ tags:
 specDoc: docs/ARCHITECTURE-V2-SPEC.md
 ---
 
-# Architecture V2
+# Architecture V2 (MVP)
 
-Decouple Pipeline Dashboard from `clawdbot-sandbox` so it can live as a standalone app while still tracking projects across multiple workspaces and integrating with OpenClaw.
+Decouple Pipeline Dashboard from `clawdbot-sandbox` so it can run as a standalone app while tracking projects across configured workspaces.
 
 ## Delivery Status (2026-02-12)
 
-Current implementation state against the full spec:
+This deliverable is complete for MVP scope (Phases 1-5):
 
-- [x] **Phase 1 complete**: settings foundation shipped (settings file + Rust read/write + Settings UI + settings-backed paths)
-- [x] **Phase 2 complete**: catalog-root separation with legacy compatibility + id/file invariants
-- [x] **Phase 3 complete**: Create New wizard flow (folder picker, bootstrap, git init support, uniqueness checks)
-- [x] **Phase 4 complete**: Add Existing wizard flow (compatibility check, retrofit actions, dirty-repo guard)
-- [x] **Phase 5 complete**: migration runner + hardcoded-path removal + settings-based cutover hooks (physical app move remains operator-executed)
-- [ ] **Phase 6 pending**: V2.1 hardening scope
+- [x] **Phase 1**: settings foundation (Rust read/write, settings UI, settings-backed paths)
+- [x] **Phase 2**: catalog-root separation with legacy compatibility
+- [x] **Phase 3**: Create New wizard (folder picker, bootstrap, git init, uniqueness checks)
+- [x] **Phase 4**: Add Existing wizard (compatibility check, retrofit actions, dirty-repo guard)
+- [x] **Phase 5**: migration runner, hardcoded-path removal, settings-based cutover hooks
 
-What you should see now:
+Finalized operator cutover state:
+- `appSourcePath` points to `/Users/piercekearns/repos/pipeline-dashboard`
+- `workspaceRoots` is repos-only (`/Users/piercekearns/repos`)
+- legacy sandbox app copy retired from `clawdbot-sandbox/projects`
+
+## What Is Deferred
+
+Hardening work is tracked as a separate deliverable:
+- [Architecture V2.1 Hardening](./architecture-v2-1-hardening.md)
+
+This includes interprocess locking/CAS, conflict retries, and broader migration hardening tests.
+
+## User-Visible Outcomes
+
 - Header settings control (gear icon)
 - Dashboard Settings modal with path/config fields
-- Project Wizard (`Create New` and `Add Existing`) from the Add Project button
+- Project Wizard (`Create New` and `Add Existing`) from Add Project
 - V2 migration runner inside Dashboard Settings
-
-What you should not expect yet:
-- Full V2.1 interprocess hardening (locks/CAS/conflict retries)
-
-## Key Components
-
-### Four-Path Model
-- `catalogRoot` — Where project catalog entries live
-- `workspaceRoots[]` — Allowed locations for project folders
-- `openclawWorkspacePath` — OpenClaw operating context
-- `appSourcePath` — App source location (for self-update)
-
-### Settings System
-- Settings file at `~/Library/Application Support/Pipeline Dashboard/settings.json` (macOS)
-- In-app Settings panel (gear icon in header)
-- Editable path/config fields
-
-### Enhanced Project Flows
-- **Create New:** Folder picker, git init, full bootstrap
-- **Add Existing:** Compatibility checker, retrofit UI
-
-### Migration
-- Move app to standalone repo
-- Migrate catalog entries
-- Remove hardcoded paths
-
-### App Rename
-- Rename to "Pipeline" (drop "Dashboard")
-
-## Implementation Phases
-
-1. Settings System (read/write config, basic UI)
-2. Catalog Separation (use catalogRoot)
-3. Create New Flow (folder picker, git init, validation)
-4. Add Existing Flow (compatibility checker, retrofit)
-5. Migration (move app, update paths)
-6. Rename (update all references)
 
 ## Spec
 
