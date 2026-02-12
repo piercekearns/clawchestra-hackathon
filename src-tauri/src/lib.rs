@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -250,6 +251,132 @@ fn settings_file_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
+const MUTATION_LOCK_TIMEOUT_MS: u64 = 5_000;
+const MUTATION_LOCK_STALE_SECS: u64 = 300;
+
+fn app_support_dir() -> Result<PathBuf, String> {
+    let settings_path = settings_file_path()?;
+    settings_path
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Could not find app data directory".to_string())
+}
+
+fn hardening_log_path() -> Result<PathBuf, String> {
+    let logs_dir = app_support_dir()?.join("logs");
+    fs::create_dir_all(&logs_dir).map_err(|error| error.to_string())?;
+    Ok(logs_dir.join("hardening.log"))
+}
+
+fn append_hardening_log(event: &str, details: &str) {
+    let Ok(path) = hardening_log_path() else {
+        return;
+    };
+    let timestamp = unix_timestamp_secs();
+    let line = format!("[{}] {} {}\n", timestamp, event, details);
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
+#[derive(Debug)]
+struct MutationLockGuard {
+    path: PathBuf,
+}
+
+impl Drop for MutationLockGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn acquire_mutation_lock_at(
+    lock_path: &Path,
+    timeout: Duration,
+    stale_after: Duration,
+) -> Result<MutationLockGuard, String> {
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    let start = Instant::now();
+    loop {
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(lock_path)
+        {
+            Ok(mut file) => {
+                let _ = writeln!(
+                    file,
+                    "pid={} at={}",
+                    std::process::id(),
+                    unix_timestamp_secs()
+                );
+                return Ok(MutationLockGuard {
+                    path: lock_path.to_path_buf(),
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let stale = fs::metadata(lock_path)
+                    .and_then(|meta| meta.modified())
+                    .ok()
+                    .and_then(|modified| modified.elapsed().ok())
+                    .is_some_and(|elapsed| elapsed >= stale_after);
+
+                if stale {
+                    let _ = fs::remove_file(lock_path);
+                    append_hardening_log(
+                        "stale_mutation_lock_removed",
+                        &format!("lock_path={}", lock_path.to_string_lossy()),
+                    );
+                    continue;
+                }
+
+                if start.elapsed() >= timeout {
+                    return Err(
+                        "mutationLocked: another write operation is in progress. retry shortly"
+                            .to_string(),
+                    );
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Failed to acquire mutation lock at `{}`: {}",
+                    lock_path.to_string_lossy(),
+                    error
+                ));
+            }
+        }
+    }
+}
+
+fn acquire_mutation_lock() -> Result<MutationLockGuard, String> {
+    let lock_path = app_support_dir()?.join("catalog-mutation.lock");
+    acquire_mutation_lock_at(
+        &lock_path,
+        Duration::from_millis(MUTATION_LOCK_TIMEOUT_MS),
+        Duration::from_secs(MUTATION_LOCK_STALE_SECS),
+    )
+}
+
+fn with_mutation_lock<T>(
+    operation: &str,
+    action: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let _guard = acquire_mutation_lock()?;
+    let result = action();
+    if let Err(error) = &result {
+        append_hardening_log(
+            "mutation_failed",
+            &format!("operation={} error={}", operation, error),
+        );
+    }
+    result
+}
+
 fn normalize_lexical_path(path: &Path) -> PathBuf {
     use std::path::Component;
 
@@ -291,7 +418,13 @@ fn normalize_path(path: &str) -> Result<String, String> {
     };
 
     let normalized = if absolute.exists() {
-        fs::canonicalize(&absolute).map_err(|error| error.to_string())?
+        fs::canonicalize(&absolute).map_err(|error| {
+            append_hardening_log(
+                "path_normalization_failed",
+                &format!("path={} error={}", absolute.to_string_lossy(), error),
+            );
+            error.to_string()
+        })?
     } else {
         normalize_lexical_path(&absolute)
     };
@@ -485,9 +618,11 @@ fn get_dashboard_settings() -> Result<DashboardSettings, String> {
 
 #[tauri::command]
 fn update_dashboard_settings(settings: DashboardSettings) -> Result<DashboardSettings, String> {
-    let sanitized = sanitize_settings(settings)?;
-    write_dashboard_settings_file(&sanitized)?;
-    Ok(sanitized)
+    with_mutation_lock("update_dashboard_settings", || {
+        let sanitized = sanitize_settings(settings)?;
+        write_dashboard_settings_file(&sanitized)?;
+        Ok(sanitized)
+    })
 }
 
 #[tauri::command]
@@ -508,11 +643,13 @@ fn read_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
-    if let Some(parent) = Path::new(&path).parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
+    with_mutation_lock("write_file", || {
+        if let Some(parent) = Path::new(&path).parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
 
-    fs::write(&path, content).map_err(|error| error.to_string())
+        fs::write(&path, content).map_err(|error| error.to_string())
+    })
 }
 
 #[tauri::command]
@@ -577,19 +714,23 @@ fn collect_markdown_files_recursive(
 
 #[tauri::command]
 fn delete_file(path: String) -> Result<(), String> {
-    fs::remove_file(path).map_err(|error| error.to_string())
+    with_mutation_lock("delete_file", || {
+        fs::remove_file(path).map_err(|error| error.to_string())
+    })
 }
 
 #[tauri::command]
 fn remove_path(path: String) -> Result<(), String> {
-    let expanded = expand_tilde(&path)?;
-    if expanded.is_file() {
-        fs::remove_file(expanded).map_err(|error| error.to_string())
-    } else if expanded.is_dir() {
-        fs::remove_dir_all(expanded).map_err(|error| error.to_string())
-    } else {
-        Ok(())
-    }
+    with_mutation_lock("remove_path", || {
+        let expanded = expand_tilde(&path)?;
+        if expanded.is_file() {
+            fs::remove_file(expanded).map_err(|error| error.to_string())
+        } else if expanded.is_dir() {
+            fs::remove_dir_all(expanded).map_err(|error| error.to_string())
+        } else {
+            Ok(())
+        }
+    })
 }
 
 #[tauri::command]
@@ -598,7 +739,13 @@ fn resolve_path(path: String) -> Result<String, String> {
 
     fs::canonicalize(expanded)
         .map(|resolved| resolved.to_string_lossy().to_string())
-        .map_err(|error| error.to_string())
+        .map_err(|error| {
+            append_hardening_log(
+                "path_resolution_failed",
+                &format!("path={} error={}", path, error),
+            );
+            error.to_string()
+        })
 }
 
 #[tauri::command]
@@ -609,8 +756,10 @@ fn path_exists(path: String) -> Result<bool, String> {
 
 #[tauri::command]
 fn create_directory(path: String) -> Result<(), String> {
-    let expanded = expand_tilde(&path)?;
-    fs::create_dir_all(expanded).map_err(|error| error.to_string())
+    with_mutation_lock("create_directory", || {
+        let expanded = expand_tilde(&path)?;
+        fs::create_dir_all(expanded).map_err(|error| error.to_string())
+    })
 }
 
 #[tauri::command]
@@ -1572,7 +1721,11 @@ fn ensure_git_repository_with_head(path: &Path, warnings: &mut Vec<String>) -> R
     run_git(&repo, &["add", "-A"])?;
     if let Err(error) = run_git(
         &repo,
-        &["commit", "-m", "chore: bootstrap standalone pipeline-dashboard repo"],
+        &[
+            "commit",
+            "-m",
+            "chore: bootstrap standalone pipeline-dashboard repo",
+        ],
     ) {
         warnings.push(format!(
             "Failed to create initial commit in `{}`: {}",
@@ -1589,8 +1742,12 @@ fn looks_like_catalog_entry(path: &Path) -> bool {
     if !raw.trim_start().starts_with("---") {
         return false;
     }
-    let has_title = raw.lines().any(|line| line.trim_start().starts_with("title:"));
-    let has_status = raw.lines().any(|line| line.trim_start().starts_with("status:"));
+    let has_title = raw
+        .lines()
+        .any(|line| line.trim_start().starts_with("title:"));
+    let has_status = raw
+        .lines()
+        .any(|line| line.trim_start().starts_with("status:"));
     let has_local_path = raw
         .lines()
         .any(|line| line.trim_start().starts_with("localPath:"));
@@ -1673,6 +1830,7 @@ fn migrate_catalog_entries(
 
 #[tauri::command]
 fn run_architecture_v2_migration() -> Result<MigrationReport, String> {
+    let _mutation_lock = acquire_mutation_lock()?;
     let mut settings = load_dashboard_settings()?;
     let original_settings = settings.clone();
     let home = env::var("HOME")
@@ -1716,8 +1874,9 @@ fn run_architecture_v2_migration() -> Result<MigrationReport, String> {
         let target_catalog_root = PathBuf::from(default_catalog_root());
         let target_entries_dir = resolve_entries_dir_from_catalog_root(&target_catalog_root, true)?;
 
-        let source_entries_dir = resolve_entries_dir_from_catalog_root(&previous_catalog_root, false)
-            .unwrap_or_else(|_| previous_catalog_root.clone());
+        let source_entries_dir =
+            resolve_entries_dir_from_catalog_root(&previous_catalog_root, false)
+                .unwrap_or_else(|_| previous_catalog_root.clone());
         let source_is_legacy = source_entries_dir == previous_catalog_root;
 
         if source_entries_dir.exists() && source_entries_dir != target_entries_dir {
@@ -2102,16 +2261,16 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
 // Chat Persistence (SQLite)
 // =============================================================================
 
-use rusqlite::{Connection, params};
-use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use rusqlite::{params, Connection};
+use std::sync::Mutex;
 
 // Global database connection (thread-safe)
 static CHAT_DB: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| Mutex::new(None));
 
 fn get_chat_db_path() -> Result<PathBuf, String> {
-    let data_dir = dirs::data_dir()
-        .ok_or_else(|| "Could not find app data directory".to_string())?;
+    let data_dir =
+        dirs::data_dir().ok_or_else(|| "Could not find app data directory".to_string())?;
     let app_dir = data_dir.join("pipeline-dashboard");
     fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
     Ok(app_dir.join("chat.db"))
@@ -2120,10 +2279,11 @@ fn get_chat_db_path() -> Result<PathBuf, String> {
 fn init_chat_db() -> Result<Connection, String> {
     let db_path = get_chat_db_path()?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     // Enable WAL mode for better concurrent read performance
-    conn.execute_batch("PRAGMA journal_mode=WAL;").map_err(|e| e.to_string())?;
-    
+    conn.execute_batch("PRAGMA journal_mode=WAL;")
+        .map_err(|e| e.to_string())?;
+
     // Create messages table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS messages (
@@ -2135,14 +2295,16 @@ fn init_chat_db() -> Result<Connection, String> {
             created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
         )",
         [],
-    ).map_err(|e| e.to_string())?;
-    
+    )
+    .map_err(|e| e.to_string())?;
+
     // Create index for timestamp queries
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)",
         [],
-    ).map_err(|e| e.to_string())?;
-    
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(conn)
 }
 
@@ -2173,58 +2335,64 @@ fn chat_messages_load(
     let limit = limit.unwrap_or(50);
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
-    
+
     let mut messages: Vec<ChatMessage> = Vec::new();
-    
+
     let mut stmt = match before_timestamp {
         Some(ts) => {
             // Use <= to avoid skipping messages with same timestamp
             // ORDER BY timestamp DESC, id DESC ensures consistent ordering
-            let mut stmt = conn.prepare(
-                "SELECT id, role, content, timestamp, metadata FROM messages 
-                 WHERE timestamp <= ?1 ORDER BY timestamp DESC, id DESC LIMIT ?2"
-            ).map_err(|e| e.to_string())?;
-            
-            let rows = stmt.query_map(params![ts, limit], |row| {
-                Ok(ChatMessage {
-                    id: row.get(0)?,
-                    role: row.get(1)?,
-                    content: row.get(2)?,
-                    timestamp: row.get(3)?,
-                    metadata: row.get(4)?,
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, role, content, timestamp, metadata FROM messages 
+                 WHERE timestamp <= ?1 ORDER BY timestamp DESC, id DESC LIMIT ?2",
+                )
+                .map_err(|e| e.to_string())?;
+
+            let rows = stmt
+                .query_map(params![ts, limit], |row| {
+                    Ok(ChatMessage {
+                        id: row.get(0)?,
+                        role: row.get(1)?,
+                        content: row.get(2)?,
+                        timestamp: row.get(3)?,
+                        metadata: row.get(4)?,
+                    })
                 })
-            }).map_err(|e| e.to_string())?;
-            
+                .map_err(|e| e.to_string())?;
+
             for row in rows {
                 messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
             }
             return Ok(messages.into_iter().rev().collect());
-        },
-        None => {
-            conn.prepare(
-                "SELECT id, role, content, timestamp, metadata FROM messages 
-                 ORDER BY timestamp DESC LIMIT ?1"
-            ).map_err(|e| e.to_string())?
         }
+        None => conn
+            .prepare(
+                "SELECT id, role, content, timestamp, metadata FROM messages 
+                 ORDER BY timestamp DESC LIMIT ?1",
+            )
+            .map_err(|e| e.to_string())?,
     };
-    
-    let rows = stmt.query_map(params![limit], |row| {
-        Ok(ChatMessage {
-            id: row.get(0)?,
-            role: row.get(1)?,
-            content: row.get(2)?,
-            timestamp: row.get(3)?,
-            metadata: row.get(4)?,
+
+    let rows = stmt
+        .query_map(params![limit], |row| {
+            Ok(ChatMessage {
+                id: row.get(0)?,
+                role: row.get(1)?,
+                content: row.get(2)?,
+                timestamp: row.get(3)?,
+                metadata: row.get(4)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
-    
+        .map_err(|e| e.to_string())?;
+
     for row in rows {
         messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
     }
-    
+
     // Reverse to get chronological order (oldest first)
     messages.reverse();
-    
+
     Ok(messages)
 }
 
@@ -2232,7 +2400,7 @@ fn chat_messages_load(
 fn chat_message_save(message: ChatMessage) -> Result<(), String> {
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
-    
+
     conn.execute(
         "INSERT OR REPLACE INTO messages (id, role, content, timestamp, metadata)
          VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -2243,8 +2411,9 @@ fn chat_message_save(message: ChatMessage) -> Result<(), String> {
             message.timestamp,
             message.metadata,
         ],
-    ).map_err(|e| e.to_string())?;
-    
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -2252,9 +2421,10 @@ fn chat_message_save(message: ChatMessage) -> Result<(), String> {
 fn chat_messages_clear() -> Result<(), String> {
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
-    
-    conn.execute("DELETE FROM messages", []).map_err(|e| e.to_string())?;
-    
+
+    conn.execute("DELETE FROM messages", [])
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -2262,11 +2432,11 @@ fn chat_messages_clear() -> Result<(), String> {
 fn chat_messages_count() -> Result<i64, String> {
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
-    
+
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    
+
     Ok(count)
 }
 
@@ -2309,4 +2479,116 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod hardening_tests {
+    use super::*;
+
+    fn test_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "pipeline-dashboard-{}-{}",
+            name,
+            uuid::Uuid::new_v4()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn mutation_lock_times_out_when_contended() {
+        let dir = test_dir("lock-timeout");
+        let lock_path = dir.join("catalog-mutation.lock");
+
+        let guard = acquire_mutation_lock_at(
+            &lock_path,
+            Duration::from_millis(50),
+            Duration::from_secs(60),
+        )
+        .expect("first lock should succeed");
+
+        let err = acquire_mutation_lock_at(
+            &lock_path,
+            Duration::from_millis(80),
+            Duration::from_secs(60),
+        )
+        .expect_err("second lock should time out");
+        assert!(err.contains("mutationLocked"));
+
+        drop(guard);
+        acquire_mutation_lock_at(
+            &lock_path,
+            Duration::from_millis(50),
+            Duration::from_secs(60),
+        )
+        .expect("lock should be reacquired after release");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stale_mutation_lock_is_recovered() {
+        let dir = test_dir("lock-stale");
+        let lock_path = dir.join("catalog-mutation.lock");
+        fs::write(&lock_path, "stale-lock").expect("write stale lock");
+
+        acquire_mutation_lock_at(
+            &lock_path,
+            Duration::from_millis(100),
+            Duration::from_secs(0),
+        )
+        .expect("stale lock should be removed and replaced");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn migration_smoke_copies_valid_catalog_entries() {
+        let source = test_dir("migration-source");
+        let target = test_dir("migration-target");
+        let source_entries = source.join("projects");
+        let target_entries = target.join("projects");
+
+        fs::create_dir_all(source_entries.join("nested")).expect("create source dirs");
+        fs::create_dir_all(&target_entries).expect("create target dirs");
+
+        fs::write(
+            source_entries.join("valid.md"),
+            "---\ntitle: Valid\nstatus: up-next\ntype: project\n---\n",
+        )
+        .expect("write valid entry");
+        fs::write(
+            source_entries.join("nested").join("also-valid.md"),
+            "---\ntitle: Another\ntrackingMode: linked\nlocalPath: /tmp/x\ntype: project\n---\n",
+        )
+        .expect("write nested valid entry");
+        fs::write(source_entries.join("invalid.md"), "# Not a catalog entry\n")
+            .expect("write invalid entry");
+
+        let mut moved_entries = Vec::new();
+        let mut skipped_entries = Vec::new();
+        let mut warnings = Vec::new();
+
+        migrate_catalog_entries(
+            &source_entries,
+            false,
+            &target_entries,
+            &mut moved_entries,
+            &mut skipped_entries,
+            &mut warnings,
+        )
+        .expect("migration should succeed");
+
+        assert!(moved_entries.contains(&"valid.md".to_string()));
+        assert!(moved_entries.contains(&"nested/also-valid.md".to_string()));
+        assert!(!moved_entries.contains(&"invalid.md".to_string()));
+        assert!(target_entries.join("valid.md").exists());
+        assert!(target_entries.join("nested").join("also-valid.md").exists());
+        assert!(!target_entries.join("invalid.md").exists());
+        assert!(skipped_entries.is_empty());
+        assert!(warnings.is_empty());
+
+        let _ = fs::remove_dir_all(source);
+        let _ = fs::remove_dir_all(target);
+    }
 }

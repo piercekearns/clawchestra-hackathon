@@ -1,6 +1,6 @@
 # Architecture V2 — Specification
 
-**Status:** MVP shipped (Phases 1-5); V2.1 hardening pending  
+**Status:** MVP shipped (Phases 1-5); V2.1 hardening shipped with non-critical follow-ups  
 **Created:** 2026-02-11  
 **Last Updated:** 2026-02-12 (rev N+1)
 
@@ -20,7 +20,7 @@ Non-goal for this document: app rename and brand changes. Keep rename as a separ
 
 - MVP scope (settings foundation, catalog separation, Create New, Add Existing, migration cutover) is shipped.
 - Runtime paths are settings-backed with repos-first operation.
-- V2.1 hardening (interprocess locks/CAS/conflict handling and expanded hardening tests) is intentionally deferred.
+- V2.1 hardening baseline (mutation locks, retries, rollback/migration tests, path-failure telemetry) is shipped; advanced CAS/recovery-gate items remain as non-critical follow-ups.
 - Authoritative roadmap state is tracked in `roadmap/architecture-v2.md` and `roadmap/architecture-v2-1-hardening.md`.
 
 ---

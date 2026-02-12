@@ -10,6 +10,12 @@ Completed features and fixes, most recent first.
 
 ## 2026-02-12
 
+### Architecture V2.1 Hardening ✅
+- Added mutation locking around catalog/filesystem write commands in Tauri runtime
+- Added lock-contention retry handling in Create New/Add Existing project flows
+- Added rollback-focused tests for create/add-existing late failures and migration smoke coverage
+- Added hardening telemetry for path normalization/resolution failures
+
 ### Architecture V2 (MVP) ✅
 - Shipped settings-backed four-path model (`catalogRoot`, `workspaceRoots`, `openclawWorkspacePath`, `appSourcePath`)
 - Shipped Project Wizard flows for Create New and Add Existing with compatibility and retrofit logic

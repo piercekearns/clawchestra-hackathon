@@ -19,6 +19,31 @@ import type { ProjectStatus, ProjectViewModel, RepoStatus } from './schema';
 import { validateRepoStatus } from './schema';
 
 const RESERVED_IDS = new Set(['index', 'projects', 'templates', 'con', 'prn', 'aux', 'nul']);
+const MUTATION_LOCK_ERROR_PREFIX = 'mutationLocked:';
+const MAX_MUTATION_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 75;
+
+function isMutationLockedError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(MUTATION_LOCK_ERROR_PREFIX);
+}
+
+async function withMutationRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  while (attempt < MAX_MUTATION_RETRIES) {
+    try {
+      return await operation();
+    } catch (error) {
+      attempt += 1;
+      if (!isMutationLockedError(error) || attempt >= MAX_MUTATION_RETRIES) {
+        throw error;
+      }
+      const backoff = RETRY_BASE_DELAY_MS * attempt;
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+
+  throw new Error('Mutation retry loop exited unexpectedly');
+}
 
 export function canonicalSlugify(input: string): string {
   const normalized = input
@@ -49,6 +74,12 @@ export function titleFromFolderName(folderName: string): string {
 
 function normalizePathForComparison(path: string): string {
   return path.replace(/\/+$/g, '');
+}
+
+function compactFrontmatter(frontmatter: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(frontmatter).filter(([, value]) => value !== undefined),
+  );
 }
 
 function ensureInsideWorkspace(path: string, workspaceRoots: string[]): { inside: boolean; root?: string } {
@@ -336,19 +367,21 @@ async function writeCatalogLinkedEntry(args: {
   status: ProjectStatus;
   priority?: number;
 }): Promise<string> {
-  await createProject(
-    args.id,
-    {
-      id: args.id,
-      title: args.title,
-      type: 'project',
-      trackingMode: 'linked',
-      localPath: args.localPath,
-      priority: args.priority,
-      cachedStatus: args.status,
-      cacheUpdatedAt: new Date().toISOString(),
-    },
-    '',
+  await withMutationRetry(() =>
+    createProject(
+      args.id,
+      {
+        id: args.id,
+        title: args.title,
+        type: 'project',
+        trackingMode: 'linked',
+        localPath: args.localPath,
+        priority: args.priority,
+        cachedStatus: args.status,
+        cacheUpdatedAt: new Date().toISOString(),
+      },
+      '',
+    ),
   );
   const projectsDir = await getProjectsDir();
   return `${projectsDir}/${args.id}.md`;
@@ -386,32 +419,37 @@ export async function createNewProjectFlow(
   let folderCreated = false;
 
   try {
-    await createDirectory(localPath);
+    await withMutationRetry(() => createDirectory(localPath));
     folderCreated = true;
 
-    const projectMarkdown = matter.stringify(projectBodyTemplate(title), {
-      title,
-      status: input.status,
-      type: 'project',
-      priority: input.priority,
-      lastActivity: new Date().toISOString().split('T')[0],
-      nextAction: 'Define first implementation milestone',
-    });
-    await writeFile(`${localPath}/PROJECT.md`, projectMarkdown);
+    const projectMarkdown = matter.stringify(
+      projectBodyTemplate(title),
+      compactFrontmatter({
+        title,
+        status: input.status,
+        type: 'project',
+        priority: input.priority,
+        lastActivity: new Date().toISOString().split('T')[0],
+        nextAction: 'Define first implementation milestone',
+      }),
+    );
+    await withMutationRetry(() => writeFile(`${localPath}/PROJECT.md`, projectMarkdown));
     createdFiles.push('PROJECT.md');
 
     if (input.createRoadmap) {
-      await writeFile(`${localPath}/ROADMAP.md`, roadmapTemplate(title));
+      await withMutationRetry(() => writeFile(`${localPath}/ROADMAP.md`, roadmapTemplate(title)));
       createdFiles.push('ROADMAP.md');
     }
     if (input.createAgents) {
-      await writeFile(`${localPath}/AGENTS.md`, agentsTemplate(title));
+      await withMutationRetry(() => writeFile(`${localPath}/AGENTS.md`, agentsTemplate(title)));
       createdFiles.push('AGENTS.md');
     }
 
-    await writeFile(
-      `${localPath}/.gitignore`,
-      `node_modules\n.DS_Store\ndist\n.target\n`,
+    await withMutationRetry(() =>
+      writeFile(
+        `${localPath}/.gitignore`,
+        `node_modules\n.DS_Store\ndist\n.target\n`,
+      ),
     );
     createdFiles.push('.gitignore');
 
@@ -430,13 +468,14 @@ export async function createNewProjectFlow(
     return { id, localPath };
   } catch (error) {
     if (catalogFilePath) {
-      await removeProject(catalogFilePath).catch(() => undefined);
+      const catalogPath = catalogFilePath;
+      await withMutationRetry(() => removeProject(catalogPath)).catch(() => undefined);
     }
     for (const relative of createdFiles) {
-      await removePath(`${localPath}/${relative}`).catch(() => undefined);
+      await withMutationRetry(() => removePath(`${localPath}/${relative}`)).catch(() => undefined);
     }
     if (folderCreated) {
-      await removePath(localPath).catch(() => undefined);
+      await withMutationRetry(() => removePath(localPath)).catch(() => undefined);
     }
     throw error;
   }
@@ -494,26 +533,32 @@ export async function addExistingProjectFlow(
     } else {
       createdFilePaths.push(filePath);
     }
-    await writeFile(filePath, content);
+    await withMutationRetry(() => writeFile(filePath, content));
   };
 
   try {
     const projectPath = `${localPath}/PROJECT.md`;
     if (!input.report.hasProjectMd && input.addMissingProjectMd) {
-      const projectMarkdown = matter.stringify(projectBodyTemplate(input.title), {
-        title: input.title,
-        status: input.fallbackStatus,
-        type: 'project',
-        lastActivity: new Date().toISOString().split('T')[0],
-      });
+      const projectMarkdown = matter.stringify(
+        projectBodyTemplate(input.title),
+        compactFrontmatter({
+          title: input.title,
+          status: input.fallbackStatus,
+          type: 'project',
+          lastActivity: new Date().toISOString().split('T')[0],
+        }),
+      );
       await writeWithBackup(projectPath, projectMarkdown);
     } else if (input.report.projectMdStatus === 'missing-frontmatter' && input.addMissingFrontmatter) {
       const current = await readFile(projectPath);
-      const patched = matter.stringify(current, {
-        title: input.title,
-        status: input.fallbackStatus,
-        type: 'project',
-      });
+      const patched = matter.stringify(
+        current,
+        compactFrontmatter({
+          title: input.title,
+          status: input.fallbackStatus,
+          type: 'project',
+        }),
+      );
       await writeWithBackup(projectPath, patched);
     }
 
@@ -542,13 +587,14 @@ export async function addExistingProjectFlow(
     return { id, localPath };
   } catch (error) {
     for (const createdPath of createdFilePaths) {
-      await removePath(createdPath).catch(() => undefined);
+      await withMutationRetry(() => removePath(createdPath)).catch(() => undefined);
     }
     for (const [filePath, content] of backups.entries()) {
-      await writeFile(filePath, content).catch(() => undefined);
+      await withMutationRetry(() => writeFile(filePath, content)).catch(() => undefined);
     }
     if (catalogFilePath) {
-      await removeProject(catalogFilePath).catch(() => undefined);
+      const catalogPath = catalogFilePath;
+      await withMutationRetry(() => removeProject(catalogPath)).catch(() => undefined);
     }
     throw error;
   }
