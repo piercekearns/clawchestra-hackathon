@@ -4,6 +4,7 @@ import type { ProjectViewModel } from '../../lib/schema';
 import { useProjectModal } from '../../hooks/useProjectModal';
 import { ProjectModalHeader } from './ProjectModalHeader';
 import { ProjectDetails } from './ProjectDetails';
+import { RoadmapItemList } from './RoadmapItemList';
 import type { ProjectModalActions } from './types';
 
 interface ProjectModalProps {
@@ -14,7 +15,14 @@ interface ProjectModalProps {
 }
 
 export function ProjectModal({ project, open, onClose, actions }: ProjectModalProps) {
-  const { localStatus, updateProjectStatus } = useProjectModal(project, actions);
+  const {
+    localStatus,
+    updateProjectStatus,
+    roadmapItems,
+    roadmapLoading,
+    reorderRoadmapItems,
+    updateRoadmapItemStatus,
+  } = useProjectModal(project, actions);
 
   useEffect(() => {
     if (!open) return;
@@ -30,6 +38,8 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
   }, [open, onClose]);
 
   if (!open || !project) return null;
+
+  const hasRoadmap = project.hasRoadmap;
 
   return (
     <div
@@ -49,10 +59,33 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
           onClose={onClose}
         />
 
-        {/* Main content: roadmap items (later phases) or markdown for non-roadmap projects */}
-        <div className="prose max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
-          <ReactMarkdown>{project.content || '_No markdown content_'}</ReactMarkdown>
-        </div>
+        {/* Main content: roadmap list or markdown */}
+        {hasRoadmap ? (
+          <div className="mb-4">
+            {roadmapLoading ? (
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3].map((n) => (
+                  <div
+                    key={n}
+                    className="h-10 animate-pulse rounded-lg bg-neutral-200 dark:bg-neutral-700"
+                  />
+                ))}
+              </div>
+            ) : (
+              <RoadmapItemList
+                items={roadmapItems}
+                onReorder={reorderRoadmapItems}
+                onStatusChange={updateRoadmapItemStatus}
+                onItemClick={() => {/* Phase 4: navigate to detail view */}}
+                onDocClick={() => {/* Phase 4: navigate to detail with doc tab */}}
+              />
+            )}
+          </div>
+        ) : (
+          <div className="prose mb-4 max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
+            <ReactMarkdown>{project.content || '_No markdown content_'}</ReactMarkdown>
+          </div>
+        )}
 
         <ProjectDetails project={project} actions={actions} />
       </div>
