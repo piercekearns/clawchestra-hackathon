@@ -209,17 +209,21 @@ Optional markdown content below frontmatter.
 
 ## Migration Plan
 
-### Phase 1: Add `PROJECT.md` to existing repos
+### Phase 1: Create `~/projects/` and move ideas
 
-For each repo in `~/repos/`:
-- Create `PROJECT.md` with frontmatter migrated from sandbox stub
-- Ensure `ROADMAP.md` is in parseable frontmatter-items format (already done for pipeline-dashboard)
+- Create `~/projects/` directory
+- For each idea/pre-repo project currently in `clawdbot-sandbox/projects/`:
+  - Create `~/projects/{name}/` folder
+  - Create `PROJECT.md` inside with frontmatter migrated from the sandbox `.md` file
+  - Move any related content (research docs, notes) into the folder
+- This includes: nostr-dating, botfather, decentralized-reputation, btc-folio, bitcoin-time-machine, bitchat-research, openclaw-browser-extension, openclaw-sdk, restricted-section projects, etc.
 
-### Phase 2: Move ideas to `~/projects/`
+### Phase 2: Add `PROJECT.md` to existing repos
 
-For each idea in `clawdbot-sandbox/projects/`:
-- Create `~/projects/{name}/PROJECT.md`
-- Move content from sandbox `.md` file
+- For each repo already in `~/repos/` (pipeline-dashboard, memestr, ClawOS, piercekearns.com, Shopify-Fabric-Theme, clawd):
+  - Create `PROJECT.md` in the repo root with standardised frontmatter
+  - Ensure `ROADMAP.md` is in parseable frontmatter-items format (already done for pipeline-dashboard)
+  - Content/description migrated from whatever sandbox stub currently exists
 
 ### Phase 3: Backend changes
 
@@ -237,9 +241,11 @@ For each idea in `clawdbot-sandbox/projects/`:
 
 ### Phase 5: Cleanup
 
-- Delete `clawdbot-sandbox/projects/` contents (keep folder for OpenClaw workspace)
+- **Delete all project files from `clawdbot-sandbox/projects/`** — these are now dead stubs
+- Keep the `projects/` folder empty (or remove it) — OpenClaw workspace doesn't need it
 - Remove migration/legacy code from Rust backend
 - Update all documentation
+- Verify no references to old sandbox project paths remain in settings, scripts, or AGENTS.md
 
 ## Open Questions
 
