@@ -15,7 +15,7 @@ Redesign the project detail modal to be compact, roadmap-focused, and genuinely 
 
 ## Status
 
-🟡 Scoping — spec drafted, awaiting final sign-off from Pierce
+🟢 Spec locked — ready to build
 
 ## Notes
 
