@@ -12,6 +12,7 @@ export interface TrustedPathApproval {
 
 export interface DashboardSettings {
   settingsVersion: number;
+  migrationVersion: number;
   catalogRoot: string;
   workspaceRoots: string[];
   openclawWorkspacePath: string | null;

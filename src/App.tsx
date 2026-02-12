@@ -214,12 +214,7 @@ export default function App() {
     if (!dashboardSettings) return;
     if (startupMigrationAttemptedRef.current) return;
 
-    const normalizedCatalogRoot = dashboardSettings.catalogRoot.replace(/\\/g, '/');
-    const needsStartupMigration =
-      normalizedCatalogRoot.includes('/clawdbot-sandbox/projects')
-      || normalizedCatalogRoot.endsWith('/clawdbot-sandbox/projects/projects');
-
-    if (!needsStartupMigration) return;
+    if ((dashboardSettings.migrationVersion ?? 0) >= 1) return;
 
     startupMigrationAttemptedRef.current = true;
     const runStartupMigration = async () => {

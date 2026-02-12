@@ -1,3 +1,5 @@
+import { listSlashCommands } from './tauri';
+
 // Slash commands available in chat
 // Loads dynamically from Tauri backend which scans:
 // 1. ~/.config/opencode/opencode.json (workflow commands)
@@ -27,7 +29,6 @@ export async function loadCompoundCommands(): Promise<SlashCommand[]> {
   loadPromise = (async () => {
     try {
       if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-        const { listSlashCommands } = await import('./tauri');
         const commands = await listSlashCommands();
         
         const loadedCommands: SlashCommand[] = commands.map((cmd) => ({

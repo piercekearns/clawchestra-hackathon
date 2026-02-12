@@ -100,6 +100,8 @@ struct TrustedPathApproval {
 struct DashboardSettings {
     #[serde(default = "default_settings_version")]
     settings_version: u32,
+    #[serde(default = "default_migration_version")]
+    migration_version: u32,
     #[serde(default = "default_catalog_root")]
     catalog_root: String,
     #[serde(default = "default_workspace_roots")]
@@ -126,6 +128,10 @@ struct OpenClawChatAttachmentInput {
 
 fn default_settings_version() -> u32 {
     1
+}
+
+fn default_migration_version() -> u32 {
+    0
 }
 
 fn default_catalog_root() -> String {
@@ -340,6 +346,9 @@ fn resolve_catalog_entries_dir(
 
 fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSettings, String> {
     settings.settings_version = 1;
+    if settings.migration_version > 1 {
+        settings.migration_version = 1;
+    }
     settings.catalog_root = normalize_path(&settings.catalog_root)?;
 
     let mut workspace_roots: Vec<String> = settings
@@ -390,6 +399,7 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
 fn default_settings() -> DashboardSettings {
     let settings = DashboardSettings {
         settings_version: default_settings_version(),
+        migration_version: 1,
         catalog_root: default_catalog_root(),
         workspace_roots: default_workspace_roots(),
         openclaw_workspace_path: default_openclaw_workspace_path(),
@@ -401,6 +411,7 @@ fn default_settings() -> DashboardSettings {
 
     sanitize_settings(settings).unwrap_or_else(|_| DashboardSettings {
         settings_version: 1,
+        migration_version: 1,
         catalog_root: default_catalog_root(),
         workspace_roots: vec![default_catalog_root()],
         openclaw_workspace_path: None,
@@ -541,9 +552,8 @@ fn collect_markdown_files_recursive(
 
         if path.is_dir() {
             let dir_name = path.file_name().and_then(|value| value.to_str());
-            if legacy_mode
-                && dir_name.is_some_and(|name| LEGACY_SKIP_DIR_NAMES.contains(&name))
-            {
+            let should_skip = dir_name.is_some_and(|name| LEGACY_SKIP_DIR_NAMES.contains(&name));
+            if should_skip {
                 continue;
             }
             collect_markdown_files_recursive(&path, legacy_mode, files)?;
@@ -689,41 +699,6 @@ fn run_command_with_output(command: &str, args: &[&str]) -> Result<String, Strin
     }
 }
 
-fn run_command_with_output_dynamic(command: &str, args: &[String]) -> Result<String, String> {
-    // Build full command string to run through login shell (to get PATH with node)
-    let escaped_args: Vec<String> = args
-        .iter()
-        .map(|arg| {
-            if arg.contains(' ') || arg.contains('"') || arg.contains('{') {
-                format!("'{}'", arg.replace('\'', "'\\''"))
-            } else {
-                arg.clone()
-            }
-        })
-        .collect();
-    let full_cmd = format!("{} {}", command, escaped_args.join(" "));
-
-    let output = Command::new("/bin/sh")
-        .args(["-l", "-c", &full_cmd])
-        .output()
-        .map_err(|error| format!("Failed to run `{command}`: {error}"))?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-        if !stderr.is_empty() {
-            Err(stderr)
-        } else if !stdout.is_empty() {
-            Err(stdout)
-        } else {
-            Err(format!("`{command}` exited with status {}", output.status))
-        }
-    }
-}
-
 fn find_openclaw_binary() -> Option<PathBuf> {
     // Check common installation locations with explicit paths
     let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -760,10 +735,6 @@ fn find_openclaw_binary() -> Option<PathBuf> {
     }
 
     None
-}
-
-fn openclaw_command_available() -> bool {
-    find_openclaw_binary().is_some()
 }
 
 fn extension_for_mime(mime_type: &str) -> &'static str {
@@ -1475,7 +1446,16 @@ fn move_home_repositories_to_repos_root(
         })?;
 
         if let Err(error) = create_legacy_symlink(&path, &target) {
-            warnings.push(error);
+            let rollback_error = match fs::rename(&target, &path) {
+                Ok(()) => "rollback ok".to_string(),
+                Err(err) => format!("rollback failed: {err}"),
+            };
+            return Err(format!(
+                "{}. Move rolled back for `{}` ({})",
+                error,
+                path.to_string_lossy(),
+                rollback_error
+            ));
         }
 
         moved.insert(
@@ -1485,6 +1465,45 @@ fn move_home_repositories_to_repos_root(
     }
 
     Ok(moved)
+}
+
+fn rollback_moved_repositories(moved_repos: &HashMap<String, String>, warnings: &mut Vec<String>) {
+    for (source, target) in moved_repos {
+        let source_path = Path::new(source);
+        let target_path = Path::new(target);
+
+        if source_path.exists() {
+            let source_is_symlink = fs::symlink_metadata(source_path)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false);
+            if source_is_symlink {
+                if let Err(error) = fs::remove_file(source_path) {
+                    warnings.push(format!(
+                        "Rollback warning: failed to remove symlink `{}`: {}",
+                        source, error
+                    ));
+                    continue;
+                }
+            } else {
+                warnings.push(format!(
+                    "Rollback warning: source `{}` already exists and is not a symlink",
+                    source
+                ));
+                continue;
+            }
+        }
+
+        if !target_path.exists() {
+            continue;
+        }
+
+        if let Err(error) = fs::rename(target_path, source_path) {
+            warnings.push(format!(
+                "Rollback warning: failed to move `{}` back to `{}`: {}",
+                target, source, error
+            ));
+        }
+    }
 }
 
 fn copy_directory_recursive(
@@ -1529,6 +1548,58 @@ fn copy_directory_recursive(
     Ok(())
 }
 
+fn ensure_git_repository_with_head(path: &Path, warnings: &mut Vec<String>) -> Result<(), String> {
+    let repo = path.to_string_lossy().to_string();
+    if run_git(&repo, &["rev-parse", "--is-inside-work-tree"]).is_err() {
+        run_git(&repo, &["init"])?;
+    }
+
+    if run_git(&repo, &["rev-parse", "--verify", "HEAD"]).is_ok() {
+        return Ok(());
+    }
+
+    // Configure a local identity only when missing to keep bootstrap commits deterministic.
+    if run_git(&repo, &["config", "--get", "user.name"]).is_err() {
+        let _ = run_git(&repo, &["config", "user.name", "Pipeline Dashboard"]);
+    }
+    if run_git(&repo, &["config", "--get", "user.email"]).is_err() {
+        let _ = run_git(
+            &repo,
+            &["config", "user.email", "pipeline-dashboard@local.invalid"],
+        );
+    }
+
+    run_git(&repo, &["add", "-A"])?;
+    if let Err(error) = run_git(
+        &repo,
+        &["commit", "-m", "chore: bootstrap standalone pipeline-dashboard repo"],
+    ) {
+        warnings.push(format!(
+            "Failed to create initial commit in `{}`: {}",
+            repo, error
+        ));
+    }
+    Ok(())
+}
+
+fn looks_like_catalog_entry(path: &Path) -> bool {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return false;
+    };
+    if !raw.trim_start().starts_with("---") {
+        return false;
+    }
+    let has_title = raw.lines().any(|line| line.trim_start().starts_with("title:"));
+    let has_status = raw.lines().any(|line| line.trim_start().starts_with("status:"));
+    let has_local_path = raw
+        .lines()
+        .any(|line| line.trim_start().starts_with("localPath:"));
+    let has_tracking_mode = raw
+        .lines()
+        .any(|line| line.trim_start().starts_with("trackingMode:"));
+    has_title && (has_status || has_local_path || has_tracking_mode)
+}
+
 fn legacy_layout_for_catalog_root(catalog_root: &Path) -> bool {
     let entries_dir = catalog_root.join("projects");
     catalog_root.exists() && !entries_dir.exists() && directory_contains_markdown(catalog_root)
@@ -1562,6 +1633,10 @@ fn migrate_catalog_entries(
     files.sort();
 
     for source_path in files {
+        if !looks_like_catalog_entry(&source_path) {
+            continue;
+        }
+
         let relative = source_path
             .strip_prefix(source_entries_dir)
             .map_err(|error| error.to_string())?;
@@ -1599,114 +1674,143 @@ fn migrate_catalog_entries(
 #[tauri::command]
 fn run_architecture_v2_migration() -> Result<MigrationReport, String> {
     let mut settings = load_dashboard_settings()?;
+    let original_settings = settings.clone();
     let home = env::var("HOME")
         .map(PathBuf::from)
         .map_err(|error| error.to_string())?;
 
-    let mut moved_entries = Vec::new();
-    let mut skipped_entries = Vec::new();
     let mut warnings = Vec::new();
 
     let repos_root = home.join("repos");
     let moved_repos = move_home_repositories_to_repos_root(&home, &repos_root, &mut warnings)?;
+    let migration_result = (|| -> Result<MigrationReport, String> {
+        let mut moved_entries = Vec::new();
+        let mut skipped_entries = Vec::new();
 
-    // Establish a standalone app source path at ~/repos/pipeline-dashboard.
-    let target_app_source = repos_root.join("pipeline-dashboard");
-    if !target_app_source.exists() {
-        if let Some(current_source) = settings
-            .app_source_path
-            .as_deref()
-            .map(PathBuf::from)
-            .filter(|path| path.exists())
-        {
-            let skip_dirs = ["node_modules", "dist", "target", ".next"];
-            copy_directory_recursive(&current_source, &target_app_source, &skip_dirs)?;
-            warnings.push(format!(
-                "Copied app source from `{}` to `{}`",
-                current_source.to_string_lossy(),
-                target_app_source.to_string_lossy()
-            ));
+        // Establish a standalone app source path at ~/repos/pipeline-dashboard.
+        let target_app_source = repos_root.join("pipeline-dashboard");
+        if !target_app_source.exists() {
+            if let Some(current_source) = settings
+                .app_source_path
+                .as_deref()
+                .map(PathBuf::from)
+                .filter(|path| path.exists())
+            {
+                let skip_dirs = ["node_modules", "dist", "target", ".next"];
+                copy_directory_recursive(&current_source, &target_app_source, &skip_dirs)?;
+                warnings.push(format!(
+                    "Copied app source from `{}` to `{}`",
+                    current_source.to_string_lossy(),
+                    target_app_source.to_string_lossy()
+                ));
+            }
+        }
+
+        if target_app_source.exists() {
+            ensure_git_repository_with_head(&target_app_source, &mut warnings)?;
+            settings.app_source_path = Some(target_app_source.to_string_lossy().to_string());
+        }
+
+        // Move catalog into the canonical app-support location and import legacy entries recursively.
+        let previous_catalog_root = PathBuf::from(&settings.catalog_root);
+        let target_catalog_root = PathBuf::from(default_catalog_root());
+        let target_entries_dir = resolve_entries_dir_from_catalog_root(&target_catalog_root, true)?;
+
+        let source_entries_dir = resolve_entries_dir_from_catalog_root(&previous_catalog_root, false)
+            .unwrap_or_else(|_| previous_catalog_root.clone());
+        let source_is_legacy = source_entries_dir == previous_catalog_root;
+
+        if source_entries_dir.exists() && source_entries_dir != target_entries_dir {
+            migrate_catalog_entries(
+                &source_entries_dir,
+                source_is_legacy,
+                &target_entries_dir,
+                &mut moved_entries,
+                &mut skipped_entries,
+                &mut warnings,
+            )?;
+        }
+
+        settings.catalog_root = target_catalog_root.to_string_lossy().to_string();
+        let mut workspace_roots = settings.workspace_roots.clone();
+        workspace_roots.push(repos_root.to_string_lossy().to_string());
+        let legacy_projects_root = home.join("clawdbot-sandbox").join("projects");
+        if legacy_projects_root.exists() {
+            workspace_roots.push(legacy_projects_root.to_string_lossy().to_string());
+        }
+        settings.workspace_roots = workspace_roots;
+        settings.migration_version = 1;
+
+        settings = sanitize_settings(settings.clone())?;
+        write_dashboard_settings_file(&settings)?;
+
+        let migration_state_path = target_catalog_root.join("migration-state.json");
+        let payload = json!({
+            "version": 2,
+            "migratedAt": unix_timestamp_secs(),
+            "sourceCatalogRoot": previous_catalog_root.to_string_lossy(),
+            "targetCatalogRoot": target_catalog_root.to_string_lossy(),
+            "movedEntries": moved_entries,
+            "skippedEntries": skipped_entries,
+            "warnings": warnings,
+            "movedRepos": moved_repos,
+            "appSourcePath": settings.app_source_path,
+            "migrationVersion": settings.migration_version,
+        });
+        write_file_atomic(
+            &migration_state_path,
+            &serde_json::to_string_pretty(&payload).map_err(|error| error.to_string())?,
+        )?;
+
+        Ok(MigrationReport {
+            moved_entries: payload["movedEntries"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|value| value.as_str().map(|text| text.to_string()))
+                .collect(),
+            skipped_entries: payload["skippedEntries"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|value| value.as_str().map(|text| text.to_string()))
+                .collect(),
+            warnings: payload["warnings"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|value| value.as_str().map(|text| text.to_string()))
+                .collect(),
+            settings_updated: true,
+            catalog_entries_dir: target_entries_dir.to_string_lossy().to_string(),
+        })
+    })();
+
+    match migration_result {
+        Ok(report) => Ok(report),
+        Err(error) => {
+            rollback_moved_repositories(&moved_repos, &mut warnings);
+            if let Err(restore_error) = write_dashboard_settings_file(&original_settings) {
+                warnings.push(format!(
+                    "Rollback warning: failed to restore settings file: {}",
+                    restore_error
+                ));
+            }
+
+            if warnings.is_empty() {
+                Err(error)
+            } else {
+                Err(format!(
+                    "{}. Rollback notes: {}",
+                    error,
+                    warnings.join(" | ")
+                ))
+            }
         }
     }
-
-    if target_app_source.exists() {
-        settings.app_source_path = Some(target_app_source.to_string_lossy().to_string());
-    }
-
-    // Move catalog into the canonical app-support location and import legacy entries recursively.
-    let previous_catalog_root = PathBuf::from(&settings.catalog_root);
-    let target_catalog_root = PathBuf::from(default_catalog_root());
-    let target_entries_dir = resolve_entries_dir_from_catalog_root(&target_catalog_root, true)?;
-
-    let source_entries_dir = resolve_entries_dir_from_catalog_root(&previous_catalog_root, false)
-        .unwrap_or_else(|_| previous_catalog_root.clone());
-    let source_is_legacy = source_entries_dir == previous_catalog_root;
-
-    if source_entries_dir.exists() && source_entries_dir != target_entries_dir {
-        migrate_catalog_entries(
-            &source_entries_dir,
-            source_is_legacy,
-            &target_entries_dir,
-            &mut moved_entries,
-            &mut skipped_entries,
-            &mut warnings,
-        )?;
-    }
-
-    settings.catalog_root = target_catalog_root.to_string_lossy().to_string();
-    let mut workspace_roots = settings.workspace_roots.clone();
-    workspace_roots.push(repos_root.to_string_lossy().to_string());
-    let legacy_projects_root = home.join("clawdbot-sandbox").join("projects");
-    if legacy_projects_root.exists() {
-        workspace_roots.push(legacy_projects_root.to_string_lossy().to_string());
-    }
-    settings.workspace_roots = workspace_roots;
-
-    settings = sanitize_settings(settings)?;
-    write_dashboard_settings_file(&settings)?;
-
-    let migration_state_path = target_catalog_root.join("migration-state.json");
-    let payload = json!({
-        "version": 2,
-        "migratedAt": unix_timestamp_secs(),
-        "sourceCatalogRoot": previous_catalog_root.to_string_lossy(),
-        "targetCatalogRoot": target_catalog_root.to_string_lossy(),
-        "movedEntries": moved_entries,
-        "skippedEntries": skipped_entries,
-        "warnings": warnings,
-        "movedRepos": moved_repos,
-        "appSourcePath": settings.app_source_path,
-    });
-    write_file_atomic(
-        &migration_state_path,
-        &serde_json::to_string_pretty(&payload).map_err(|error| error.to_string())?,
-    )?;
-
-    Ok(MigrationReport {
-        moved_entries: payload["movedEntries"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|value| value.as_str().map(|text| text.to_string()))
-            .collect(),
-        skipped_entries: payload["skippedEntries"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|value| value.as_str().map(|text| text.to_string()))
-            .collect(),
-        warnings: payload["warnings"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|value| value.as_str().map(|text| text.to_string()))
-            .collect(),
-        settings_updated: true,
-        catalog_entries_dir: target_entries_dir.to_string_lossy().to_string(),
-    })
 }
 
 #[derive(Serialize)]

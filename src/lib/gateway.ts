@@ -1,3 +1,9 @@
+import {
+  checkOpenClawGatewayConnection,
+  getOpenClawGatewayConfig,
+  sendOpenClawMessage,
+} from './tauri';
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -255,8 +261,7 @@ async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
   if (!cachedOpenClawTransportPromise) {
     cachedOpenClawTransportPromise = (async () => {
       try {
-        const tauri = await import('./tauri');
-        const config = await tauri.getOpenClawGatewayConfig();
+        const config = await getOpenClawGatewayConfig();
         
         // Use Tauri WebSocket for streaming support
         console.log('[Gateway] Using tauri-ws transport');
@@ -591,7 +596,6 @@ async function sendViaTauriOpenClaw(
     throw new Error('Tauri OpenClaw transport is not configured');
   }
 
-  const tauri = await import('./tauri');
   const converted = toOpenClawAttachments(attachments);
   const mappedAttachments = converted.map((attachment, index) => ({
     name: attachments[index]?.name,
@@ -599,7 +603,7 @@ async function sendViaTauriOpenClaw(
     content: attachment.content,
   }));
 
-  return tauri.sendOpenClawMessage({
+  return sendOpenClawMessage({
     message: messageText,
     attachments: mappedAttachments,
     sessionKey: transport.sessionKey,
@@ -1049,8 +1053,7 @@ export async function checkGatewayConnection(options?: { transport?: GatewayTran
 
   if (transport.mode === 'tauri-openclaw') {
     try {
-      const tauri = await import('./tauri');
-      return tauri.checkOpenClawGatewayConnection();
+      return checkOpenClawGatewayConnection();
     } catch {
       return false;
     }
