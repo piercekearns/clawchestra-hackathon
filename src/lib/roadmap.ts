@@ -1,6 +1,13 @@
 import matter from 'gray-matter';
-import type { RoadmapDocument, RoadmapItem, RoadmapStatus } from './schema';
-import { readFile, writeFile } from './tauri';
+import type {
+  ProjectFrontmatter,
+  RoadmapDocument,
+  RoadmapItem,
+  RoadmapItemDocs,
+  RoadmapItemWithDocs,
+  RoadmapStatus,
+} from './schema';
+import { pathExists, readFile, writeFile } from './tauri';
 
 const VALID_ROADMAP_STATUS = new Set<RoadmapStatus>(['pending', 'in-progress', 'complete']);
 
@@ -75,4 +82,129 @@ export async function writeRoadmap(document: RoadmapDocument): Promise<void> {
   });
 
   await writeFile(document.filePath, content);
+}
+
+async function checkPath(path: string): Promise<string | undefined> {
+  const exists = await pathExists(path);
+  return exists ? path : undefined;
+}
+
+/**
+ * Resolve doc files for roadmap items.
+ * 1. Check frontmatter fields (specDoc / planDoc) first
+ * 2. Fall back to convention-based paths
+ */
+export async function resolveDocFiles(
+  localPath: string,
+  items: RoadmapItem[],
+  frontmatter: ProjectFrontmatter,
+): Promise<Map<string, RoadmapItemDocs>> {
+  const result = new Map<string, RoadmapItemDocs>();
+
+  // Project-level frontmatter docs (shared across items)
+  const projectSpecPath = frontmatter.specDoc
+    ? `${localPath}/${frontmatter.specDoc}`
+    : undefined;
+  const projectPlanPath = frontmatter.planDoc
+    ? `${localPath}/${frontmatter.planDoc}`
+    : undefined;
+
+  // Convention paths at project level
+  const projectConventionPaths = [
+    { type: 'spec' as const, paths: [
+      `${localPath}/SPEC.md`,
+      `${localPath}/docs/specs/SPEC.md`,
+    ]},
+    { type: 'plan' as const, paths: [
+      `${localPath}/PLAN.md`,
+      `${localPath}/docs/plans/PLAN.md`,
+    ]},
+  ];
+
+  // Resolve project-level docs once
+  let projectSpec: string | undefined;
+  let projectPlan: string | undefined;
+
+  const projectChecks: Promise<void>[] = [];
+
+  if (projectSpecPath) {
+    projectChecks.push(
+      checkPath(projectSpecPath).then((p) => { projectSpec = p; }),
+    );
+  }
+  if (projectPlanPath) {
+    projectChecks.push(
+      checkPath(projectPlanPath).then((p) => { projectPlan = p; }),
+    );
+  }
+
+  await Promise.all(projectChecks);
+
+  // For each item, check item-specific paths, then fall back to project-level
+  const itemPromises = items.map(async (item) => {
+    const docs: RoadmapItemDocs = {};
+
+    // Item-specific convention paths
+    const itemSpecPaths = [
+      `${localPath}/docs/specs/${item.id}-spec.md`,
+      `${localPath}/docs/specs/${item.id}.md`,
+    ];
+    const itemPlanPaths = [
+      `${localPath}/docs/plans/${item.id}-plan.md`,
+      `${localPath}/docs/plans/${item.id}.md`,
+    ];
+
+    // Check item-specific paths first
+    const checks = await Promise.all([
+      ...itemSpecPaths.map(checkPath),
+      ...itemPlanPaths.map(checkPath),
+    ]);
+
+    const specMatch = checks.slice(0, itemSpecPaths.length).find(Boolean);
+    const planMatch = checks.slice(itemSpecPaths.length).find(Boolean);
+
+    docs.spec = specMatch;
+    docs.plan = planMatch;
+
+    // Fall back to project-level if no item-specific docs found
+    if (!docs.spec && projectSpec) docs.spec = projectSpec;
+    if (!docs.plan && projectPlan) docs.plan = projectPlan;
+
+    // Fall back to convention paths if still no matches
+    if (!docs.spec && !projectSpecPath) {
+      for (const conv of projectConventionPaths) {
+        if (conv.type === 'spec' && !docs.spec) {
+          for (const path of conv.paths) {
+            const found = await checkPath(path);
+            if (found) { docs.spec = found; break; }
+          }
+        }
+      }
+    }
+    if (!docs.plan && !projectPlanPath) {
+      for (const conv of projectConventionPaths) {
+        if (conv.type === 'plan' && !docs.plan) {
+          for (const path of conv.paths) {
+            const found = await checkPath(path);
+            if (found) { docs.plan = found; break; }
+          }
+        }
+      }
+    }
+
+    result.set(item.id, docs);
+  });
+
+  await Promise.all(itemPromises);
+  return result;
+}
+
+export function enrichItemsWithDocs(
+  items: RoadmapItem[],
+  docsMap: Map<string, RoadmapItemDocs>,
+): RoadmapItemWithDocs[] {
+  return items.map((item) => ({
+    ...item,
+    docs: docsMap.get(item.id) ?? {},
+  }));
 }

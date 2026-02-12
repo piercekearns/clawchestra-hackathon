@@ -126,6 +126,15 @@ export interface RoadmapDocument {
   notes: string;
 }
 
+export interface RoadmapItemDocs {
+  spec?: string;
+  plan?: string;
+}
+
+export interface RoadmapItemWithDocs extends RoadmapItem {
+  docs: RoadmapItemDocs;
+}
+
 export const PROJECT_COLUMNS: ColumnDefinition[] = [
   { id: 'in-flight', label: 'In Flight' },
   { id: 'up-next', label: 'Up Next' },
