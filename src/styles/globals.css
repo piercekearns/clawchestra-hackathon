@@ -1,0 +1,136 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 9%;
+    --primary: 72 100% 50%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 72 100% 50%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 98%;
+    --primary: 72 100% 50%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 23%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 23%;
+    --muted-foreground: 0 0% 64%;
+    --border: 0 0% 28%;
+    --input: 0 0% 28%;
+    --ring: 72 100% 50%;
+  }
+
+  * {
+    @apply border-neutral-200 dark:border-neutral-700;
+  }
+
+  body {
+    font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
+    overflow: hidden;
+    background-image: radial-gradient(
+        circle at 50% -28%,
+        rgba(223, 255, 0, 0.12),
+        rgba(223, 255, 0, 0) 45%
+      ),
+      linear-gradient(180deg, #fafafa 0%, #f2f2f2 100%);
+    @apply bg-neutral-0 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+  }
+
+  .dark body {
+    background-image: radial-gradient(
+        circle at 50% -24%,
+        rgba(223, 255, 0, 0.13),
+        rgba(223, 255, 0, 0) 48%
+      ),
+      linear-gradient(180deg, #0a0a0a 0%, #101010 100%);
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+}
+
+@layer components {
+  .bg-page {
+    background-color: transparent;
+  }
+
+  .kanban-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .kanban-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  /* Animated dots for loading states */
+  .loading-dots span {
+    animation: dot-blink 1.4s infinite both;
+  }
+  .loading-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .loading-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
+@keyframes dot-blink {
+  0%, 80%, 100% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
