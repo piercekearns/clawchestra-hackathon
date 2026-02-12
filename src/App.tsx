@@ -3,7 +3,8 @@ import { Clock4, Link2 } from 'lucide-react';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
-import { CardDetail } from './components/CardDetail';
+import { ProjectModal } from './components/modal';
+import type { ProjectModalActions } from './components/modal';
 import { Header } from './components/Header';
 import { SettingsDialog } from './components/SettingsDialog';
 import { ChatShell, createQueueId } from './components/chat';
@@ -615,6 +616,75 @@ export default function App() {
     return sendChatMessage({ text: message, images: [] });
   };
 
+  const projectModalActions: ProjectModalActions = {
+    onSave: async (project, updates) => {
+      try {
+        await updateProjectAndReload(project, updates);
+        pushToast('success', `Updated ${project.title}`);
+      } catch (error) {
+        pushToast('error', error instanceof Error ? error.message : 'Save failed');
+      }
+    },
+    onDelete: async (project) => {
+      try {
+        await deleteProjectAndReload(project.filePath);
+        pushToast('success', `Deleted ${project.title}`);
+      } catch (error) {
+        pushToast('error', error instanceof Error ? error.message : 'Delete failed');
+      }
+    },
+    onMarkReviewed: async (project) => {
+      try {
+        await updateProjectAndReload(project, {
+          lastReviewed: new Date().toISOString().split('T')[0],
+        });
+        pushToast('success', `Marked ${project.title} as reviewed`);
+      } catch (error) {
+        pushToast('error', error instanceof Error ? error.message : 'Mark reviewed failed');
+      }
+    },
+    onRequestUpdate: async (project) => {
+      const ok = await sendChatText(
+        `Please review and update status for project \"${project.title}\" (${project.id}).`,
+      );
+      if (ok) {
+        pushToast('success', `Requested update for ${project.title}`);
+      } else {
+        pushToast('error', `Failed to send update request for ${project.title}`);
+      }
+    },
+    onCommitRepo: async (project) => {
+      if (!project.frontmatter.localPath) {
+        pushToast('error', `Project ${project.title} has no local repo path.`);
+        return;
+      }
+
+      try {
+        const message = `[Dashboard] Synced planning docs for \"${project.title}\"`;
+        await commitPlanningDocs(project.frontmatter.localPath, message);
+        pushToast('success', `Committed planning docs for ${project.title}`);
+        await loadProjects();
+      } catch (error) {
+        pushToast('error', error instanceof Error ? error.message : 'Commit failed');
+      }
+    },
+    onPushRepo: async (project) => {
+      if (!project.frontmatter.localPath) {
+        pushToast('error', `Project ${project.title} has no local repo path.`);
+        return;
+      }
+
+      try {
+        await pushRepo(project.frontmatter.localPath);
+        pushToast('success', `Pushed ${project.title}`);
+        await loadProjects();
+      } catch (error) {
+        pushToast('error', error instanceof Error ? error.message : 'Push failed');
+      }
+    },
+    onOpenLinkedProject: (projectId) => setSelectedProjectId(projectId),
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-page px-4 pb-32 pt-4 text-neutral-900 dark:text-neutral-100 md:px-6 md:pb-36">
       <div className="flex h-full min-h-0 w-full flex-col">
@@ -773,77 +843,11 @@ export default function App() {
         onLoadMore={loadMoreChatMessages}
       />
 
-      <CardDetail
+      <ProjectModal
         open={Boolean(selectedProject)}
         project={selectedProject}
         onClose={() => setSelectedProjectId(undefined)}
-        onOpenLinkedProject={(projectId) => setSelectedProjectId(projectId)}
-        onViewRoadmap={openRoadmapView}
-        onMarkReviewed={async (project) => {
-          try {
-            await updateProjectAndReload(project, {
-              lastReviewed: new Date().toISOString().split('T')[0],
-            });
-            pushToast('success', `Marked ${project.title} as reviewed`);
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Mark reviewed failed');
-          }
-        }}
-        onRequestUpdate={async (project) => {
-          const ok = await sendChatText(
-            `Please review and update status for project \"${project.title}\" (${project.id}).`,
-          );
-          if (ok) {
-            pushToast('success', `Requested update for ${project.title}`);
-          } else {
-            pushToast('error', `Failed to send update request for ${project.title}`);
-          }
-        }}
-        onCommitRepo={async (project) => {
-          if (!project.frontmatter.localPath) {
-            pushToast('error', `Project ${project.title} has no local repo path.`);
-            return;
-          }
-
-          try {
-            const message = `[Dashboard] Synced planning docs for \"${project.title}\"`;
-            await commitPlanningDocs(project.frontmatter.localPath, message);
-            pushToast('success', `Committed planning docs for ${project.title}`);
-            await loadProjects();
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Commit failed');
-          }
-        }}
-        onPushRepo={async (project) => {
-          if (!project.frontmatter.localPath) {
-            pushToast('error', `Project ${project.title} has no local repo path.`);
-            return;
-          }
-
-          try {
-            await pushRepo(project.frontmatter.localPath);
-            pushToast('success', `Pushed ${project.title}`);
-            await loadProjects();
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Push failed');
-          }
-        }}
-        onSave={async (project, updates) => {
-          try {
-            await updateProjectAndReload(project, updates);
-            pushToast('success', `Updated ${project.title}`);
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Save failed');
-          }
-        }}
-        onDelete={async (project) => {
-          try {
-            await deleteProjectAndReload(project.filePath);
-            pushToast('success', `Deleted ${project.title}`);
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Delete failed');
-          }
-        }}
+        actions={projectModalActions}
       />
 
       <SearchModal

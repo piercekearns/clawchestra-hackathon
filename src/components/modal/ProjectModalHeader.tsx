@@ -1,0 +1,88 @@
+import { AlertTriangle, X } from 'lucide-react';
+import type { ProjectStatus, ProjectViewModel } from '../../lib/schema';
+import type { BadgeProps } from '../ui/badge';
+import { StatusBadge } from './StatusBadge';
+
+type BadgeVariant = NonNullable<BadgeProps['variant']>;
+
+const PROJECT_STATUSES: readonly ProjectStatus[] = [
+  'in-flight',
+  'up-next',
+  'simmering',
+  'dormant',
+  'shipped',
+] as const;
+
+const PROJECT_STATUS_LABELS: Partial<Record<ProjectStatus, string>> = {
+  'in-flight': 'In Flight',
+  'up-next': 'Up Next',
+  simmering: 'Simmering',
+  dormant: 'Dormant',
+  shipped: 'Shipped',
+};
+
+function projectStatusVariant(status: ProjectStatus): BadgeVariant {
+  switch (status) {
+    case 'in-flight':
+      return 'accent';
+    case 'up-next':
+      return 'success';
+    case 'simmering':
+      return 'warning';
+    case 'dormant':
+      return 'outline';
+    case 'shipped':
+      return 'default';
+  }
+}
+
+interface ProjectModalHeaderProps {
+  project: ProjectViewModel;
+  localStatus: ProjectStatus;
+  onStatusChange: (status: ProjectStatus) => void;
+  onClose: () => void;
+}
+
+export function ProjectModalHeader({
+  project,
+  localStatus,
+  onStatusChange,
+  onClose,
+}: ProjectModalHeaderProps) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {project.icon && (
+            <span className="shrink-0 text-lg">{project.icon}</span>
+          )}
+          <h2 className="truncate text-xl font-semibold text-neutral-900 dark:text-neutral-100">
+            {project.title}
+          </h2>
+          <StatusBadge<ProjectStatus>
+            value={localStatus}
+            options={PROJECT_STATUSES}
+            labels={PROJECT_STATUS_LABELS}
+            variant={projectStatusVariant}
+            onChange={onStatusChange}
+          />
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+          onClick={onClose}
+          aria-label="Close modal"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {project.blockedBy && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-status-warning/40 bg-status-warning/10 px-3 py-1.5 text-sm text-status-warning">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Blocked by: {project.blockedBy}</span>
+        </div>
+      )}
+    </div>
+  );
+}
