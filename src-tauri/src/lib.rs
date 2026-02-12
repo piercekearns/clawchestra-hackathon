@@ -2001,7 +2001,37 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
         }
     }
 
-    // 3. Load skills from ~/.config/opencode/skills/
+    // 3. Load user commands from ~/.claude/commands/
+    let user_commands_dir = Path::new(&home).join(".claude/commands");
+    if user_commands_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&user_commands_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.extension().map(|e| e == "md").unwrap_or(false) {
+                    continue;
+                }
+
+                if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                    if seen_names.contains(name) {
+                        continue;
+                    }
+                    seen_names.insert(name.to_string());
+
+                    let desc = fs::read_to_string(&path)
+                        .map(|c| extract_command_description(&c))
+                        .unwrap_or_else(|_| "User command".to_string());
+
+                    commands.push(SlashCommand {
+                        name: name.to_string(),
+                        desc,
+                        category: "workflow".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // 4. Load skills from ~/.config/opencode/skills/
     let skills_dir = Path::new(&home).join(".config/opencode/skills");
     if skills_dir.exists() {
         if let Ok(entries) = fs::read_dir(&skills_dir) {
@@ -2035,7 +2065,7 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
         }
     }
 
-    // 4. Add built-in session commands
+    // 5. Add built-in session commands
     if !seen_names.contains("status") {
         commands.push(SlashCommand {
             name: "status".to_string(),
