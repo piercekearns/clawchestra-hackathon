@@ -6,7 +6,12 @@ import type {
   RoadmapStatus,
 } from '../lib/schema';
 import { readRoadmap, writeRoadmap, resolveDocFiles, enrichItemsWithDocs } from '../lib/roadmap';
+import { readFile } from '../lib/tauri';
 import type { ProjectModalActions } from '../components/modal/types';
+
+type ModalView =
+  | { kind: 'list' }
+  | { kind: 'detail'; itemId: string; initialDocTab?: 'spec' | 'plan' };
 
 interface UseProjectModalReturn {
   localStatus: ProjectStatus;
@@ -15,6 +20,13 @@ interface UseProjectModalReturn {
   roadmapLoading: boolean;
   reorderRoadmapItems: (items: RoadmapItemWithDocs[]) => void;
   updateRoadmapItemStatus: (itemId: string, status: RoadmapStatus) => void;
+  modalView: ModalView;
+  selectedItem: RoadmapItemWithDocs | undefined;
+  openItemDetail: (itemId: string, initialDocTab?: 'spec' | 'plan') => void;
+  backToList: () => void;
+  fetchDocContent: (path: string) => Promise<string>;
+  getDocContent: (path: string) => string | undefined;
+  docLoading: boolean;
 }
 
 export function useProjectModal(
@@ -26,12 +38,21 @@ export function useProjectModal(
   const [roadmapLoading, setRoadmapLoading] = useState(false);
   const [roadmapFilePath, setRoadmapFilePath] = useState<string | null>(null);
   const [roadmapNotes, setRoadmapNotes] = useState('');
+  const [modalView, setModalView] = useState<ModalView>({ kind: 'list' });
+  const [docContentCache, setDocContentCache] = useState<Record<string, string>>({});
+  const [docLoading, setDocLoading] = useState(false);
 
   // Sync local status from project prop
   useEffect(() => {
     if (!project) return;
     setLocalStatus(project.status as ProjectStatus);
   }, [project]);
+
+  // Reset view and cache when project changes
+  useEffect(() => {
+    setModalView({ kind: 'list' });
+    setDocContentCache({});
+  }, [project?.id]);
 
   // Load roadmap when project changes
   useEffect(() => {
@@ -130,6 +151,49 @@ export function useProjectModal(
     [roadmapItems, persistRoadmap],
   );
 
+  // View navigation
+  const openItemDetail = useCallback(
+    (itemId: string, initialDocTab?: 'spec' | 'plan') => {
+      setModalView({ kind: 'detail', itemId, initialDocTab });
+    },
+    [],
+  );
+
+  const backToList = useCallback(() => {
+    setModalView({ kind: 'list' });
+  }, []);
+
+  const selectedItem = useMemo(() => {
+    if (modalView.kind !== 'detail') return undefined;
+    return roadmapItems.find((item) => item.id === modalView.itemId);
+  }, [modalView, roadmapItems]);
+
+  // Doc content fetching with cache
+  const fetchDocContent = useCallback(
+    async (path: string): Promise<string> => {
+      if (docContentCache[path] !== undefined) return docContentCache[path];
+
+      setDocLoading(true);
+      try {
+        const content = await readFile(path);
+        setDocContentCache((prev) => ({ ...prev, [path]: content }));
+        return content;
+      } catch {
+        const fallback = '_Could not load document_';
+        setDocContentCache((prev) => ({ ...prev, [path]: fallback }));
+        return fallback;
+      } finally {
+        setDocLoading(false);
+      }
+    },
+    [docContentCache],
+  );
+
+  const getDocContent = useCallback(
+    (path: string): string | undefined => docContentCache[path],
+    [docContentCache],
+  );
+
   return {
     localStatus,
     updateProjectStatus,
@@ -137,5 +201,12 @@ export function useProjectModal(
     roadmapLoading,
     reorderRoadmapItems,
     updateRoadmapItemStatus,
+    modalView,
+    selectedItem,
+    openItemDetail,
+    backToList,
+    fetchDocContent,
+    getDocContent,
+    docLoading,
   };
 }

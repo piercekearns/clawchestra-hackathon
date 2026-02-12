@@ -5,6 +5,7 @@ import { useProjectModal } from '../../hooks/useProjectModal';
 import { ProjectModalHeader } from './ProjectModalHeader';
 import { ProjectDetails } from './ProjectDetails';
 import { RoadmapItemList } from './RoadmapItemList';
+import { RoadmapItemDetail } from './RoadmapItemDetail';
 import type { ProjectModalActions } from './types';
 
 interface ProjectModalProps {
@@ -22,6 +23,13 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     roadmapLoading,
     reorderRoadmapItems,
     updateRoadmapItemStatus,
+    modalView,
+    selectedItem,
+    openItemDetail,
+    backToList,
+    fetchDocContent,
+    getDocContent,
+    docLoading,
   } = useProjectModal(project, actions);
 
   useEffect(() => {
@@ -59,7 +67,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
           onClose={onClose}
         />
 
-        {/* Main content: roadmap list or markdown */}
+        {/* Main content area */}
         {hasRoadmap ? (
           <div className="mb-4">
             {roadmapLoading ? (
@@ -71,13 +79,24 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
                   />
                 ))}
               </div>
+            ) : modalView.kind === 'detail' && selectedItem ? (
+              <RoadmapItemDetail
+                item={selectedItem}
+                projectTitle={project.title}
+                initialTab={modalView.initialDocTab}
+                onBack={backToList}
+                onStatusChange={updateRoadmapItemStatus}
+                fetchDocContent={fetchDocContent}
+                getDocContent={getDocContent}
+                docLoading={docLoading}
+              />
             ) : (
               <RoadmapItemList
                 items={roadmapItems}
                 onReorder={reorderRoadmapItems}
                 onStatusChange={updateRoadmapItemStatus}
-                onItemClick={() => {/* Phase 4: navigate to detail view */}}
-                onDocClick={() => {/* Phase 4: navigate to detail with doc tab */}}
+                onItemClick={(item) => openItemDetail(item.id)}
+                onDocClick={(item, docType) => openItemDetail(item.id, docType)}
               />
             )}
           </div>

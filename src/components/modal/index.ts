@@ -5,4 +5,5 @@ export { StatusBadge } from './StatusBadge';
 export { DocBadge } from './DocBadge';
 export { RoadmapItemRow } from './RoadmapItemRow';
 export { RoadmapItemList } from './RoadmapItemList';
+export { RoadmapItemDetail } from './RoadmapItemDetail';
 export type { ProjectModalActions } from './types';
