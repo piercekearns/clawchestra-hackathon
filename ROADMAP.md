@@ -7,12 +7,14 @@ items:
     nextAction: Test all 6 phases, verify build
     tags: [ui, ux, core]
     icon: "\U0001F3A8"
-  - id: retrofit-projects
-    title: Retrofit Projects to Schema
+  - id: project-architecture-overhaul
+    title: "Project Architecture Overhaul"
     status: pending
     priority: 2
-    nextAction: Audit existing project files against schema
-    tags: [data, cleanup]
+    nextAction: "Claude Code: /plan then /build against docs/specs/project-architecture-overhaul-spec.md"
+    tags: [architecture, data, cleanup, core]
+    icon: "\U0001F3D7"
+    specDoc: docs/specs/project-architecture-overhaul-spec.md
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: pending
