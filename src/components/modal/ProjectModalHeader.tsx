@@ -10,7 +10,7 @@ const PROJECT_STATUSES: readonly ProjectStatus[] = [
   'up-next',
   'simmering',
   'dormant',
-  'shipped',
+  'archived',
 ] as const;
 
 const PROJECT_STATUS_LABELS: Partial<Record<ProjectStatus, string>> = {
@@ -18,7 +18,7 @@ const PROJECT_STATUS_LABELS: Partial<Record<ProjectStatus, string>> = {
   'up-next': 'Up Next',
   simmering: 'Simmering',
   dormant: 'Dormant',
-  shipped: 'Shipped',
+  archived: 'Archived',
 };
 
 function projectStatusVariant(status: ProjectStatus): BadgeVariant {
@@ -30,9 +30,8 @@ function projectStatusVariant(status: ProjectStatus): BadgeVariant {
     case 'simmering':
       return 'warning';
     case 'dormant':
+    case 'archived':
       return 'outline';
-    case 'shipped':
-      return 'default';
   }
 }
 

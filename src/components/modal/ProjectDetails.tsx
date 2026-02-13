@@ -91,7 +91,7 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
 
             <div className="flex flex-wrap gap-2">
               <Badge variant={project.hasRepo ? 'success' : 'outline'}>
-                {project.hasRepo ? 'Repo-linked' : 'Dashboard-only'}
+                {project.hasRepo ? 'GitHub' : project.hasGit ? 'Local Git' : 'Idea'}
               </Badge>
               {project.gitStatus && (
                 <Badge variant="outline">
@@ -139,8 +139,8 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
             )}
 
             <div className="grid gap-0.5 text-xs text-neutral-500">
-              <p><strong>Dashboard file:</strong> {project.filePath}</p>
-              {project.repoFilePath && <p><strong>Repo file:</strong> {project.repoFilePath}</p>}
+              <p><strong>Project file:</strong> {project.filePath}</p>
+              <p><strong>Directory:</strong> {project.dirPath}</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-700">
@@ -190,7 +190,7 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
                 Mark Reviewed
               </Button>
 
-              {project.frontmatter.localPath && (
+              {project.hasGit && (
                 <Button
                   type="button"
                   variant="outline"
@@ -201,7 +201,7 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
                 </Button>
               )}
 
-              {project.frontmatter.localPath && (
+              {project.hasGit && (
                 <Button
                   type="button"
                   variant="outline"

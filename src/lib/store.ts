@@ -10,6 +10,7 @@ import {
   chatMessageSave,
   chatMessagesClear,
   chatMessagesCount,
+  getDashboardSettings,
   isTauriRuntime,
   type PersistedChatMessage,
 } from './tauri';
@@ -41,7 +42,7 @@ interface DashboardState {
   setSelectedProjectId: (id?: string) => void;
   updateProjectAndReload: (project: ProjectViewModel, updates: ProjectUpdate) => Promise<void>;
   createProjectAndReload: (
-    id: string,
+    dirPath: string,
     frontmatter: ProjectFrontmatter,
     content: string,
   ) => Promise<void>;
@@ -72,7 +73,8 @@ export const useDashboardStore = create<DashboardState>()(
       loadProjects: async () => {
         set({ loading: true });
         try {
-          const result = await getProjects();
+          const settings = await getDashboardSettings();
+          const result = await getProjects(settings.scanPaths);
           set({ projects: result.projects, errors: result.errors, loading: false });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed loading projects';
@@ -224,8 +226,8 @@ export const useDashboardStore = create<DashboardState>()(
         await get().loadProjects();
       },
 
-      createProjectAndReload: async (id, frontmatter, content) => {
-        await createProject(id, frontmatter, content);
+      createProjectAndReload: async (dirPath, frontmatter, content) => {
+        await createProject(dirPath, frontmatter, content);
         await get().loadProjects();
       },
 

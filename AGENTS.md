@@ -40,17 +40,24 @@ If any answer is YES → update AGENTS.md.
 | **Delete project** | Delete the `.md` file |
 | **Move to column** | Change `status:` to target column value |
 
-**Status values:** `in-flight`, `up-next`, `simmering`, `dormant`, `shipped`
+**Status values:** `in-flight`, `up-next`, `simmering`, `dormant`, `shipped`, `archived`
 
-### Deliverables (Project Roadmaps)
+### Roadmap Items
 
 | Operation | How Agent Does It |
 |-----------|-------------------|
-| **View roadmap** | Read files from `projects/pipeline-dashboard/roadmap/` |
-| **Add deliverable** | Create `roadmap/{id}.md` with `type: deliverable` and `parent:` |
-| **Mark done** | Set `status: shipped`, add to CHANGELOG.md |
-| **Remove** | Delete file, update ROADMAP.md index |
-| **Reprioritize** | Update `priority:` fields (keep unique) |
+| **View roadmap** | Parse `ROADMAP.md` frontmatter `items:` array |
+| **Add item** | Append to `items:` array in ROADMAP.md frontmatter |
+| **Mark done** | Set item `status: complete` — auto-migrates to CHANGELOG.md |
+| **Remove** | Delete from `items:` array (not a file deletion) |
+| **Reprioritize** | Change `priority:` values in ROADMAP.md frontmatter |
+
+### CHANGELOG
+
+| Operation | How Agent Does It |
+|-----------|-------------------|
+| **View changelog** | Parse `CHANGELOG.md` frontmatter `entries:` array |
+| **Edit entries** | Read-only for agents unless explicitly asked to edit |
 
 ### Dashboard Actions
 
@@ -67,10 +74,9 @@ If any answer is YES → update AGENTS.md.
 ## Project Structure
 
 ```
-ROADMAP.md     — Index linking to individual roadmap item files
-CHANGELOG.md   — Completed items with dates (historical record)
-roadmap/       — Individual deliverable files (type: deliverable)
-docs/          — Spec and plan documents for deliverables
+ROADMAP.md     — Frontmatter items: array of roadmap items
+CHANGELOG.md   — Frontmatter entries: array of completed items
+docs/          — Spec and plan documents for roadmap items
 src/           — React frontend (TypeScript, Tailwind, shadcn/ui)
 src-tauri/     — Rust backend (Tauri v2)
 ```
@@ -96,33 +102,28 @@ Example: If Up Next has P1, P2, P3 and user says "add X to Up Next":
 
 ## Roadmap Workflow
 
-Roadmap items are individual `.md` files in `roadmap/` with frontmatter.
+Roadmap items live in `ROADMAP.md` as a YAML frontmatter `items:` array.
 
 When the user says **"add X to the roadmap"**:
-1. Create `roadmap/{item-id}.md` with frontmatter:
+1. Add to `items:` array in ROADMAP.md frontmatter:
    ```yaml
-   title: X
-   status: up-next
-   type: deliverable
-   priority: N
-   parent: pipeline-dashboard
-   lastActivity: YYYY-MM-DD
+   - id: item-id
+     title: X
+     status: pending
+     priority: N
    ```
-2. If it has a spec, create `docs/{item-id}/SPEC.md` and link via `specDoc`
-3. Update `ROADMAP.md` index table
+2. If it has a spec, create `docs/specs/{item-id}-spec.md`
+3. If it has a plan, create `docs/plans/{item-id}-plan.md`
 
 When the user says **"mark X as done"** or **"X is complete"**:
-1. Change `status: shipped` in the deliverable file
-2. Add an abbreviated entry to CHANGELOG.md under today's date:
-   - Item name with ✅
-   - 2-3 bullet points summarizing what was built
-   - Optionally note key files changed if helpful for future reference
-3. Update ROADMAP.md index
+1. Change item `status: complete` in ROADMAP.md — this triggers auto-migration:
+   - Item is appended to CHANGELOG.md `entries:` array (with `completedAt` date)
+   - Item is removed from ROADMAP.md `items:` array
+   - Migration is idempotent
 
 When the user says **"remove X from the roadmap"** (without completing):
-1. Delete the file from `roadmap/`
-2. Update ROADMAP.md index
-3. Do NOT add to CHANGELOG.md (it wasn't completed)
+1. Remove the item from the `items:` array in ROADMAP.md
+2. Do NOT add to CHANGELOG.md (it wasn't completed)
 
 ---
 

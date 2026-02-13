@@ -12,7 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   'up-next': 'bg-revival-accent/20 text-revival-accent-600 dark:text-revival-accent',
   'simmering': 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   'dormant': 'bg-neutral-500/20 text-neutral-500',
-  'shipped': 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+  'archived': 'bg-neutral-400/20 text-neutral-500 dark:text-neutral-400',
 };
 
 export function SearchResultItem({ project, isSelected, onClick }: SearchResultItemProps) {

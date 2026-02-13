@@ -3,7 +3,6 @@ import {
   isStale,
   needsReview,
   validateProject,
-  validateRepoStatus,
 } from './schema';
 
 describe('schema', () => {
@@ -17,27 +16,39 @@ describe('schema', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('allows linked projects without catalog status', () => {
+  it('requires status field', () => {
     const result = validateProject({
-      title: 'Linked Project',
+      title: 'No Status',
       type: 'project',
-      trackingMode: 'linked',
-      localPath: '/tmp/linked-project',
-    });
-
-    expect(result.valid).toBe(true);
-  });
-
-  it('requires status for catalog-only projects', () => {
-    const result = validateProject({
-      title: 'Catalog Only',
-      type: 'idea',
-      trackingMode: 'catalog-only',
     });
 
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.errors).toContain('status is required for catalog-only projects');
+      expect(result.errors).toContain('status is required');
+    }
+  });
+
+  it('requires title field', () => {
+    const result = validateProject({
+      status: 'up-next',
+      type: 'project',
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors).toContain('title is required');
+    }
+  });
+
+  it('requires type field', () => {
+    const result = validateProject({
+      title: 'No Type',
+      status: 'up-next',
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors).toContain('type is required');
     }
   });
 
@@ -54,6 +65,16 @@ describe('schema', () => {
     }
   });
 
+  it('accepts archived status', () => {
+    const result = validateProject({
+      title: 'Old Project',
+      status: 'archived',
+      type: 'project',
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
   it('requires priority for in-flight projects', () => {
     const result = validateProject({
       title: 'In Flight No Priority',
@@ -67,13 +88,31 @@ describe('schema', () => {
     }
   });
 
-  it('validates repo status shape and rejects invalid status', () => {
-    const ok = validateRepoStatus({ title: 'Repo project', status: 'in-flight' });
-    const bad = validateRepoStatus({ title: 'Repo project', status: 'invalid' });
+  it('requires parent for sub-projects', () => {
+    const result = validateProject({
+      title: 'Sub Project',
+      status: 'up-next',
+      type: 'sub-project',
+    });
 
-    expect(ok).not.toBeNull();
-    expect(ok?.status).toBe('in-flight');
-    expect(bad).toBeNull();
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors).toContain('parent is required for sub-projects');
+    }
+  });
+
+  it('validates tags as string array', () => {
+    const result = validateProject({
+      title: 'Tagged',
+      status: 'up-next',
+      type: 'project',
+      tags: [123],
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((error) => error.includes('tags'))).toBe(true);
+    }
   });
 
   it('computes stale/review heuristics from dates', () => {

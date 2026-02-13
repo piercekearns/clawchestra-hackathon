@@ -17,10 +17,9 @@ export type ProjectStatus =
   | 'up-next'
   | 'simmering'
   | 'dormant'
-  | 'shipped';
+  | 'archived';
 
-export type ProjectType = 'project' | 'sub-project' | 'idea' | 'deliverable';
-export type ProjectTrackingMode = 'linked' | 'catalog-only';
+export type ProjectType = 'project' | 'sub-project' | 'idea';
 
 export type ProjectColor =
   | 'blue'
@@ -53,12 +52,8 @@ export interface ProjectFrontmatter {
   id?: string;
   title: string;
   status?: ProjectStatus;
-  trackingMode?: ProjectTrackingMode;
-  catalogVersion?: number;
   type: ProjectType;
   priority?: number;
-  localPath?: string;
-  statusFile?: string;
   repo?: string;
   parent?: string;
   lastActivity?: string;
@@ -68,21 +63,8 @@ export interface ProjectFrontmatter {
   color?: ProjectColor;
   blockedBy?: string;
   nextAction?: string;
-  cachedStatus?: ProjectStatus;
-  cachedNextAction?: string;
-  cachedGitStatus?: string;
-  cachedBranch?: string;
-  cacheUpdatedAt?: string;
-  specDoc?: string;    // Path to specification document
-  planDoc?: string;    // Path to planning document
-}
-
-export interface RepoStatus {
-  title?: string;
-  status?: ProjectStatus;
-  nextAction?: string;
-  blockedBy?: string;
-  lastActivity?: string;
+  specDoc?: string;
+  planDoc?: string;
 }
 
 export type GitStatusState = 'clean' | 'uncommitted' | 'unpushed' | 'behind' | 'unknown';
@@ -95,17 +77,22 @@ export interface GitStatus {
 
 export interface ProjectViewModel extends BoardItem {
   id: string;
+  /** Absolute path to the PROJECT.md file */
   filePath: string;
+  /** Absolute path to the project directory (parent of PROJECT.md) */
+  dirPath: string;
   frontmatter: ProjectFrontmatter;
   content: string;
-  repoStatus?: RepoStatus;
-  repoFilePath?: string;
   roadmapFilePath?: string;
   hasRoadmap: boolean;
+  changelogFilePath?: string;
+  hasChangelog: boolean;
+  hasGit: boolean;
   gitStatus?: GitStatus;
   children: ProjectViewModel[];
   isStale: boolean;
   needsReview: boolean;
+  /** True if frontmatter.repo is set (GitHub-linked) */
   hasRepo: boolean;
   commitActivity?: {
     lastCommit?: string;
@@ -135,13 +122,25 @@ export interface RoadmapItemWithDocs extends RoadmapItem {
   docs: RoadmapItemDocs;
 }
 
+export interface ChangelogEntry {
+  id: string;
+  title: string;
+  completedAt: string;
+  summary?: string;
+}
+
+export interface ChangelogDocument {
+  filePath: string;
+  entries: ChangelogEntry[];
+}
+
 export const PROJECT_COLUMNS: ColumnDefinition[] = [
   { id: 'in-flight', label: 'In Flight' },
   { id: 'up-next', label: 'Up Next' },
   { id: 'simmering', label: 'Simmering' },
   { id: 'dormant', label: 'Dormant' },
-  { id: 'shipped', label: 'Shipped' },
 ];
+
 
 export const ROADMAP_COLUMNS: ColumnDefinition[] = [
   { id: 'pending', label: 'Pending' },
@@ -154,16 +153,14 @@ export const VALID_STATUSES = [
   'up-next',
   'simmering',
   'dormant',
-  'shipped',
+  'archived',
 ] as const satisfies readonly ProjectStatus[];
 
 export const VALID_TYPES = [
   'project',
   'sub-project',
   'idea',
-  'deliverable',
 ] as const satisfies readonly ProjectType[];
-export const VALID_TRACKING_MODES = ['linked', 'catalog-only'] as const satisfies readonly ProjectTrackingMode[];
 
 export const VALID_COLORS = [
   'blue',
@@ -182,19 +179,6 @@ export function isProjectStatus(value: unknown): value is ProjectStatus {
   return typeof value === 'string' && VALID_STATUSES.includes(value as ProjectStatus);
 }
 
-function resolveTrackingMode(record: Record<string, unknown>): ProjectTrackingMode {
-  if (
-    typeof record.trackingMode === 'string'
-    && VALID_TRACKING_MODES.includes(record.trackingMode as ProjectTrackingMode)
-  ) {
-    return record.trackingMode as ProjectTrackingMode;
-  }
-
-  return typeof record.localPath === 'string' && record.localPath.trim().length > 0
-    ? 'linked'
-    : 'catalog-only';
-}
-
 export function validateProject(data: unknown): ValidationResult {
   const errors: string[] = [];
 
@@ -210,16 +194,8 @@ export function validateProject(data: unknown): ValidationResult {
   if (typeof record.type !== 'string' || !record.type.trim()) {
     errors.push('type is required');
   }
-
-  const trackingMode = resolveTrackingMode(record);
-  if (trackingMode === 'catalog-only') {
-    if (typeof record.status !== 'string' || !record.status.trim()) {
-      errors.push('status is required for catalog-only projects');
-    }
-  } else if (trackingMode === 'linked') {
-    if (typeof record.localPath !== 'string' || !record.localPath.trim()) {
-      errors.push('localPath is required for linked projects');
-    }
+  if (typeof record.status !== 'string' || !record.status.trim()) {
+    errors.push('status is required');
   }
 
   if (record.status === 'in-flight' && typeof record.priority !== 'number') {
@@ -236,14 +212,6 @@ export function validateProject(data: unknown): ValidationResult {
 
   if (typeof record.type === 'string' && !VALID_TYPES.includes(record.type as ProjectType)) {
     errors.push(`invalid type: ${record.type}`);
-  }
-
-  if (
-    record.trackingMode !== undefined
-    && (typeof record.trackingMode !== 'string'
-      || !VALID_TRACKING_MODES.includes(record.trackingMode as ProjectTrackingMode))
-  ) {
-    errors.push(`invalid trackingMode: ${String(record.trackingMode)}`);
   }
 
   if (record.color !== undefined) {
@@ -269,14 +237,6 @@ export function validateProject(data: unknown): ValidationResult {
     errors.push('priority must be a finite number');
   }
 
-  if (record.localPath !== undefined && typeof record.localPath !== 'string') {
-    errors.push('localPath must be a string');
-  }
-
-  if (record.statusFile !== undefined && typeof record.statusFile !== 'string') {
-    errors.push('statusFile must be a string');
-  }
-
   if (record.blockedBy !== undefined && typeof record.blockedBy !== 'string') {
     errors.push('blockedBy must be a string');
   }
@@ -285,41 +245,14 @@ export function validateProject(data: unknown): ValidationResult {
     errors.push('nextAction must be a string');
   }
 
-  if (record.cachedStatus !== undefined && !isProjectStatus(record.cachedStatus)) {
-    errors.push(`invalid cachedStatus: ${String(record.cachedStatus)}`);
-  }
-
   if (errors.length > 0) {
     return { valid: false, errors };
   }
 
   return {
     valid: true,
-    data: {
-      ...(record as unknown as ProjectFrontmatter),
-      trackingMode,
-    },
+    data: record as unknown as ProjectFrontmatter,
   };
-}
-
-export function validateRepoStatus(data: unknown): RepoStatus | null {
-  if (typeof data !== 'object' || data === null) return null;
-
-  const record = data as Record<string, unknown>;
-  const result: RepoStatus = {};
-
-  if (typeof record.title === 'string') result.title = record.title;
-  if (typeof record.status === 'string') {
-    if (!VALID_STATUSES.includes(record.status as ProjectStatus)) return null;
-    result.status = record.status as ProjectStatus;
-  }
-  if (typeof record.nextAction === 'string') result.nextAction = record.nextAction;
-  if (record.blockedBy === null || typeof record.blockedBy === 'string') {
-    result.blockedBy = record.blockedBy ?? undefined;
-  }
-  if (typeof record.lastActivity === 'string') result.lastActivity = record.lastActivity;
-
-  return result;
 }
 
 export function isStale(lastActivity: string | Date | undefined): boolean {

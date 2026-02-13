@@ -21,7 +21,6 @@ import {
 import { commitPlanningDocs, gitStatusEmoji, pushRepo } from './lib/git';
 import { reorderProjects, updateProject } from './lib/projects';
 import { readRoadmap, writeRoadmap } from './lib/roadmap';
-import { runV2MigrationFlow } from './lib/project-flows';
 import type {
   ProjectStatus,
   ProjectViewModel,
@@ -33,7 +32,6 @@ import type { DashboardSettings } from './lib/settings';
 import { useDashboardStore } from './lib/store';
 import {
   getDashboardSettings,
-  getProjectsDir,
   isTauriRuntime,
   updateDashboardSettings,
 } from './lib/tauri';
@@ -98,16 +96,12 @@ export default function App() {
   const [chatResponseToastMessage, setChatResponseToastMessage] = useState<string | null>(null);
   const [chatQueue, setChatQueue] = useState<QueuedMessage[]>([]); // Message queue
   const chatDrawerOpenRef = useRef(chatDrawerOpen);
-  const startupMigrationAttemptedRef = useRef(false);
 
   const allProjects = useMemo(() => flattenProjects(projects), [projects]);
 
-  // Filter out deliverables from top-level view - they only show when drilling into a project
+  // Filter out sub-projects from top-level view
   const topLevelProjects = useMemo(
-    () =>
-      projects.filter(
-        (p) => p.frontmatter.type !== 'deliverable' && !p.frontmatter.parent,
-      ),
+    () => projects.filter((p) => !p.frontmatter.parent),
     [projects],
   );
 
@@ -117,18 +111,6 @@ export default function App() {
   );
 
   const isRoadmapView = viewContext.type === 'roadmap';
-
-  const missingRepoWarnings = useMemo(() => {
-    const paths = new Set<string>();
-
-    for (const error of errors) {
-      if (error.type === 'repo_status_missing') {
-        paths.add(`${error.localPath}/${error.statusFile}`);
-      }
-    }
-
-    return paths;
-  }, [errors]);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -211,35 +193,6 @@ export default function App() {
   }, [addError]);
 
   useEffect(() => {
-    if (!isTauriRuntime()) return;
-    if (!dashboardSettings) return;
-    if (startupMigrationAttemptedRef.current) return;
-
-    if ((dashboardSettings.migrationVersion ?? 0) >= 1) return;
-
-    startupMigrationAttemptedRef.current = true;
-    const runStartupMigration = async () => {
-      try {
-        const report = await runV2MigrationFlow();
-        const reloadedSettings = await getDashboardSettings();
-        setDashboardSettings(reloadedSettings);
-        await loadProjects();
-        pushToast(
-          'success',
-          `Migration completed: moved ${report.movedEntries.length} entries, skipped ${report.skippedEntries.length}.`,
-        );
-      } catch (error) {
-        pushToast(
-          'error',
-          error instanceof Error ? `Startup migration failed: ${error.message}` : 'Startup migration failed',
-        );
-      }
-    };
-
-    void runStartupMigration();
-  }, [dashboardSettings, loadProjects]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const checkConnection = async () => {
@@ -267,11 +220,10 @@ export default function App() {
     let fallbackPoll: number | undefined;
 
     const startWatching = async () => {
-      if (!isTauriRuntime()) return;
+      if (!isTauriRuntime() || !dashboardSettings) return;
 
       try {
-        const projectsDir = await getProjectsDir();
-        const unwatch = await watchProjects(projectsDir, async () => {
+        const unwatch = await watchProjects(dashboardSettings.scanPaths, async () => {
           await loadProjects();
           addChatMessage({
             role: 'system',
@@ -303,7 +255,7 @@ export default function App() {
         window.clearInterval(fallbackPoll);
       }
     };
-  }, [addChatMessage, loadProjects, dashboardSettings?.catalogRoot]);
+  }, [addChatMessage, loadProjects, dashboardSettings]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -654,14 +606,14 @@ export default function App() {
       }
     },
     onCommitRepo: async (project) => {
-      if (!project.frontmatter.localPath) {
-        pushToast('error', `Project ${project.title} has no local repo path.`);
+      if (!project.hasGit) {
+        pushToast('error', `Project ${project.title} has no git repository.`);
         return;
       }
 
       try {
         const message = `[Dashboard] Synced planning docs for \"${project.title}\"`;
-        await commitPlanningDocs(project.frontmatter.localPath, message);
+        await commitPlanningDocs(project.dirPath, message);
         pushToast('success', `Committed planning docs for ${project.title}`);
         await loadProjects();
       } catch (error) {
@@ -669,13 +621,13 @@ export default function App() {
       }
     },
     onPushRepo: async (project) => {
-      if (!project.frontmatter.localPath) {
-        pushToast('error', `Project ${project.title} has no local repo path.`);
+      if (!project.hasGit) {
+        pushToast('error', `Project ${project.title} has no git repository.`);
         return;
       }
 
       try {
-        await pushRepo(project.frontmatter.localPath);
+        await pushRepo(project.dirPath);
         pushToast('success', `Pushed ${project.title}`);
         await loadProjects();
       } catch (error) {
@@ -775,12 +727,6 @@ export default function App() {
                   columns={viewContext.columns}
                   items={topLevelProjects}
                   onItemClick={(project) => setSelectedProjectId(project.id)}
-                  getItemWarning={(project) =>
-                    Boolean(project.frontmatter.localPath) &&
-                    missingRepoWarnings.has(
-                      `${project.frontmatter.localPath}/${project.frontmatter.statusFile ?? 'PROJECT.md'}`,
-                    )
-                  }
                   renderItemIndicators={(project) => (
                     <>
                       {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
@@ -877,11 +823,6 @@ export default function App() {
         open={settingsDialogOpen}
         settings={dashboardSettings}
         onClose={() => setSettingsDialogOpen(false)}
-        onRunMigration={async () => {
-          const report = await runV2MigrationFlow();
-          await loadProjects();
-          return report;
-        }}
         onSave={async (settings) => {
           try {
             const saved = await updateDashboardSettings(settings);

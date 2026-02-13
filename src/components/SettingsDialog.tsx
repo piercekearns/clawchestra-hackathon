@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import type {
@@ -7,38 +7,31 @@ import type {
   OpenClawContextPolicy,
   UpdateMode,
 } from '../lib/settings';
-import type { MigrationReport } from '../lib/tauri';
 
 interface SettingsDialogProps {
   open: boolean;
   settings: DashboardSettings | null;
   onClose: () => void;
   onSave: (settings: DashboardSettings) => Promise<void>;
-  onRunMigration: () => Promise<MigrationReport>;
 }
 
-export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration }: SettingsDialogProps) {
-  const [catalogRoot, setCatalogRoot] = useState('');
-  const [workspaceRootsText, setWorkspaceRootsText] = useState('');
+export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDialogProps) {
+  const [scanPaths, setScanPaths] = useState<string[]>([]);
   const [openclawWorkspacePath, setOpenclawWorkspacePath] = useState('');
   const [appSourcePath, setAppSourcePath] = useState('');
   const [updateMode, setUpdateMode] = useState<UpdateMode>('source-rebuild');
   const [openclawContextPolicy, setOpenclawContextPolicy] =
     useState<OpenClawContextPolicy>('selected-project-first');
   const [saving, setSaving] = useState(false);
-  const [migrating, setMigrating] = useState(false);
-  const [migrationSummary, setMigrationSummary] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !settings) return;
 
-    setCatalogRoot(settings.catalogRoot);
-    setWorkspaceRootsText(settings.workspaceRoots.join('\n'));
+    setScanPaths(settings.scanPaths.length > 0 ? [...settings.scanPaths] : ['']);
     setOpenclawWorkspacePath(settings.openclawWorkspacePath ?? '');
     setAppSourcePath(settings.appSourcePath ?? '');
     setUpdateMode(settings.updateMode);
     setOpenclawContextPolicy(settings.openclawContextPolicy);
-    setMigrationSummary(null);
   }, [open, settings]);
 
   useEffect(() => {
@@ -54,14 +47,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  const workspaceRoots = useMemo(
-    () =>
-      workspaceRootsText
-        .split(/\n|,/)
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    [workspaceRootsText],
-  );
+  const validScanPaths = scanPaths.map((p) => p.trim()).filter(Boolean);
 
   if (!open) return null;
 
@@ -82,24 +68,45 @@ export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration
         )}
 
         <div className={`grid gap-3 ${!settings ? 'opacity-60' : ''}`}>
-          <label className="grid gap-1 text-sm">
-            <span>Catalog Root</span>
-            <Input
-              value={catalogRoot}
-              onChange={(event) => setCatalogRoot(event.target.value)}
-              placeholder="~/Library/Application Support/Pipeline Dashboard/catalog"
-            />
-          </label>
-
-          <label className="grid gap-1 text-sm">
-            <span>Workspace Roots (one per line)</span>
-            <textarea
-              value={workspaceRootsText}
-              onChange={(event) => setWorkspaceRootsText(event.target.value)}
-              className="min-h-28 w-full rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-800 outline-none transition-colors hover:border-neutral-400 focus:border-revival-accent-400 focus:ring-2 focus:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500"
-              placeholder="~/repos"
-            />
-          </label>
+          <div className="grid gap-1 text-sm">
+            <span>Scan Paths</span>
+            <div className="grid gap-2">
+              {scanPaths.map((path, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input
+                    value={path}
+                    onChange={(event) => {
+                      const next = [...scanPaths];
+                      next[index] = event.target.value;
+                      setScanPaths(next);
+                    }}
+                    placeholder="~/repos"
+                  />
+                  {scanPaths.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      onClick={() => setScanPaths(scanPaths.filter((_, i) => i !== index))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={() => setScanPaths([...scanPaths, ''])}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add path
+              </Button>
+            </div>
+          </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="grid gap-1 text-sm">
@@ -154,40 +161,6 @@ export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration
               </div>
             </label>
           </div>
-
-          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-950/40">
-            <p className="font-semibold">Architecture V2 Migration</p>
-            <p className="mt-1 text-xs text-neutral-500">
-              Moves legacy catalog markdown entries into <code>catalogRoot/projects</code> and writes a migration state report.
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!settings || migrating}
-                onClick={async () => {
-                  setMigrating(true);
-                  setMigrationSummary(null);
-                  try {
-                    const report = await onRunMigration();
-                    setMigrationSummary(
-                      `Moved ${report.movedEntries.length} entries, skipped ${report.skippedEntries.length}.`,
-                    );
-                  } catch (error) {
-                    setMigrationSummary(
-                      error instanceof Error ? error.message : 'Migration failed',
-                    );
-                  } finally {
-                    setMigrating(false);
-                  }
-                }}
-              >
-                {migrating ? 'Running migration...' : 'Run V2 Migration'}
-              </Button>
-              {migrationSummary && <span className="text-xs text-neutral-500">{migrationSummary}</span>}
-            </div>
-          </div>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
@@ -196,15 +169,14 @@ export function SettingsDialog({ open, settings, onClose, onSave, onRunMigration
           </Button>
           <Button
             type="button"
-            disabled={!settings || saving || !catalogRoot.trim() || workspaceRoots.length === 0}
+            disabled={!settings || saving || validScanPaths.length === 0}
             onClick={async () => {
               if (!settings) return;
               setSaving(true);
               try {
                 await onSave({
                   ...settings,
-                  catalogRoot: catalogRoot.trim(),
-                  workspaceRoots,
+                  scanPaths: validScanPaths,
                   openclawWorkspacePath: openclawWorkspacePath.trim() || null,
                   appSourcePath: appSourcePath.trim() || null,
                   updateMode,

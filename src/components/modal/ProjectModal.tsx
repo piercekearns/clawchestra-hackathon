@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { ProjectViewModel } from '../../lib/schema';
 import { useProjectModal } from '../../hooks/useProjectModal';
@@ -24,6 +24,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     roadmapError,
     reorderRoadmapItems,
     updateRoadmapItemStatus,
+    changelogEntries,
     modalView,
     selectedItem,
     openItemDetail,
@@ -32,6 +33,8 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     getDocContent,
     docLoading,
   } = useProjectModal(project, actions);
+
+  const [completedExpanded, setCompletedExpanded] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +118,42 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
         ) : (
           <div className="prose mb-4 max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
             <ReactMarkdown>{project.content || '_No markdown content_'}</ReactMarkdown>
+          </div>
+        )}
+
+        {/* Completed items (collapsible) */}
+        {changelogEntries.length > 0 && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setCompletedExpanded(!completedExpanded)}
+              className="flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+            >
+              <span className="text-xs">{completedExpanded ? '▾' : '▸'}</span>
+              Completed ({changelogEntries.length})
+            </button>
+            {completedExpanded && (
+              <div className="mt-2 space-y-1.5">
+                {changelogEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-baseline gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+                  >
+                    <span className="font-medium text-neutral-700 dark:text-neutral-200">
+                      {entry.title}
+                    </span>
+                    <span className="text-xs text-neutral-400">
+                      {entry.completedAt}
+                    </span>
+                    {entry.summary && (
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                        — {entry.summary}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

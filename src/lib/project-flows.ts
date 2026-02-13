@@ -3,20 +3,15 @@ import type { DashboardSettings } from './settings';
 import { createProject, removeProject } from './projects';
 import {
   createDirectory,
-  getProjectsDir,
   gitInitRepo,
   pathExists,
   pickFolder,
   probeRepo,
   readFile,
   removePath,
-  resolvePath,
-  runArchitectureV2Migration,
   writeFile,
-  type MigrationReport,
 } from './tauri';
-import type { ProjectStatus, ProjectViewModel, RepoStatus } from './schema';
-import { validateRepoStatus } from './schema';
+import type { ProjectStatus, ProjectViewModel } from './schema';
 
 const RESERVED_IDS = new Set(['index', 'projects', 'templates', 'con', 'prn', 'aux', 'nul']);
 const MUTATION_LOCK_ERROR_PREFIX = 'mutationLocked:';
@@ -82,9 +77,9 @@ function compactFrontmatter(frontmatter: Record<string, unknown>): Record<string
   );
 }
 
-function ensureInsideWorkspace(path: string, workspaceRoots: string[]): { inside: boolean; root?: string } {
+function ensureInsideScanPaths(path: string, scanPaths: string[]): { inside: boolean; root?: string } {
   const normalized = normalizePathForComparison(path);
-  for (const root of workspaceRoots) {
+  for (const root of scanPaths) {
     const rootNormalized = normalizePathForComparison(root);
     if (!rootNormalized) continue;
     if (normalized === rootNormalized || normalized.startsWith(`${rootNormalized}/`)) {
@@ -92,18 +87,6 @@ function ensureInsideWorkspace(path: string, workspaceRoots: string[]): { inside
     }
   }
   return { inside: false };
-}
-
-function extractProjectFrontmatterState(raw: string): {
-  hasFrontmatter: boolean;
-  repoStatus: RepoStatus | null;
-} {
-  const hasFrontmatter = raw.trimStart().startsWith('---');
-  const parsed = matter(raw);
-  return {
-    hasFrontmatter,
-    repoStatus: validateRepoStatus(parsed.data),
-  };
 }
 
 export type CompatibilityAction = {
@@ -131,39 +114,27 @@ export type CompatibilityReport = {
   inferredStatus: ProjectStatus;
   detectedStatus?: ProjectStatus;
   inferredRepo?: string;
-  catalogIdConflict: boolean;
-  localPathConflict: boolean;
+  idConflict: boolean;
   conflictingEntryId?: string;
-  insideWorkspaceRoots: boolean;
-  matchedWorkspaceRoot?: string;
-  requiresWorkspaceApproval: boolean;
+  insideScanPaths: boolean;
+  matchedScanPath?: string;
   isWorkingTreeDirty?: boolean;
   dirtyPaths?: string[];
   actions: CompatibilityAction[];
 };
 
-async function resolveExistingLocalPath(path: string): Promise<string | null> {
-  try {
-    return await resolvePath(path);
-  } catch {
-    return null;
-  }
-}
-
 export async function checkExistingProjectCompatibility(args: {
   folderPath: string;
-  workspaceRoots: string[];
+  scanPaths: string[];
   existingProjects: ProjectViewModel[];
 }): Promise<CompatibilityReport> {
-  const resolvedFolderPath = await resolvePath(args.folderPath);
-  const folderName = resolvedFolderPath.split('/').pop() || resolvedFolderPath;
+  const folderName = args.folderPath.split('/').pop() || args.folderPath;
+  const repoInfo = await probeRepo(args.folderPath);
 
-  const repoInfo = await probeRepo(resolvedFolderPath);
-
-  const projectPath = `${resolvedFolderPath}/PROJECT.md`;
-  const roadmapPath = `${resolvedFolderPath}/ROADMAP.md`;
-  const agentsPath = `${resolvedFolderPath}/AGENTS.md`;
-  const readmePath = `${resolvedFolderPath}/README.md`;
+  const projectPath = `${args.folderPath}/PROJECT.md`;
+  const roadmapPath = `${args.folderPath}/ROADMAP.md`;
+  const agentsPath = `${args.folderPath}/AGENTS.md`;
+  const readmePath = `${args.folderPath}/README.md`;
 
   const hasProjectMd = await pathExists(projectPath);
   const hasRoadmapMd = await pathExists(roadmapPath);
@@ -176,43 +147,25 @@ export async function checkExistingProjectCompatibility(args: {
 
   if (hasProjectMd) {
     const raw = await readFile(projectPath);
-    const parsed = extractProjectFrontmatterState(raw);
-    if (!parsed.hasFrontmatter) {
+    const hasFrontmatter = raw.trimStart().startsWith('---');
+    if (!hasFrontmatter) {
       projectMdStatus = 'missing-frontmatter';
-    } else if (!parsed.repoStatus) {
-      projectMdStatus = 'invalid-frontmatter';
     } else {
-      projectMdStatus = 'valid';
-      detectedStatus = parsed.repoStatus.status;
-      if (parsed.repoStatus.title) {
-        inferredTitle = parsed.repoStatus.title;
-      }
+      const { data } = matter(raw);
+      const record = data as Record<string, unknown>;
+      if (typeof record.title === 'string') inferredTitle = record.title;
+      if (typeof record.status === 'string') detectedStatus = record.status as ProjectStatus;
+      projectMdStatus = record.title ? 'valid' : 'invalid-frontmatter';
     }
   }
 
   const inferredStatus: ProjectStatus = detectedStatus ?? 'simmering';
   const inferredId = canonicalSlugify(inferredTitle || folderName);
 
-  let localPathConflict = false;
-  let conflictingEntryId: string | undefined;
-  for (const entry of args.existingProjects) {
-    const localPath = entry.frontmatter.localPath;
-    if (!localPath) continue;
-    const resolved = await resolveExistingLocalPath(localPath);
-    if (!resolved) continue;
-    if (normalizePathForComparison(resolved) === normalizePathForComparison(resolvedFolderPath)) {
-      localPathConflict = true;
-      conflictingEntryId = entry.id;
-      break;
-    }
-  }
+  const idConflict = args.existingProjects.some((entry) => entry.id === inferredId);
+  const conflictingEntryId = idConflict ? inferredId : undefined;
 
-  const catalogIdConflict = args.existingProjects.some((entry) => entry.id === inferredId);
-  if (!conflictingEntryId && catalogIdConflict) {
-    conflictingEntryId = inferredId;
-  }
-
-  const workspaceCheck = ensureInsideWorkspace(resolvedFolderPath, args.workspaceRoots);
+  const scanPathCheck = ensureInsideScanPaths(args.folderPath, args.scanPaths);
   const actions: CompatibilityAction[] = [];
 
   if (!hasProjectMd) {
@@ -262,41 +215,25 @@ export async function checkExistingProjectCompatibility(args: {
       severity: 'info',
     });
   }
-  if (catalogIdConflict) {
+  if (idConflict) {
     actions.push({
       type: 'prompt',
-      file: 'catalog',
-      description: `Catalog id conflict for "${inferredId}"`,
+      file: 'project',
+      description: `Project id conflict for "${inferredId}"`,
       severity: 'error',
     });
   }
-  if (localPathConflict) {
-    actions.push({
-      type: 'prompt',
-      file: 'catalog',
-      description: `Path already tracked by "${conflictingEntryId}"`,
-      severity: 'error',
-    });
-  }
-  if (!workspaceCheck.inside) {
+  if (!scanPathCheck.inside) {
     actions.push({
       type: 'prompt',
       file: 'settings',
-      description: 'Folder is outside workspace roots; approval required before writes',
-      severity: 'warning',
-    });
-  }
-  if (repoInfo.isWorkingTreeDirty) {
-    actions.push({
-      type: 'prompt',
-      file: '.git',
-      description: 'Working tree is dirty; mutation requires explicit override',
+      description: 'Folder is outside scan paths; add to settings first',
       severity: 'warning',
     });
   }
 
   return {
-    folderPath: resolvedFolderPath,
+    folderPath: args.folderPath,
     folderName,
     isGitRepo: repoInfo.isGitRepo,
     gitBranch: repoInfo.gitBranch,
@@ -311,12 +248,10 @@ export async function checkExistingProjectCompatibility(args: {
     inferredStatus,
     detectedStatus,
     inferredRepo: repoInfo.gitRemote,
-    catalogIdConflict,
-    localPathConflict,
+    idConflict,
     conflictingEntryId,
-    insideWorkspaceRoots: workspaceCheck.inside,
-    matchedWorkspaceRoot: workspaceCheck.root,
-    requiresWorkspaceApproval: !workspaceCheck.inside,
+    insideScanPaths: scanPathCheck.inside,
+    matchedScanPath: scanPathCheck.root,
     isWorkingTreeDirty: repoInfo.isWorkingTreeDirty,
     dirtyPaths: repoInfo.dirtyPaths,
     actions,
@@ -326,8 +261,8 @@ export async function checkExistingProjectCompatibility(args: {
 type CreateFlowInput = {
   title: string;
   folderName: string;
-  workspaceRoot: string;
-  workspaceRoots: string[];
+  scanPath: string;
+  scanPaths: string[];
   status: ProjectStatus;
   priority?: number;
   initializeGit: boolean;
@@ -345,11 +280,10 @@ Describe the purpose, scope, and current state of this project.
 }
 
 function roadmapTemplate(title: string): string {
-  return `# ROADMAP — ${title}
-
-## Backlog
-
-- [ ] Define first deliverable
+  return `---
+items: []
+---
+# ROADMAP — ${title}
 `;
 }
 
@@ -358,33 +292,6 @@ function agentsTemplate(title: string): string {
 
 Instructions for agents working on this project.
 `;
-}
-
-async function writeCatalogLinkedEntry(args: {
-  id: string;
-  title: string;
-  localPath: string;
-  status: ProjectStatus;
-  priority?: number;
-}): Promise<string> {
-  await withMutationRetry(() =>
-    createProject(
-      args.id,
-      {
-        id: args.id,
-        title: args.title,
-        type: 'project',
-        trackingMode: 'linked',
-        localPath: args.localPath,
-        priority: args.priority,
-        cachedStatus: args.status,
-        cacheUpdatedAt: new Date().toISOString(),
-      },
-      '',
-    ),
-  );
-  const projectsDir = await getProjectsDir();
-  return `${projectsDir}/${args.id}.md`;
 }
 
 export async function createNewProjectFlow(
@@ -402,20 +309,18 @@ export async function createNewProjectFlow(
     throw new Error(`A project with id "${id}" already exists`);
   }
 
-  const resolvedRoot = await resolvePath(input.workspaceRoot);
-  if (input.workspaceRoots.length > 0) {
-    const policy = ensureInsideWorkspace(resolvedRoot, input.workspaceRoots);
+  if (input.scanPaths.length > 0) {
+    const policy = ensureInsideScanPaths(input.scanPath, input.scanPaths);
     if (!policy.inside) {
-      throw new Error('Selected workspace root is outside configured workspace roots');
+      throw new Error('Selected path is outside configured scan paths');
     }
   }
-  const localPath = `${resolvedRoot}/${id}`;
+  const localPath = `${input.scanPath}/${id}`;
   if (await pathExists(localPath)) {
     throw new Error(`Target folder already exists: ${localPath}`);
   }
 
   const createdFiles: string[] = [];
-  let catalogFilePath: string | null = null;
   let folderCreated = false;
 
   try {
@@ -453,24 +358,12 @@ export async function createNewProjectFlow(
     );
     createdFiles.push('.gitignore');
 
-    catalogFilePath = await writeCatalogLinkedEntry({
-      id,
-      title,
-      localPath,
-      status: input.status,
-      priority: input.priority,
-    });
-
     if (input.initializeGit) {
       await gitInitRepo(localPath, true, createdFiles);
     }
 
     return { id, localPath };
   } catch (error) {
-    if (catalogFilePath) {
-      const catalogPath = catalogFilePath;
-      await withMutationRetry(() => removeProject(catalogPath)).catch(() => undefined);
-    }
     for (const relative of createdFiles) {
       await withMutationRetry(() => removePath(`${localPath}/${relative}`)).catch(() => undefined);
     }
@@ -501,14 +394,11 @@ export async function addExistingProjectFlow(
   if (input.report.projectMdStatus === 'invalid-frontmatter') {
     throw new Error('PROJECT.md frontmatter is invalid. Fix it before adding.');
   }
-  if (input.report.localPathConflict) {
-    throw new Error('This local path is already tracked.');
-  }
   if (input.report.isWorkingTreeDirty && !input.allowDirtyOverride) {
     throw new Error('Repo is dirty. Enable override to continue.');
   }
-  if (!input.report.insideWorkspaceRoots) {
-    throw new Error('Selected folder is outside workspace roots. Update settings first.');
+  if (!input.report.insideScanPaths) {
+    throw new Error('Selected folder is outside scan paths. Update settings first.');
   }
 
   const id = canonicalSlugify(input.id);
@@ -522,7 +412,6 @@ export async function addExistingProjectFlow(
   const localPath = input.report.folderPath;
   const createdFilePaths: string[] = [];
   const backups = new Map<string, string>();
-  let catalogFilePath: string | null = null;
 
   const writeWithBackup = async (filePath: string, content: string): Promise<void> => {
     const exists = await pathExists(filePath);
@@ -569,13 +458,6 @@ export async function addExistingProjectFlow(
       await writeWithBackup(`${localPath}/AGENTS.md`, agentsTemplate(input.title));
     }
 
-    catalogFilePath = await writeCatalogLinkedEntry({
-      id,
-      title: input.title,
-      localPath,
-      status: input.report.detectedStatus ?? input.fallbackStatus,
-    });
-
     if (!input.report.isGitRepo && input.initGitIfMissing) {
       const filesForCommit = [
         'PROJECT.md',
@@ -592,23 +474,15 @@ export async function addExistingProjectFlow(
     for (const [filePath, content] of backups.entries()) {
       await withMutationRetry(() => writeFile(filePath, content)).catch(() => undefined);
     }
-    if (catalogFilePath) {
-      const catalogPath = catalogFilePath;
-      await withMutationRetry(() => removeProject(catalogPath)).catch(() => undefined);
-    }
     throw error;
   }
-}
-
-export async function runV2MigrationFlow(): Promise<MigrationReport> {
-  return runArchitectureV2Migration();
 }
 
 export async function chooseFolder(initialPath?: string | null): Promise<string | null> {
   return pickFolder(initialPath);
 }
 
-export async function chooseWorkspaceRoot(settings: DashboardSettings | null): Promise<string | null> {
-  const preferred = settings?.workspaceRoots[0] ?? null;
+export async function chooseScanPath(settings: DashboardSettings | null): Promise<string | null> {
+  const preferred = settings?.scanPaths[0] ?? null;
   return pickFolder(preferred);
 }

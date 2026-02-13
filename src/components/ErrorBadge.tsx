@@ -12,7 +12,10 @@ function formatError(error: DashboardError): string {
   if (error.type === 'parse_failure') return `${error.file}: ${error.error}`;
   if (error.type === 'save_failure') return `${error.file}: ${error.error}`;
   if (error.type === 'file_not_found') return error.file;
-  return `${error.localPath}/${error.statusFile}`;
+  if (error.type === 'duplicate_project_id') return `Duplicate id "${error.id}": ${error.paths.join(', ')}`;
+  if (error.type === 'scan_path_missing') return `Scan path missing: ${error.path}`;
+  if (error.type === 'scan_path_permission_denied') return `Permission denied: ${error.path}`;
+  return 'Unknown error';
 }
 
 export function ErrorBadge({ errors }: ErrorBadgeProps) {

@@ -24,7 +24,7 @@ interface AddProjectDialogProps {
 
 type WizardMode = 'create-new' | 'add-existing';
 
-const STATUS_OPTIONS: ProjectStatus[] = ['in-flight', 'up-next', 'simmering', 'dormant', 'shipped'];
+const STATUS_OPTIONS: ProjectStatus[] = ['in-flight', 'up-next', 'simmering', 'dormant', 'archived'];
 
 export function AddProjectDialog({
   open,
@@ -37,13 +37,13 @@ export function AddProjectDialog({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const workspaceRoots = settings?.workspaceRoots ?? [];
-  const defaultRoot = workspaceRoots[0] ?? '';
+  const scanPaths = settings?.scanPaths ?? [];
+  const defaultRoot = scanPaths[0] ?? '';
 
   const [title, setTitle] = useState('');
   const [folderName, setFolderName] = useState('');
   const [folderEdited, setFolderEdited] = useState(false);
-  const [workspaceRoot, setWorkspaceRoot] = useState(defaultRoot);
+  const [scanPath, setScanPath] = useState(defaultRoot);
   const [status, setStatus] = useState<ProjectStatus>('up-next');
   const [priority, setPriority] = useState('');
   const [initializeGit, setInitializeGit] = useState(true);
@@ -78,7 +78,7 @@ export function AddProjectDialog({
   );
   const canCreate =
     title.trim().length > 0
-    && workspaceRoot.trim().length > 0
+    && scanPath.trim().length > 0
     && !isReservedProjectId(canonicalCreateId)
     && !hasCreateIdConflict;
 
@@ -98,7 +98,7 @@ export function AddProjectDialog({
     setError(null);
     setSaving(false);
     setCompatibility(null);
-    setWorkspaceRoot(defaultRoot);
+    setScanPath(defaultRoot);
   }, [defaultRoot, open]);
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export function AddProjectDialog({
     try {
       const report = await checkExistingProjectCompatibility({
         folderPath: existingFolderPath,
-        workspaceRoots: workspaceRoots.length > 0 ? workspaceRoots : [workspaceRoot],
+        scanPaths: scanPaths.length > 0 ? scanPaths : [scanPath],
         existingProjects,
       });
       setCompatibility(report);
@@ -185,16 +185,16 @@ export function AddProjectDialog({
                 }}
                 placeholder="shopping-app"
               />
-              <span className="text-xs text-neutral-500">Catalog id: <code>{canonicalCreateId}</code></span>
+              <span className="text-xs text-neutral-500">Project id: <code>{canonicalCreateId}</code></span>
             </label>
 
             <label className="grid gap-1 text-sm">
-              <span>Workspace root</span>
+              <span>Scan path</span>
               <div className="flex gap-2">
                 <Input
-                  value={workspaceRoot}
-                  onChange={(event) => setWorkspaceRoot(event.target.value)}
-                  placeholder="Select workspace root..."
+                  value={scanPath}
+                  onChange={(event) => setScanPath(event.target.value)}
+                  placeholder="Select scan path..."
                 />
                 <Button
                   type="button"
@@ -202,17 +202,17 @@ export function AddProjectDialog({
                   size="icon"
                   className="h-10 w-10 shrink-0"
                   onClick={async () => {
-                    const picked = await chooseFolder(workspaceRoot || null);
-                    if (picked) setWorkspaceRoot(picked);
+                    const picked = await chooseFolder(scanPath || null);
+                    if (picked) setScanPath(picked);
                   }}
                   title="Choose folder"
                 >
                   <FolderOpen className="h-4 w-4" />
                 </Button>
               </div>
-              {workspaceRoots.length > 0 && (
+              {scanPaths.length > 0 && (
                 <span className="text-xs text-neutral-500">
-                  Suggested: {workspaceRoots.join(', ')}
+                  Configured: {scanPaths.join(', ')}
                 </span>
               )}
             </label>
@@ -292,8 +292,8 @@ export function AddProjectDialog({
                       {
                         title,
                         folderName,
-                        workspaceRoot,
-                        workspaceRoots,
+                        scanPath,
+                        scanPaths,
                         status,
                         priority: priority.trim() ? Number(priority) : undefined,
                         initializeGit,
@@ -331,7 +331,7 @@ export function AddProjectDialog({
                   size="icon"
                   className="h-10 w-10 shrink-0"
                   onClick={async () => {
-                    const picked = await chooseFolder(existingFolderPath || workspaceRoot || null);
+                    const picked = await chooseFolder(existingFolderPath || scanPath || null);
                     if (picked) setExistingFolderPath(picked);
                   }}
                   title="Choose folder"
@@ -362,7 +362,7 @@ export function AddProjectDialog({
                   <p>PROJECT.md: {compatibility.hasProjectMd ? (compatibility.projectMdStatus ?? 'found') : 'missing'}</p>
                   <p>ROADMAP.md: {compatibility.hasRoadmapMd ? 'found' : 'missing'}</p>
                   <p>AGENTS.md: {compatibility.hasAgentsMd ? 'found' : 'missing'}</p>
-                  <p>Workspace policy: {compatibility.insideWorkspaceRoots ? 'inside roots' : 'outside roots'}</p>
+                  <p>Scan policy: {compatibility.insideScanPaths ? 'inside scan paths' : 'outside scan paths'}</p>
                   {compatibility.actions.length > 0 && (
                     <ul className="mt-2 list-disc pl-4">
                       {compatibility.actions.map((action) => (
@@ -379,7 +379,7 @@ export function AddProjectDialog({
                   <Input value={existingTitle} onChange={(event) => setExistingTitle(event.target.value)} />
                 </label>
                 <label className="grid gap-1 text-sm">
-                  <span>Catalog id</span>
+                  <span>Project id</span>
                   <Input value={existingId} onChange={(event) => setExistingId(event.target.value)} />
                 </label>
                 {isReservedProjectId(canonicalExistingId) && (

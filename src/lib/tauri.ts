@@ -23,18 +23,20 @@ export type RepoProbe = {
   dirtyPaths: string[];
 };
 
-export type MigrationReport = {
-  movedEntries: string[];
-  skippedEntries: string[];
-  warnings: string[];
-  settingsUpdated: boolean;
-  catalogEntriesDir: string;
+export type ScanResult = {
+  projects: string[];
+  skipped: SkippedDirectory[];
+};
+
+export type SkippedDirectory = {
+  path: string;
+  reason: string;
 };
 
 type TauriCommands = {
   get_dashboard_settings: { args: Record<string, never>; return: DashboardSettings };
   update_dashboard_settings: { args: { settings: DashboardSettings }; return: DashboardSettings };
-  get_projects_dir: { args: Record<string, never>; return: string };
+  scan_projects: { args: { scanPaths: string[] }; return: ScanResult };
   get_openclaw_gateway_config: {
     args: Record<string, never>;
     return: { ws_url: string; token?: string; session_key: string };
@@ -50,7 +52,6 @@ type TauriCommands = {
   };
   read_file: { args: { path: string }; return: string };
   write_file: { args: { path: string; content: string }; return: void };
-  list_files: { args: { dir: string }; return: string[] };
   delete_file: { args: { path: string }; return: void };
   remove_path: { args: { path: string }; return: void };
   resolve_path: { args: { path: string }; return: string };
@@ -70,7 +71,6 @@ type TauriCommands = {
   };
   check_for_update: { args: Record<string, never>; return: UpdateStatus };
   run_app_update: { args: Record<string, never>; return: string };
-  run_architecture_v2_migration: { args: Record<string, never>; return: MigrationReport };
   list_slash_commands: { args: Record<string, never>; return: TauriSlashCommand[] };
   // Chat persistence commands
   chat_messages_load: {
@@ -102,8 +102,8 @@ async function typedInvoke<T extends keyof TauriCommands>(
   return invoke<TauriCommands[T]['return']>(cmd, args[0]);
 }
 
-export async function getProjectsDir(): Promise<string> {
-  return typedInvoke('get_projects_dir');
+export async function scanProjects(scanPaths: string[]): Promise<ScanResult> {
+  return typedInvoke('scan_projects', { scanPaths });
 }
 
 export async function getDashboardSettings(): Promise<DashboardSettings> {
@@ -150,10 +150,6 @@ export async function readFile(path: string): Promise<string> {
 
 export async function writeFile(path: string, content: string): Promise<void> {
   return typedInvoke('write_file', { path, content });
-}
-
-export async function listFiles(dir: string): Promise<string[]> {
-  return typedInvoke('list_files', { dir });
 }
 
 export async function deleteFile(path: string): Promise<void> {
@@ -210,10 +206,6 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 
 export async function runAppUpdate(): Promise<string> {
   return typedInvoke('run_app_update');
-}
-
-export async function runArchitectureV2Migration(): Promise<MigrationReport> {
-  return typedInvoke('run_architecture_v2_migration');
 }
 
 export async function listSlashCommands(): Promise<TauriSlashCommand[]> {

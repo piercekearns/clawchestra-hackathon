@@ -45,7 +45,6 @@ function installMocks(state: TestState): void {
       }
       state.dirs.add(path);
     },
-    getProjectsDir: async () => '/catalog/projects',
     gitInitRepo: async () => {
       if (state.gitInitFailuresRemaining > 0) {
         state.gitInitFailuresRemaining -= 1;
@@ -71,27 +70,10 @@ function installMocks(state: TestState): void {
     removePath: async (path: string) => {
       removePathRecursive(state, path);
     },
-    resolvePath: async (path: string) => path,
-    runArchitectureV2Migration: async () => ({
-      movedEntries: [],
-      skippedEntries: [],
-      warnings: [],
-      settingsUpdated: false,
-      catalogEntriesDir: '/catalog/projects',
-    }),
     writeFile: async (path: string, content: string) => {
       const parent = path.split('/').slice(0, -1).join('/');
       if (parent) state.dirs.add(parent);
       state.files.set(path, content);
-    },
-  }));
-
-  mock.module('./projects', () => ({
-    createProject: async (id: string) => {
-      state.files.set(`/catalog/projects/${id}.md`, `id: ${id}`);
-    },
-    removeProject: async (path: string) => {
-      state.files.delete(path);
     },
   }));
 }
@@ -115,8 +97,8 @@ describe('project flow hardening', () => {
       {
         title: 'Shopping App',
         folderName: 'shopping-app',
-        workspaceRoot: '/workspace',
-        workspaceRoots: ['/workspace'],
+        scanPath: '/workspace',
+        scanPaths: ['/workspace'],
         status: 'up-next',
         initializeGit: false,
         createRoadmap: false,
@@ -129,7 +111,7 @@ describe('project flow hardening', () => {
     expect(state.createDirCalls).toBe(3);
   });
 
-  it('rolls back create flow when git init fails after catalog entry creation', async () => {
+  it('rolls back create flow when git init fails', async () => {
     const state = createState();
     installMocks(state);
     state.gitInitFailuresRemaining = 1;
@@ -141,8 +123,8 @@ describe('project flow hardening', () => {
         {
           title: 'Shopping App',
           folderName: 'shopping-app',
-          workspaceRoot: '/workspace',
-          workspaceRoots: ['/workspace'],
+          scanPath: '/workspace',
+          scanPaths: ['/workspace'],
           status: 'up-next',
           initializeGit: true,
           createRoadmap: true,
@@ -153,10 +135,9 @@ describe('project flow hardening', () => {
     ).rejects.toThrow('git init failed');
 
     expect(isPathPresent(state, '/workspace/shopping-app')).toBe(false);
-    expect(state.files.has('/catalog/projects/shopping-app.md')).toBe(false);
   });
 
-  it('restores edited files and removes catalog entry when add-existing fails late', async () => {
+  it('restores edited files when add-existing fails late', async () => {
     const state = createState();
     installMocks(state);
     state.gitInitFailuresRemaining = 1;
@@ -182,12 +163,10 @@ describe('project flow hardening', () => {
             inferredStatus: 'simmering',
             detectedStatus: undefined,
             inferredRepo: undefined,
-            catalogIdConflict: false,
-            localPathConflict: false,
+            idConflict: false,
             conflictingEntryId: undefined,
-            insideWorkspaceRoots: true,
-            matchedWorkspaceRoot: '/workspace',
-            requiresWorkspaceApproval: false,
+            insideScanPaths: true,
+            matchedScanPath: '/workspace',
             isWorkingTreeDirty: false,
             dirtyPaths: [],
             actions: [],
@@ -209,6 +188,5 @@ describe('project flow hardening', () => {
     expect(state.files.get('/workspace/existing-app/PROJECT.md')).toBe('plain body without frontmatter');
     expect(state.files.has('/workspace/existing-app/ROADMAP.md')).toBe(false);
     expect(state.files.has('/workspace/existing-app/AGENTS.md')).toBe(false);
-    expect(state.files.has('/catalog/projects/existing-app.md')).toBe(false);
   });
 });

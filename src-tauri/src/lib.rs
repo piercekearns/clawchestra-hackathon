@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -12,46 +12,6 @@ use serde_json::{json, Value};
 
 // Embedded at compile time by build.rs
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
-const SKIP_FILE_NAMES: [&str; 11] = [
-    "PIPELINE.md",
-    "SPEC.md",
-    "OVERVIEW.md",
-    "SCHEMA.md",
-    "USAGE.md",
-    "README.md",
-    "REVIEW-FIXES.md",
-    "PROJECT.md",
-    "CHANGELOG.md",
-    "ROADMAP.md",
-    "AGENTS.md",
-];
-const LEGACY_SKIP_DIR_NAMES: [&str; 8] = [
-    "node_modules",
-    ".git",
-    "target",
-    "dist",
-    "todos",
-    "docs",
-    "src",
-    "src-tauri",
-];
-const HOME_REPO_EXCLUSIONS: [&str; 14] = [
-    "repos",
-    "clawdbot-sandbox",
-    "Library",
-    "Desktop",
-    "Documents",
-    "Downloads",
-    "Movies",
-    "Music",
-    "Pictures",
-    "Public",
-    "Applications",
-    "node_modules",
-    "heroku-cli",
-    "tmp",
-];
-
 #[derive(Serialize)]
 struct GitStatus {
     state: String,
@@ -70,30 +30,10 @@ struct RepoProbe {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MigrationReport {
-    moved_entries: Vec<String>,
-    skipped_entries: Vec<String>,
-    warnings: Vec<String>,
-    settings_updated: bool,
-    catalog_entries_dir: String,
-}
-
-#[derive(Serialize)]
 struct OpenClawGatewayConfig {
     ws_url: String,
     token: Option<String>,
     session_key: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TrustedPathApproval {
-    approved_path: String,
-    approved_at: String,
-    approved_by: String,
-    expires_at: String,
-    operations: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -103,10 +43,8 @@ struct DashboardSettings {
     settings_version: u32,
     #[serde(default = "default_migration_version")]
     migration_version: u32,
-    #[serde(default = "default_catalog_root")]
-    catalog_root: String,
-    #[serde(default = "default_workspace_roots")]
-    workspace_roots: Vec<String>,
+    #[serde(default = "default_scan_paths")]
+    scan_paths: Vec<String>,
     #[serde(default = "default_openclaw_workspace_path")]
     openclaw_workspace_path: Option<String>,
     #[serde(default = "default_app_source_path")]
@@ -115,8 +53,6 @@ struct DashboardSettings {
     update_mode: String,
     #[serde(default = "default_openclaw_context_policy")]
     openclaw_context_policy: String,
-    #[serde(default)]
-    approved_external_paths: Vec<TrustedPathApproval>,
 }
 
 #[derive(Deserialize)]
@@ -135,49 +71,13 @@ fn default_migration_version() -> u32 {
     0
 }
 
-fn default_catalog_root() -> String {
+fn default_scan_paths() -> Vec<String> {
     if let Ok(path) = std::env::var("PIPELINE_PROJECTS_DIR") {
-        return path;
+        return vec![path];
     }
 
     let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    if cfg!(target_os = "macos") {
-        Path::new(&home)
-            .join("Library")
-            .join("Application Support")
-            .join("Pipeline Dashboard")
-            .join("catalog")
-            .to_string_lossy()
-            .to_string()
-    } else if cfg!(target_os = "windows") {
-        if let Ok(appdata) = env::var("APPDATA") {
-            Path::new(&appdata)
-                .join("Pipeline Dashboard")
-                .join("catalog")
-                .to_string_lossy()
-                .to_string()
-        } else {
-            Path::new(&home)
-                .join("AppData")
-                .join("Roaming")
-                .join("Pipeline Dashboard")
-                .join("catalog")
-                .to_string_lossy()
-                .to_string()
-        }
-    } else {
-        Path::new(&home)
-            .join(".config")
-            .join("pipeline-dashboard")
-            .join("catalog")
-            .to_string_lossy()
-            .to_string()
-    }
-}
-
-fn default_workspace_roots() -> Vec<String> {
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let mut roots = Vec::new();
+    let mut paths = Vec::new();
     let preferred = [
         Path::new(&home).join("repos").to_string_lossy().to_string(),
         Path::new(&home)
@@ -187,17 +87,13 @@ fn default_workspace_roots() -> Vec<String> {
             .to_string(),
     ];
 
-    for root in preferred {
-        if Path::new(&root).exists() {
-            roots.push(root);
+    for path in preferred {
+        if Path::new(&path).exists() {
+            paths.push(path);
         }
     }
 
-    if roots.is_empty() {
-        roots.push(default_catalog_root());
-    }
-
-    roots
+    paths
 }
 
 fn default_openclaw_workspace_path() -> Option<String> {
@@ -446,49 +342,17 @@ fn normalize_optional_path(path: Option<String>) -> Result<Option<String>, Strin
     }
 }
 
-fn directory_contains_markdown(dir: &Path) -> bool {
-    fs::read_dir(dir)
-        .ok()
-        .into_iter()
-        .flat_map(|entries| entries.filter_map(Result::ok))
-        .map(|entry| entry.path())
-        .any(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "md"))
-}
-
-fn resolve_catalog_entries_dir(
-    settings: &DashboardSettings,
-    create_if_missing: bool,
-) -> Result<PathBuf, String> {
-    let catalog_root = PathBuf::from(&settings.catalog_root);
-    let entries_dir = catalog_root.join("projects");
-
-    let has_legacy_layout = catalog_root.exists()
-        && !entries_dir.exists()
-        && directory_contains_markdown(&catalog_root);
-
-    if has_legacy_layout {
-        return Ok(catalog_root);
-    }
-
-    if create_if_missing {
-        fs::create_dir_all(&entries_dir).map_err(|error| error.to_string())?;
-    }
-
-    Ok(entries_dir)
-}
-
 fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSettings, String> {
     settings.settings_version = 1;
     if settings.migration_version > 1 {
         settings.migration_version = 1;
     }
-    settings.catalog_root = normalize_path(&settings.catalog_root)?;
 
-    let mut workspace_roots: Vec<String> = settings
-        .workspace_roots
+    let mut scan_paths: Vec<String> = settings
+        .scan_paths
         .into_iter()
-        .filter_map(|root| {
-            let trimmed = root.trim();
+        .filter_map(|path| {
+            let trimmed = path.trim();
             if trimmed.is_empty() {
                 None
             } else {
@@ -497,12 +361,9 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    if workspace_roots.is_empty() {
-        workspace_roots.push(settings.catalog_root.clone());
-    }
-    workspace_roots.sort();
-    workspace_roots.dedup();
-    settings.workspace_roots = workspace_roots;
+    scan_paths.sort();
+    scan_paths.dedup();
+    settings.scan_paths = scan_paths;
 
     settings.openclaw_workspace_path =
         normalize_optional_path(settings.openclaw_workspace_path.clone())?;
@@ -517,15 +378,6 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
         settings.openclaw_context_policy = default_openclaw_context_policy();
     }
 
-    settings.approved_external_paths = settings
-        .approved_external_paths
-        .into_iter()
-        .map(|mut approval| {
-            approval.approved_path = normalize_path(&approval.approved_path)?;
-            Ok::<TrustedPathApproval, String>(approval)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
     Ok(settings)
 }
 
@@ -533,25 +385,21 @@ fn default_settings() -> DashboardSettings {
     let settings = DashboardSettings {
         settings_version: default_settings_version(),
         migration_version: 1,
-        catalog_root: default_catalog_root(),
-        workspace_roots: default_workspace_roots(),
+        scan_paths: default_scan_paths(),
         openclaw_workspace_path: default_openclaw_workspace_path(),
         app_source_path: default_app_source_path(),
         update_mode: default_update_mode(),
         openclaw_context_policy: default_openclaw_context_policy(),
-        approved_external_paths: vec![],
     };
 
     sanitize_settings(settings).unwrap_or_else(|_| DashboardSettings {
         settings_version: 1,
         migration_version: 1,
-        catalog_root: default_catalog_root(),
-        workspace_roots: vec![default_catalog_root()],
+        scan_paths: vec![],
         openclaw_workspace_path: None,
         app_source_path: default_app_source_path(),
         update_mode: default_update_mode(),
         openclaw_context_policy: default_openclaw_context_policy(),
-        approved_external_paths: vec![],
     })
 }
 
@@ -625,15 +473,86 @@ fn update_dashboard_settings(settings: DashboardSettings) -> Result<DashboardSet
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanResult {
+    projects: Vec<String>,
+    skipped: Vec<SkippedDirectory>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SkippedDirectory {
+    path: String,
+    reason: String,
+}
+
+const SCAN_SKIP_DIRS: [&str; 6] = [
+    "node_modules",
+    ".git",
+    "target",
+    "dist",
+    ".next",
+    ".cache",
+];
+
 #[tauri::command]
-fn get_projects_dir() -> Result<String, String> {
-    if let Ok(override_dir) = std::env::var("PIPELINE_PROJECTS_DIR") {
-        return normalize_path(&override_dir);
+fn scan_projects(scan_paths: Vec<String>) -> Result<ScanResult, String> {
+    let mut projects = Vec::new();
+    let mut skipped = Vec::new();
+
+    for scan_path in &scan_paths {
+        let root = PathBuf::from(scan_path);
+        if !root.exists() {
+            skipped.push(SkippedDirectory {
+                path: scan_path.clone(),
+                reason: "not found".to_string(),
+            });
+            continue;
+        }
+
+        let entries = match fs::read_dir(&root) {
+            Ok(entries) => entries,
+            Err(_) => {
+                skipped.push(SkippedDirectory {
+                    path: scan_path.clone(),
+                    reason: "permission denied".to_string(),
+                });
+                continue;
+            }
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let dir_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+
+            // Skip hidden directories and known noise
+            if dir_name.starts_with('.') || SCAN_SKIP_DIRS.contains(&dir_name) {
+                continue;
+            }
+
+            // A project directory must contain PROJECT.md
+            let project_md = path.join("PROJECT.md");
+            if project_md.exists() {
+                projects.push(path.to_string_lossy().to_string());
+            }
+        }
     }
 
-    let settings = load_dashboard_settings()?;
-    let entries_dir = resolve_catalog_entries_dir(&settings, true)?;
-    Ok(entries_dir.to_string_lossy().to_string())
+    projects.sort();
+    Ok(ScanResult { projects, skipped })
 }
 
 #[tauri::command]
@@ -650,66 +569,6 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 
         fs::write(&path, content).map_err(|error| error.to_string())
     })
-}
-
-#[tauri::command]
-fn list_files(dir: String) -> Result<Vec<String>, String> {
-    let dir_path = PathBuf::from(&dir);
-    let mut file_paths = Vec::new();
-    let legacy_mode = is_legacy_catalog_entries_dir(&dir_path);
-    collect_markdown_files_recursive(&dir_path, legacy_mode, &mut file_paths)?;
-
-    let mut files: Vec<String> = file_paths
-        .into_iter()
-        .map(|path| path.to_string_lossy().to_string())
-        .collect();
-    files.sort();
-    Ok(files)
-}
-
-fn is_legacy_catalog_entries_dir(dir: &Path) -> bool {
-    let settings = match load_dashboard_settings() {
-        Ok(value) => value,
-        Err(_) => return false,
-    };
-    let catalog_root = PathBuf::from(&settings.catalog_root);
-    let entries_dir = catalog_root.join("projects");
-    catalog_root == dir && catalog_root.exists() && !entries_dir.exists()
-}
-
-fn collect_markdown_files_recursive(
-    dir: &Path,
-    legacy_mode: bool,
-    files: &mut Vec<PathBuf>,
-) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|error| error.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let path = entry.path();
-
-        if path.is_dir() {
-            let dir_name = path.file_name().and_then(|value| value.to_str());
-            let should_skip = dir_name.is_some_and(|name| LEGACY_SKIP_DIR_NAMES.contains(&name));
-            if should_skip {
-                continue;
-            }
-            collect_markdown_files_recursive(&path, legacy_mode, files)?;
-            continue;
-        }
-
-        if path.extension().is_none_or(|ext| ext != "md") {
-            continue;
-        }
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default();
-        if SKIP_FILE_NAMES.contains(&file_name) {
-            continue;
-        }
-        files.push(path);
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -1518,460 +1377,6 @@ fn unix_timestamp_secs() -> u64 {
         .unwrap_or(0)
 }
 
-fn create_legacy_symlink(source: &Path, target: &Path) -> Result<(), String> {
-    if source.exists() {
-        return Ok(());
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
-        symlink(target, source).map_err(|error| {
-            format!(
-                "Failed to create symlink `{}` -> `{}`: {}",
-                source.to_string_lossy(),
-                target.to_string_lossy(),
-                error
-            )
-        })
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::symlink_dir;
-        symlink_dir(target, source).map_err(|error| {
-            format!(
-                "Failed to create symlink `{}` -> `{}`: {}",
-                source.to_string_lossy(),
-                target.to_string_lossy(),
-                error
-            )
-        })
-    }
-}
-
-fn is_home_repo_candidate(path: &Path, entry_name: &str) -> bool {
-    if HOME_REPO_EXCLUSIONS.contains(&entry_name) || entry_name.starts_with('.') {
-        return false;
-    }
-    path.is_dir() && path.join(".git").exists()
-}
-
-fn move_home_repositories_to_repos_root(
-    home: &Path,
-    repos_root: &Path,
-    warnings: &mut Vec<String>,
-) -> Result<HashMap<String, String>, String> {
-    fs::create_dir_all(repos_root).map_err(|error| error.to_string())?;
-    let mut moved = HashMap::new();
-
-    for entry in fs::read_dir(home).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-
-        if !is_home_repo_candidate(&path, name) {
-            continue;
-        }
-
-        let target = repos_root.join(name);
-        if target.exists() {
-            warnings.push(format!(
-                "Skipped moving `{}` because `{}` already exists",
-                path.to_string_lossy(),
-                target.to_string_lossy()
-            ));
-            continue;
-        }
-
-        fs::rename(&path, &target).map_err(|error| {
-            format!(
-                "Failed moving repository `{}` to `{}`: {}",
-                path.to_string_lossy(),
-                target.to_string_lossy(),
-                error
-            )
-        })?;
-
-        if let Err(error) = create_legacy_symlink(&path, &target) {
-            let rollback_error = match fs::rename(&target, &path) {
-                Ok(()) => "rollback ok".to_string(),
-                Err(err) => format!("rollback failed: {err}"),
-            };
-            return Err(format!(
-                "{}. Move rolled back for `{}` ({})",
-                error,
-                path.to_string_lossy(),
-                rollback_error
-            ));
-        }
-
-        moved.insert(
-            path.to_string_lossy().to_string(),
-            target.to_string_lossy().to_string(),
-        );
-    }
-
-    Ok(moved)
-}
-
-fn rollback_moved_repositories(moved_repos: &HashMap<String, String>, warnings: &mut Vec<String>) {
-    for (source, target) in moved_repos {
-        let source_path = Path::new(source);
-        let target_path = Path::new(target);
-
-        if source_path.exists() {
-            let source_is_symlink = fs::symlink_metadata(source_path)
-                .map(|metadata| metadata.file_type().is_symlink())
-                .unwrap_or(false);
-            if source_is_symlink {
-                if let Err(error) = fs::remove_file(source_path) {
-                    warnings.push(format!(
-                        "Rollback warning: failed to remove symlink `{}`: {}",
-                        source, error
-                    ));
-                    continue;
-                }
-            } else {
-                warnings.push(format!(
-                    "Rollback warning: source `{}` already exists and is not a symlink",
-                    source
-                ));
-                continue;
-            }
-        }
-
-        if !target_path.exists() {
-            continue;
-        }
-
-        if let Err(error) = fs::rename(target_path, source_path) {
-            warnings.push(format!(
-                "Rollback warning: failed to move `{}` back to `{}`: {}",
-                target, source, error
-            ));
-        }
-    }
-}
-
-fn copy_directory_recursive(
-    source: &Path,
-    target: &Path,
-    skip_dir_names: &[&str],
-) -> Result<(), String> {
-    if !source.exists() {
-        return Err(format!(
-            "Cannot copy missing source directory `{}`",
-            source.to_string_lossy()
-        ));
-    }
-
-    fs::create_dir_all(target).map_err(|error| error.to_string())?;
-    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let src_path = entry.path();
-        let dst_path = target.join(entry.file_name());
-
-        if src_path.is_dir() {
-            let skip = src_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .is_some_and(|name| skip_dir_names.contains(&name));
-            if skip {
-                continue;
-            }
-            copy_directory_recursive(&src_path, &dst_path, skip_dir_names)?;
-        } else {
-            fs::copy(&src_path, &dst_path).map_err(|error| {
-                format!(
-                    "Failed copying `{}` to `{}`: {}",
-                    src_path.to_string_lossy(),
-                    dst_path.to_string_lossy(),
-                    error
-                )
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
-fn ensure_git_repository_with_head(path: &Path, warnings: &mut Vec<String>) -> Result<(), String> {
-    let repo = path.to_string_lossy().to_string();
-    if run_git(&repo, &["rev-parse", "--is-inside-work-tree"]).is_err() {
-        run_git(&repo, &["init"])?;
-    }
-
-    if run_git(&repo, &["rev-parse", "--verify", "HEAD"]).is_ok() {
-        return Ok(());
-    }
-
-    // Configure a local identity only when missing to keep bootstrap commits deterministic.
-    if run_git(&repo, &["config", "--get", "user.name"]).is_err() {
-        let _ = run_git(&repo, &["config", "user.name", "Pipeline Dashboard"]);
-    }
-    if run_git(&repo, &["config", "--get", "user.email"]).is_err() {
-        let _ = run_git(
-            &repo,
-            &["config", "user.email", "pipeline-dashboard@local.invalid"],
-        );
-    }
-
-    run_git(&repo, &["add", "-A"])?;
-    if let Err(error) = run_git(
-        &repo,
-        &[
-            "commit",
-            "-m",
-            "chore: bootstrap standalone pipeline-dashboard repo",
-        ],
-    ) {
-        warnings.push(format!(
-            "Failed to create initial commit in `{}`: {}",
-            repo, error
-        ));
-    }
-    Ok(())
-}
-
-fn looks_like_catalog_entry(path: &Path) -> bool {
-    let Ok(raw) = fs::read_to_string(path) else {
-        return false;
-    };
-    if !raw.trim_start().starts_with("---") {
-        return false;
-    }
-    let has_title = raw
-        .lines()
-        .any(|line| line.trim_start().starts_with("title:"));
-    let has_status = raw
-        .lines()
-        .any(|line| line.trim_start().starts_with("status:"));
-    let has_local_path = raw
-        .lines()
-        .any(|line| line.trim_start().starts_with("localPath:"));
-    let has_tracking_mode = raw
-        .lines()
-        .any(|line| line.trim_start().starts_with("trackingMode:"));
-    has_title && (has_status || has_local_path || has_tracking_mode)
-}
-
-fn legacy_layout_for_catalog_root(catalog_root: &Path) -> bool {
-    let entries_dir = catalog_root.join("projects");
-    catalog_root.exists() && !entries_dir.exists() && directory_contains_markdown(catalog_root)
-}
-
-fn resolve_entries_dir_from_catalog_root(
-    catalog_root: &Path,
-    create_if_missing: bool,
-) -> Result<PathBuf, String> {
-    if legacy_layout_for_catalog_root(catalog_root) {
-        return Ok(catalog_root.to_path_buf());
-    }
-
-    let entries_dir = catalog_root.join("projects");
-    if create_if_missing {
-        fs::create_dir_all(&entries_dir).map_err(|error| error.to_string())?;
-    }
-    Ok(entries_dir)
-}
-
-fn migrate_catalog_entries(
-    source_entries_dir: &Path,
-    source_is_legacy: bool,
-    target_entries_dir: &Path,
-    moved_entries: &mut Vec<String>,
-    skipped_entries: &mut Vec<String>,
-    warnings: &mut Vec<String>,
-) -> Result<(), String> {
-    let mut files = Vec::new();
-    collect_markdown_files_recursive(source_entries_dir, source_is_legacy, &mut files)?;
-    files.sort();
-
-    for source_path in files {
-        if !looks_like_catalog_entry(&source_path) {
-            continue;
-        }
-
-        let relative = source_path
-            .strip_prefix(source_entries_dir)
-            .map_err(|error| error.to_string())?;
-        let relative_str = relative.to_string_lossy().to_string();
-        let target_path = target_entries_dir.join(relative);
-
-        if target_path.exists() {
-            skipped_entries.push(relative_str.clone());
-            warnings.push(format!(
-                "Skipped `{}` because destination `{}` already exists",
-                relative_str,
-                target_path.to_string_lossy()
-            ));
-            continue;
-        }
-
-        if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-
-        fs::copy(&source_path, &target_path).map_err(|error| {
-            format!(
-                "Failed to copy `{}` to `{}`: {}",
-                source_path.to_string_lossy(),
-                target_path.to_string_lossy(),
-                error
-            )
-        })?;
-        moved_entries.push(relative_str);
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-fn run_architecture_v2_migration() -> Result<MigrationReport, String> {
-    let _mutation_lock = acquire_mutation_lock()?;
-    let mut settings = load_dashboard_settings()?;
-    let original_settings = settings.clone();
-    let home = env::var("HOME")
-        .map(PathBuf::from)
-        .map_err(|error| error.to_string())?;
-
-    let mut warnings = Vec::new();
-
-    let repos_root = home.join("repos");
-    let moved_repos = move_home_repositories_to_repos_root(&home, &repos_root, &mut warnings)?;
-    let migration_result = (|| -> Result<MigrationReport, String> {
-        let mut moved_entries = Vec::new();
-        let mut skipped_entries = Vec::new();
-
-        // Establish a standalone app source path at ~/repos/pipeline-dashboard.
-        let target_app_source = repos_root.join("pipeline-dashboard");
-        if !target_app_source.exists() {
-            if let Some(current_source) = settings
-                .app_source_path
-                .as_deref()
-                .map(PathBuf::from)
-                .filter(|path| path.exists())
-            {
-                let skip_dirs = ["node_modules", "dist", "target", ".next"];
-                copy_directory_recursive(&current_source, &target_app_source, &skip_dirs)?;
-                warnings.push(format!(
-                    "Copied app source from `{}` to `{}`",
-                    current_source.to_string_lossy(),
-                    target_app_source.to_string_lossy()
-                ));
-            }
-        }
-
-        if target_app_source.exists() {
-            ensure_git_repository_with_head(&target_app_source, &mut warnings)?;
-            settings.app_source_path = Some(target_app_source.to_string_lossy().to_string());
-        }
-
-        // Move catalog into the canonical app-support location and import legacy entries recursively.
-        let previous_catalog_root = PathBuf::from(&settings.catalog_root);
-        let target_catalog_root = PathBuf::from(default_catalog_root());
-        let target_entries_dir = resolve_entries_dir_from_catalog_root(&target_catalog_root, true)?;
-
-        let source_entries_dir =
-            resolve_entries_dir_from_catalog_root(&previous_catalog_root, false)
-                .unwrap_or_else(|_| previous_catalog_root.clone());
-        let source_is_legacy = source_entries_dir == previous_catalog_root;
-
-        if source_entries_dir.exists() && source_entries_dir != target_entries_dir {
-            migrate_catalog_entries(
-                &source_entries_dir,
-                source_is_legacy,
-                &target_entries_dir,
-                &mut moved_entries,
-                &mut skipped_entries,
-                &mut warnings,
-            )?;
-        }
-
-        settings.catalog_root = target_catalog_root.to_string_lossy().to_string();
-        let mut workspace_roots = settings.workspace_roots.clone();
-        workspace_roots.push(repos_root.to_string_lossy().to_string());
-        let legacy_projects_root = home.join("clawdbot-sandbox").join("projects");
-        if legacy_projects_root.exists() {
-            workspace_roots.push(legacy_projects_root.to_string_lossy().to_string());
-        }
-        settings.workspace_roots = workspace_roots;
-        settings.migration_version = 1;
-
-        settings = sanitize_settings(settings.clone())?;
-        write_dashboard_settings_file(&settings)?;
-
-        let migration_state_path = target_catalog_root.join("migration-state.json");
-        let payload = json!({
-            "version": 2,
-            "migratedAt": unix_timestamp_secs(),
-            "sourceCatalogRoot": previous_catalog_root.to_string_lossy(),
-            "targetCatalogRoot": target_catalog_root.to_string_lossy(),
-            "movedEntries": moved_entries,
-            "skippedEntries": skipped_entries,
-            "warnings": warnings,
-            "movedRepos": moved_repos,
-            "appSourcePath": settings.app_source_path,
-            "migrationVersion": settings.migration_version,
-        });
-        write_file_atomic(
-            &migration_state_path,
-            &serde_json::to_string_pretty(&payload).map_err(|error| error.to_string())?,
-        )?;
-
-        Ok(MigrationReport {
-            moved_entries: payload["movedEntries"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|value| value.as_str().map(|text| text.to_string()))
-                .collect(),
-            skipped_entries: payload["skippedEntries"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|value| value.as_str().map(|text| text.to_string()))
-                .collect(),
-            warnings: payload["warnings"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|value| value.as_str().map(|text| text.to_string()))
-                .collect(),
-            settings_updated: true,
-            catalog_entries_dir: target_entries_dir.to_string_lossy().to_string(),
-        })
-    })();
-
-    match migration_result {
-        Ok(report) => Ok(report),
-        Err(error) => {
-            rollback_moved_repositories(&moved_repos, &mut warnings);
-            if let Err(restore_error) = write_dashboard_settings_file(&original_settings) {
-                warnings.push(format!(
-                    "Rollback warning: failed to restore settings file: {}",
-                    restore_error
-                ));
-            }
-
-            if warnings.is_empty() {
-                Err(error)
-            } else {
-                Err(format!(
-                    "{}. Rollback notes: {}",
-                    error,
-                    warnings.join(" | ")
-                ))
-            }
-        }
-    }
-}
-
 #[derive(Serialize)]
 struct SlashCommand {
     name: String,
@@ -2450,10 +1855,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_dashboard_settings,
             update_dashboard_settings,
-            get_projects_dir,
+            scan_projects,
             read_file,
             write_file,
-            list_files,
             delete_file,
             remove_path,
             resolve_path,
@@ -2470,7 +1874,6 @@ pub fn run() {
             git_init_repo,
             check_for_update,
             run_app_update,
-            run_architecture_v2_migration,
             list_slash_commands,
             chat_messages_load,
             chat_message_save,
@@ -2542,53 +1945,4 @@ mod hardening_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    #[test]
-    fn migration_smoke_copies_valid_catalog_entries() {
-        let source = test_dir("migration-source");
-        let target = test_dir("migration-target");
-        let source_entries = source.join("projects");
-        let target_entries = target.join("projects");
-
-        fs::create_dir_all(source_entries.join("nested")).expect("create source dirs");
-        fs::create_dir_all(&target_entries).expect("create target dirs");
-
-        fs::write(
-            source_entries.join("valid.md"),
-            "---\ntitle: Valid\nstatus: up-next\ntype: project\n---\n",
-        )
-        .expect("write valid entry");
-        fs::write(
-            source_entries.join("nested").join("also-valid.md"),
-            "---\ntitle: Another\ntrackingMode: linked\nlocalPath: /tmp/x\ntype: project\n---\n",
-        )
-        .expect("write nested valid entry");
-        fs::write(source_entries.join("invalid.md"), "# Not a catalog entry\n")
-            .expect("write invalid entry");
-
-        let mut moved_entries = Vec::new();
-        let mut skipped_entries = Vec::new();
-        let mut warnings = Vec::new();
-
-        migrate_catalog_entries(
-            &source_entries,
-            false,
-            &target_entries,
-            &mut moved_entries,
-            &mut skipped_entries,
-            &mut warnings,
-        )
-        .expect("migration should succeed");
-
-        assert!(moved_entries.contains(&"valid.md".to_string()));
-        assert!(moved_entries.contains(&"nested/also-valid.md".to_string()));
-        assert!(!moved_entries.contains(&"invalid.md".to_string()));
-        assert!(target_entries.join("valid.md").exists());
-        assert!(target_entries.join("nested").join("also-valid.md").exists());
-        assert!(!target_entries.join("invalid.md").exists());
-        assert!(skipped_entries.is_empty());
-        assert!(warnings.is_empty());
-
-        let _ = fs::remove_dir_all(source);
-        let _ = fs::remove_dir_all(target);
-    }
 }

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
+  ChangelogEntry,
   ProjectStatus,
   ProjectViewModel,
   RoadmapItemWithDocs,
   RoadmapStatus,
 } from '../lib/schema';
 import { readRoadmap, writeRoadmap, resolveDocFiles, enrichItemsWithDocs } from '../lib/roadmap';
+import { migrateCompletedItem } from '../lib/changelog';
+import { parseChangelog } from '../lib/changelog';
 import { readFile } from '../lib/tauri';
 import type { ProjectModalActions } from '../components/modal/types';
 
@@ -21,6 +24,7 @@ interface UseProjectModalReturn {
   roadmapError: string | null;
   reorderRoadmapItems: (items: RoadmapItemWithDocs[]) => void;
   updateRoadmapItemStatus: (itemId: string, status: RoadmapStatus) => void;
+  changelogEntries: ChangelogEntry[];
   modalView: ModalView;
   selectedItem: RoadmapItemWithDocs | undefined;
   openItemDetail: (itemId: string, initialDocTab?: 'spec' | 'plan') => void;
@@ -43,6 +47,7 @@ export function useProjectModal(
   const [modalView, setModalView] = useState<ModalView>({ kind: 'list' });
   const [docContentCache, setDocContentCache] = useState<Record<string, string>>({});
   const [docLoading, setDocLoading] = useState(false);
+  const [changelogEntries, setChangelogEntries] = useState<ChangelogEntry[]>([]);
 
   // Sync local status from project prop
   useEffect(() => {
@@ -78,9 +83,9 @@ export function useProjectModal(
         setRoadmapFilePath(roadmap.filePath);
         setRoadmapNotes(roadmap.notes);
 
-        const localPath = project.frontmatter.localPath;
-        if (localPath) {
-          const docsMap = await resolveDocFiles(localPath, roadmap.items, project.frontmatter);
+        const dirPath = project.dirPath;
+        if (dirPath) {
+          const docsMap = await resolveDocFiles(dirPath, roadmap.items, project.frontmatter);
           if (cancelled) return;
           setRoadmapItems(enrichItemsWithDocs(roadmap.items, docsMap));
         } else {
@@ -101,6 +106,28 @@ export function useProjectModal(
     void load();
     return () => { cancelled = true; };
   }, [project?.id, project?.hasRoadmap, project?.roadmapFilePath]);
+
+  // Load changelog when project changes
+  useEffect(() => {
+    if (!project?.hasChangelog || !project.changelogFilePath) {
+      setChangelogEntries([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const changelog = await parseChangelog(project.changelogFilePath!);
+        if (!cancelled) setChangelogEntries(changelog.entries);
+      } catch {
+        if (!cancelled) setChangelogEntries([]);
+      }
+    };
+
+    void load();
+    return () => { cancelled = true; };
+  }, [project?.id, project?.hasChangelog, project?.changelogFilePath]);
 
   const updateProjectStatus = useCallback(
     (next: ProjectStatus) => {
@@ -147,6 +174,29 @@ export function useProjectModal(
 
   const updateRoadmapItemStatus = useCallback(
     (itemId: string, status: RoadmapStatus) => {
+      // If marking as complete, trigger changelog migration
+      if (status === 'complete' && roadmapFilePath && project?.changelogFilePath) {
+        const previous = roadmapItems;
+
+        // Optimistic: remove from list immediately
+        setRoadmapItems(roadmapItems.filter((item) => item.id !== itemId));
+
+        void migrateCompletedItem(roadmapFilePath, project.changelogFilePath, itemId)
+          .then(async () => {
+            // Refresh changelog entries
+            try {
+              const changelog = await parseChangelog(project.changelogFilePath!);
+              setChangelogEntries(changelog.entries);
+            } catch {
+              // Best effort
+            }
+          })
+          .catch(() => {
+            setRoadmapItems(previous);
+          });
+        return;
+      }
+
       const previous = roadmapItems;
       const updated = roadmapItems.map((item) =>
         item.id === itemId ? { ...item, status } : item,
@@ -157,7 +207,7 @@ export function useProjectModal(
         setRoadmapItems(previous);
       });
     },
-    [roadmapItems, persistRoadmap],
+    [roadmapItems, persistRoadmap, roadmapFilePath, project?.changelogFilePath],
   );
 
   // View navigation
@@ -211,6 +261,7 @@ export function useProjectModal(
     roadmapError,
     reorderRoadmapItems,
     updateRoadmapItemStatus,
+    changelogEntries,
     modalView,
     selectedItem,
     openItemDetail,

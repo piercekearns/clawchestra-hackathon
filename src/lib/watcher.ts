@@ -2,10 +2,10 @@ import { watch } from '@tauri-apps/plugin-fs';
 import { isTauriRuntime } from './tauri';
 
 export async function watchProjects(
-  projectsDir: string,
+  scanPaths: string[],
   onChanged: () => void,
 ): Promise<() => void> {
-  if (!isTauriRuntime()) {
+  if (!isTauriRuntime() || scanPaths.length === 0) {
     return () => undefined;
   }
 
@@ -16,16 +16,26 @@ export async function watchProjects(
     timeout = setTimeout(onChanged, 150);
   };
 
-  let unwatch: Awaited<ReturnType<typeof watch>>;
-  try {
-    unwatch = await watch(projectsDir, onEvent, { recursive: true });
-  } catch {
-    // Some environments fail recursive watchers on large trees; fall back to shallow watch.
-    unwatch = await watch(projectsDir, onEvent, { recursive: false });
+  const unwatchers: Array<Awaited<ReturnType<typeof watch>>> = [];
+
+  for (const scanPath of scanPaths) {
+    try {
+      const unwatch = await watch(scanPath, onEvent, { recursive: true });
+      unwatchers.push(unwatch);
+    } catch {
+      try {
+        const unwatch = await watch(scanPath, onEvent, { recursive: false });
+        unwatchers.push(unwatch);
+      } catch {
+        // Skip paths that can't be watched at all
+      }
+    }
   }
 
   return () => {
     clearTimeout(timeout);
-    void unwatch();
+    for (const unwatch of unwatchers) {
+      void unwatch();
+    }
   };
 }

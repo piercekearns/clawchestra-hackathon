@@ -11,7 +11,8 @@ function project(
     id,
     title: id,
     status: 'up-next',
-    filePath: `/tmp/${id}.md`,
+    filePath: `/tmp/${id}/PROJECT.md`,
+    dirPath: `/tmp/${id}`,
     frontmatter: {
       title: id,
       status: 'up-next',
@@ -21,6 +22,8 @@ function project(
     },
     content: '',
     hasRoadmap: false,
+    hasChangelog: false,
+    hasGit: false,
     children: [],
     isStale: false,
     needsReview: false,
