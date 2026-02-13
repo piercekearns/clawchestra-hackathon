@@ -19,7 +19,7 @@ import {
 } from './lib/gateway';
 // Note: reconnection resilience temporarily removed - debugging WebSocket issues
 import { commitPlanningDocs, gitStatusEmoji, pushRepo } from './lib/git';
-import { reorderProjects, updateProject } from './lib/projects';
+import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
 import { readRoadmap, writeRoadmap } from './lib/roadmap';
 import type {
   ProjectStatus,
@@ -430,7 +430,19 @@ export default function App() {
       for (const item of nextItems) {
         const before = previousById.get(item.id);
         if (before && before.status !== item.status) {
-          statusUpdates.push(updateProject(item, { status: item.status as ProjectStatus }));
+          const updates: ProjectUpdate = { status: item.status as ProjectStatus };
+          // Auto-assign priority when moving to in-flight (required by schema)
+          if (item.status === 'in-flight' && item.priority === undefined) {
+            const inFlightCount = nextItems.filter(
+              (entry) => entry.status === 'in-flight' && entry.id !== item.id,
+            ).length;
+            updates.priority = inFlightCount + 1;
+          }
+          // Clear priority when leaving in-flight
+          if (before.status === 'in-flight' && item.status !== 'in-flight') {
+            updates.priority = null;
+          }
+          statusUpdates.push(updateProject(item, updates));
         }
       }
 

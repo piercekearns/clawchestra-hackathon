@@ -1,6 +1,7 @@
 ---
 title: Pipeline Dashboard
 status: in-flight
+priority: 2
 type: project
 tags:
   - tooling
