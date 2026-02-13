@@ -3,7 +3,7 @@ title: "Project Architecture Overhaul"
 status: draft
 type: spec
 created: 2026-02-13
-phases: 3
+phases: 4
 ---
 
 # Project Architecture Overhaul
@@ -12,10 +12,11 @@ Three-phase deliverable that aligns schema, introduces the CHANGELOG lifecycle, 
 
 ## Why This Is One Deliverable
 
-These three pieces are conditional on each other:
+These four pieces are conditional on each other:
 - Phase 1 defines the types and docs that Phase 2 implements
-- Phase 2 introduces the CHANGELOG pattern that Phase 3 needs for migration (completed items must survive the move)
-- Phase 3 eliminates the catalog system entirely
+- Phase 2 introduces the CHANGELOG pattern that Phase 3 needs
+- Phase 3 retrofits every existing project's data to match the schema (PROJECT.md, ROADMAP.md conversion, CHANGELOG pairing) — prep work for Phase 4
+- Phase 4 replaces the catalog system with scan-based discovery
 
 Each phase is independently shippable — the app works after each one — but they must be built in order.
 
@@ -162,21 +163,149 @@ Update to reflect current reality:
 
 ---
 
-## Phase 3: Scan Paths Migration
+## Phase 3: Data Retrofit
 
-**Goal**: Replace catalog with scan-based discovery. See `docs/specs/scan-paths-architecture-spec.md` for full details.
+**Goal**: Bring every existing project into compliance with the schema defined in Phase 1 and the CHANGELOG lifecycle built in Phase 2. This is the prep work that ensures Phase 4's scanner has clean data to discover.
 
-### 3.1 Settings Schema
+### Current State (Audit: 2026-02-13)
+
+**Repos in `~/repos/` (6):**
+| Repo | PROJECT.md | ROADMAP.md | ROADMAP Format | CHANGELOG.md |
+|------|-----------|-----------|----------------|-------------|
+| pipeline-dashboard | ❌ | ✅ | ✅ frontmatter | ✅ (populated) |
+| ClawOS | ❌ | ✅ | ❌ markdown | ❌ |
+| memestr | ❌ | ✅ | ❌ markdown | ❌ |
+| Shopify-Fabric-Theme | ❌ | ✅ | ❌ markdown | ❌ |
+| piercekearns.com | ❌ | ✅ | ❌ markdown | ❌ |
+| clawd | ❌ | ❌ | N/A | ❌ |
+
+**Catalog entries (25 .md files):**
+- 3 idea files (`ideas/bitchat-research.md`, `bitcoin-time-machine.md`, `btc-folio.md`)
+- 11 nostr files (memestr, clawos, botfather, dating, reputation, etc.)
+- 2 openclaw files (browser-extension, sdk)
+- 1 pipeline-dashboard.md + 11 old `roadmap/*.md` individual files
+- 3 revival files (REVIVAL.md, redbird-app.md, revival-running.md)
+- 4 restricted-section files
+- Frontmatter quality: generally good (title/status/type present)
+
+### 3.1 Create PROJECT.md in Every Repo
+
+For each repo in `~/repos/`, create `PROJECT.md` with frontmatter migrated from the corresponding catalog stub:
+
+| Repo | Catalog Source | Notes |
+|------|---------------|-------|
+| `pipeline-dashboard` | `catalog/projects/pipeline-dashboard.md` | Already has ROADMAP + CHANGELOG |
+| `ClawOS` | `catalog/projects/nostr/clawos/CONTEXT.md` | Has IDEAS.md too — keep as content |
+| `memestr` | `catalog/projects/nostr/memestr.md` | Live on DigitalOcean |
+| `Shopify-Fabric-Theme` | `catalog/projects/revival/REVIVAL.md` | Revival Fightwear store |
+| `piercekearns.com` | No catalog entry found | Personal site, needs fresh PROJECT.md |
+| `clawd` | `catalog/projects/nostr/clawd.md` or similar | OpenClaw/Clawd bot |
+
+For each:
+- Copy frontmatter fields (title, status, tags, icon, repo, priority)
+- Add `type: project`
+- Set `lastActivity` to today
+- Write a brief description in the markdown body
+- **Do not delete the catalog entry yet** — Phase 4 handles that
+
+### 3.2 Convert ROADMAP.md Files to Frontmatter Format
+
+4 repos need conversion from markdown index format → YAML frontmatter `items:` array:
+- `ClawOS/ROADMAP.md`
+- `memestr/ROADMAP.md`
+- `Shopify-Fabric-Theme/ROADMAP.md`
+- `piercekearns.com/ROADMAP.md`
+
+For each:
+1. Read existing markdown content, extract item names/statuses
+2. Convert to frontmatter `items:` array format (matching pipeline-dashboard's format)
+3. Assign sequential priorities
+4. Preserve any notes as markdown body below frontmatter
+
+### 3.3 Create Paired CHANGELOG.md Files
+
+For every repo that has ROADMAP.md but no CHANGELOG.md (5 repos):
+- Create `CHANGELOG.md` with empty entries array:
+  ```yaml
+  ---
+  entries: []
+  ---
+  # {Project Name} — Changelog
+  ```
+- If the old ROADMAP.md had items marked as shipped/complete/done, migrate those to the new CHANGELOG.md using Phase 2's auto-migration tooling
+
+### 3.4 Migrate Ideas to `~/projects/`
+
+Create `~/projects/` directory, then for each idea/pre-repo catalog entry:
+
+| Catalog Entry | Target Folder |
+|--------------|---------------|
+| `ideas/bitchat-research.md` | `~/projects/bitchat-research/PROJECT.md` |
+| `ideas/bitcoin-time-machine.md` | `~/projects/bitcoin-time-machine/PROJECT.md` |
+| `ideas/btc-folio.md` | `~/projects/btc-folio/PROJECT.md` |
+| `nostr/botfather.md` | `~/projects/nostr-botfather/PROJECT.md` |
+| `nostr/dating.md` | `~/projects/nostr-dating/PROJECT.md` |
+| `nostr/commerce.md` | `~/projects/nostr-commerce/PROJECT.md` |
+| `nostr/decentralized-reputation.md` | `~/projects/decentralized-reputation/PROJECT.md` |
+| `nostr/distributed-cloudflare.md` | `~/projects/distributed-cloudflare/PROJECT.md` |
+| `nostr/miniclip.md` | `~/projects/nostr-miniclip/PROJECT.md` |
+| `nostr/white-noise-bots.md` | `~/projects/white-noise-bots/PROJECT.md` |
+| `openclaw-browser-extension.md` | `~/projects/openclaw-browser-extension/PROJECT.md` |
+| `openclaw-sdk.md` | `~/projects/openclaw-sdk/PROJECT.md` |
+| `revival/redbird-app.md` | `~/projects/redbird-app/PROJECT.md` |
+| `revival/revival-running.md` | `~/projects/revival-running/PROJECT.md` |
+| `the-restricted-section/*.md` | `~/projects/the-restricted-section/PROJECT.md` (consolidate) |
+| `nostr/botfather-architecture.md` | Merge into botfather's PROJECT.md as content |
+| `nostr/RESEARCH.md` | Merge into decentralized-reputation or keep as docs |
+
+For each:
+- Create the `~/projects/{name}/` directory
+- Create `PROJECT.md` with frontmatter migrated from catalog stub
+- Move any substantial markdown content into the body
+- Related files (architecture docs, research notes) go into `docs/` subfolder
+- **Do not delete catalog entries yet** — Phase 4 handles that
+
+### 3.5 Clean Up Old Roadmap Individual Files
+
+The 11 old `catalog/projects/pipeline-dashboard/roadmap/*.md` files are superseded by the repo's `ROADMAP.md` frontmatter format. Verify no unique content is lost, then mark for deletion in Phase 4.
+
+### 3.6 Validate
+
+After all data work:
+- Every repo in `~/repos/` has `PROJECT.md` with valid frontmatter
+- Every `ROADMAP.md` uses frontmatter `items:` format
+- Every `ROADMAP.md` has a paired `CHANGELOG.md`
+- Every idea has a folder in `~/projects/` with `PROJECT.md`
+- The existing catalog+dashboard still works (we haven't changed any code, just added files)
+- No duplicate project IDs between `~/repos/` and `~/projects/`
+
+### Deliverables
+- [ ] `PROJECT.md` created in all 6 repos
+- [ ] 4 ROADMAP.md files converted to frontmatter format
+- [ ] 5 CHANGELOG.md files created (paired with ROADMAP)
+- [ ] Shipped items backfilled into changelogs
+- [ ] `~/projects/` directory created with all idea folders
+- [ ] All PROJECT.md files validated against schema
+- [ ] Old catalog still works (no code changes in this phase)
+- [ ] Migration script or checklist for repeatability
+
+---
+
+## Phase 4: Scan Paths Migration
+
+**Goal**: Replace catalog with scan-based discovery. See `docs/specs/scan-paths-architecture-spec.md` for full details. Phase 3's data work means the scanner has clean, validated data to find.
+
+### 4.1 Settings Schema
 
 - Add `scanPaths: string[]` to settings
 - Default: `["/Users/piercekearns/repos", "/Users/piercekearns/projects"]`
 - Keep `catalogRoot` temporarily for migration, mark deprecated
 - Update `sanitize_settings()` in Rust backend
 
-### 3.2 New Scanner (Rust)
+### 4.2 New Scanner (Rust)
 
 - Replace `get_projects_dir()` + `list_files()` with new scanner:
-  - Walk each scan path one level deep
+  - Walk each scan path **one level deep** (direct children only)
   - For each child directory: look for `PROJECT.md`
   - If found: return the directory path
   - If not found: skip
@@ -184,7 +313,7 @@ Update to reflect current reality:
 - Handle duplicate IDs across scan paths (error)
 - Detect `.git/` presence for tier inference
 
-### 3.3 Frontend: Project Loading
+### 4.3 Frontend: Project Loading
 
 - Update `getProjects()` in `projects.ts`:
   - No more `catalogRoot` / `getProjectsDir()`
@@ -194,19 +323,7 @@ Update to reflect current reality:
   - Tier detection: Idea (no .git) / Local (.git, no repo:) / GitHub (has repo:)
 - Remove `trackingMode`, `catalog-only`, `linked` concepts — everything is scan-discovered
 
-### 3.4 Physical File Migration
-
-- Create `~/projects/` directory
-- For each idea/pre-repo project in catalog:
-  - Create `~/projects/{name}/PROJECT.md` with migrated frontmatter
-  - Move related content into the folder
-- For each repo in `~/repos/`:
-  - Create `PROJECT.md` in repo root (if not exists)
-  - Ensure ROADMAP.md is in frontmatter format
-  - Ensure CHANGELOG.md exists if ROADMAP.md exists
-- This can be a migration script or manual + agent-assisted
-
-### 3.5 Frontend: Tier Badges
+### 4.4 Frontend: Tier Badges
 
 - Replace current project card badges with tier indicators:
   - 💡 Idea (no .git)
@@ -214,12 +331,13 @@ Update to reflect current reality:
   - 🔗 GitHub (has `repo:` field)
 - Settings UI for managing scan paths
 
-### 3.6 Cleanup
+### 4.5 Cleanup
 
 - Delete all catalog project files (`~/Library/Application Support/Pipeline Dashboard/catalog/projects/`)
+- Delete old `roadmap/*.md` individual files from catalog
 - Remove `catalogRoot`, `catalog_entries_dir`, legacy mode from Rust backend
 - Remove `trackingMode` from schema
-- Remove migration-state.json handling
+- Remove `migration-state.json` handling
 - Update all documentation references
 - Delete `clawdbot-sandbox/projects/` stubs (no longer needed)
 
@@ -227,11 +345,9 @@ Update to reflect current reality:
 - [ ] Settings schema + UI for `scanPaths`
 - [ ] New Rust scanner (one-level-deep PROJECT.md discovery)
 - [ ] Updated `getProjects()` for scan-based loading
-- [ ] PROJECT.md created in all repos
-- [ ] Ideas migrated from catalog to `~/projects/`
 - [ ] Tier badges on board cards
 - [ ] Catalog + legacy code removed
-- [ ] Build passes, all projects visible
+- [ ] Build passes, all projects visible from scan paths
 
 ---
 
@@ -245,9 +361,14 @@ Update to reflect current reality:
 - [ ] Empty CHANGELOG shows "no completed items" not a crash
 - [ ] DnD reordering still works for roadmap items
 - [ ] New project creation scaffolds ROADMAP + CHANGELOG together
-- [ ] (Phase 3) Projects discovered from both scan paths
-- [ ] (Phase 3) Tier badges render correctly
-- [ ] (Phase 3) No references to catalog remain in code
+- [ ] (Phase 3) All repos have valid PROJECT.md
+- [ ] (Phase 3) All ROADMAP.md files parse correctly in frontmatter format
+- [ ] (Phase 3) All ROADMAP.md files have paired CHANGELOG.md
+- [ ] (Phase 3) Ideas in `~/projects/` have valid PROJECT.md
+- [ ] (Phase 3) Existing dashboard still works with catalog (no code changes)
+- [ ] (Phase 4) Projects discovered from both scan paths
+- [ ] (Phase 4) Tier badges render correctly
+- [ ] (Phase 4) No references to catalog remain in code
 
 ---
 
