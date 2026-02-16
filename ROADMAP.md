@@ -46,6 +46,14 @@ items:
     nextAction: "Audit OpenClaw docs + source for per-platform interaction capabilities"
     tags: [research, openclaw, clawos]
     icon: "\U0001F50D"
+  - id: scoped-chat-sessions
+    title: "Scoped Chat Sessions"
+    status: pending
+    priority: 8
+    nextAction: "Spec drafted — review and refine"
+    tags: [architecture, openclaw, chat]
+    icon: "\U0001F9F5"
+    specDoc: docs/specs/scoped-chat-sessions-spec.md
 ---
 
 # Pipeline Dashboard — Roadmap
