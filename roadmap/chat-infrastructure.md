@@ -9,66 +9,129 @@ specDoc: docs/specs/scoped-chat-sessions-spec.md
 
 # Chat Infrastructure Overhaul
 
-Combined deliverable covering chat reliability, session isolation, and coding agent orchestration. These are the foundational improvements that make the dashboard chat a reliable command center for project work.
+Make the dashboard chat a reliable command center for orchestrating project work. The goal is confidence: confident messages arrive, confident they're in the right thread, confident sub-agent work completes and reports back, confident decisions aren't made invisibly.
 
-## Scope
+## The Confidence Chain
 
-### 1. WebSocket Auto-Reconnection
+Pierce's framing: "I can't orchestrate work through the chat because I'm not confident that..."
+
+1. **...agents will actually run** → WebSocket reliability
+2. **...if they run, they'll complete** → Failure surfacing
+3. **...if they complete, I'll see the output** → Completion delivery + scoped sessions
+4. **...if decisions need to be made, I'll see them** → Decision surfacing
+
+Each link in the chain must work before the next one matters.
+
+---
+
+## Phase A: Reliability (Build First)
+
+The foundation. Without this, nothing else works.
+
+### WebSocket Auto-Reconnection
 - Reliable reconnection when gateway drops or restarts
-- Previous attempt reverted (commit `36fbc72`) — suspected Tauri WebSocket plugin issue
-- Need: exponential backoff, connection state tracking, message delivery guarantee post-reconnect
-- Includes: fix default scan path from `~/clawdbot-sandbox/projects/` to `~/projects/`
+- Exponential backoff, connection state tracking, message delivery guarantee post-reconnect
+- Previous attempt reverted (`36fbc72`) — suspected Tauri WebSocket plugin issue
+- Includes: fix default scan path to `~/projects/`
 
-### 2. Scoped Chat Sessions
+### Scoped Chat Sessions
 - Change session key from `agent:main:main` to `agent:main:pipeline-dashboard`
 - Clear SQLite chat.db (clean slate)
-- Dashboard gets its own conversation thread, isolated from Telegram/webchat
-- See `docs/specs/scoped-chat-sessions-spec.md` for full spec
+- Dashboard gets own conversation thread — sub-agent announces route here, not Telegram
+- This alone fixes a huge part of the "I never see the output" problem
+- See `docs/specs/scoped-chat-sessions-spec.md`
 
-### 3. Compaction Awareness UI
-- Surface compaction/memory-flush events as system bubbles in chat
-- Reference OpenClaw Control UI for event flow
-- Add compaction states to `stateLabels` in `gateway.ts`
-- Design system-style bubble (spinner + label, muted styling)
+---
 
-### 4. Sub-Agent & Coding Agent Orchestration
-- **Status visibility:** Real-time status of spawned sub-agents and coding agent sessions (Claude Code, Codex CLI) directly in the chat UI
-- **Progress tracking:** System bubbles or status cards showing active background work — agent name/label, runtime, current state (thinking/executing/etc)
-- **Completion notifications:** Reliable delivery of sub-agent results into the dashboard chat session (not lost to Telegram or swallowed silently)
-- **Failure surfacing:** Proactive notification when sub-agents OOM, timeout, or error — not discovered only when user asks
-- **Session list panel:** UI to see active sub-agent sessions, their status, and ability to view logs or stop them (wraps `/subagents list/log/stop`)
+## Phase B: Awareness (Build Second)
 
-### Research Findings (Sub-Agent Orchestration)
+Make the invisible visible. The user should always know what's happening.
 
-**What OpenClaw already provides:**
+### Completion Delivery Guarantees
+- Sub-agent announce results must reliably arrive in the dashboard session
+- Scoped sessions (Phase A) handles routing — this phase validates it works end-to-end
+- Test: spawn sub-agent from dashboard, verify announce arrives in dashboard chat (not webchat/Telegram)
+- Test: coding agent (Claude Code/Codex) background session completes, result surfaces in dashboard
+- Wake trigger pattern (`openclaw system event --mode now`) for immediate notification
+
+### Failure Alerts
+- Proactive notification when sub-agents OOM, timeout, or error
+- Currently: failures are silent until user asks "what happened?"
+- Needed: system bubble in chat when a spawned task fails — with context (what task, what error, which project)
+- Monitor `process` sessions for crash/timeout, surface alerts immediately
+- Priority over status cards — knowing something broke is more important than watching it work
+
+### Compaction Awareness
+- Surface compaction/memory-flush events as system bubbles
+- Reference Control UI for event names
+- Add to `stateLabels` in `gateway.ts`
+
+### Decision Surfacing (Critical)
+- When sub-agents or coding agents surface decisions that need human input, those decisions must be pulled up to the dashboard chat — not resolved invisibly by the orchestrating agent
+- **The problem:** In a multi-tier hierarchy (user → OpenClaw → Claude Code → sub-agents), decisions can get swallowed at any layer. The orchestrating agent might just pick an option without asking.
+- **Initial approach (conservative):** Surface ALL decisions to the user. Err on the side of asking too much rather than too little.
+- **What a decision looks like in chat:**
+  - Context: which project, which deliverable, which command/workflow produced it
+  - The decision itself: what's being asked, what the options are
+  - Ability to respond inline (reply in chat with the choice)
+- **Examples:**
+  - Plan review recommends changes → surface "Plan review for [deliverable] has 3 recommendations: ..."
+  - Claude Code hits an ambiguous architecture choice → surface "Claude Code asks: should X use approach A or B?"
+  - Sub-agent encounters an error and has recovery options → surface the options
+- **Not in scope (yet):** Structured decision UI (option cards, buttons). That's Phase C / future. For now, natural language in chat is fine — the key is that decisions *reach* the user at all.
+
+---
+
+## Phase C: Orchestration UI (Future — Not Blocking)
+
+Nice-to-have visualization. Only matters when you're regularly running many parallel agents.
+
+### Status Cards / Bubbles
+- Real-time status of active sub-agents in the chat
+- Agent label, runtime, current state (thinking/executing/etc)
+- Useful when running 3+ background tasks simultaneously
+
+### Session Panel
+- Lightweight panel listing active sub-agents
+- Quick actions: view log, stop, send message
+- Wraps `/subagents list/log/stop/info/send`
+
+### Coding Agent Integration UI
+- Deeper integration with Claude Code / Codex session names
+- Progress indicators tied to specific roadmap items
+- "Build" button on roadmap items (hammer icon → kick off plan/build workflow)
+- Structured decision UI (option cards with click-to-choose)
+
+**Phase C is parked.** It's the long-term vision but not needed for the dashboard to be a reliable orchestration surface. Phases A + B deliver the confidence chain.
+
+---
+
+## Research Findings
+
+### What OpenClaw Already Provides
 - `sessions_spawn` — non-blocking, returns `{ status, runId, childSessionKey }` immediately
 - `sessions_list` — list active sessions with optional last N messages
 - `sessions_history` — fetch transcript for any session
-- `/subagents list/log/stop/info/send` — slash commands for managing sub-agents
-- Announce step — sub-agent results are announced back to the requester chat session
-- Dedicated `subagent` queue lane — sub-agents don't block main agent
+- `/subagents list/log/stop/info/send` — slash commands for management
+- Announce step — results announced back to requester chat session
+- Dedicated `subagent` queue lane (concurrency: 8, separate from main)
 - Auto-archive after 60 min (configurable)
-- `coding-agent` skill — bash-first pattern with PTY, background mode, process monitoring
+- `coding-agent` skill — PTY, background mode, process monitoring, wake triggers
 
-**What the dashboard needs to add:**
-- **UI for gateway events** — the gateway already broadcasts chat events with state info. The dashboard needs to interpret sub-agent spawn/progress/completion events and render them as status cards.
-- **Session panel** — a lightweight panel (maybe in the chat drawer or a separate tab) listing active sub-agents with status, runtime, and quick actions (view log, stop).
-- **Coding agent wake triggers** — the `coding-agent` skill documents an `openclaw system event` trick for immediate notification when a background coding agent finishes. The dashboard should surface these events.
-- **Failure detection** — monitor `process` sessions for OOM/timeout/crash and surface alerts in the chat. Currently this only happens if the main agent proactively checks.
+### The Gap
+The gateway has all the plumbing. The gap is:
+1. **Routing** (fixed by scoped sessions) — announces go to the right session
+2. **UI** — the dashboard doesn't render sub-agent lifecycle events or decision requests
+3. **Agent discipline** — the orchestrating agent (me) needs clear rules about when to escalate decisions vs. act autonomously
 
-**Key architectural insight:**
-The gateway already has all the plumbing (session tools, events, queue lanes). The gap is purely **UI** — the dashboard doesn't render sub-agent lifecycle events. This is a frontend problem, not a backend one.
+### Decision Surfacing — Agent-Side Rules
+This isn't just a UI problem. The agent (OpenClaw) needs behavioral rules:
+- **Always surface:** Architecture decisions, approach choices (A vs B), plan review recommendations, error recovery options, anything that changes scope or direction
+- **Can act autonomously:** File naming, formatting, ordering of independent tasks, mechanical execution of an already-approved plan
+- **Rule of thumb:** If the decision would change what gets built or how, surface it. If it's execution detail within an approved scope, proceed.
+- These rules should be codified in AGENTS.md and/or SOUL.md so they persist across sessions.
 
-## Why Combined
-
-These four areas are the "make the dashboard chat a reliable orchestration surface" bundle. WebSocket reconnection ensures messages arrive. Scoped sessions ensure they're in the right thread. Compaction UI keeps the user informed about session health. Sub-agent orchestration lets the user kick off and monitor background work.
-
-## May Break Into Phases
-
-This scope is large enough that it might split into sequential deliverables during implementation. Likely split:
-1. **Phase A:** WebSocket reconnection + scoped sessions + scan path fix (reliability)
-2. **Phase B:** Compaction UI + sub-agent status visibility (awareness)
-3. **Phase C:** Session panel + coding agent orchestration UI (orchestration)
+---
 
 ## Predecessors
 
