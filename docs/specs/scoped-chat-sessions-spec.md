@@ -43,35 +43,69 @@ This is the critical design constraint:
 
 The agent is one entity with one memory and one identity, but it maintains separate *conversations* with different *contextual priming* depending on the surface.
 
+## Investigation Results (2026-02-16)
+
+**OpenClaw already supports this natively.** The investigation phase is done.
+
+### What the dashboard does today
+
+In `src-tauri/src/lib.rs`:
+- Session key is hardcoded: `session_key: "agent:main:main".to_string()` (line 667)
+- `normalize_session_key()` defaults to `"agent:main:main"` (line 773)
+- All `chat.send`, `chat.history` calls pass `sessionKey` as a parameter
+- The gateway `chat.send` and `chat.history` WS methods already accept arbitrary session keys
+
+### What needs to change
+
+**One line.** Change `"agent:main:main"` to `"agent:main:pipeline-dashboard"` and the dashboard gets its own isolated conversation thread. The gateway creates sessions on demand — no pre-registration needed.
+
+### Confirmed behaviors
+
+| Question | Answer | Source |
+|----------|--------|--------|
+| Does OpenClaw support custom session keys? | **Yes.** `chat.send` accepts `sessionKey`. HTTP API has `x-openclaw-session-key` header. Sessions are created on demand. | `docs/gateway/openai-http-api.md`, `docs/concepts/session.md` |
+| Do sessions share memory files? | **Yes.** Memory is file-based (MEMORY.md, daily notes). All sessions read from the same workspace. | `docs/concepts/session.md` — "All session state is owned by the gateway" but workspace files are filesystem-level, not session-scoped |
+| Independent compaction? | **Yes.** Each session has its own JSONL transcript and compacts independently. | `docs/concepts/session.md` — transcripts stored per sessionId |
+| Per-session system prompts? | **Partially.** The workspace files (AGENTS.md, SOUL.md, etc.) are injected based on agent config, not session. But the dashboard can prepend context to each message (already does with "User is viewing: X"). | `docs/concepts/system-prompt.md` |
+| Token cost of parallel sessions? | Each session maintains its own context window. Workspace files (AGENTS.md, SOUL.md, MEMORY.md, etc.) are re-read per session. Acceptable trade-off for isolation. | Architecture inference |
+| Session lifecycle/reset? | Configurable. Default: daily reset at 4am. Can set per-channel or per-type overrides. Dashboard session could have its own reset policy via `resetByChannel` if registered as a channel type. | `docs/concepts/session.md` |
+
+### Session key format
+
+OpenClaw session keys follow the pattern `agent:<agentId>:<key>`. The dashboard should use:
+
+```
+agent:main:pipeline-dashboard
+```
+
+This is explicit, descriptive, and follows the existing convention. The gateway will create the session on first message and persist its transcript separately.
+
+---
+
 ## Approaches
 
-### Option A: OpenClaw Session Keys (Recommended)
+### Option A: OpenClaw Session Keys (Recommended — confirmed feasible)
 
-OpenClaw already has a concept of session keys. Today the dashboard talks to the `main` session. Instead, it could use a surface-specific session key like `dashboard:chat` or `pipeline-dashboard`.
+OpenClaw already has a concept of session keys. Today the dashboard talks to the `main` session. Instead, it uses a surface-specific session key like `agent:main:pipeline-dashboard`.
 
 **How it works:**
-- Dashboard sends messages with a distinct session key (e.g. `pipeline-dashboard`)
+- Dashboard sends messages with a distinct session key (`agent:main:pipeline-dashboard`)
 - OpenClaw routes to a session with that key — separate conversation history
 - The session inherits the same agent config, memory files, tools, and workspace
 - System prompt can be augmented with dashboard-specific context (e.g. AGENTS.md auto-injection, "User is viewing: X")
 - Agent can still reference global memory and files
 
 **Pros:**
-- Native OpenClaw concept — minimal custom work
+- Native OpenClaw concept — **already works today with no OpenClaw changes**
 - Conversation isolation is automatic
 - Chat persistence (SQLite) naturally separates by session key
 - Each surface gets its own scrollback
+- Compaction is independent per session
 
 **Cons:**
-- Need to understand how OpenClaw handles multi-session memory sharing (do sessions share MEMORY.md? Almost certainly yes since it's file-based, but need to confirm)
-- System prompt customization per session may need OpenClaw config changes
-- Cost: each surface session uses its own context window, so the agent re-reads files per session
-
-**Investigation needed:**
-- Does OpenClaw support custom session keys from external integrations?
-- Can per-session system prompts be configured?
-- How does conversation compaction work across sessions — are they independent?
-- What's the token cost implication of N parallel sessions?
+- Cost: each surface session uses its own context window, so the agent re-reads workspace files per session
+- System prompt customization is limited to what the dashboard prepends to messages (no per-session system prompt override in OpenClaw config yet)
+- The agent in the dashboard session won't automatically know what happened in the Telegram session (unless it checks memory files)
 
 ### Option B: Surface Tags on Messages
 
@@ -163,35 +197,46 @@ The dashboard already has SQLite chat persistence. Currently it stores all messa
 
 ## Implementation Phases
 
-### Phase 1: Investigation
-- Confirm OpenClaw session key mechanics (can external apps create/target sessions?)
-- Confirm memory sharing between sessions (file-based = likely yes)
-- Confirm per-session system prompt customization
-- Document findings
+### Phase 1: Investigation ✅ DONE
+- ✅ OpenClaw supports custom session keys natively (`chat.send` accepts `sessionKey`)
+- ✅ Memory sharing confirmed (file-based, all sessions share workspace)
+- ✅ Per-session system prompts: not directly configurable, but dashboard can prepend context
+- ✅ Findings documented above
 
-### Phase 2: Dashboard Integration
-- Dashboard sends messages with a `pipeline-dashboard` session key
-- Chat persistence keyed by session
-- System prompt augmented with dashboard context
-- History loads only dashboard messages
+### Phase 2: Dashboard Session Key (minimal change)
+- Change `session_key` in `OpenClawGatewayConfig` from `"agent:main:main"` to `"agent:main:pipeline-dashboard"`
+- Update `normalize_session_key()` default to match
+- Chat persistence already keyed by session — should work automatically
+- Test: send a message from dashboard, verify it doesn't appear in webchat/Telegram history
+- Test: send a message from webchat, verify it doesn't appear in dashboard history
+- Verify the agent still has full workspace access (memory, files, tools)
 
-### Phase 3: Context Profiles
+### Phase 3: Context Enrichment
+- Dashboard prepends richer context to each message:
+  - Current view (already doing "User is viewing: X")
+  - Selected project (if any)
+  - Auto-inject: "Consult {project}/AGENTS.md for operations" when a project is selected
+- Consider a "session preamble" that runs once on first message to prime the agent:
+  - "You are in the Pipeline Dashboard. This is a project management surface. Load the Pipeline Dashboard AGENTS.md."
+- Surface-specific system prompt injection (may need OpenClaw feature request if message-level prepending isn't enough)
+
+### Phase 4: Surface Profiles (optional, future)
 - Define a "surface profile" structure: session key, context files, system prompt additions, capabilities
 - Dashboard profile auto-injects AGENTS.md + current view state
 - Profile is passed with each message or configured on session creation
+- Generalizes to any future app integration (ClawOS, Revival admin, IDE plugin)
 
-### Phase 4: Cross-Session Awareness (if needed)
+### Phase 5: Cross-Session Awareness (optional, future)
 - Shared state file for significant events
 - Heartbeat-based cross-session sync
 - "What happened on other surfaces?" query support
 
-## Open Questions
+## Remaining Questions
 
-1. **Does OpenClaw already support this?** The session architecture may already allow custom session keys from Tauri. Need to check OpenClaw docs for external session targeting.
-2. **Token cost of multiple sessions?** Each session maintains its own context window. If the agent re-reads MEMORY.md, SOUL.md, etc. per session, that's duplicated tokens. Acceptable trade-off?
-3. **Session lifecycle.** Does a dashboard session persist forever, or expire after inactivity? What about context window limits — does each session compact independently?
-4. **Cross-surface commands.** Should the user be able to say "send this to Telegram" from the dashboard? Or is surface isolation strict?
-5. **Which approach?** Option A (session keys) seems right for v1. Option C (hybrid) is the long-term ideal but may be premature.
+1. **Session lifecycle.** Should the dashboard session reset daily (default behavior) or persist longer? Project management context benefits from longer sessions. Consider `resetByChannel` or `idleMinutes` override.
+2. **Cross-surface commands.** Should the user be able to say "send this to Telegram" from the dashboard? Or is surface isolation strict? (Probably allow it — the agent has `message` tool.)
+3. **SQLite migration.** Existing chat.db has messages from the main session. After switching session keys, those old messages won't load. Options: migrate them, keep them accessible via a "legacy" query, or accept a clean slate.
+4. **Settings UI.** Should the session key be user-configurable in Settings, or hardcoded? Hardcoded for now — make configurable only if there's a use case.
 
 ## Non-Goals
 
