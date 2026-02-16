@@ -39,6 +39,13 @@ items:
     priority: 6
     nextAction: Debug TauriOpenClawConnection reconnect logic
     tags: [infra, chat]
+  - id: openclaw-platform-interaction-audit
+    title: "OpenClaw Platform Interaction Audit"
+    status: pending
+    priority: 7
+    nextAction: "Audit OpenClaw docs + source for per-platform interaction capabilities"
+    tags: [research, openclaw, clawos]
+    icon: "\U0001F50D"
 ---
 
 # Pipeline Dashboard — Roadmap
