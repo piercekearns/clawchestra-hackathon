@@ -8,6 +8,32 @@ Completed features and fixes, most recent first.
 
 ---
 
+## 2026-02-16
+
+### OpenClaw Platform Interaction Audit ✅
+- Comprehensive audit of all 20 OpenClaw communication channels
+- Per-platform capability breakdowns, cross-platform comparison matrix
+- Tier system identified: Telegram/Discord (richest) → Nostr/Tlon (minimal)
+- Output: `clawdbot-sandbox/projects/openclaw-platform-audit.md`
+
+## 2026-02-13
+
+### Project Architecture Overhaul ✅
+- Phase 1: Schema & docs alignment — `schema.ts` types, `SCHEMA.md`, `ChangelogEntry`/`RoadmapItem` definitions
+- Phase 2: CHANGELOG lifecycle — `changelog.ts` with auto-migration from ROADMAP → CHANGELOG on completion
+- Phase 3: Data retrofit — PROJECT.md files standardized across all repos and `~/projects/`, CHANGELOG.md paired
+- Phase 4: Scan paths — `scan_projects()` discovers PROJECT.md files from configurable scan paths, replaces old catalog system
+- Note: default scan path still references `~/clawdbot-sandbox/projects/` — needs one-line update to `~/projects/` (tracked in Chat Infrastructure P1)
+
+### Project Modal Improvements ✅
+- Phase 1: Foundation — Generic `StatusBadge<T>`, `ProjectModalHeader`, `useProjectModal` hook, types
+- Phase 2: Roadmap data loading + doc resolution with frontmatter-first strategy
+- Phase 3: `RoadmapItemList` + `RoadmapItemRow` + `DocBadge` + DnD reordering
+- Phase 4: `RoadmapItemDetail` view with doc tabs + view state + doc cache
+- Phase 5: `ProjectDetails` collapsible section
+- Phase 6: Polish — responsive layout, keyboard nav, edge cases
+- 14 files, 1402 insertions. Old `CardDetail.tsx` removed.
+
 ## 2026-02-12
 
 ### Architecture V2.1 Hardening ✅
