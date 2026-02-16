@@ -41,16 +41,16 @@ items:
     tags: [infra, chat]
   - id: openclaw-platform-interaction-audit
     title: "OpenClaw Platform Interaction Audit"
-    status: pending
+    status: complete
     priority: 7
-    nextAction: "Audit OpenClaw docs + source for per-platform interaction capabilities"
+    nextAction: "Done — output at clawdbot-sandbox/projects/openclaw-platform-audit.md"
     tags: [research, openclaw, clawos]
     icon: "\U0001F50D"
   - id: scoped-chat-sessions
     title: "Scoped Chat Sessions"
     status: pending
     priority: 8
-    nextAction: "Spec drafted — review and refine"
+    nextAction: "Phase 2: Change session key in lib.rs + clear chat.db"
     tags: [architecture, openclaw, chat]
     icon: "\U0001F9F5"
     specDoc: docs/specs/scoped-chat-sessions-spec.md

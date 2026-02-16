@@ -203,15 +203,29 @@ The dashboard already has SQLite chat persistence. Currently it stores all messa
 - ✅ Per-session system prompts: not directly configurable, but dashboard can prepend context
 - ✅ Findings documented above
 
-### Phase 2: Dashboard Session Key (minimal change)
+### Phase 2: Dashboard Session Key + Clean Slate
 - Change `session_key` in `OpenClawGatewayConfig` from `"agent:main:main"` to `"agent:main:pipeline-dashboard"`
 - Update `normalize_session_key()` default to match
-- Chat persistence already keyed by session — should work automatically
+- **Clear SQLite chat.db** on session key change (clean slate — decision confirmed 2026-02-16)
+  - Old messages from `agent:main:main` are still in the gateway's JSONL transcript if ever needed
+  - No migration of old messages — fresh start for the dashboard thread
 - Test: send a message from dashboard, verify it doesn't appear in webchat/Telegram history
 - Test: send a message from webchat, verify it doesn't appear in dashboard history
 - Verify the agent still has full workspace access (memory, files, tools)
 
-### Phase 3: Context Enrichment
+### Phase 3: Compaction Awareness UI
+- **Investigate gateway chat event states** — identify what state name is emitted during compaction (likely `compacting` or similar) and memory flush (`memory_flush` or similar)
+- **Reference the OpenClaw Control UI** — examine how it renders the compaction indicator (spinner + system bubble) to understand the event flow
+- **Add compaction states to `stateLabels`** in `gateway.ts`:
+  - `compacting: "Compacting conversation..."`
+  - `memory_flush: "Saving context..."` (or whatever the gateway emits)
+- **Design a system-style chat bubble** for compaction/flush events:
+  - Similar shape to message bubbles but visually distinct (muted color, smaller, centered)
+  - Shows spinner + label while in progress
+  - Styled to match dashboard theme (not copy-pasted from Control UI)
+- **Show compaction count** — surface `🧹 Compactions: N` somewhere (status bar or chat info)
+
+### Phase 4: Context Enrichment
 - Dashboard prepends richer context to each message:
   - Current view (already doing "User is viewing: X")
   - Selected project (if any)
@@ -220,23 +234,31 @@ The dashboard already has SQLite chat persistence. Currently it stores all messa
   - "You are in the Pipeline Dashboard. This is a project management surface. Load the Pipeline Dashboard AGENTS.md."
 - Surface-specific system prompt injection (may need OpenClaw feature request if message-level prepending isn't enough)
 
-### Phase 4: Surface Profiles (optional, future)
+### Phase 5: Surface Profiles (optional, future)
 - Define a "surface profile" structure: session key, context files, system prompt additions, capabilities
 - Dashboard profile auto-injects AGENTS.md + current view state
 - Profile is passed with each message or configured on session creation
 - Generalizes to any future app integration (ClawOS, Revival admin, IDE plugin)
 
-### Phase 5: Cross-Session Awareness (optional, future)
+### Phase 6: Cross-Session Awareness (optional, future)
 - Shared state file for significant events
 - Heartbeat-based cross-session sync
 - "What happened on other surfaces?" query support
+
+## Decisions Log
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-02-16 | **Option A: Session Keys** | Native OpenClaw support, no changes needed on gateway side |
+| 2026-02-16 | **Clean slate for chat.db** | Old messages are mixed main-session history; no reliable way to filter. Gateway JSONL preserved as backup. |
+| 2026-02-16 | **Compaction UI as Phase 3** | Natural fit — scoped sessions mean independent compaction per surface, so the dashboard needs to show when its session is compacting |
 
 ## Remaining Questions
 
 1. **Session lifecycle.** Should the dashboard session reset daily (default behavior) or persist longer? Project management context benefits from longer sessions. Consider `resetByChannel` or `idleMinutes` override.
 2. **Cross-surface commands.** Should the user be able to say "send this to Telegram" from the dashboard? Or is surface isolation strict? (Probably allow it — the agent has `message` tool.)
-3. **SQLite migration.** Existing chat.db has messages from the main session. After switching session keys, those old messages won't load. Options: migrate them, keep them accessible via a "legacy" query, or accept a clean slate.
-4. **Settings UI.** Should the session key be user-configurable in Settings, or hardcoded? Hardcoded for now — make configurable only if there's a use case.
+3. **Settings UI.** Should the session key be user-configurable in Settings, or hardcoded? Hardcoded for now — make configurable only if there's a use case.
+4. **Compaction event state names.** Need to check gateway source or Control UI source for exact event state strings emitted during compaction/memory flush.
 
 ## Non-Goals
 
