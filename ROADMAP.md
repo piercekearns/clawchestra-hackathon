@@ -4,10 +4,10 @@ items:
     title: "Chat Infrastructure Overhaul"
     status: pending
     priority: 1
-    nextAction: "Research complete — break into phases, then build"
+    nextAction: "Phase A specced — ready to build (scoped sessions + WS reconnection + scan path fix)"
     tags: [chat, infra, openclaw, architecture]
     icon: "\U0001F527"
-    specDoc: docs/specs/scoped-chat-sessions-spec.md
+    specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: app-ux-review
     title: "App UX Review & Improvements"
     status: pending
