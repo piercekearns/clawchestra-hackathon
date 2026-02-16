@@ -82,27 +82,9 @@ Make the invisible visible. The user should always know what's happening.
 
 ---
 
-## Phase C: Orchestration UI (Future — Not Blocking)
+---
 
-Nice-to-have visualization. Only matters when you're regularly running many parallel agents.
-
-### Status Cards / Bubbles
-- Real-time status of active sub-agents in the chat
-- Agent label, runtime, current state (thinking/executing/etc)
-- Useful when running 3+ background tasks simultaneously
-
-### Session Panel
-- Lightweight panel listing active sub-agents
-- Quick actions: view log, stop, send message
-- Wraps `/subagents list/log/stop/info/send`
-
-### Coding Agent Integration UI
-- Deeper integration with Claude Code / Codex session names
-- Progress indicators tied to specific roadmap items
-- "Build" button on roadmap items (hammer icon → kick off plan/build workflow)
-- Structured decision UI (option cards with click-to-choose)
-
-**Phase C is parked.** It's the long-term vision but not needed for the dashboard to be a reliable orchestration surface. Phases A + B deliver the confidence chain.
+*Phase C (orchestration UI: session panel, status cards, coding agent integration, build buttons) has been de-scoped and moved to the Collapsible Sidebar roadmap item as expansion ideas. See `roadmap/collapsible-sidebar.md`.*
 
 ---
 
