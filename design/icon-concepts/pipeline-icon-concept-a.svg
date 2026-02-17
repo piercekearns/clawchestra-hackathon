@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#060606"/>
+      <stop offset="0.55" stop-color="#171717"/>
+      <stop offset="1" stop-color="#2a2a2a"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0.1" y1="0.1" x2="0.9" y2="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="0.4" stop-color="#9da3a5" stop-opacity="0.22"/>
+      <stop offset="0.72" stop-color="#dfff00" stop-opacity="0.58"/>
+      <stop offset="1" stop-color="#f6ffe0" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#262626" stop-opacity="0.95"/>
+      <stop offset="0.55" stop-color="#111214" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#202325" stop-opacity="0.9"/>
+    </linearGradient>
+    <radialGradient id="bloom1" cx="0.2" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#dfff00" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#dfff00" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloom2" cx="0.8" cy="0.82" r="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <rect x="24" y="24" width="976" height="976" rx="224" fill="url(#bg)"/>
+  <rect x="42" y="42" width="940" height="940" rx="206" fill="none" stroke="url(#rim)" stroke-width="28"/>
+  <rect x="58" y="58" width="908" height="908" rx="190" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="4"/>
+
+  <rect x="168" y="168" width="688" height="688" rx="168" fill="url(#panel)"/>
+  <rect x="192" y="192" width="640" height="640" rx="148" fill="url(#bloom1)"/>
+  <rect x="192" y="192" width="640" height="640" rx="148" fill="url(#bloom2)"/>
+
+  <g opacity="0.35" filter="url(#soft)">
+    <circle cx="332" cy="312" r="84" fill="#dfff00"/>
+    <circle cx="700" cy="700" r="96" fill="#ffffff"/>
+  </g>
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 396 H724" stroke="#f1f1f1" stroke-opacity="0.85" stroke-width="34"/>
+    <path d="M300 512 H724" stroke="#d5d9dc" stroke-opacity="0.9" stroke-width="34"/>
+    <path d="M300 628 H724" stroke="#dfff00" stroke-opacity="0.95" stroke-width="34"/>
+
+    <path d="M394 396 V628" stroke="#f7ffcf" stroke-width="24"/>
+    <path d="M630 396 V628" stroke="#f7ffcf" stroke-width="24"/>
+
+    <circle cx="394" cy="396" r="24" fill="#ffffff" stroke="#101010" stroke-width="4"/>
+    <circle cx="630" cy="512" r="24" fill="#ffffff" stroke="#101010" stroke-width="4"/>
+    <circle cx="394" cy="628" r="24" fill="#dfff00" stroke="#101010" stroke-width="4"/>
+  </g>
+</svg>

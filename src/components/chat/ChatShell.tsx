@@ -295,28 +295,40 @@ export function ChatShell({
   };
 
   // Keep chat content anchored to the top edge of the composer container.
-  // When the composer grows/shrinks (Shift+Enter, queued rows, images), adjust
-  // message scroll by the exact composer height delta so visible content above
-  // the bar stays stable.
+  // When the composer grows/shrinks (Shift+Enter, queued rows, images),
+  // keep the message list anchored if the user was near the bottom.
+  // Previous delta-based approach accumulated rounding errors at the scroll
+  // boundary. This simpler strategy: if within 200px of the bottom before
+  // the resize, snap to the new bottom after.
   useLayoutEffect(() => {
     if (!drawerOpen || typeof ResizeObserver === 'undefined') return;
     const composerNode = composerContainerRef.current;
     const messageNode = messageListRef.current;
     if (!composerNode || !messageNode) return;
 
-    let previousHeight = composerNode.getBoundingClientRect().height;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const nextHeight = entry.contentRect.height;
-      const delta = nextHeight - previousHeight;
-      previousHeight = nextHeight;
-      if (delta === 0) return;
-      messageNode.scrollTop += delta;
+    // Track distance from bottom on every scroll event so we know
+    // the user's position at the moment the resize fires.
+    let lastDistFromBottom = messageNode.scrollHeight - messageNode.scrollTop - messageNode.clientHeight;
+    const onScroll = () => {
+      lastDistFromBottom = messageNode.scrollHeight - messageNode.scrollTop - messageNode.clientHeight;
+    };
+    messageNode.addEventListener('scroll', onScroll, { passive: true });
+
+    const observer = new ResizeObserver(() => {
+      // After flex recalculates, if we were near the bottom, snap there.
+      // The 200px threshold covers the composer growth plus a small buffer.
+      if (lastDistFromBottom < 200) {
+        messageNode.scrollTop = messageNode.scrollHeight - messageNode.clientHeight;
+      }
+      // Update tracking after our own scroll adjustment
+      lastDistFromBottom = messageNode.scrollHeight - messageNode.scrollTop - messageNode.clientHeight;
     });
 
     observer.observe(composerNode);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      messageNode.removeEventListener('scroll', onScroll);
+    };
   }, [drawerOpen]);
 
   const latestResponsePreview = useMemo(() => {
