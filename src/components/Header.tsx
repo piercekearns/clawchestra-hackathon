@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Moon, RefreshCcw, Settings, Sun, SunMoon } from 'lucide-react';
+import { ChevronDown, Loader2, Moon, RefreshCcw, Settings, Sun, SunMoon } from 'lucide-react';
+import { flushSync } from 'react-dom';
 import { Input } from './ui/input';
 import type { ThemePreference } from '../lib/schema';
 import { ErrorBadge } from './ErrorBadge';
@@ -59,7 +60,14 @@ export function Header({
   const handleUpdate = async () => {
     if (!isTauriRuntime() || updating || updateTriggeredRef.current) return;
     updateTriggeredRef.current = true;
-    setUpdating(true);
+    // Force immediate visual transition to "Updating..." before invoking Tauri.
+    flushSync(() => {
+      setUpdating(true);
+    });
+    // Give the browser one frame to paint the updated button state.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
     try {
       await runAppUpdate(); // Build runs in background, app stays open until done
     } catch (error) {
@@ -87,12 +95,8 @@ export function Header({
             >
               {updating ? (
                 <span className="inline-flex items-center">
-                  Updating
-                  <span className="loading-dots ml-0.5">
-                    <span>.</span>
-                    <span>.</span>
-                    <span>.</span>
-                  </span>
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  Updating...
                 </span>
               ) : (
                 'Update'
