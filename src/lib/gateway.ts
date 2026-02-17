@@ -857,16 +857,9 @@ async function sendViaTauriWs(
     markActiveSendRun(runId);
     setAgentActivity('working', onActivityChange);
 
-    console.log('[Gateway] Sending chat.send via tauri-ws, connection.connected:', connection.connected);
-    await connection.request('chat.send', {
-      sessionKey,
-      message: messageText,
-      deliver: false,
-      idempotencyKey: runId,
-      attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
-    });
-    console.log('[Gateway] chat.send succeeded');
-
+    // Subscribe to events BEFORE sending so we never miss early deltas.
+    // The gateway may start emitting events as soon as chat.send is acknowledged,
+    // and if we subscribe after, fast responses can be completely lost.
     await new Promise<void>((resolve, reject) => {
       let completed = false;
       let finalDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1114,6 +1107,23 @@ async function sendViaTauriWs(
       };
 
       let unsubscribe = connection.subscribe(eventHandler);
+
+      // Now that events are subscribed, send the message.
+      console.log('[Gateway] Sending chat.send via tauri-ws, connection.connected:', connection.connected);
+      connection.request('chat.send', {
+        sessionKey,
+        message: messageText,
+        deliver: false,
+        idempotencyKey: runId,
+        attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
+      }).then(() => {
+        console.log('[Gateway] chat.send succeeded');
+      }).catch((err) => {
+        console.error('[Gateway] chat.send failed:', err);
+        cleanup();
+        clearActiveSendRun(runId);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
     });
 
     await new Promise((r) => setTimeout(r, 50));
