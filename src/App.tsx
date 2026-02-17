@@ -66,6 +66,7 @@ function applyTheme(preference: ThemePreference) {
 
 const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
+const CONNECTION_LOSS_BUBBLE_DELAY_MS = 5000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
 
 function getGitHubStatusMeta(
@@ -384,26 +385,55 @@ export default function App() {
   // System bubbles for connection state transitions
   useEffect(() => {
     let prevState: ChatConnectionState = useDashboardStore.getState().wsConnectionState;
+    let lossBubbleTimer: number | null = null;
+    let lossBubbleShown = false;
+
+    const clearLossBubbleTimer = () => {
+      if (lossBubbleTimer !== null) {
+        window.clearTimeout(lossBubbleTimer);
+        lossBubbleTimer = null;
+      }
+    };
+
+    const scheduleLossBubble = () => {
+      if (lossBubbleTimer !== null || lossBubbleShown) return;
+      lossBubbleTimer = window.setTimeout(() => {
+        lossBubbleTimer = null;
+        lossBubbleShown = true;
+        void addSystemBubble('info', 'Gateway connection lost', {
+          Status: 'Reconnecting...',
+        });
+      }, CONNECTION_LOSS_BUBBLE_DELAY_MS);
+    };
 
     const unsubscribe = subscribeConnectionState((nextState) => {
       if (nextState === prevState) return;
 
-      if (nextState === 'disconnected' && prevState === 'connected') {
-        void addSystemBubble('info', 'Gateway connection lost', {
-          Status: 'Reconnecting...',
-        });
-      } else if (nextState === 'connected' && (prevState === 'reconnecting' || prevState === 'error')) {
-        void addSystemBubble('info', 'Connection restored');
+      if (nextState === 'reconnecting' && prevState === 'connected') {
+        scheduleLossBubble();
+      } else if (nextState === 'connected') {
+        clearLossBubbleTimer();
+        if (lossBubbleShown || prevState === 'error') {
+          void addSystemBubble('info', 'Connection restored');
+        }
+        lossBubbleShown = false;
       } else if (nextState === 'error') {
+        clearLossBubbleTimer();
+        lossBubbleShown = false;
         void addSystemBubble('failure', 'Connection failed after 5 attempts', {
           Action: 'Click retry to try again.',
         });
+      } else if (nextState === 'disconnected' && prevState === 'connected') {
+        scheduleLossBubble();
       }
 
       prevState = nextState;
     });
 
-    return unsubscribe;
+    return () => {
+      clearLossBubbleTimer();
+      unsubscribe();
+    };
   }, [addSystemBubble]);
 
   useEffect(() => {

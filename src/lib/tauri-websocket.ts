@@ -12,6 +12,9 @@ import WebSocket from '@tauri-apps/plugin-websocket';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
 
+const WS_KEEPALIVE_INTERVAL_MS = 30_000;
+const WS_STALE_SOCKET_MS = 90_000;
+
 export interface OpenClawMessage {
   type: string;
   payload?: unknown;
@@ -47,6 +50,8 @@ export class TauriOpenClawConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private maxReconnectAttempts = 5;
   private disposed = false;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private lastSocketActivityAt = 0;
 
   constructor(private wsUrl: string, sessionKey: string, token?: string) {
     this.sessionKey = sessionKey;
@@ -66,6 +71,63 @@ export class TauriOpenClawConnection {
   onStateChange(listener: (s: ChatConnectionState) => void): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);
+  }
+
+  private markSocketActivity(): void {
+    this.lastSocketActivityAt = Date.now();
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
+  }
+
+  private startKeepalive(): void {
+    this.stopKeepalive();
+    this.markSocketActivity();
+
+    this.keepaliveTimer = setInterval(() => {
+      if (this.disposed) return;
+      if (!this.ws || this._state !== 'connected') return;
+
+      const idleForMs = Date.now() - this.lastSocketActivityAt;
+      if (idleForMs > WS_STALE_SOCKET_MS) {
+        console.warn(
+          `[TauriWS] Stale socket detected (${idleForMs}ms without inbound traffic), forcing reconnect`,
+        );
+        this.forceReconnect('stale socket');
+        return;
+      }
+
+      this.ws
+        .send({ type: 'Ping', data: [] })
+        .catch((err) => {
+          console.warn('[TauriWS] Keepalive ping failed, forcing reconnect:', err);
+          this.forceReconnect('keepalive ping failed');
+        });
+    }, WS_KEEPALIVE_INTERVAL_MS);
+  }
+
+  private forceReconnect(reason: string): void {
+    if (this.disposed) return;
+    if (this.reconnectTimer) return;
+
+    console.warn(`[TauriWS] Force reconnect: ${reason}`);
+    this.stopKeepalive();
+    this.rejectPendingCallbacks(`WebSocket reconnect: ${reason}`);
+
+    const active = this.ws;
+    this.ws = null;
+
+    if (active) {
+      active.disconnect().catch((err) => {
+        console.warn('[TauriWS] Force reconnect disconnect error:', err);
+      });
+    }
+
+    this.scheduleReconnect();
   }
 
   async connect(): Promise<void> {
@@ -88,12 +150,13 @@ export class TauriOpenClawConnection {
     this.ws.addListener((msg) => {
       if (msg.type === 'Close') {
         console.warn('[TauriWS] Server sent Close frame');
+        this.stopKeepalive();
         this.ws = null;
         this.rejectPendingCallbacks('WebSocket closed');
-        this.setState('disconnected');
         this.scheduleReconnect();
         return;
       }
+      this.markSocketActivity();
       if (msg.type === 'Text' && typeof msg.data === 'string') {
         this.handleMessage(msg.data);
       }
@@ -122,6 +185,8 @@ export class TauriOpenClawConnection {
 
     this.setState('connected');
     this.reconnectAttempt = 0;
+    this.reconnectTimer = null;
+    this.startKeepalive();
     console.log('[TauriWS] Connected and authenticated');
   }
 
@@ -261,6 +326,7 @@ export class TauriOpenClawConnection {
       if (!this.disposed) this.setState('error');
       return;
     }
+    if (this.reconnectTimer) return;
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 30_000);
     this.reconnectAttempt++;
     this.setState('reconnecting');
@@ -269,6 +335,7 @@ export class TauriOpenClawConnection {
 
   private async attemptReconnect(): Promise<void> {
     if (this.disposed) return;
+    this.reconnectTimer = null;
     try {
       if (this.ws) {
         try { await this.ws.disconnect(); } catch (e) { console.warn('[TauriWS] Pre-reconnect disconnect error:', e); }
@@ -291,6 +358,7 @@ export class TauriOpenClawConnection {
 
   async disconnect(): Promise<void> {
     this.disposed = true;
+    this.stopKeepalive();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
