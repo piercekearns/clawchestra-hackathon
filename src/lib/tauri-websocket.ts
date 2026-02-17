@@ -169,9 +169,44 @@ export class TauriOpenClawConnection {
     }
   }
 
+  /**
+   * Wait for the connection to reach 'connected' state.
+   * Resolves immediately if already connected. Rejects on timeout or terminal state.
+   */
+  private waitForConnection(timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.ws && this._state === 'connected') { resolve(); return; }
+
+      const timeout = setTimeout(() => {
+        unsub();
+        reject(new Error(`Connection wait timeout (${timeoutMs}ms)`));
+      }, timeoutMs);
+
+      const unsub = this.onStateChange((state) => {
+        if (state === 'connected') {
+          clearTimeout(timeout);
+          unsub();
+          resolve();
+        } else if (state === 'error' || (state === 'disconnected' && this.disposed)) {
+          clearTimeout(timeout);
+          unsub();
+          reject(new Error(`Connection failed: ${state}`));
+        }
+        // 'reconnecting' / 'connecting' / 'disconnected' (non-disposed) — keep waiting
+      });
+    });
+  }
+
   async request<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    // If WS is null but we're reconnecting/connecting, wait up to 15s
     if (!this.ws) {
-      throw new Error('WebSocket not connected');
+      if (this._state === 'reconnecting' || this._state === 'connecting') {
+        console.log(`[TauriWS] request(${method}): ws null, state=${this._state} — waiting for reconnection`);
+        await this.waitForConnection(15000);
+      }
+      if (!this.ws) {
+        throw new Error('WebSocket not connected');
+      }
     }
 
     const id = `req-${++this.messageIdCounter}-${Date.now()}`;

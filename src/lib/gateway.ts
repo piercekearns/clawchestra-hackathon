@@ -858,18 +858,26 @@ async function sendViaTauriWs(
     setAgentActivity('working', onActivityChange);
     console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
 
-    // Send FIRST, then subscribe to events. This ordering is critical:
-    // the gateway acks the send before processing it, so any stale events
-    // from previous responses pass through during the await. By the time
-    // we subscribe, only events from the current response will arrive.
-    await connection.request('chat.send', {
-      sessionKey,
-      message: messageText,
-      deliver: false,
-      idempotencyKey: runId,
-      attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
-    });
-    console.log('[Gateway] chat.send acknowledged');
+    // Try to send the message. If the WS drops before the ack returns,
+    // the request will reject — but the gateway may have already received
+    // the message (sent on wire before disconnect). We MUST continue to
+    // the polling phase regardless, because the response may still arrive.
+    let sendAcked = false;
+    try {
+      await connection.request('chat.send', {
+        sessionKey,
+        message: messageText,
+        deliver: false,
+        idempotencyKey: runId,
+        attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
+      });
+      sendAcked = true;
+      console.log('[Gateway] chat.send acknowledged');
+    } catch (sendErr) {
+      console.warn('[Gateway] chat.send failed — will poll for response:', sendErr);
+      // Don't throw — fall through to polling. The message may have been
+      // delivered before the connection dropped.
+    }
 
     await new Promise<void>((resolve, reject) => {
       let completed = false;
@@ -952,22 +960,28 @@ async function sendViaTauriWs(
         }
       });
 
-      // Record when the send started so the poll can ignore older messages
-      const sendStartedAt = Date.now();
+      // Record when the send started so the poll can ignore older messages.
+      // If the send wasn't acked, widen the window — the message may have
+      // arrived slightly before or after our timestamp.
+      const sendStartedAt = sendAcked ? Date.now() : Date.now() - 5000;
       let lastPollLength = 0; // Track content growth across polls
       let pollStableCount = 0; // How many consecutive polls returned the same length
 
       // Aggressive poll fallback — events may not be delivered reliably
       // (WS drops, event subscription issues), so poll frequently.
-      // Poll every 3 seconds. If content is found AND stable for 2 consecutive
-      // polls, treat it as complete.
+      // Poll every 2s when send failed, 3s otherwise. Resolve after
+      // 2 consecutive stable polls.
+      const pollIntervalMs = sendAcked ? 3000 : 2000;
       const pollInterval = setInterval(async () => {
         if (completed) return;
 
-        // If events are actively streaming, let them drive — only poll as backup
-        const timeSinceLastEvent = Date.now() - lastEventTime;
-        if (timeSinceLastEvent < 5000 && streamedText.length > 0) {
-          return;
+        // If events are actively streaming, let them drive — only poll as backup.
+        // But if the send itself failed, poll aggressively from the start.
+        if (sendAcked) {
+          const timeSinceLastEvent = Date.now() - lastEventTime;
+          if (timeSinceLastEvent < 5000 && streamedText.length > 0) {
+            return;
+          }
         }
 
         try {
@@ -1012,7 +1026,7 @@ async function sendViaTauriWs(
         } catch (error) {
           console.warn('[Gateway] Poll failed:', error);
         }
-      }, 3000);
+      }, pollIntervalMs);
 
       const stateLabels: Record<string, string> = {
         compacting: 'Compacting conversation...',
