@@ -1143,9 +1143,6 @@ async function sendViaTauriWs(
       const eventHandler = (eventName: string, payload: unknown) => {
         if (completed) return;
 
-        lastEventTime = Date.now();
-        resetIdleTimeout();
-
         // Agent events fire constantly during ALL processing — not just tool use.
         // Only treat them as tool-use indicators when content is NOT actively
         // streaming (no delta in last 3 seconds). This prevents every streaming
@@ -1153,6 +1150,17 @@ async function sendViaTauriWs(
         // Also: don't change the activity indicator during active streaming
         // (prevents Working/Typing flicker).
         if (eventName === 'agent') {
+          const agentPayload = (typeof payload === 'object' && payload !== null
+            ? payload
+            : {}) as Record<string, unknown>;
+          const agentRunId = typeof agentPayload.runId === 'string' ? agentPayload.runId : undefined;
+          if (agentRunId && agentRunId !== runId) {
+            return;
+          }
+
+          lastEventTime = Date.now();
+          resetIdleTimeout();
+
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
           if (timeSinceLastDelta > 3000) {
             sawToolSinceLastContent = true;
@@ -1177,6 +1185,8 @@ async function sendViaTauriWs(
         if (eventRunId && eventRunId !== runId) {
           return;
         }
+        lastEventTime = Date.now();
+        resetIdleTimeout();
 
         if (state && stateLabels[state]) {
           setAgentActivity('working', onActivityChange);
@@ -1191,7 +1201,7 @@ async function sendViaTauriWs(
         } else if (TOOL_ACTIVITY_STATES.has(state)) {
           setAgentActivity('working', onActivityChange);
           sawToolSinceLastContent = true;
-        } else if (TERMINAL_ACTIVITY_STATES.has(state)) {
+        } else if (TERMINAL_ACTIVITY_STATES.has(state) && eventRunId === runId) {
           setAgentActivity('idle', onActivityChange);
         }
 
@@ -1241,6 +1251,10 @@ async function sendViaTauriWs(
         }
 
         if (state === 'error') {
+          if (eventRunId !== runId) {
+            console.log('[Gateway] Ignoring unscoped error event during active send');
+            return;
+          }
           console.log('[Gateway] REJECT via error event:', chat.errorMessage);
           cleanup();
           clearActiveSendRun(runId);
@@ -1249,6 +1263,10 @@ async function sendViaTauriWs(
         }
 
         if (state === 'aborted') {
+          if (eventRunId !== runId) {
+            console.log('[Gateway] Ignoring unscoped aborted event during active send');
+            return;
+          }
           console.log('[Gateway] REJECT via aborted event');
           cleanup();
           clearActiveSendRun(runId);
@@ -1257,6 +1275,10 @@ async function sendViaTauriWs(
         }
 
         if (state === 'final') {
+          if (eventRunId !== runId) {
+            console.log('[Gateway] Ignoring unscoped final event during active send');
+            return;
+          }
           const finalText = extractText(chat.message);
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
 
@@ -1286,7 +1308,7 @@ async function sendViaTauriWs(
       ? historyAfter.messages.filter(isHistoryMessage)
       : [];
 
-    const assistantMessages = extractAssistantMessagesFromHistory(allMessages, {
+    let assistantMessages = extractAssistantMessagesFromHistory(allMessages, {
       baselineIds: baselineMessageIds,
       minTimestamp: minNewMessageTimestamp,
     });
@@ -1328,6 +1350,35 @@ async function sendViaTauriWs(
         content: streamedTrimmed,
         timestamp: Date.now(),
       });
+    }
+
+    // Recovery path: if completion resolved but we still have no content,
+    // keep polling history briefly before returning an empty response.
+    if (assistantMessages.length === 0 && !streamedTrimmed) {
+      const recoveryDeadline = Date.now() + 30_000;
+      while (Date.now() < recoveryDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        try {
+          const recoveryHistory = (await connection.request('chat.history', {
+            sessionKey,
+            limit: 30,
+          })) as { messages?: unknown[] };
+          const recoveryMessages = Array.isArray(recoveryHistory.messages)
+            ? recoveryHistory.messages.filter(isHistoryMessage)
+            : [];
+          const recovered = extractAssistantMessagesFromHistory(recoveryMessages, {
+            baselineIds: baselineMessageIds,
+            minTimestamp: minNewMessageTimestamp,
+          });
+          if (recovered.length > 0) {
+            assistantMessages = recovered;
+            console.log(`[Gateway] Recovery poll captured ${recovered.length} assistant message(s)`);
+            break;
+          }
+        } catch (error) {
+          console.warn('[Gateway] Recovery poll failed:', error);
+        }
+      }
     }
 
     setAgentActivity('idle', onActivityChange);
