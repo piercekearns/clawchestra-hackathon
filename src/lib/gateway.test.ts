@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import {
+  __gatewayTestUtils,
   checkGatewayConnection,
   parseAnnounceMetadata,
   sendMessage,
@@ -258,5 +259,49 @@ describe('gateway client', () => {
       { type: 'text', text: 'what is in this image?' },
       { type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } },
     ]);
+  });
+
+  it('extracts assistant messages anchored to the triggering user turn', () => {
+    const messages = [
+      { id: 'u-old', role: 'user', content: 'old message', timestamp: 1 },
+      { id: 'a-old', role: 'assistant', content: 'old reply', timestamp: 2 },
+      {
+        id: 'u-1',
+        role: 'user',
+        content: 'User is viewing project: Clawchestra\n\nHello there',
+        timestamp: 10,
+      },
+      { id: 'a-1', role: 'assistant', content: 'first answer', timestamp: 11 },
+      { id: 'a-2', role: 'assistant', content: 'second answer', timestamp: 12 },
+      { id: 'u-2', role: 'user', content: 'next user turn', timestamp: 13 },
+      { id: 'a-3', role: 'assistant', content: 'later answer', timestamp: 14 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(['u-old', 'a-old']),
+      minTimestamp: 5,
+      expectedUserText: 'User is viewing project: Clawchestra   Hello there',
+    });
+
+    expect(extracted.map((message) => message._id)).toEqual(['a-1', 'a-2']);
+    expect(extracted.map((message) => message.content)).toEqual(['first answer', 'second answer']);
+  });
+
+  it('falls back to first new user turn when expected text is transformed', () => {
+    const messages = [
+      { id: 'u-1', role: 'user', content: 'wrapped context + prompt', timestamp: 10 },
+      { id: 'a-1', role: 'assistant', content: 'assistant response', timestamp: 11 },
+      { id: 'u-2', role: 'user', content: 'another prompt', timestamp: 12 },
+      { id: 'a-2', role: 'assistant', content: 'another response', timestamp: 13 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 5,
+      expectedUserText: 'this exact text does not exist',
+    });
+
+    expect(extracted.map((message) => message._id)).toEqual(['a-1']);
+    expect(extracted[0]?.content).toBe('assistant response');
   });
 });

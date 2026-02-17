@@ -1086,6 +1086,7 @@ async function sendViaTauriWs(
 
   const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   const runId = getRequestId();
+  const turnToken = getRequestId();
   const sendRequestedAt = Date.now();
   let streamedText = '';
   const baselineMessageIds = new Set<string>();
@@ -1111,7 +1112,7 @@ async function sendViaTauriWs(
   try {
     markActiveSendRun(runId);
     setAgentActivity('working', onActivityChange);
-    console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
+    console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'turnToken:', turnToken, 'connected:', connection.connected);
 
     // Try to send the message. If the WS drops before the ack returns,
     // the request will reject — but the gateway may have already received
@@ -1142,6 +1143,15 @@ async function sendViaTauriWs(
       let sawFinalAt = 0;
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
       let unsubscribeState: (() => void) | null = null;
+      let sawOwnedProgressEvent = false;
+
+      const ownsTerminalEvent = (eventRunId?: string): boolean => {
+        if (eventRunId === runId) return true;
+        if (eventRunId) return false;
+        // Fallback path for gateways that omit runId on terminal events.
+        // Only trust unscoped terminal events once we've seen owned progress.
+        return sawOwnedProgressEvent;
+      };
 
       const resetIdleTimeout = () => {
         // Don't idle-timeout during an active send. The activity label
@@ -1346,6 +1356,8 @@ async function sendViaTauriWs(
             return;
           }
 
+          sawOwnedProgressEvent = true;
+
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
           if (timeSinceLastDelta > 3000) {
             sawToolSinceLastContent = true;
@@ -1369,6 +1381,9 @@ async function sendViaTauriWs(
         // legitimate gateway events omit runId.
         if (eventRunId && eventRunId !== runId) {
           return;
+        }
+        if (state && state !== 'final') {
+          sawOwnedProgressEvent = true;
         }
         lastEventTime = Date.now();
         resetIdleTimeout();
@@ -1435,7 +1450,7 @@ async function sendViaTauriWs(
         }
 
         if (state === 'error') {
-          if (eventRunId !== runId) {
+          if (!ownsTerminalEvent(eventRunId)) {
             console.log('[Gateway] Ignoring unscoped error event during active send');
             return;
           }
@@ -1447,7 +1462,7 @@ async function sendViaTauriWs(
         }
 
         if (state === 'aborted') {
-          if (eventRunId !== runId) {
+          if (!ownsTerminalEvent(eventRunId)) {
             console.log('[Gateway] Ignoring unscoped aborted event during active send');
             return;
           }
@@ -1459,7 +1474,7 @@ async function sendViaTauriWs(
         }
 
         if (state === 'final') {
-          if (eventRunId !== runId) {
+          if (!ownsTerminalEvent(eventRunId)) {
             console.log('[Gateway] Ignoring unscoped final event during active send');
             return;
           }
