@@ -1086,7 +1086,6 @@ async function sendViaTauriWs(
 
   const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   const runId = getRequestId();
-  const turnToken = getRequestId();
   const sendRequestedAt = Date.now();
   let streamedText = '';
   const baselineMessageIds = new Set<string>();
@@ -1112,7 +1111,7 @@ async function sendViaTauriWs(
   try {
     markActiveSendRun(runId);
     setAgentActivity('working', onActivityChange);
-    console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'turnToken:', turnToken, 'connected:', connection.connected);
+    console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
 
     // Try to send the message. If the WS drops before the ack returns,
     // the request will reject — but the gateway may have already received
@@ -1144,13 +1143,14 @@ async function sendViaTauriWs(
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
       let unsubscribeState: (() => void) | null = null;
       let sawOwnedProgressEvent = false;
+      let sawOwnedContentEvent = false;
 
       const ownsTerminalEvent = (eventRunId?: string): boolean => {
         if (eventRunId === runId) return true;
         if (eventRunId) return false;
         // Fallback path for gateways that omit runId on terminal events.
-        // Only trust unscoped terminal events once we've seen owned progress.
-        return sawOwnedProgressEvent;
+        // Only trust unscoped terminal events after run-owned progress/content.
+        return sawOwnedProgressEvent || sawOwnedContentEvent;
       };
 
       const resetIdleTimeout = () => {
@@ -1176,7 +1176,6 @@ async function sendViaTauriWs(
         if (completed) return;
         completed = true;
         console.log(`[Gateway] CLEANUP reason=${reason}, streamedLen=${streamedText.length}, handlers=${connection.handlerCount?.() ?? '?'}`);
-        console.trace('[Gateway] cleanup stack');
         clearTimeout(safetyTimeout);
         clearInterval(pollInterval);
         if (idleTimeout) {
@@ -1356,7 +1355,9 @@ async function sendViaTauriWs(
             return;
           }
 
-          sawOwnedProgressEvent = true;
+          if (agentRunId === runId) {
+            sawOwnedProgressEvent = true;
+          }
 
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
           if (timeSinceLastDelta > 3000) {
@@ -1382,7 +1383,7 @@ async function sendViaTauriWs(
         if (eventRunId && eventRunId !== runId) {
           return;
         }
-        if (state && state !== 'final') {
+        if (state && state !== 'final' && eventRunId === runId) {
           sawOwnedProgressEvent = true;
         }
         lastEventTime = Date.now();
@@ -1400,7 +1401,7 @@ async function sendViaTauriWs(
         } else if (TOOL_ACTIVITY_STATES.has(state)) {
           setAgentActivity('working', onActivityChange);
           sawToolSinceLastContent = true;
-        } else if (TERMINAL_ACTIVITY_STATES.has(state) && eventRunId === runId) {
+        } else if (TERMINAL_ACTIVITY_STATES.has(state) && ownsTerminalEvent(eventRunId)) {
           setAgentActivity('idle', onActivityChange);
         }
 
@@ -1425,6 +1426,7 @@ async function sendViaTauriWs(
           lastDeltaTime = Date.now();
           const deltaText = extractText(chat.message);
           if (deltaText) {
+            sawOwnedContentEvent = true;
             if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
               // New content block after tool calls — append with separator.
               contentBlockOffset = streamedText.length + 2; // +2 for '\n\n'
