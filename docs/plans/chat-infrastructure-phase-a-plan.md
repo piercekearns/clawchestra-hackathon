@@ -6,11 +6,24 @@ The dashboard shares chat sessions with webchat/Telegram (`agent:main:main`), th
 
 **Spec:** `docs/specs/chat-infrastructure-phase-a-spec.md`
 
+### Transport Architecture (Clarification)
+
+The app defaults to **`tauri-ws`** transport, not CLI. The transport resolution path is:
+
+1. `App` sends via `sendMessageWithContext(...)` (`src/App.tsx:532`)
+2. `resolveTransport()` calls `getDefaultOpenClawTransport()` (`src/lib/gateway.ts:258`)
+3. When Tauri is available, this returns `{ mode: 'tauri-ws', ... }` (`src/lib/gateway.ts:269`)
+4. Messages are sent via `sendViaTauriWs(...)` using `TauriOpenClawConnection` (`src/lib/gateway.ts:989`)
+
+The CLI path (`tauri-openclaw` mode via `gateway_call()` in Rust) is used for backend commands and as a fallback, but is **not** the default chat send path. The WS reconnection work (Step 5) is therefore the primary resilience mechanism; CLI retries (Step 4) cover backend command paths only.
+
 ---
 
 ## Build Order
 
-### Step 1: Scoped Session Key (3 string replacements)
+### Step 1: Scoped Session Key (4 transport paths)
+
+Update session key across **all** transport modes, not just `tauri-ws`.
 
 **`src-tauri/src/lib.rs`**
 - Line 667: `"agent:main:main"` → `"agent:main:pipeline-dashboard"`
@@ -18,9 +31,12 @@ The dashboard shares chat sessions with webchat/Telegram (`agent:main:main`), th
 - Line 780: `"agent:main:main"` → `"agent:main:pipeline-dashboard"` (in `normalize_session_key()` empty branch)
 
 **`src/lib/gateway.ts`**
-- Line 627: `'agent:main:main'` → `'agent:main:pipeline-dashboard'`
-- Line 631: `'agent:main:main'` → `'agent:main:pipeline-dashboard'`
-- Line 1043: `'agent:main:main'` → `'agent:main:pipeline-dashboard'`
+- Line 572: `'main'` → `'agent:main:pipeline-dashboard'` (in `sendViaOpenClawWs` — `transport.sessionKey?.trim() || 'main'` fallback)
+- Line 627: `'agent:main:main'` → `'agent:main:pipeline-dashboard'` (in `sendViaTauriWs` — `getTauriOpenClawConnection` call)
+- Line 631: `'agent:main:main'` → `'agent:main:pipeline-dashboard'` (in `sendViaTauriWs` — local `sessionKey` variable)
+- Line 1043: `'agent:main:main'` → `'agent:main:pipeline-dashboard'` (in `checkGatewayConnection`)
+
+**Note:** Line 572 uses `'main'` not `'agent:main:main'` — this is a different fallback format in the `openclaw-ws` transport path. Must be updated to the full scoped key to avoid leaking into shared session semantics.
 
 ---
 
@@ -65,7 +81,7 @@ Update both `sanitize_settings()` fallback paths to include the field.
 chatSessionKey?: string | null;
 ```
 
-#### 3c. Startup migration in App.tsx
+#### 3c. Startup migration in App.tsx (atomic with error handling)
 
 **`src/App.tsx`** — In `loadSettings` effect (line 176-193):
 
@@ -74,17 +90,48 @@ After `const settings = await getDashboardSettings()`, add:
 const CURRENT_SESSION_KEY = 'agent:main:pipeline-dashboard';
 if (settings.chatSessionKey !== CURRENT_SESSION_KEY) {
   console.log('[App] Session key changed, clearing chat.db');
-  await useDashboardStore.getState().clearChatHistory();
-  await updateDashboardSettings({ ...settings, chatSessionKey: CURRENT_SESSION_KEY });
-  settings.chatSessionKey = CURRENT_SESSION_KEY;
+  try {
+    await useDashboardStore.getState().clearChatHistory();
+    // Only mark migration complete if clear succeeded
+    await updateDashboardSettings({ ...settings, chatSessionKey: CURRENT_SESSION_KEY });
+    settings.chatSessionKey = CURRENT_SESSION_KEY;
+    console.log('[App] Session key migration complete');
+  } catch (migrationError) {
+    // If clear or settings update fails, do NOT mark complete.
+    // Migration will retry on next startup.
+    console.error('[App] Session key migration failed, will retry next launch:', migrationError);
+  }
 }
+```
+
+**Critical fix (review finding #5):** The original plan called `clearChatHistory()` then `updateDashboardSettings()` without checking if clear succeeded. `clearChatHistory()` swallows errors internally (`src/lib/store.ts:216-217`), so a failed clear would still mark migration complete, leaving stale history forever.
+
+Fix: Wrap both operations in a single try/catch. `clearChatHistory()` must also be updated to **re-throw** errors so the migration can detect failure:
+
+**`src/lib/store.ts`** — `clearChatHistory` (line 209-219):
+```typescript
+clearChatHistory: async () => {
+  set({ chatMessages: [], chatHasMore: false });
+
+  if (isTauriRuntime()) {
+    try {
+      await chatMessagesClear();
+      console.log('[Store] Chat history cleared');
+    } catch (error) {
+      console.error('[Store] Failed to clear chat history:', error);
+      throw error; // Re-throw so callers can detect failure
+    }
+  }
+},
 ```
 
 **Race condition fix:** Move `loadChatMessages()` call (currently at line 172-174 as a separate effect) to the end of the `loadSettings` effect, *after* the migration check. Remove the standalone `useEffect(() => { void loadChatMessages(); }, [...])`.
 
 ---
 
-### Step 4: CLI Retry Logic in `gateway_call()`
+### Step 4: CLI Retry Logic in `gateway_call()` (backend command paths only)
+
+**Scope clarification:** This retry logic covers `gateway_call()` in Rust, which is used by `tauri-openclaw` mode and backend commands (e.g., the polling loop in `openclaw_chat` at line 995). It does **not** cover the default `tauri-ws` send path — that is handled by Step 5's reconnection state machine.
 
 **`src-tauri/src/lib.rs`** — lines 786-834
 
@@ -92,7 +139,7 @@ Rename current `gateway_call()` → `gateway_call_once()`. Create new `gateway_c
 
 ```rust
 fn gateway_call(method: &str, params: &Value) -> Result<Value, String> {
-    let max_retries: u32 = 3;
+    let max_retries: u32 = 4;
     let mut delay_ms: u64 = 1000;
     let mut last_error = String::new();
 
@@ -119,7 +166,9 @@ fn gateway_call(method: &str, params: &Value) -> Result<Value, String> {
 }
 ```
 
-Backoff: 1s → 2s → (fail). Runs on Tauri command thread, `thread::sleep` is safe.
+Backoff: 1s → 2s → 4s → (fail), max 10s cap. Matches spec (`docs/specs/chat-infrastructure-phase-a-spec.md:72`).
+
+**Note on blocking:** `thread::sleep` in `gateway_call()` retries can compound with the existing `poll_interval` sleep in `openclaw_chat` (line 995). For the polling loop, this means worst-case latency increases by up to 7s (1+2+4) per poll cycle. This is acceptable because CLI polling is not the primary transport, and transient failures during polling should self-heal.
 
 ---
 
@@ -159,12 +208,13 @@ onStateChange(listener: (s: WsConnectionState) => void): () => void {
 }
 ```
 
-#### 5c. Close frame → reconnect
+#### 5c. Close frame → reconnect + pending callback rejection
 
 In `connect()`, modify the listener (line 73-75):
 ```typescript
 if (msg.type === 'Close') {
   this.ws = null;
+  this.rejectPendingCallbacks('WebSocket closed');
   this.setState('disconnected');
   this.scheduleReconnect();
   return;
@@ -175,6 +225,18 @@ After successful handshake (line 107):
 ```typescript
 this.setState('connected');
 this.reconnectAttempt = 0;
+```
+
+**Critical fix (review finding #6):** On disconnect, all pending request callbacks must be explicitly rejected. Without this, in-flight requests hang until their 30s timeout during reconnect churn.
+
+```typescript
+private rejectPendingCallbacks(reason: string): void {
+  const pending = new Map(this.requestCallbacks);
+  this.requestCallbacks.clear();
+  for (const [id, { reject }] of pending) {
+    try { reject(new Error(reason)); } catch {}
+  }
+}
 ```
 
 #### 5d. Reconnection logic
@@ -202,6 +264,7 @@ private async attemptReconnect(): Promise<void> {
 }
 
 retryManually(): void {
+  if (this.disposed) return;
   this.reconnectAttempt = 0;
   this.scheduleReconnect();
 }
@@ -209,7 +272,24 @@ retryManually(): void {
 
 #### 5e. Clean disconnect
 
-Update `disconnect()` to set `disposed = true`, clear reconnect timer, clear stateListeners.
+Update `disconnect()` to set `disposed = true`, clear reconnect timer, reject pending callbacks, clear stateListeners:
+```typescript
+async disconnect(): Promise<void> {
+  this.disposed = true;
+  if (this.reconnectTimer) {
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+  this.rejectPendingCallbacks('Connection disposed');
+  if (this.ws) {
+    await this.ws.disconnect();
+    this.ws = null;
+  }
+  this.handlers.clear();
+  this.stateListeners.clear();
+  this.setState('disconnected');
+}
+```
 
 #### 5f. Update `get connected`
 
@@ -223,7 +303,12 @@ get connected(): boolean {
 
 Return existing instance if state is `connected` or `reconnecting` (don't create duplicates during reconnection).
 
-Add `getConnectionInstance()` export for external state access.
+Add `getConnectionInstance()` export for external state access:
+```typescript
+export function getConnectionInstance(): TauriOpenClawConnection | null {
+  return connectionInstance;
+}
+```
 
 ---
 
@@ -246,10 +331,19 @@ export function subscribeConnectionState(listener: ConnectionStateListener): () 
 }
 
 export function retryGatewayConnection(): void {
-  const { getConnectionInstance } = require('./tauri-websocket'); // or dynamic import
-  getConnectionInstance()?.retryManually();
+  import('./tauri-websocket').then(({ getConnectionInstance }) => {
+    const instance = getConnectionInstance();
+    if (instance) {
+      instance.retryManually();
+    } else {
+      // No instance exists yet — trigger a fresh connection attempt
+      void checkGatewayConnection();
+    }
+  });
 }
 ```
+
+**Critical fix (review finding #4):** The original plan used `getConnectionInstance()?.retryManually()` which is a no-op when no connection singleton exists (e.g., if the initial `checkGatewayConnection()` failed before creating a `TauriOpenClawConnection`). The fix above falls back to `checkGatewayConnection()` to bootstrap a fresh connection attempt.
 
 Wire in `sendViaTauriWs()` after `getTauriOpenClawConnection()` resolves — subscribe to `connection.onStateChange()` once (guarded by `connectionStateBridgeWired` flag).
 
@@ -293,6 +387,8 @@ useEffect(() => {
 }, [setGatewayConnected, addChatMessage]);
 ```
 
+**Startup resilience (review finding #4 continued):** If `checkGatewayConnection()` fails on initial call (returns `false`), the subscription bridge may not be wired yet (no connection instance to subscribe to). The `subscribeConnectionState` listener will still receive the initial `'disconnected'` state from the module-level default. When the user clicks "Retry", `retryGatewayConnection()` will call `checkGatewayConnection()` to bootstrap a fresh instance and wire the bridge.
+
 Update `chatConnectionState` memo (lines 137-141) to incorporate `wsConnectionState`:
 ```typescript
 const chatConnectionState = useMemo<ChatConnectionState>(() => {
@@ -312,22 +408,45 @@ onRetryConnection?: () => void;
 
 Pass through to both `ChatBar` instances (floating and embedded).
 
-#### 7c. ChatBar — Retry button
+#### 7c. ChatBar — Retry button (avoiding nested `<button>`)
 
 **`src/components/chat/ChatBar.tsx`** — Add `onRetryConnection?: () => void` to `ChatBarProps`.
 
-In the header bar, next to `StatusBadge`:
+**Critical fix (review finding #3):** In floating mode, the header bar is a `<button>` element (`src/components/chat/ChatBar.tsx:162`). Placing another `<button>` inside it creates invalid nested HTML that breaks click/keyboard behavior.
+
+**Solution:** Place the retry control **outside** the floating header button, as a sibling element within the header container. Refactor the floating header to wrap both elements in a non-interactive container:
+
 ```tsx
-{connectionState === 'error' && onRetryConnection && (
-  <button
-    type="button"
-    className="rounded-full border border-status-danger/50 px-2 py-0.5 text-[10px] text-status-danger hover:bg-status-danger/10"
-    onClick={(e) => { e.stopPropagation(); onRetryConnection(); }}
-  >
-    Retry
-  </button>
-)}
+{isFloating ? (
+  <div className="relative flex w-full flex-shrink-0 items-center border-b border-neutral-300/80 dark:border-neutral-700/80">
+    <button
+      type="button"
+      className="flex flex-1 items-center gap-2 px-3 py-2 text-left"
+      onClick={onToggleDrawer}
+      aria-expanded={drawerOpen}
+      aria-label={drawerOpen ? 'Collapse chat drawer' : 'Open chat drawer'}
+    >
+      <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
+        OpenClaw
+      </span>
+      <StatusBadge state={connectionState} />
+      {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
+      {/* ... rest of header content ... */}
+    </button>
+    {connectionState === 'error' && onRetryConnection && (
+      <button
+        type="button"
+        className="mr-2 rounded-full border border-status-danger/50 px-2 py-0.5 text-[10px] text-status-danger hover:bg-status-danger/10"
+        onClick={(e) => { e.stopPropagation(); onRetryConnection(); }}
+      >
+        Retry
+      </button>
+    )}
+  </div>
+) : (/* embedded header unchanged */)}
 ```
+
+For the **embedded** variant, the retry button can be placed directly in the header (which is already a `<div>`, not a `<button>`).
 
 #### 7d. Wire retry in App.tsx
 
@@ -337,6 +456,10 @@ import { retryGatewayConnection } from './lib/gateway';
 onRetryConnection={retryGatewayConnection}
 ```
 
+#### 7e. StatusBadge — No changes needed
+
+**Note (review finding #9):** `StatusBadge` already supports `reconnecting` and `connecting` states (`src/components/chat/StatusBadge.tsx:13-21`). No new badge variants are needed — only the state wiring in Steps 6-7a.
+
 ---
 
 ## Files Modified (summary)
@@ -344,12 +467,13 @@ onRetryConnection={retryGatewayConnection}
 | File | Changes |
 |------|---------|
 | `src-tauri/src/lib.rs` | Session key (3×), scan path (1×), settings struct, CLI retry |
-| `src/lib/gateway.ts` | Session key (3×), state bridge, retry export |
-| `src/lib/tauri-websocket.ts` | State machine, reconnection, retry, singleton update |
+| `src/lib/gateway.ts` | Session key (4× — includes line 572), state bridge, retry export with bootstrap fallback |
+| `src/lib/tauri-websocket.ts` | State machine, reconnection, pending callback rejection, retry, singleton update, `getConnectionInstance` export |
 | `src/lib/settings.ts` | Add `chatSessionKey` field |
-| `src/App.tsx` | Chat.db migration, subscription effect, system bubbles, retry wiring |
+| `src/lib/store.ts` | `clearChatHistory` re-throws errors for migration detection |
+| `src/App.tsx` | Chat.db migration (atomic), subscription effect, system bubbles, retry wiring |
 | `src/components/chat/ChatShell.tsx` | Add `onRetryConnection` prop |
-| `src/components/chat/ChatBar.tsx` | Add retry button, `onRetryConnection` prop |
+| `src/components/chat/ChatBar.tsx` | Refactor floating header to avoid nested `<button>`, add retry button as sibling |
 
 ---
 
@@ -359,11 +483,21 @@ onRetryConnection={retryGatewayConnection}
 1. **Session isolation:** Send message from dashboard → confirm NOT in webchat. Send from webchat → confirm NOT in dashboard.
 2. **Scan path:** Verify `~/projects/` projects appear. Verify `~/repos/` still works.
 3. **Chat.db clear:** After update, verify chat history is wiped (clean slate). On second launch, verify messages persist normally.
-4. **CLI retry:** Stop gateway, send message, verify retry log in Tauri console ("Gateway call failed... retrying"), then start gateway before retries exhaust.
+4. **CLI retry:** Stop gateway, send message via `tauri-openclaw` mode, verify retry log in Tauri console ("Gateway call failed... retrying"), then start gateway before retries exhaust.
 5. **WS reconnect:** Stop gateway while connected → StatusBadge shows "Reconnecting..." with spinner. Restart gateway → StatusBadge returns to "Connected". System bubble confirms "Connection restored."
-6. **Graceful degradation:** Kill WS but keep CLI alive → messages still send/receive via polling fallback. No blocking on WS state.
+6. **WS down, no automatic transport fallback:** Kill WS — messages fail (no silent fallback to CLI). StatusBadge reflects disconnected/reconnecting state. This is the expected behavior: `tauri-ws` is the sole frontend send path; there is no automatic fallback to `tauri-openclaw` mode in `sendMessage()` (`src/lib/gateway.ts:945`).
 7. **Manual retry:** Let auto-reconnect exhaust 5 attempts → StatusBadge shows "Error". Click "Retry" → reconnection attempts restart.
 8. **Startup race condition:** Fresh install → settings load, session key check passes (new default), chat loads empty. No flash of stale messages.
+9. **Startup with gateway down:** App starts, `checkGatewayConnection()` fails → state stays `disconnected`. "Retry" button appears after user interaction or state transition. Clicking retry bootstraps a fresh connection attempt.
+10. **Manual retry with no connection instance:** After initial connect failure (no singleton created), click "Retry" → `retryGatewayConnection()` calls `checkGatewayConnection()` to bootstrap fresh instance instead of being a no-op.
+11. **In-flight requests during disconnect:** Send a message, then kill WS before response arrives → pending callbacks are rejected immediately (not after 30s timeout). User sees error promptly.
+12. **Multiple reconnect cycles:** Trigger disconnect/reconnect 3+ times in succession → verify no duplicate listeners, no timer leaks, no stale state bridge subscriptions.
+13. **Migration failure — DB clear fails:** Simulate `chatMessagesClear()` throwing → settings key is NOT updated → migration retries on next launch.
+14. **Migration failure — settings update fails after clear:** Simulate `updateDashboardSettings()` throwing → migration retries on next launch → second clear is a no-op on empty DB → settings update succeeds.
+15. **First-launch migration race:** User sends message before migration completes → migration still runs (loads settings first), no stale messages leak.
+16. **`openclaw-ws` transport isolation:** If `openclaw-ws` mode is used, verify session key is `agent:main:pipeline-dashboard` (not the old `'main'` fallback at line 572).
+17. **Floating header retry button:** Click "Retry" in floating mode → verify no nested `<button>` in DOM, keyboard navigation works correctly, `onToggleDrawer` is not triggered.
+18. **No regressions in `tauri-openclaw` mode:** After session key + retry changes, verify backend CLI commands still work correctly.
 
 ### Automated
 - `bun test` — existing tests pass (no behavioral changes to schema/views/projects)
