@@ -36,12 +36,14 @@ export interface SystemBubbleMeta {
   title: string;
   details?: Record<string, string>;  // key-value pairs (Label, Runtime, Status, etc.)
   actions?: string[];                 // text hints: "View logs", "Retry", etc.
+  runId?: string;                     // ties bubble to gateway run for dedup/lifecycle tracking
 }
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number;
+  _id?: string;                       // stable local key set by store addChatMessage
   systemMeta?: SystemBubbleMeta;      // Only present when role === 'system'
 }
 ```
@@ -57,7 +59,8 @@ The SQLite schema already has a `metadata TEXT` column on the `messages` table (
   "systemMeta": {
     "kind": "completion",
     "title": "Sub-agent completed",
-    "details": { "Label": "Plan review", "Runtime": "2m 31s" }
+    "details": { "Label": "Plan review", "Runtime": "2m 31s" },
+    "runId": "run_abc123"
   }
 }
 ```
@@ -319,7 +322,7 @@ if (latestMessage?.role === 'assistant') {
 if (
   latestMessage?.role === 'assistant' ||
   (latestMessage?.role === 'system' && latestMessage.systemMeta &&
-    ['failure', 'completion', 'decision'].includes(latestMessage.systemMeta.kind))
+    ['failure', 'completion', 'compaction', 'decision'].includes(latestMessage.systemMeta.kind))
 ) {
   setHasNewMessages(true);
 }
@@ -341,6 +344,7 @@ type SystemEventKind = 'compaction' | 'error' | 'announce';
 interface SystemEvent {
   kind: SystemEventKind;
   sessionKey?: string;
+  runId?: string;
   label?: string;
   message?: string;
   status?: string;
@@ -353,6 +357,25 @@ type SystemEventListener = (event: SystemEvent) => void;
 
 let systemEventUnsubscribe: (() => void) | null = null;
 const systemEventListeners = new Set<SystemEventListener>();
+const ACTIVE_SEND_DEDUP_WINDOW_MS = 120_000;
+let activeSendRun: { runId: string; startedAt: number } | null = null;
+
+export function markActiveSendRun(runId: string): void {
+  activeSendRun = { runId, startedAt: Date.now() };
+}
+
+export function clearActiveSendRun(runId?: string): void {
+  if (!activeSendRun) return;
+  if (!runId || activeSendRun.runId === runId) {
+    activeSendRun = null;
+  }
+}
+
+function shouldSuppressForActiveSend(runId?: string): boolean {
+  if (!runId || !activeSendRun) return false;
+  if (activeSendRun.runId !== runId) return false;
+  return Date.now() - activeSendRun.startedAt <= ACTIVE_SEND_DEDUP_WINDOW_MS;
+}
 
 /**
  * Subscribe to system-level gateway events (compaction, errors, announces)
@@ -369,14 +392,14 @@ export function subscribeSystemEvents(listener: SystemEventListener): () => void
  * Call once after Phase A's getConnectionInstance() is available.
  * Idempotent — safe to call on reconnect.
  */
-export function wireSystemEventBus(): void {
+export async function wireSystemEventBus(): Promise<void> {
   // Tear down previous subscription if re-wiring (reconnect scenario)
   if (systemEventUnsubscribe) {
     systemEventUnsubscribe();
     systemEventUnsubscribe = null;
   }
 
-  const { getConnectionInstance } = require('./tauri-websocket');
+  const { getConnectionInstance } = await import('./tauri-websocket');
   const connection = getConnectionInstance();
   if (!connection) return;
 
@@ -388,10 +411,19 @@ export function wireSystemEventBus(): void {
       : {}) as Record<string, unknown>;
     const state = typeof chat.state === 'string' ? chat.state : '';
     const sessionKey = typeof chat.sessionKey === 'string' ? chat.sessionKey : undefined;
+    const runId = typeof chat.runId === 'string' ? chat.runId : undefined;
+
+    // Dedup against active foreground send: the per-send subscriber already owns these.
+    if (
+      shouldSuppressForActiveSend(runId) &&
+      (state === 'announce' || state === 'error' || state === 'final')
+    ) {
+      return;
+    }
 
     // Compaction detection
     if (state === 'compacted' || state === 'compacting' || state === 'compaction_complete') {
-      emit({ kind: 'compaction', sessionKey, message: 'Conversation compacted' });
+      emit({ kind: 'compaction', sessionKey, runId, message: 'Conversation compacted' });
     }
 
     // Background error detection (errors outside active send are not caught by sendViaTauriWs)
@@ -399,20 +431,24 @@ export function wireSystemEventBus(): void {
       emit({
         kind: 'error',
         sessionKey,
+        runId,
         message: typeof chat.errorMessage === 'string' ? chat.errorMessage : 'Unknown error',
         label: typeof chat.label === 'string' ? chat.label : undefined,
       });
     }
 
-    // Announce detection (sub-agent completion/failure)
-    if (state === 'announce' || chat.announce === true || chat.subagentResult !== undefined) {
+    // Announce detection and classification (structured parser first, guarded fallback)
+    const announce = parseAnnounceMetadata(chat, true);
+    if (announce) {
       emit({
         kind: 'announce',
-        sessionKey,
-        label: typeof chat.label === 'string' ? chat.label : undefined,
-        status: typeof chat.status === 'string' ? chat.status : 'ok',
-        runtime: typeof chat.runtime === 'string' ? chat.runtime : undefined,
-        tokens: typeof chat.tokens === 'string' ? chat.tokens : undefined,
+        sessionKey: announce.sessionKey ?? sessionKey,
+        runId: announce.runId ?? runId,
+        label: announce.label,
+        status: announce.status,
+        runtime: announce.runtime,
+        tokens: announce.tokens,
+        message: typeof chat.message === 'string' ? chat.message : undefined,
         raw: chat,
       });
     }
@@ -441,10 +477,26 @@ export function teardownSystemEventBus(): void {
 
 **Reconnect rebinding:** When Phase A's connection state transitions to `'connected'` (including after a reconnect), call `wireSystemEventBus()` to rebind. This replaces any stale subscription from the previous connection.
 
-**Deduplication policy:** During an active `sendViaTauriWs` call, the per-send subscriber also sees these events. To avoid duplicate bubbles:
-- The per-send subscriber handles `error`/`final` for the active exchange and suppresses them.
-- The durable bus only emits `error` events whose `sessionKey` or `runId` do NOT match the active send's context.
-- In practice: pass the active `runId` to a module-level variable while a send is in-flight, and skip matching events in the durable bus.
+**Deduplication policy (concrete):**
+- **Gateway-level active-send dedup window:** `sendViaTauriWs` must call `markActiveSendRun(runId)` immediately before `chat.send`, and call `clearActiveSendRun(runId)` in all terminal paths (`final` resolve, `error`, `aborted`, timeout). While active and within `ACTIVE_SEND_DEDUP_WINDOW_MS` (120s), the durable bus suppresses matching `announce`/`error`/`final` events for that `runId`.
+- **Announce lifecycle set/clear:** App-layer announce handling keeps an `activeAnnounceRuns` map keyed by `runId`. Set on announce start (`status: started|running`), clear on terminal announce (`ok|error|timeout`).
+- **Terminal announce dedup window:** App-layer keeps `seenTerminalAnnounceRuns` (`runId` -> timestamp). If a terminal announce for the same `runId` arrives again within `ANNOUNCE_TERMINAL_DEDUP_MS` (45s), drop it.
+- **Persistence tie-in:** `runId` is stored on `SystemBubbleMeta.runId` so replays/history loads can still reason about duplicate terminal bubbles.
+
+Placement in `sendViaTauriWs`:
+
+```typescript
+markActiveSendRun(runId);
+try {
+  await connection.request('chat.send', { sessionKey, message: messageText, idempotencyKey: runId });
+  // ...existing event wait / completion logic...
+} catch (error) {
+  clearActiveSendRun(runId);
+  throw error;
+} finally {
+  clearActiveSendRun(runId);
+}
+```
 
 ---
 
@@ -467,20 +519,20 @@ const stateLabels: Record<string, string> = {
 ```typescript
 useEffect(() => {
   // Wire the durable event bus after connection is ready
-  wireSystemEventBus();
+  void wireSystemEventBus();
 
   const unsubscribe = subscribeSystemEvents((event) => {
     if (event.kind === 'compaction') {
       addSystemBubble('compaction', 'Conversation compacted', {
         'Note': 'Older messages were summarized to free context space',
-      });
+      }, undefined, event.runId);
     }
   });
 
   // Re-wire on reconnect (Phase A provides subscribeConnectionState)
   const unsubConnState = subscribeConnectionState((state) => {
     if (state === 'connected') {
-      wireSystemEventBus();
+      void wireSystemEventBus();
     }
   });
 
@@ -518,9 +570,28 @@ When a sub-agent completes, OpenClaw sends an announce to the scoped session. Wi
 interface AnnounceMetadata {
   label?: string;
   runtime?: string;
-  status?: string;
+  status?: 'started' | 'running' | 'ok' | 'error' | 'timeout';
   tokens?: string;
   sessionKey?: string;
+  runId?: string;
+}
+
+function normalizeAnnounceStatus(
+  rawStatus: unknown,
+  messageText: string,
+): AnnounceMetadata['status'] {
+  const normalized = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
+  if (['start', 'started', 'queued'].includes(normalized)) return 'started';
+  if (['running', 'in_progress'].includes(normalized)) return 'running';
+  if (['ok', 'success', 'completed', 'complete', 'finished'].includes(normalized)) return 'ok';
+  if (['error', 'failed', 'failure'].includes(normalized)) return 'error';
+  if (['timeout', 'timed_out', 'timed-out'].includes(normalized)) return 'timeout';
+
+  // Fallback to content hints when status field is absent/ambiguous
+  if (/(timed?\s*out)/i.test(messageText)) return 'timeout';
+  if (/(failed|error)/i.test(messageText)) return 'error';
+  if (/(completed|finished|succeeded)/i.test(messageText)) return 'ok';
+  return undefined;
 }
 
 /**
@@ -536,6 +607,8 @@ export function parseAnnounceMetadata(
   eventPayload: Record<string, unknown>,
   fromEventBus: boolean = false,
 ): AnnounceMetadata | null {
+  const messageText = typeof eventPayload.message === 'string' ? eventPayload.message : '';
+
   // Primary: structured event fields
   if (
     eventPayload.announce === true ||
@@ -545,23 +618,24 @@ export function parseAnnounceMetadata(
     return {
       label: typeof eventPayload.label === 'string' ? eventPayload.label : undefined,
       runtime: typeof eventPayload.runtime === 'string' ? eventPayload.runtime : undefined,
-      status: typeof eventPayload.status === 'string' ? eventPayload.status : 'ok',
+      status: normalizeAnnounceStatus(eventPayload.status, messageText),
       tokens: typeof eventPayload.tokens === 'string' ? eventPayload.tokens : undefined,
       sessionKey: typeof eventPayload.sessionKey === 'string' ? eventPayload.sessionKey : undefined,
+      runId: typeof eventPayload.runId === 'string' ? eventPayload.runId : undefined,
     };
   }
 
   // Fallback: content-based heuristic — ONLY from event bus, never on history fetch
   if (fromEventBus) {
-    const content = typeof eventPayload.message === 'string' ? eventPayload.message : '';
     // Only match if content explicitly looks like an announce
     // Require both a status indicator AND a structural marker
     const isAnnounce =
-      /(?:sub-?agent|task|background job)\s+(?:completed|finished|failed|timed?\s*out)/i.test(content);
+      /(?:sub-?agent|task|background job)\s+(?:completed|finished|failed|timed?\s*out)/i.test(messageText);
 
     if (isAnnounce) {
       return {
-        status: /(?:failed|error|timed?\s*out)/i.test(content) ? 'error' : 'ok',
+        status: normalizeAnnounceStatus(undefined, messageText),
+        runId: typeof eventPayload.runId === 'string' ? eventPayload.runId : undefined,
       };
     }
   }
@@ -573,8 +647,49 @@ export function parseAnnounceMetadata(
 **`src/App.tsx`** — Handle announce events from the durable bus (add to the `subscribeSystemEvents` callback):
 
 ```typescript
+const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
+const activeAnnounceRunsRef = useRef<Map<string, number>>(new Map());
+const seenTerminalAnnounceRunsRef = useRef<Map<string, number>>(new Map());
+
+function pruneExpiredRuns(map: Map<string, number>, ttlMs: number): void {
+  const now = Date.now();
+  for (const [runId, ts] of map.entries()) {
+    if (now - ts > ttlMs) map.delete(runId);
+  }
+}
+
 if (event.kind === 'announce') {
-  const isFailure = event.status === 'error' || event.status === 'timeout';
+  const status = (event.status ?? '').toLowerCase();
+  const runId = event.runId;
+  const isStart = status === 'started' || status === 'running';
+  const isFailure = status === 'error' || status === 'timeout';
+  const isSuccess = status === 'ok';
+  const isTerminal = isFailure || isSuccess;
+  const now = Date.now();
+
+  // Keep maps bounded.
+  pruneExpiredRuns(activeAnnounceRunsRef.current, 10 * 60_000);
+  pruneExpiredRuns(seenTerminalAnnounceRunsRef.current, ANNOUNCE_TERMINAL_DEDUP_MS);
+
+  // Set run lifecycle on announce start.
+  if (runId && isStart) {
+    activeAnnounceRunsRef.current.set(runId, now);
+    return;
+  }
+
+  // Clear lifecycle + dedupe terminal repeats.
+  if (runId && isTerminal) {
+    const seenAt = seenTerminalAnnounceRunsRef.current.get(runId);
+    if (seenAt && now - seenAt < ANNOUNCE_TERMINAL_DEDUP_MS) {
+      return;
+    }
+    seenTerminalAnnounceRunsRef.current.set(runId, now);
+    activeAnnounceRunsRef.current.delete(runId);
+  }
+
+  // Ignore non-terminal progress announces (already tracked via activeAnnounceRunsRef).
+  if (!isTerminal) return;
+
   addSystemBubble(
     isFailure ? 'failure' : 'completion',
     isFailure ? 'Sub-agent failed' : 'Sub-agent completed',
@@ -584,6 +699,7 @@ if (event.kind === 'announce') {
       ...(event.status ? { 'Status': event.status } : {}),
     },
     isFailure ? ['Check logs for details'] : undefined,
+    runId,
   );
 }
 ```
@@ -607,7 +723,7 @@ if (event.kind === 'error') {
   addSystemBubble('failure', 'Background task failed', {
     'Error': event.message ?? 'Unknown error',
     ...(event.label ? { 'Task': event.label } : {}),
-  }, ['Check logs for details']);
+  }, ['Check logs for details'], event.runId);
 }
 ```
 
@@ -625,16 +741,27 @@ The spec requires polling `process action:poll` periodically for active backgrou
 /**
  * Poll for background coding agent session health.
  * Call periodically (e.g., every 30s) while background sessions are active.
+ * Uses the existing tauri-ws request path (TauriOpenClawConnection.request).
  * Returns sessions that have exited abnormally.
  */
 export async function pollProcessSessions(
   sessionKeys: string[],
+  transportOverride?: GatewayTransport,
 ): Promise<Array<{ sessionKey: string; exitCode: number; error?: string }>> {
   const failures: Array<{ sessionKey: string; exitCode: number; error?: string }> = [];
+  const transport = await resolveTransport(transportOverride);
+  if (transport.mode !== 'tauri-ws') return failures;
+
+  const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+  const connection = await getTauriOpenClawConnection(
+    transport.wsUrl,
+    transport.sessionKey || 'agent:main:main',
+    transport.token,
+  );
 
   for (const sessionKey of sessionKeys) {
     try {
-      const result = await gatewayCall('process', {
+      const result = await connection.request<{ exitCode?: number; error?: string }>('process', {
         action: 'poll',
         sessionKey,
       });
@@ -658,19 +785,36 @@ export async function pollProcessSessions(
 **`src/App.tsx`** — Wire periodic polling (only when background sessions are known to be active):
 
 ```typescript
-// Track active background session keys (populated when sessions_spawn is called)
-const activeBackgroundSessions = useRef<Set<string>>(new Set());
+// Track active background session keys (reactive so polling effect starts/stops correctly)
+const [activeBackgroundSessions, setActiveBackgroundSessions] = useState<Set<string>>(new Set());
+
+// Call this when parsing a sessions_spawn result
+const registerBackgroundSession = useCallback((sessionKey: string) => {
+  setActiveBackgroundSessions((prev) => {
+    if (prev.has(sessionKey)) return prev;
+    const next = new Set(prev);
+    next.add(sessionKey);
+    return next;
+  });
+}, []);
 
 useEffect(() => {
-  if (activeBackgroundSessions.current.size === 0) return;
+  if (activeBackgroundSessions.size === 0) return;
 
   const interval = setInterval(async () => {
-    const keys = [...activeBackgroundSessions.current];
+    const keys = [...activeBackgroundSessions];
     if (keys.length === 0) return;
 
     const failures = await pollProcessSessions(keys);
+    if (failures.length === 0) return;
+
+    setActiveBackgroundSessions((prev) => {
+      const next = new Set(prev);
+      for (const failure of failures) next.delete(failure.sessionKey);
+      return next;
+    });
+
     for (const failure of failures) {
-      activeBackgroundSessions.current.delete(failure.sessionKey);
       addSystemBubble('failure', 'Coding agent crashed', {
         'Session': failure.sessionKey,
         'Exit code': String(failure.exitCode),
@@ -680,7 +824,7 @@ useEffect(() => {
   }, 30_000); // Every 30 seconds
 
   return () => clearInterval(interval);
-}, [activeBackgroundSessions.current.size]);
+}, [activeBackgroundSessions]);
 ```
 
 **Note:** The set of active background session keys must be populated when `sessions_spawn` is called from the chat. This requires tracking the session keys returned by spawn results. For Phase B, the simplest approach is to parse spawn results from assistant messages and add session keys to the set. Full lifecycle management is Phase C territory.
@@ -735,18 +879,19 @@ addSystemBubble: (
   title: string,
   details?: Record<string, string>,
   actions?: string[],
+  runId?: string,
 ) => Promise<void>;
 ```
 
 **`src/lib/store.ts`** — Add implementation alongside `addChatMessage`:
 
 ```typescript
-addSystemBubble: async (kind, title, details, actions) => {
+addSystemBubble: async (kind, title, details, actions, runId) => {
   return get().addChatMessage({
     role: 'system',
     content: title,
     timestamp: Date.now(),
-    systemMeta: { kind, title, details, actions },
+    systemMeta: { kind, title, details, actions, ...(runId ? { runId } : {}) },
   });
 },
 ```
@@ -756,6 +901,7 @@ Then callers become one-liners:
 ```typescript
 addSystemBubble('compaction', 'Conversation compacted', { 'Note': 'Older messages summarized' });
 addSystemBubble('failure', 'Sub-agent failed', { 'Error': 'OOM killed', 'Task': 'Phase B plan' });
+addSystemBubble('completion', 'Sub-agent completed', { 'Runtime': '2m 10s' }, undefined, 'run_abc123');
 ```
 
 ---
@@ -764,15 +910,15 @@ addSystemBubble('failure', 'Sub-agent failed', { 'Error': 'OOM killed', 'Task': 
 
 | File | Changes |
 |------|---------|
-| `src/lib/gateway.ts` | Extend `ChatMessage` with `systemMeta`, add `SystemBubbleMeta` type, add `SystemBubbleKind` type, add `parseAnnounceMetadata()`, add durable system event bus (`subscribeSystemEvents`, `wireSystemEventBus`, `teardownSystemEventBus`), add `pollProcessSessions()`, add compaction state labels |
+| `src/lib/gateway.ts` | Extend `ChatMessage` with `systemMeta` + `_id`, add `SystemBubbleMeta` with `runId`, add `SystemBubbleKind`, add `parseAnnounceMetadata()` with status normalization, add durable system event bus (`subscribeSystemEvents`, async `wireSystemEventBus`, `teardownSystemEventBus`), add active-send `runId` dedup helpers, add `pollProcessSessions()` via tauri-ws `connection.request('process', ...)`, add compaction state labels |
 | `src/components/chat/SystemBubble.tsx` | **New file** — center-aligned, icon-driven system bubble component with ARIA roles |
-| `src/components/chat/MessageList.tsx` | Conditional render: `SystemBubble` for system messages with meta, `MessageBubble` for everything else. Unread indicator includes critical system messages. |
+| `src/components/chat/MessageList.tsx` | Conditional render: `SystemBubble` for system messages with meta, `MessageBubble` for everything else. Unread indicator includes critical system messages including compaction. |
 | `src/components/chat/MessageBubble.tsx` | No changes (existing system message styling remains as fallback for system messages without `systemMeta`) |
 | `src/components/chat/index.ts` | Export `SystemBubble` |
-| `src/lib/store.ts` | Add `addSystemBubble` convenience method, add `deserializePersistedMessage` helper, fix `addChatMessage` to serialize metadata, fix `loadChatMessages` and `loadMoreChatMessages` to deserialize metadata |
+| `src/lib/store.ts` | Add `addSystemBubble` convenience method with optional `runId`, add `deserializePersistedMessage` helper, fix `addChatMessage` to serialize metadata, fix `loadChatMessages` and `loadMoreChatMessages` to deserialize metadata |
 | `src/lib/tauri.ts` | No changes (existing `PersistedChatMessage` already has `metadata?: string`) |
 | `src-tauri/src/lib.rs` | No changes (existing `ChatMessage` struct already has `metadata: Option<String>`, schema already has `metadata TEXT` column) |
-| `src/App.tsx` | Wire durable event bus on mount, subscribe to system events for compaction/announce/error, re-wire on reconnect, process session health polling, teardown on unmount |
+| `src/App.tsx` | Wire durable event bus on mount, subscribe to system events for compaction/announce/error, implement announce lifecycle `runId` set/clear + terminal dedup window, re-wire on reconnect, process session health polling with reactive `useState` session tracking, teardown on unmount |
 | `AGENTS.md` (this repo only) | Add Decision Escalation rules |
 
 ---
@@ -792,7 +938,7 @@ addSystemBubble('failure', 'Sub-agent failed', { 'Error': 'OOM killed', 'Task': 
 9. **Persistence pagination:** Load enough messages to trigger "load more" pagination → verify older system bubbles retain their structured metadata after pagination load
 10. **Fallback rendering:** System messages WITHOUT `systemMeta` → verify they still render as plain system messages via `MessageBubble` (backward compat)
 11. **No duplicate rendering:** When an announce arrives via the event bus → verify exactly ONE bubble appears (not both a system bubble and a separate assistant message)
-12. **Unread indicator:** Scroll up in a long conversation. Trigger a failure or completion → verify "new messages" indicator appears
+12. **Unread indicator:** Scroll up in a long conversation. Trigger a failure, completion, or compaction bubble → verify "new messages" indicator appears
 13. **Decision surfacing:** Ask the orchestrating agent to run a `/plan` review → verify decisions are surfaced in chat as assistant messages (not silently resolved)
 14. **Reconnect rebinding:** Disconnect WS → reconnect → trigger a system event → verify the durable event bus still receives it (no stale subscription)
 15. **Mobile overflow:** Add a system bubble with a very long label or error message → verify text wraps properly on narrow screens (no horizontal overflow)
@@ -821,6 +967,7 @@ addSystemBubble('failure', 'Sub-agent failed', { 'Error': 'OOM killed', 'Task': 
 5. **Background error listener reconnect:** Simulate disconnect → reconnect → verify single listener (no duplicate bubbles from stale subscriptions)
 6. **Unread indicator for system bubbles:** Add a failure bubble while `userScrolled` is true → verify `hasNewMessages` is set
 7. **Duplicate suppression:** Same announce observed via both event bus and history fetch → verify only one bubble rendered
+8. **Announce lifecycle dedup:** Emit `announce` start for `runId=X`, then terminal `ok`, then duplicate terminal `ok` within 45s → verify exactly one terminal bubble and `runId=X` removed from active lifecycle set
 
 ---
 
@@ -830,7 +977,7 @@ addSystemBubble('failure', 'Sub-agent failed', { 'Error': 'OOM killed', 'Task': 
 
 2. **Announce format** — Sub-agent announces arrive via the gateway. Verify the exact event payload structure from a real `sessions_spawn` to confirm which structured fields (`announce`, `subagentResult`, `state: 'announce'`) are present. Tune `parseAnnounceMetadata` accordingly.
 
-3. **Active send deduplication** — Test whether the durable bus and the per-send subscriber in `sendViaTauriWs` both fire for the same event. If so, implement the `activeRunId` suppression described in Step 5.
+3. **Active send deduplication validation** — Test whether the durable bus and the per-send subscriber in `sendViaTauriWs` both fire for the same event, and verify Step 5 suppression (`markActiveSendRun`/`clearActiveSendRun`) prevents duplicate bubbles for the same `runId`.
 
 4. **Background session tracking** — Determine how `sessions_spawn` results are structured and how to extract session keys for the process polling in Step 8c. This may require parsing the assistant's response or adding structured tracking.
 
