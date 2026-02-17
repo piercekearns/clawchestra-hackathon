@@ -2,9 +2,9 @@
 items:
   - id: chat-infrastructure
     title: "Chat Infrastructure Overhaul"
-    status: testing
+    status: in-progress
     priority: 1
-    nextAction: "Code complete — needs manual testing in Tauri app (build, reconnection, activity indicator)"
+    nextAction: "Testing streaming fixes, multi-block message display, activity indicator"
     tags: [chat, infra, openclaw, architecture]
     icon: "\U0001F527"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
@@ -19,12 +19,20 @@ items:
     title: Collapsible Sidebar
     status: pending
     priority: 3
-    nextAction: Spec needed
+    nextAction: "Spec written — ready for plan/build"
     tags: [ui]
+    specDoc: docs/specs/collapsible-sidebar-spec.md
+  - id: fix-roadmap-spec-links
+    title: "Fix: Roadmap Item Spec Links"
+    status: pending
+    priority: 4
+    nextAction: "specDoc on items ignored, fallback shows project SPEC.md"
+    tags: [bug, roadmap, ui]
+    icon: "\U0001F41B"
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
-    priority: 4
+    priority: 5
     nextAction: Post-V2 scope
     tags: [integration, openclaw]
 ---
