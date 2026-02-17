@@ -1,11 +1,11 @@
----
-title: Scan Paths Architecture
-status: draft
-type: spec
-created: 2026-02-12
+# Scan Paths Architecture
+
+> Eliminate the sandbox projects folder — discover projects by scanning `~/repos/` and `~/projects/` for `PROJECT.md` files.
+
 ---
 
-# Scan Paths Architecture Spec
+**Status:** Draft
+**Created:** 2026-02-12
 
 ## Problem
 

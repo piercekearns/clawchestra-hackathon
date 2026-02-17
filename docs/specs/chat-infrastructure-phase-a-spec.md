@@ -1,14 +1,12 @@
----
-title: "Chat Infrastructure Phase A: Reliability"
-status: draft
-type: spec
-created: 2026-02-16
-parent: chat-infrastructure
----
-
 # Chat Infrastructure Phase A: Reliability
 
-WebSocket auto-reconnection + scoped chat sessions + scan path fix. The foundation everything else builds on.
+> WebSocket auto-reconnection + scoped chat sessions + scan path fix. The foundation everything else builds on.
+
+---
+
+**Roadmap Item:** `chat-infrastructure`
+**Status:** Draft
+**Created:** 2026-02-16
 
 ## Deliverables
 

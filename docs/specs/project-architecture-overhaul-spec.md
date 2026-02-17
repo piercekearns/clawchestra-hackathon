@@ -1,14 +1,11 @@
----
-title: "Project Architecture Overhaul"
-status: draft
-type: spec
-created: 2026-02-13
-phases: 4
----
-
 # Project Architecture Overhaul
 
-Three-phase deliverable that aligns schema, introduces the CHANGELOG lifecycle, and migrates from catalog to scan-based discovery.
+> Three-phase deliverable that aligns schema, introduces the CHANGELOG lifecycle, and migrates from catalog to scan-based discovery.
+
+---
+
+**Status:** Draft
+**Created:** 2026-02-13
 
 ## Why This Is One Deliverable
 

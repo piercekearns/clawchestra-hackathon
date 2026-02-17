@@ -1,11 +1,12 @@
----
-title: Scoped Chat Sessions
-status: draft
-type: spec
-created: 2026-02-16
+# Scoped Chat Sessions
+
+> Isolate dashboard chat from other OpenClaw surfaces so messages don't leak between webchat, Telegram, and the app.
+
 ---
 
-# Scoped Chat Sessions
+**Roadmap Item:** `chat-infrastructure`
+**Status:** Draft
+**Created:** 2026-02-16
 
 ## Problem
 

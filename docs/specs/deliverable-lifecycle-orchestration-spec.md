@@ -1,14 +1,12 @@
----
-title: "Deliverable Lifecycle Orchestration"
-status: draft
-type: spec
-created: 2026-02-17
-parent: deliverable-lifecycle-orchestration
----
-
 # Deliverable Lifecycle Orchestration
 
-Make roadmap deliverables operationally obvious: what exists, what is missing, and the single next action to run.
+> Make roadmap deliverables operationally obvious: what exists, what is missing, and the single next action to run.
+
+---
+
+**Roadmap Item:** `deliverable-lifecycle-orchestration`
+**Status:** Draft
+**Created:** 2026-02-17
 
 ## Problem
 

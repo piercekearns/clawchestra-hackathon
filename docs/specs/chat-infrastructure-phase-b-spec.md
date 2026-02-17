@@ -1,14 +1,12 @@
----
-title: "Chat Infrastructure Phase B: Awareness"
-status: draft
-type: spec
-created: 2026-02-16
-parent: chat-infrastructure
----
-
 # Chat Infrastructure Phase B: Awareness
 
-Completion delivery, failure alerts, compaction UI, and decision surfacing. The user should always know what's happening and never have decisions made for them invisibly.
+> Completion delivery, failure alerts, compaction UI, and decision surfacing. The user should always know what's happening and never have decisions made for them invisibly.
+
+---
+
+**Roadmap Item:** `chat-infrastructure`
+**Status:** Draft
+**Created:** 2026-02-16
 
 ## Prerequisites
 
