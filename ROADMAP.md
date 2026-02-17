@@ -27,13 +27,14 @@ items:
     title: Deliverable Lifecycle Orchestration
     status: up-next
     priority: 2
-    nextAction: Spec written — ready for plan/build
+    nextAction: Plan written — ready for build
     tags:
       - roadmap
       - workflow
       - ux
       - automation
     specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
+    planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: up-next
