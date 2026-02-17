@@ -110,6 +110,7 @@ const DEFAULT_HTTP_GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://loc
 const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
+const FINAL_DEBOUNCE_MS = 8000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -1002,10 +1003,17 @@ async function sendViaTauriWs(
       const startFinalDebounce = () => {
         cancelFinalDebounce();
         finalDebounceTimer = setTimeout(() => {
-          console.log('[Gateway] RESOLVE via finalDebounce (2s after final event)');
+          console.log(`[Gateway] RESOLVE via finalDebounce (${FINAL_DEBOUNCE_MS}ms after final event)`);
           cleanup('finalDebounce');
           resolve();
-        }, 2000);
+        }, FINAL_DEBOUNCE_MS);
+      };
+
+      const clearSawFinal = (reason: string) => {
+        if (!sawFinal) return;
+        sawFinal = false;
+        cancelFinalDebounce();
+        console.log(`[Gateway] Final signal cleared due to ${reason}`);
       };
 
       const cleanup = (reason: string) => {
@@ -1111,7 +1119,7 @@ async function sendViaTauriWs(
             lastPollSignature = signature;
 
             // Content stability check. Two thresholds:
-            // 1. With final event: resolve immediately (agent confirmed done)
+            // 1. With final event and no further activity: resolve quickly
             // 2. Without final event: require 8 consecutive stable polls (~24s at 3s
             //    intervals). This prevents premature resolution during tool use where
             //    visible content is stable but the agent is still working in the
@@ -1154,21 +1162,32 @@ async function sendViaTauriWs(
         // Also: don't change the activity indicator during active streaming
         // (prevents Working/Typing flicker).
         if (eventName === 'agent') {
+          // ALWAYS update timing/stability for agent events — the gateway
+          // assigns its own runId to agent events which won't match our
+          // idempotency key. Without this, agent events during tool use
+          // get filtered out and the poll stability counter is never reset,
+          // causing premature send resolution.
+          lastEventTime = Date.now();
+          resetIdleTimeout();
+          pollStableCount = 0;
+          clearSawFinal('agent activity');
+
           const agentPayload = (typeof payload === 'object' && payload !== null
             ? payload
             : {}) as Record<string, unknown>;
+          const agentSessionKey =
+            typeof agentPayload.sessionKey === 'string' ? agentPayload.sessionKey : undefined;
           const agentRunId = typeof agentPayload.runId === 'string' ? agentPayload.runId : undefined;
-          if (agentRunId && agentRunId !== runId) {
+
+          if (agentSessionKey && agentSessionKey !== sessionKey) {
             return;
           }
 
-          lastEventTime = Date.now();
-          resetIdleTimeout();
-
-          // Agent events mean the gateway is still processing — reset poll
-          // stability so the poll fallback doesn't prematurely resolve during
-          // long tool-use sequences (e.g. 60s+ sleeps between tmux checks).
-          pollStableCount = 0;
+          // Only filter on runId for activity state changes — don't skip
+          // timing updates above.
+          if (agentRunId && agentRunId !== runId) {
+            return;
+          }
 
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
           if (timeSinceLastDelta > 3000) {
@@ -1196,13 +1215,12 @@ async function sendViaTauriWs(
         }
         lastEventTime = Date.now();
         resetIdleTimeout();
+        if (state && state !== 'final') {
+          clearSawFinal(`chat state=${state}`);
+        }
 
         if (state && stateLabels[state]) {
           setAgentActivity('working', onActivityChange);
-        }
-
-        if (TOOL_ACTIVITY_STATES.has(state) && sawFinal) {
-          cancelFinalDebounce();
         }
 
         if (TYPING_ACTIVITY_STATES.has(state)) {
