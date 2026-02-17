@@ -70,18 +70,22 @@ export async function readRoadmap(filePath: string): Promise<RoadmapDocument> {
 }
 
 export async function writeRoadmap(document: RoadmapDocument): Promise<void> {
-  const payloadItems = document.items.map((item) => ({
-    id: item.id,
-    title: item.title,
-    status: item.status,
-    priority: item.priority,
-    nextAction: item.nextAction,
-    blockedBy: item.blockedBy,
-    tags: item.tags,
-    icon: item.icon,
-    specDoc: item.specDoc,
-    planDoc: item.planDoc,
-  }));
+  const payloadItems = document.items.map((item) => {
+    const entry: Record<string, unknown> = {
+      id: item.id,
+      title: item.title,
+      status: item.status,
+    };
+    // Only include optional fields when defined — js-yaml throws on undefined values
+    if (item.priority != null) entry.priority = item.priority;
+    if (item.nextAction) entry.nextAction = item.nextAction;
+    if (item.blockedBy) entry.blockedBy = item.blockedBy;
+    if (item.tags && item.tags.length > 0) entry.tags = item.tags;
+    if (item.icon) entry.icon = item.icon;
+    if (item.specDoc) entry.specDoc = item.specDoc;
+    if (item.planDoc) entry.planDoc = item.planDoc;
+    return entry;
+  });
 
   const content = matter.stringify(document.notes ?? '', {
     items: payloadItems,
