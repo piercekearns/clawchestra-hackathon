@@ -856,6 +856,7 @@ async function sendViaTauriWs(
   try {
     markActiveSendRun(runId);
     setAgentActivity('working', onActivityChange);
+    console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
 
     // Subscribe to events BEFORE sending so we never miss early deltas.
     // The gateway may start emitting events as soon as chat.send is acknowledged,
@@ -889,6 +890,7 @@ async function sendViaTauriWs(
       const startFinalDebounce = () => {
         cancelFinalDebounce();
         finalDebounceTimer = setTimeout(() => {
+          console.log('[Gateway] RESOLVE via finalDebounce (2s after final event)');
           cleanup();
           resolve();
         }, 2000);
@@ -912,7 +914,7 @@ async function sendViaTauriWs(
       };
 
       const safetyTimeout = setTimeout(() => {
-        console.warn('[Gateway] Safety timeout after 30 minutes');
+        console.warn('[Gateway] RESOLVE via safetyTimeout (30min)');
         cleanup();
         resolve();
       }, 30 * 60 * 1000);
@@ -1093,6 +1095,7 @@ async function sendViaTauriWs(
         }
 
         if (state === 'error') {
+          console.log('[Gateway] REJECT via error event:', chat.errorMessage);
           cleanup();
           clearActiveSendRun(runId);
           reject(new Error(typeof chat.errorMessage === 'string' ? chat.errorMessage : 'OpenClaw chat error'));
@@ -1100,6 +1103,7 @@ async function sendViaTauriWs(
         }
 
         if (state === 'aborted') {
+          console.log('[Gateway] REJECT via aborted event');
           cleanup();
           clearActiveSendRun(runId);
           reject(new Error('OpenClaw chat aborted'));
@@ -1134,7 +1138,7 @@ async function sendViaTauriWs(
       }).then(() => {
         console.log('[Gateway] chat.send succeeded');
       }).catch((err) => {
-        console.error('[Gateway] chat.send failed:', err);
+        console.error('[Gateway] REJECT via chat.send failed:', err);
         cleanup();
         clearActiveSendRun(runId);
         reject(err instanceof Error ? err : new Error(String(err)));

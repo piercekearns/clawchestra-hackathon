@@ -736,7 +736,7 @@ export default function App() {
       setGatewayConnected(true);
       
       // Add ALL assistant messages (fixes dropped message bug)
-      console.log(`[Chat] Response complete: ${result.messages.length} messages, lastContent: ${result.lastContent?.length ?? 0} chars`);
+      console.log(`[Chat] === SEND COMPLETE === ${result.messages.length} messages, lastContent: ${result.lastContent?.length ?? 0} chars`);
       for (const msg of result.messages) {
         console.log(`[Chat] Adding ${msg.role} message: ${msg.content.length} chars, preview: "${msg.content.slice(0, 100)}..."`);
         addChatMessage(msg);
@@ -753,6 +753,7 @@ export default function App() {
       await loadProjects();
       return true;
     } catch (error) {
+      console.error('[Chat] === SEND FAILED ===', error);
       const messageText = error instanceof Error ? error.message : 'Gateway request failed';
       setGatewayConnected(false);
       addError({ type: 'gateway_down', message: messageText });
