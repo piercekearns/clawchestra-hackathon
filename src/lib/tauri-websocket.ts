@@ -12,8 +12,8 @@ import WebSocket from '@tauri-apps/plugin-websocket';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
 
-const WS_KEEPALIVE_INTERVAL_MS = 30_000;
-const WS_STALE_SOCKET_MS = 90_000;
+const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
+const WS_STALE_SOCKET_MS = 60_000;       // Force reconnect after 60s without inbound
 
 export interface OpenClawMessage {
   type: string;
@@ -101,8 +101,16 @@ export class TauriOpenClawConnection {
         return;
       }
 
+      // Send a protocol-level ping as a JSON text message.
+      // The Tauri WS plugin's { type: 'Ping' } format may not work
+      // reliably — use a lightweight RPC request instead, which the
+      // gateway will respond to (keeping the connection alive).
+      const pingId = `ping-${Date.now()}`;
       this.ws
-        .send({ type: 'Ping', data: [] })
+        .send(JSON.stringify({ type: 'req', id: pingId, method: 'ping', params: {} }))
+        .then(() => {
+          console.log('[TauriWS] Keepalive ping sent');
+        })
         .catch((err) => {
           console.warn('[TauriWS] Keepalive ping failed, forcing reconnect:', err);
           this.forceReconnect('keepalive ping failed');
