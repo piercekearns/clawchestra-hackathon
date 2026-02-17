@@ -734,7 +734,9 @@ export default function App() {
       setGatewayConnected(true);
       
       // Add ALL assistant messages (fixes dropped message bug)
+      console.log(`[Chat] Response complete: ${result.messages.length} messages, lastContent: ${result.lastContent?.length ?? 0} chars`);
       for (const msg of result.messages) {
+        console.log(`[Chat] Adding ${msg.role} message: ${msg.content.length} chars, preview: "${msg.content.slice(0, 100)}..."`);
         addChatMessage(msg);
         if (msg.role === 'assistant') {
           for (const sessionKey of extractBackgroundSessionKeys(msg.content)) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { ChatMessage } from '../../lib/gateway';
 import { ChatBar } from './ChatBar';
@@ -293,19 +293,32 @@ export function ChatShell({
     document.body.style.userSelect = 'none';
   };
 
-  // When composer grows/shrinks, adjust message list scroll to keep bottom anchored.
-  // Deferred to rAF because this fires from ChatBar's useLayoutEffect before
-  // the flex layout recalculates — at that point the scroll container still has
-  // its old (larger) clientHeight, so scrollTop += delta gets clamped by the
-  // browser. By the next animation frame, flex has resized the container and
-  // the adjustment lands correctly.
+  // When composer grows/shrinks, adjust message list scroll to keep the viewport
+  // anchored. We can't adjust immediately because ChatBar's useLayoutEffect fires
+  // before ChatShell re-renders, so flex layout still reflects the OLD composer
+  // height. Instead, stash the delta in a ref and apply it in ChatShell's own
+  // useLayoutEffect — which runs after React commits the re-render (flex
+  // recalculated) but before the browser paints (no visual jank).
+  const pendingScrollDeltaRef = useRef(0);
+  const [scrollDeltaTick, setScrollDeltaTick] = useState(0);
+
   const handleComposerHeightChange = useCallback((delta: number) => {
-    const node = messageListRef.current;
-    if (!node || delta === 0) return;
-    requestAnimationFrame(() => {
-      node.scrollTop += delta;
-    });
+    if (delta === 0) return;
+    pendingScrollDeltaRef.current += delta;
+    // Trigger a re-render so ChatShell's layout effect fires
+    setScrollDeltaTick((t) => t + 1);
   }, []);
+
+  // Apply pending scroll adjustment synchronously after React commits (flex
+  // recalculated) but before browser paints — zero visual jank.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const delta = pendingScrollDeltaRef.current;
+    if (delta === 0) return;
+    pendingScrollDeltaRef.current = 0;
+    const node = messageListRef.current;
+    if (node) node.scrollTop += delta;
+  }, [scrollDeltaTick]);
 
   const latestResponsePreview = useMemo(() => {
     if (!responseToastMessage) return null;

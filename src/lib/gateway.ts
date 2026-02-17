@@ -1166,6 +1166,11 @@ async function sendViaTauriWs(
     // Only fall back to streaming if history extraction found nothing.
     const historyTotalLength = assistantMessages.reduce((sum, m) => sum + m.content.length, 0);
     console.log(`[Gateway] Post-send: history found ${assistantMessages.length} messages (${historyTotalLength} chars), streamed ${streamedText.trim().length} chars`);
+    if (assistantMessages.length > 0) {
+      for (let i = 0; i < assistantMessages.length; i++) {
+        console.log(`[Gateway] History msg[${i}]: ${assistantMessages[i].content.length} chars, preview: "${assistantMessages[i].content.slice(0, 80)}..."`);
+      }
+    }
 
     if (assistantMessages.length === 0 && streamedText.trim()) {
       console.log('[Gateway] No history messages found, falling back to streamed content');
