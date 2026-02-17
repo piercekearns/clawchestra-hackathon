@@ -293,12 +293,18 @@ export function ChatShell({
     document.body.style.userSelect = 'none';
   };
 
-  // When composer grows/shrinks, adjust message list scroll to keep bottom anchored
+  // When composer grows/shrinks, adjust message list scroll to keep bottom anchored.
+  // Deferred to rAF because this fires from ChatBar's useLayoutEffect before
+  // the flex layout recalculates — at that point the scroll container still has
+  // its old (larger) clientHeight, so scrollTop += delta gets clamped by the
+  // browser. By the next animation frame, flex has resized the container and
+  // the adjustment lands correctly.
   const handleComposerHeightChange = useCallback((delta: number) => {
     const node = messageListRef.current;
     if (!node || delta === 0) return;
-    // Composer grew → message list shrinks → scroll down to compensate
-    node.scrollTop += delta;
+    requestAnimationFrame(() => {
+      node.scrollTop += delta;
+    });
   }, []);
 
   const latestResponsePreview = useMemo(() => {
