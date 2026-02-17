@@ -1147,6 +1147,16 @@ async function sendViaTauriWs(
     if (userMessageIndex >= 0) {
       for (let i = userMessageIndex + 1; i < allMessages.length; i++) {
         const msg = allMessages[i];
+        // Log raw content format for diagnostics
+        const contentType = Array.isArray(msg.content)
+          ? `array[${msg.content.length}]`
+          : typeof msg.content;
+        console.log(`[Gateway] History msg[${i}] role=${msg.role}, contentType=${contentType}, raw preview:`, 
+          typeof msg.content === 'string' 
+            ? msg.content.slice(0, 120) 
+            : Array.isArray(msg.content) 
+              ? msg.content.slice(0, 3).map((b: Record<string, unknown>) => ({ type: b.type, len: typeof b.text === 'string' ? b.text.length : '?' }))
+              : '(object)');
         if (msg.role === 'assistant') {
           const content = extractText(msg.content);
           if (content.trim()) {
@@ -1166,17 +1176,35 @@ async function sendViaTauriWs(
     // Only fall back to streaming if history extraction found nothing.
     const historyTotalLength = assistantMessages.reduce((sum, m) => sum + m.content.length, 0);
     console.log(`[Gateway] Post-send: history found ${assistantMessages.length} messages (${historyTotalLength} chars), streamed ${streamedText.trim().length} chars`);
+    console.log(`[Gateway] Streamed text (${streamedText.trim().length} chars) preview: "${streamedText.trim().slice(0, 100)}..."`);
+    console.log(`[Gateway] Streamed text TAIL: "...${streamedText.trim().slice(-100)}"`);
     if (assistantMessages.length > 0) {
       for (let i = 0; i < assistantMessages.length; i++) {
-        console.log(`[Gateway] History msg[${i}]: ${assistantMessages[i].content.length} chars, preview: "${assistantMessages[i].content.slice(0, 80)}..."`);
+        console.log(`[Gateway] History msg[${i}]: ${assistantMessages[i].content.length} chars`);
+        console.log(`[Gateway]   HEAD: "${assistantMessages[i].content.slice(0, 100)}..."`);
+        console.log(`[Gateway]   TAIL: "...${assistantMessages[i].content.slice(-100)}"`);
       }
     }
 
-    if (assistantMessages.length === 0 && streamedText.trim()) {
+    // If streaming accumulated MORE text than history returned, prefer the
+    // streamed version. This happens when history returns only the final text
+    // block of a multi-tool-call response (flattened), while streaming correctly
+    // accumulated all content blocks with separators.
+    const streamedTrimmed = streamedText.trim();
+    if (streamedTrimmed && streamedTrimmed.length > historyTotalLength) {
+      console.log(`[Gateway] Streamed content (${streamedTrimmed.length} chars) is longer than history (${historyTotalLength} chars) — using streamed as source of truth`);
+      // Replace history messages with the complete streamed content
+      assistantMessages.length = 0;
+      assistantMessages.push({
+        role: 'assistant',
+        content: streamedTrimmed,
+        timestamp: Date.now(),
+      });
+    } else if (assistantMessages.length === 0 && streamedTrimmed) {
       console.log('[Gateway] No history messages found, falling back to streamed content');
       assistantMessages.push({
         role: 'assistant',
-        content: streamedText.trim(),
+        content: streamedTrimmed,
         timestamp: Date.now(),
       });
     }
