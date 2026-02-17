@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock4 } from 'lucide-react';
-import { GitHubMark } from './components/icons/GitHubMark';
+import { GitHubStatusBadge } from './components/GitHubStatusBadge';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
@@ -1009,21 +1009,11 @@ export default function App() {
                       <>
                         {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
                         {project.hasRepo ? (
-                          <span className="relative inline-flex">
-                            <span
-                              className="group inline-flex"
-                              tabIndex={0}
-                              aria-label={gitHubStatusMeta.label}
-                            >
-                              <GitHubMark className={`h-3.5 w-3.5 ${gitHubStatusMeta.className}`} />
-                              <span
-                                role="tooltip"
-                                className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-revival-accent-500/40 bg-neutral-900/95 px-2.5 py-1 text-[11px] font-medium text-neutral-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-revival-accent-500/40 dark:bg-neutral-100 dark:text-neutral-900"
-                              >
-                                {gitHubStatusMeta.tooltip}
-                              </span>
-                            </span>
-                          </span>
+                          <GitHubStatusBadge
+                            className={gitHubStatusMeta.className}
+                            tooltip={gitHubStatusMeta.tooltip}
+                            label={gitHubStatusMeta.label}
+                          />
                         ) : null}
                         {project.commitActivity ? (
                           <span className="rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] dark:bg-neutral-700">
