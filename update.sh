@@ -1,5 +1,5 @@
 #!/bin/bash
-# Pipeline Dashboard - Update Script
+# Clawchestra - Update Script
 # Run this to rebuild the app with latest changes.
 # Triggered by the in-app Update button.
 # Builds in the background, then replaces the installed app and restarts it.
@@ -7,9 +7,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="Pipeline Dashboard"
+APP_NAME="Clawchestra"
+OLD_APP_NAME="Pipeline Dashboard"
 BUNDLE_PATH="$SCRIPT_DIR/src-tauri/target/release/bundle/macos/$APP_NAME.app"
 INSTALL_PATH="${PIPELINE_DASHBOARD_INSTALL_PATH:-/Applications/$APP_NAME.app}"
+OLD_INSTALL_PATH="/Applications/$OLD_APP_NAME.app"
 RESTART_AFTER_BUILD="${PIPELINE_DASHBOARD_RESTART_AFTER_BUILD:-1}"
 LOCK_DIR="/tmp/pipeline-dashboard-update.lock"
 LOCK_PID_FILE="$LOCK_DIR/pid"
@@ -47,7 +49,7 @@ cleanup_lock() {
 acquire_lock
 trap cleanup_lock EXIT
 
-echo "🔨 Building Pipeline Dashboard..."
+echo "🔨 Building Clawchestra..."
 cd "$SCRIPT_DIR"
 
 # Ensure cargo and pnpm are in PATH
@@ -76,8 +78,15 @@ rm -rf "$STAGED_PATH"
 cp -R "$BUNDLE_PATH" "$STAGED_PATH"
 
 echo "🔁 Applying update and restarting app..."
+# Kill both old and new names during transition
 killall "pipeline-dashboard" 2>/dev/null || true
+killall "Clawchestra" 2>/dev/null || true
 sleep 0.5
+# Clean up old-name install if it exists
+if [ -d "$OLD_INSTALL_PATH" ] && [ "$OLD_INSTALL_PATH" != "$INSTALL_PATH" ]; then
+  echo "🧹 Removing old Pipeline Dashboard install..."
+  rm -rf "$OLD_INSTALL_PATH"
+fi
 rm -rf "$INSTALL_PATH"
 mv "$STAGED_PATH" "$INSTALL_PATH"
 open "$INSTALL_PATH"
