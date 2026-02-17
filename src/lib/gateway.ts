@@ -1138,19 +1138,26 @@ async function sendViaTauriWs(
       let sawToolSinceLastContent = false;
       let contentBlockOffset = 0; // Byte offset where the current content block starts within streamedText
 
+      let lastDeltaTime = 0; // Timestamp of most recent content delta
+
       const eventHandler = (eventName: string, payload: unknown) => {
         if (completed) return;
 
         lastEventTime = Date.now();
         resetIdleTimeout();
 
-        // Agent events indicate tool use (reading files, running commands, etc.).
-        // The send handler must track these to detect new content blocks after
-        // tool calls — without this, post-tool text is silently dropped because
-        // the delta is shorter than accumulated content from the first block.
+        // Agent events fire constantly during ALL processing — not just tool use.
+        // Only treat them as tool-use indicators when content is NOT actively
+        // streaming (no delta in last 3 seconds). This prevents every streaming
+        // delta from being misidentified as a "new content block after tools."
+        // Also: don't change the activity indicator during active streaming
+        // (prevents Working/Typing flicker).
         if (eventName === 'agent') {
-          sawToolSinceLastContent = true;
-          setAgentActivity('working', onActivityChange);
+          const timeSinceLastDelta = Date.now() - lastDeltaTime;
+          if (timeSinceLastDelta > 3000) {
+            sawToolSinceLastContent = true;
+            setAgentActivity('working', onActivityChange);
+          }
           return;
         }
 
@@ -1206,6 +1213,7 @@ async function sendViaTauriWs(
         }
 
         if (state === 'delta' || state === 'content' || state === 'streaming') {
+          lastDeltaTime = Date.now();
           const deltaText = extractText(chat.message);
           if (deltaText) {
             if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
