@@ -28,6 +28,7 @@ import {
 import { commitPlanningDocs, gitStatusEmoji, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
 import { readRoadmap, writeRoadmap } from './lib/roadmap';
+import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
 import type {
   ProjectStatus,
   ProjectViewModel,
@@ -117,6 +118,7 @@ export default function App() {
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
   const [roadmapDocument, setRoadmapDocument] = useState<RoadmapDocument | null>(null);
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>([]);
+  const [selectedRoadmapItemId, setSelectedRoadmapItemId] = useState<string | null>(null);
   const [chatStreamingContent, setChatStreamingContent] = useState<string | null>(null);
   const [chatSending, setChatSending] = useState(false); // Track if agent is working
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
@@ -920,14 +922,29 @@ export default function App() {
           <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
             <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto pr-1">
               {isRoadmapView ? (
+                <>
                 <Board
                   columns={viewContext.columns}
                   items={roadmapItems}
-                  onItemClick={() => undefined}
+                  onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
                   onItemsChange={(nextItems) => {
                     void persistRoadmapChanges(nextItems);
                   }}
                 />
+                <RoadmapItemDialog
+                  item={roadmapItems.find((i) => i.id === selectedRoadmapItemId) ?? null}
+                  projectTitle={selectedProject?.title ?? 'Project'}
+                  projectDir={selectedProject?.dirPath ?? ''}
+                  projectFrontmatter={selectedProject?.frontmatter}
+                  onClose={() => setSelectedRoadmapItemId(null)}
+                  onStatusChange={(itemId, status) => {
+                    const updated = roadmapItems.map((i) =>
+                      i.id === itemId ? { ...i, status } : i,
+                    );
+                    void persistRoadmapChanges(updated);
+                  }}
+                />
+                </>
               ) : (
                 <Board
                   columns={viewContext.columns}
