@@ -469,6 +469,69 @@ function extractAssistantMessagesForTurn(
   return assistantMessages;
 }
 
+function normalizeHistoryRole(role: unknown): ChatMessage['role'] | null {
+  return role === 'assistant' || role === 'user' || role === 'system'
+    ? role
+    : null;
+}
+
+export async function recoverRecentSessionMessages(options?: {
+  transport?: GatewayTransport;
+  limit?: number;
+  sessionKey?: string;
+}): Promise<ChatMessage[]> {
+  const transport = await resolveTransport(options?.transport);
+  const limit = options?.limit ?? 200;
+
+  if (transport.mode !== 'tauri-ws') {
+    return [];
+  }
+
+  const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+  const sessionKey = options?.sessionKey?.trim() || transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
+  const connection = await getTauriOpenClawConnection(
+    transport.wsUrl,
+    sessionKey,
+    transport.token,
+  );
+
+  const history = (await connection.request('chat.history', {
+    sessionKey,
+    limit,
+  })) as { messages?: unknown[] };
+
+  const rawMessages = Array.isArray(history.messages)
+    ? history.messages.filter(isHistoryMessage)
+    : [];
+
+  const chronological = toChronologicalHistory(rawMessages);
+  const seen = new Set<string>();
+  const recovered: ChatMessage[] = [];
+
+  for (const message of chronological) {
+    const role = normalizeHistoryRole(message.role);
+    if (!role) continue;
+
+    const content = extractText(message.content).trim();
+    if (!content) continue;
+
+    const id = getHistoryMessageId(message);
+    const timestamp = getHistoryMessageTimestamp(message) ?? Date.now();
+    const dedupeKey = id ?? `${role}:${timestamp}:${content}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    recovered.push({
+      role,
+      content,
+      timestamp,
+      ...(id ? { _id: id } : {}),
+    });
+  }
+
+  return recovered;
+}
+
 function toOpenAIMessagePayload(
   messages: ChatMessage[],
   attachments: GatewayImageAttachment[] = [],
@@ -1731,6 +1794,10 @@ export function subscribeConnectionState(
     listener(prev);
   });
 }
+
+export const __gatewayTestUtils = {
+  extractAssistantMessagesForTurn,
+};
 
 export async function pollProcessSessions(
   sessionKeys: string[],

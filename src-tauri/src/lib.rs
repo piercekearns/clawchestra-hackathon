@@ -1758,6 +1758,12 @@ fn init_chat_db() -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_timestamp_id ON messages(timestamp DESC, id DESC)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(conn)
 }
 
@@ -1882,7 +1888,7 @@ fn chat_message_save(message: ChatMessage) -> Result<(), String> {
     let conn = guard.as_ref().ok_or("Database not initialized")?;
 
     conn.execute(
-        "INSERT OR REPLACE INTO messages (id, role, content, timestamp, metadata)
+        "INSERT OR IGNORE INTO messages (id, role, content, timestamp, metadata)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             message.id,

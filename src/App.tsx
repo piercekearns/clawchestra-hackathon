@@ -26,6 +26,7 @@ import {
   checkGatewayConnection,
   DEFAULT_SESSION_KEY,
   pollProcessSessions,
+  recoverRecentSessionMessages,
   subscribeConnectionState,
   subscribeSystemEvents,
   retryGatewayConnection,
@@ -178,6 +179,7 @@ export default function App() {
   const activeAnnounceRunsRef = useRef<Map<string, number>>(new Map());
   const seenTerminalAnnounceRunsRef = useRef<Map<string, number>>(new Map());
   const chatDrawerOpenRef = useRef(chatDrawerOpen);
+  const lastChatRecoveryAtRef = useRef(0);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
@@ -450,6 +452,65 @@ export default function App() {
       unsubscribe();
     };
   }, [addSystemBubble]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    if (wsConnectionState !== 'connected') return;
+
+    const now = Date.now();
+    if (now - lastChatRecoveryAtRef.current < 5000) {
+      return;
+    }
+    lastChatRecoveryAtRef.current = now;
+
+    let cancelled = false;
+
+    const reconcileRecentHistory = async () => {
+      try {
+        const recovered = await recoverRecentSessionMessages({ limit: 200 });
+        if (cancelled || recovered.length === 0) return;
+
+        const current = useDashboardStore.getState().chatMessages;
+        const existingIds = new Set(
+          current
+            .map((message) => message._id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0),
+        );
+        const existingFallbackKeys = new Set(
+          current.map(
+            (message) =>
+              `${message.role}:${message.timestamp ?? 0}:${message.content}`,
+          ),
+        );
+
+        let recoveredCount = 0;
+        for (const message of recovered) {
+          if (message._id && existingIds.has(message._id)) continue;
+          const fallbackKey = `${message.role}:${message.timestamp ?? 0}:${message.content}`;
+          if (existingFallbackKeys.has(fallbackKey)) continue;
+
+          await addChatMessage(message);
+          if (message._id) existingIds.add(message._id);
+          existingFallbackKeys.add(fallbackKey);
+          recoveredCount += 1;
+        }
+
+        if (!cancelled && recoveredCount > 0) {
+          await addSystemBubble('info', 'Recovered recent chat messages', {
+            Recovered: String(recoveredCount),
+          });
+        }
+      } catch (error) {
+        console.warn('[Chat] Failed to reconcile recent gateway history:', error);
+      }
+    };
+
+    void reconcileRecentHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addChatMessage, addSystemBubble, wsConnectionState]);
 
   useEffect(() => {
     let disposed = false;

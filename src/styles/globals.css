@@ -10,9 +10,9 @@
 
 @font-face {
   font-family: 'Geist Pixel Circle';
-  src: local('Geist Pixel Circle Bold');
-  font-weight: 700;
-  font-style: normal;
+  src: local('Geist Pixel Circle Italic');
+  font-weight: 400;
+  font-style: italic;
   font-display: swap;
 }
 

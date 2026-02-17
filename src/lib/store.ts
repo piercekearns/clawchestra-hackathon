@@ -147,7 +147,20 @@ export const useDashboardStore = create<DashboardState>()(
         // Generate ID upfront so state and DB use the same ID
         const id = message._id ?? generateMessageId();
         const timestamp = message.timestamp ?? Date.now();
-        
+        const existingMessages = get().chatMessages;
+        const duplicateById = existingMessages.some((existing) => existing._id === id);
+        const duplicateByContentAndTime = existingMessages.some(
+          (existing) =>
+            existing._id === undefined &&
+            existing.role === message.role &&
+            existing.timestamp === timestamp &&
+            existing.content === message.content,
+        );
+
+        if (duplicateById || duplicateByContentAndTime) {
+          return;
+        }
+
         const messageWithMeta = {
           ...message,
           timestamp,
