@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock4, Link2 } from 'lucide-react';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
@@ -13,10 +13,16 @@ import type { ChatConnectionState, ChatSendPayload, QueuedMessage } from './comp
 import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
+  DEFAULT_SESSION_KEY,
+  pollProcessSessions,
+  subscribeConnectionState,
+  subscribeSystemEvents,
   retryGatewayConnection,
   sendMessageWithContext,
+  teardownSystemEventBus,
   type ChatMessage,
   type GatewayImageAttachment,
+  wireSystemEventBus,
 } from './lib/gateway';
 import { commitPlanningDocs, gitStatusEmoji, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
@@ -55,10 +61,29 @@ function applyTheme(preference: ThemePreference) {
   root.classList.toggle('dark', isDark);
 }
 
+const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
+const BACKGROUND_POLL_INTERVAL_MS = 30_000;
+const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
+
+function pruneExpiredRuns(map: Map<string, number>, ttlMs: number): void {
+  const now = Date.now();
+  for (const [runId, ts] of map.entries()) {
+    if (now - ts > ttlMs) {
+      map.delete(runId);
+    }
+  }
+}
+
+function extractBackgroundSessionKeys(content: string): string[] {
+  const matches = content.match(SESSION_KEY_PATTERN) ?? [];
+  return [...new Set(matches)].filter((key) => key !== DEFAULT_SESSION_KEY);
+}
+
 export default function App() {
   const projects = useDashboardStore((state) => state.projects);
   const errors = useDashboardStore((state) => state.errors);
   const chatMessages = useDashboardStore((state) => state.chatMessages);
+  const agentActivity = useDashboardStore((state) => state.agentActivity);
   const gatewayConnected = useDashboardStore((state) => state.gatewayConnected);
   const wsConnectionState = useDashboardStore((state) => state.wsConnectionState);
   const themePreference = useDashboardStore((state) => state.themePreference);
@@ -73,6 +98,7 @@ export default function App() {
   const setThemePreference = useDashboardStore((state) => state.setThemePreference);
   const setViewContext = useDashboardStore((state) => state.setViewContext);
   const addChatMessage = useDashboardStore((state) => state.addChatMessage);
+  const addSystemBubble = useDashboardStore((state) => state.addSystemBubble);
   const loadChatMessages = useDashboardStore((state) => state.loadChatMessages);
   const loadMoreChatMessages = useDashboardStore((state) => state.loadMoreChatMessages);
   const chatHasMore = useDashboardStore((state) => state.chatHasMore);
@@ -90,13 +116,26 @@ export default function App() {
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
   const [roadmapDocument, setRoadmapDocument] = useState<RoadmapDocument | null>(null);
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>([]);
-  const [chatActivityLabel, setChatActivityLabel] = useState<string | null>(null);
   const [chatStreamingContent, setChatStreamingContent] = useState<string | null>(null);
   const [chatSending, setChatSending] = useState(false); // Track if agent is working
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [chatResponseToastMessage, setChatResponseToastMessage] = useState<string | null>(null);
   const [chatQueue, setChatQueue] = useState<QueuedMessage[]>([]); // Message queue
+  const [activeBackgroundSessions, setActiveBackgroundSessions] = useState<Set<string>>(new Set());
+  const activeAnnounceRunsRef = useRef<Map<string, number>>(new Map());
+  const seenTerminalAnnounceRunsRef = useRef<Map<string, number>>(new Map());
   const chatDrawerOpenRef = useRef(chatDrawerOpen);
+
+  const registerBackgroundSession = useCallback((sessionKey: string) => {
+    if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
+
+    setActiveBackgroundSessions((prev) => {
+      if (prev.has(sessionKey)) return prev;
+      const next = new Set(prev);
+      next.add(sessionKey);
+      return next;
+    });
+  }, []);
 
   const allProjects = useMemo(() => flattenProjects(projects), [projects]);
 
@@ -141,6 +180,12 @@ export default function App() {
     if (gatewayConnected) return 'connected';
     return 'disconnected';
   }, [gatewayConnected, wsConnectionState]);
+
+  const chatActivityLabel = useMemo(() => {
+    if (agentActivity === 'typing') return 'Typing...';
+    if (agentActivity === 'working') return '⚙️ Working...';
+    return null;
+  }, [agentActivity]);
 
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
@@ -199,27 +244,122 @@ export default function App() {
     void checkGatewayConnection();
   }, []);
 
+  useEffect(() => {
+    void wireSystemEventBus();
+
+    const unsubscribeSystemEvents = subscribeSystemEvents((event) => {
+      if (event.kind === 'compaction') {
+        void addSystemBubble(
+          'compaction',
+          'Conversation compacted',
+          {
+            Note: 'Older messages were summarized to free context space',
+          },
+          undefined,
+          event.runId,
+          event.message,
+        );
+        return;
+      }
+
+      if (event.kind === 'error') {
+        void addSystemBubble(
+          'failure',
+          'Background task failed',
+          {
+            Error: event.message ?? 'Unknown error',
+            ...(event.label ? { Task: event.label } : {}),
+          },
+          ['Check logs for details'],
+          event.runId,
+          event.message,
+        );
+        return;
+      }
+
+      if (event.kind === 'announce') {
+        if (event.sessionKey && event.sessionKey !== DEFAULT_SESSION_KEY) {
+          registerBackgroundSession(event.sessionKey);
+        }
+        const status = (event.status ?? '').toLowerCase();
+        const runId = event.runId;
+        const isStart = status === 'started' || status === 'running';
+        const isFailure = status === 'error' || status === 'timeout';
+        const isSuccess = status === 'ok';
+        const isTerminal = isFailure || isSuccess;
+        const now = Date.now();
+
+        pruneExpiredRuns(activeAnnounceRunsRef.current, 10 * 60_000);
+        pruneExpiredRuns(seenTerminalAnnounceRunsRef.current, ANNOUNCE_TERMINAL_DEDUP_MS);
+
+        if (runId && isStart) {
+          activeAnnounceRunsRef.current.set(runId, now);
+          return;
+        }
+
+        if (runId && isTerminal) {
+          const seenAt = seenTerminalAnnounceRunsRef.current.get(runId);
+          if (seenAt && now - seenAt < ANNOUNCE_TERMINAL_DEDUP_MS) {
+            return;
+          }
+          seenTerminalAnnounceRunsRef.current.set(runId, now);
+          activeAnnounceRunsRef.current.delete(runId);
+        }
+
+        if (!isTerminal) return;
+
+        void addSystemBubble(
+          isFailure ? 'failure' : 'completion',
+          isFailure ? 'Sub-agent failed' : 'Sub-agent completed',
+          {
+            ...(event.label ? { Label: event.label } : {}),
+            ...(event.runtime ? { Runtime: event.runtime } : {}),
+            ...(event.status ? { Status: event.status } : {}),
+          },
+          isFailure ? ['Check logs for details'] : undefined,
+          runId,
+          event.message,
+        );
+      }
+    });
+
+    const unsubscribeConnectionState = subscribeConnectionState((state) => {
+      if (state === 'connected') {
+        void wireSystemEventBus();
+      }
+    });
+
+    return () => {
+      unsubscribeSystemEvents();
+      unsubscribeConnectionState();
+      teardownSystemEventBus();
+    };
+  }, [addSystemBubble, registerBackgroundSession]);
+
   // System bubbles for connection state transitions
   useEffect(() => {
     let prevState: ChatConnectionState = useDashboardStore.getState().wsConnectionState;
 
-    const unsubscribe = useDashboardStore.subscribe((state) => {
-      const nextState = state.wsConnectionState;
+    const unsubscribe = subscribeConnectionState((nextState) => {
       if (nextState === prevState) return;
 
       if (nextState === 'disconnected' && prevState === 'connected') {
-        addChatMessage({ role: 'system', content: 'Gateway connection lost, reconnecting...', timestamp: Date.now() });
+        void addSystemBubble('info', 'Gateway connection lost', {
+          Status: 'Reconnecting...',
+        });
       } else if (nextState === 'connected' && (prevState === 'reconnecting' || prevState === 'error')) {
-        addChatMessage({ role: 'system', content: 'Connection restored.', timestamp: Date.now() });
+        void addSystemBubble('info', 'Connection restored');
       } else if (nextState === 'error') {
-        addChatMessage({ role: 'system', content: 'Connection failed after 5 attempts. Click retry to try again.', timestamp: Date.now() });
+        void addSystemBubble('failure', 'Connection failed after 5 attempts', {
+          Action: 'Click retry to try again.',
+        });
       }
 
       prevState = nextState;
     });
 
     return unsubscribe;
-  }, [addChatMessage]);
+  }, [addSystemBubble]);
 
   useEffect(() => {
     let disposed = false;
@@ -232,11 +372,11 @@ export default function App() {
       try {
         const unwatch = await watchProjects(dashboardSettings.scanPaths, async () => {
           await loadProjects();
-          addChatMessage({
-            role: 'system',
-            content: `File watcher: refreshed ${new Date().toLocaleTimeString()}`,
-            timestamp: Date.now(),
-          });
+          void addSystemBubble(
+            'info',
+            'File watcher refresh',
+            { Time: new Date().toLocaleTimeString() },
+          );
         });
 
         if (disposed) {
@@ -262,7 +402,7 @@ export default function App() {
         window.clearInterval(fallbackPoll);
       }
     };
-  }, [addChatMessage, loadProjects, dashboardSettings]);
+  }, [addSystemBubble, loadProjects, dashboardSettings]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -508,6 +648,42 @@ export default function App() {
     });
   };
 
+  useEffect(() => {
+    if (activeBackgroundSessions.size === 0) return;
+
+    const interval = setInterval(() => {
+      const sessionKeys = [...activeBackgroundSessions];
+      if (sessionKeys.length === 0) return;
+
+      void pollProcessSessions(sessionKeys).then((failures) => {
+        if (failures.length === 0) return;
+
+        setActiveBackgroundSessions((prev) => {
+          const next = new Set(prev);
+          for (const failure of failures) {
+            next.delete(failure.sessionKey);
+          }
+          return next;
+        });
+
+        for (const failure of failures) {
+          void addSystemBubble(
+            'failure',
+            'Coding agent crashed',
+            {
+              Session: failure.sessionKey,
+              'Exit code': String(failure.exitCode),
+              ...(failure.error ? { Error: failure.error } : {}),
+            },
+            ['Check logs for details'],
+          );
+        }
+      });
+    }, BACKGROUND_POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [activeBackgroundSessions, addSystemBubble]);
+
   const sendChatMessage = async (payload: ChatSendPayload) => {
     const text = payload.text.trim();
     if (!text && payload.images.length === 0) return false;
@@ -531,7 +707,6 @@ export default function App() {
 
     addChatMessage(userMessage);
     setChatSending(true);
-    setChatActivityLabel('Thinking...');
     setChatStreamingContent(null);
     setChatResponseToastMessage(null);
 
@@ -547,10 +722,6 @@ export default function App() {
           onStreamDelta: (content) => {
             setChatStreamingContent(content);
           },
-          onActivityChange: (label) => {
-            // Update activity label based on gateway state events
-            setChatActivityLabel(label);
-          },
         },
       );
 
@@ -560,6 +731,11 @@ export default function App() {
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {
         addChatMessage(msg);
+        if (msg.role === 'assistant') {
+          for (const sessionKey of extractBackgroundSessionKeys(msg.content)) {
+            registerBackgroundSession(sessionKey);
+          }
+        }
       }
       
       if (!chatDrawerOpenRef.current && result.lastContent) {
@@ -571,11 +747,15 @@ export default function App() {
       const messageText = error instanceof Error ? error.message : 'Gateway request failed';
       setGatewayConnected(false);
       addError({ type: 'gateway_down', message: messageText });
-      addChatMessage({ role: 'system', content: `Gateway error: ${messageText}`, timestamp: Date.now() });
+      void addSystemBubble(
+        'failure',
+        'Gateway error',
+        { Error: messageText },
+        ['Check logs for details'],
+      );
       return false;
     } finally {
       setChatSending(false);
-      setChatActivityLabel(null);
       setChatStreamingContent(null);
       
       // Process next queued message if any

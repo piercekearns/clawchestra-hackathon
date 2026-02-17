@@ -151,6 +151,31 @@ When the user says **"add project X"** or **"create project for X"**:
 
 ---
 
+## Decision Escalation
+
+When orchestrating sub-agents or coding agents:
+
+### Always surface to user:
+- Architecture/approach decisions (option A vs B)
+- Plan review recommendations and suggested changes
+- Scope changes ("should we also do X?")
+- Error recovery options (retry, reduce scope, skip)
+- Technology/library selection
+- Breaking changes or data migrations
+- Anything that changes what gets built
+
+### Can proceed autonomously:
+- File naming, formatting, code style
+- Ordering of independent sub-tasks
+- Mechanical execution within approved plan scope
+- Git operations (commit, branch) within approved scope
+- Test writing for already-approved features
+
+### Format:
+Always provide: project context, deliverable context, the decision, options with recommendations, and an explicit ask for direction.
+
+---
+
 ## UI Patterns
 
 This app uses:

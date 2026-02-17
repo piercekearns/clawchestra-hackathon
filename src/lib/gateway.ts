@@ -3,11 +3,25 @@ import {
   getOpenClawGatewayConfig,
   sendOpenClawMessage,
 } from './tauri';
+import type { ChatConnectionState } from '../components/chat/types';
+import { useDashboardStore } from './store';
+
+export type SystemBubbleKind = 'completion' | 'failure' | 'compaction' | 'decision' | 'info';
+
+export interface SystemBubbleMeta {
+  kind: SystemBubbleKind;
+  title: string;
+  details?: Record<string, string>;
+  actions?: string[];
+  runId?: string;
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number;
+  _id?: string;
+  systemMeta?: SystemBubbleMeta;
 }
 
 export interface SendResult {
@@ -31,7 +45,7 @@ interface GatewayOptions {
   attachments?: GatewayImageAttachment[];
   transport?: GatewayTransport;
   onStreamDelta?: (content: string) => void;
-  onActivityChange?: (label: string) => void;
+  onActivityChange?: (state: 'idle' | 'typing' | 'working') => void;
 }
 
 interface ChatCompletionMessagePartText {
@@ -101,6 +115,49 @@ const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairi
 
 let cachedOpenClawTransportPromise: Promise<GatewayTransport | null> | null = null;
 
+interface AnnounceMetadata {
+  label?: string;
+  runtime?: string;
+  status?: 'started' | 'running' | 'ok' | 'error' | 'timeout';
+  tokens?: string;
+  sessionKey?: string;
+  runId?: string;
+}
+
+export type SystemEventKind = 'compaction' | 'error' | 'announce';
+
+export interface SystemEvent {
+  kind: SystemEventKind;
+  sessionKey?: string;
+  runId?: string;
+  label?: string;
+  message?: string;
+  status?: string;
+  runtime?: string;
+  tokens?: string;
+  raw?: Record<string, unknown>;
+}
+
+type SystemEventListener = (event: SystemEvent) => void;
+
+let systemEventUnsubscribe: (() => void) | null = null;
+const systemEventListeners = new Set<SystemEventListener>();
+const ACTIVE_SEND_DEDUP_WINDOW_MS = 120_000;
+let activeSendRun: { runId: string; startedAt: number } | null = null;
+const TOOL_ACTIVITY_STATES = new Set([
+  'tool_use',
+  'tool_result',
+  'tool_call',
+  'reading',
+  'writing',
+  'searching',
+  'executing',
+  'reasoning',
+  'thinking',
+]);
+const TYPING_ACTIVITY_STATES = new Set(['content', 'delta', 'streaming']);
+const TERMINAL_ACTIVITY_STATES = new Set(['final', 'error', 'aborted']);
+
 function isChatCompletionResponse(data: unknown): data is ChatCompletionResponse {
   if (typeof data !== 'object' || data === null) return false;
 
@@ -157,6 +214,61 @@ function mapOpenClawConnectionError(error: unknown): Error {
   }
 
   return new Error(message);
+}
+
+function normalizeAnnounceStatus(
+  rawStatus: unknown,
+  messageText: string,
+): AnnounceMetadata['status'] {
+  const normalized = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
+  if (['start', 'started', 'queued'].includes(normalized)) return 'started';
+  if (['running', 'in_progress'].includes(normalized)) return 'running';
+  if (['ok', 'success', 'completed', 'complete', 'finished'].includes(normalized)) return 'ok';
+  if (['error', 'failed', 'failure'].includes(normalized)) return 'error';
+  if (['timeout', 'timed_out', 'timed-out'].includes(normalized)) return 'timeout';
+
+  if (/(timed?\s*out)/i.test(messageText)) return 'timeout';
+  if (/(failed|error)/i.test(messageText)) return 'error';
+  if (/(completed|finished|succeeded)/i.test(messageText)) return 'ok';
+  return undefined;
+}
+
+export function parseAnnounceMetadata(
+  eventPayload: Record<string, unknown>,
+  fromEventBus: boolean = false,
+): AnnounceMetadata | null {
+  const messageText = typeof eventPayload.message === 'string' ? eventPayload.message : '';
+
+  if (
+    eventPayload.announce === true ||
+    eventPayload.subagentResult !== undefined ||
+    eventPayload.state === 'announce'
+  ) {
+    return {
+      label: typeof eventPayload.label === 'string' ? eventPayload.label : undefined,
+      runtime: typeof eventPayload.runtime === 'string' ? eventPayload.runtime : undefined,
+      status: normalizeAnnounceStatus(eventPayload.status, messageText),
+      tokens: typeof eventPayload.tokens === 'string' ? eventPayload.tokens : undefined,
+      sessionKey: typeof eventPayload.sessionKey === 'string' ? eventPayload.sessionKey : undefined,
+      runId: typeof eventPayload.runId === 'string' ? eventPayload.runId : undefined,
+    };
+  }
+
+  if (fromEventBus) {
+    const isAnnounce =
+      /(?:sub-?agent|task|background job)\s+(?:completed|finished|failed|timed?\s*out)/i.test(
+        messageText,
+      );
+
+    if (isAnnounce) {
+      return {
+        status: normalizeAnnounceStatus(undefined, messageText),
+        runId: typeof eventPayload.runId === 'string' ? eventPayload.runId : undefined,
+      };
+    }
+  }
+
+  return null;
 }
 
 function extractText(content: unknown): string {
@@ -288,6 +400,106 @@ async function resolveTransport(explicit?: GatewayTransport): Promise<GatewayTra
   if (openclaw) return openclaw;
 
   return { mode: 'http-openai', baseUrl: DEFAULT_HTTP_GATEWAY_URL };
+}
+
+export function markActiveSendRun(runId: string): void {
+  activeSendRun = { runId, startedAt: Date.now() };
+}
+
+export function clearActiveSendRun(runId?: string): void {
+  if (!activeSendRun) return;
+  if (!runId || activeSendRun.runId === runId) {
+    activeSendRun = null;
+  }
+}
+
+function shouldSuppressForActiveSend(runId?: string): boolean {
+  if (!runId || !activeSendRun) return false;
+  if (activeSendRun.runId !== runId) return false;
+  return Date.now() - activeSendRun.startedAt <= ACTIVE_SEND_DEDUP_WINDOW_MS;
+}
+
+function emit(event: SystemEvent): void {
+  for (const listener of systemEventListeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      console.error('[Gateway] System event listener error:', error);
+    }
+  }
+}
+
+export function subscribeSystemEvents(listener: SystemEventListener): () => void {
+  systemEventListeners.add(listener);
+  return () => systemEventListeners.delete(listener);
+}
+
+export async function wireSystemEventBus(): Promise<void> {
+  if (systemEventUnsubscribe) {
+    systemEventUnsubscribe();
+    systemEventUnsubscribe = null;
+  }
+
+  const { getConnectionInstance } = await import('./tauri-websocket');
+  const connection = getConnectionInstance();
+  if (!connection) return;
+
+  systemEventUnsubscribe = connection.subscribe((eventName: string, payload: unknown) => {
+    if (eventName !== 'chat') return;
+
+    const chat = (typeof payload === 'object' && payload !== null
+      ? payload
+      : {}) as Record<string, unknown>;
+    const state = typeof chat.state === 'string' ? chat.state : '';
+    const sessionKey = typeof chat.sessionKey === 'string' ? chat.sessionKey : undefined;
+    const runId = typeof chat.runId === 'string' ? chat.runId : undefined;
+    const announce = parseAnnounceMetadata(chat, true);
+
+    if (
+      shouldSuppressForActiveSend(runId) &&
+      (Boolean(announce) || state === 'error' || state === 'final')
+    ) {
+      return;
+    }
+
+    if (state === 'compacted' || state === 'compacting' || state === 'compaction_complete') {
+      emit({ kind: 'compaction', sessionKey, runId, message: 'Conversation compacted' });
+    }
+
+    if (state === 'error') {
+      emit({
+        kind: 'error',
+        sessionKey,
+        runId,
+        message: typeof chat.errorMessage === 'string' ? chat.errorMessage : 'Unknown error',
+        label: typeof chat.label === 'string' ? chat.label : undefined,
+      });
+    }
+
+    if (announce) {
+      const messageText =
+        typeof chat.message === 'string' ? chat.message : extractText(chat.message);
+      emit({
+        kind: 'announce',
+        sessionKey: announce.sessionKey ?? sessionKey,
+        runId: announce.runId ?? runId,
+        label: announce.label,
+        status: announce.status,
+        runtime: announce.runtime,
+        tokens: announce.tokens,
+        message: messageText || undefined,
+        raw: chat,
+      });
+    }
+  });
+}
+
+export function teardownSystemEventBus(): void {
+  if (systemEventUnsubscribe) {
+    systemEventUnsubscribe();
+    systemEventUnsubscribe = null;
+  }
+  systemEventListeners.clear();
 }
 
 async function sendViaOpenAIHttp(
@@ -611,12 +823,20 @@ async function sendViaTauriOpenClaw(
   });
 }
 
+function setAgentActivity(
+  next: 'idle' | 'typing' | 'working',
+  onActivityChange?: (state: 'idle' | 'typing' | 'working') => void,
+): void {
+  useDashboardStore.getState().setAgentActivity(next);
+  if (onActivityChange) onActivityChange(next);
+}
+
 async function sendViaTauriWs(
   messageText: string,
   attachments: GatewayImageAttachment[],
   transport: GatewayTransport,
   onStreamDelta?: (content: string) => void,
-  onActivityChange?: (label: string) => void,
+  onActivityChange?: (state: 'idle' | 'typing' | 'working') => void,
 ): Promise<SendResult> {
   if (transport.mode !== 'tauri-ws') {
     throw new Error('Tauri WebSocket transport is not configured');
@@ -633,21 +853,10 @@ async function sendViaTauriWs(
   const runId = getRequestId();
   let streamedText = '';
 
-  // Get message count BEFORE sending so we know where new messages start
-  let messageCountBefore = 0;
   try {
-    const historyBefore = (await connection.request('chat.history', {
-      sessionKey,
-      limit: 1,
-    })) as { total?: number; messages?: unknown[] };
-    messageCountBefore = historyBefore.total ?? historyBefore.messages?.length ?? 0;
-    console.log('[Gateway] Message count before send:', messageCountBefore);
-  } catch (e) {
-    console.warn('[Gateway] Failed to get message count before send:', e);
-  }
+    markActiveSendRun(runId);
+    setAgentActivity('working', onActivityChange);
 
-  try {
-    // Send the message
     console.log('[Gateway] Sending chat.send via tauri-ws, connection.connected:', connection.connected);
     await connection.request('chat.send', {
       sessionKey,
@@ -658,75 +867,72 @@ async function sendViaTauriWs(
     });
     console.log('[Gateway] chat.send succeeded');
 
-    // Wait for response using hybrid approach: events + polling
-    // Events provide real-time updates, polling ensures we catch completion even if events are missed
     await new Promise<void>((resolve, reject) => {
       let completed = false;
       let finalDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-      let sawFinal = false; // Track if we've seen at least one final
-      
-      // Cancel any pending completion timer (call when activity resumes)
+      let sawFinal = false;
+      let idleTimeout: ReturnType<typeof setTimeout> | null = null;
+
       const cancelFinalDebounce = () => {
         if (finalDebounceTimer) {
-          console.log('[Gateway] Activity detected, canceling completion timer');
           clearTimeout(finalDebounceTimer);
           finalDebounceTimer = null;
         }
       };
-      
-      // Start/restart the completion timer
+
+      const resetIdleTimeout = () => {
+        if (idleTimeout) clearTimeout(idleTimeout);
+        idleTimeout = setTimeout(() => {
+          setAgentActivity('idle', onActivityChange);
+        }, 60_000);
+      };
+
       const startFinalDebounce = () => {
         cancelFinalDebounce();
         finalDebounceTimer = setTimeout(() => {
-          console.log('[Gateway] Final debounce elapsed (2s no activity), resolving');
           cleanup();
           resolve();
         }, 2000);
       };
-      
-      // Cleanup function to stop all listeners/timers
+
       const cleanup = () => {
         if (completed) return;
         completed = true;
         clearTimeout(safetyTimeout);
         clearInterval(pollInterval);
         cancelFinalDebounce();
+        if (idleTimeout) {
+          clearTimeout(idleTimeout);
+          idleTimeout = null;
+        }
         unsubscribe();
       };
 
-      // Safety timeout (30 min) - only if both events AND polling fail
       const safetyTimeout = setTimeout(() => {
         console.warn('[Gateway] Safety timeout after 30 minutes');
         cleanup();
         resolve();
       }, 30 * 60 * 1000);
 
-      // Track when we last received an event (to detect stalled connections)
       let lastEventTime = Date.now();
-      
-      // Poll for completion only if no events received for 30+ seconds
-      // This is a true fallback, not the primary mechanism
+
       const pollInterval = setInterval(async () => {
         if (completed) return;
-        
+
         const timeSinceLastEvent = Date.now() - lastEventTime;
-        
-        // Only poll if events have stalled for 30+ seconds
         if (timeSinceLastEvent < 30000) {
           return;
         }
-        
-        console.log('[Gateway] No events for 30s, polling for completion...');
-        
+
         try {
           const pollHistory = (await connection.request('chat.history', {
             sessionKey,
             limit: 5,
           })) as { messages?: Array<Record<string, unknown>> };
-          
+
           const messages = pollHistory.messages ?? [];
-          const latestAssistant = messages.find(m => m.role === 'assistant');
-          
+          const latestAssistant = messages.find((m) => m.role === 'assistant');
+
           if (latestAssistant) {
             const content = extractText(latestAssistant.content);
             if (content && content.length > streamedText.length) {
@@ -735,41 +941,28 @@ async function sendViaTauriWs(
                 onStreamDelta(streamedText);
               }
             }
-            
-            // If we have content and events stalled, assume complete
+
             if (content) {
-              console.log('[Gateway] Poll fallback: found assistant message, resolving');
               cleanup();
               resolve();
             }
           }
-        } catch (e) {
-          console.warn('[Gateway] Poll failed:', e);
+        } catch (error) {
+          console.warn('[Gateway] Poll failed:', error);
         }
-      }, 10000); // Check every 10s but only act if stalled
+      }, 10000);
 
-      // Map states to user-friendly activity labels
       const stateLabels: Record<string, string> = {
-        thinking: 'Thinking...',
-        reasoning: 'Reasoning...',
-        tool_use: 'Using tools...',
-        tool_call: 'Using tools...',
-        tool_result: 'Processing results...',
-        reading: 'Reading...',
-        writing: 'Writing...',
-        searching: 'Searching...',
-        executing: 'Running command...',
-        delta: 'Streaming...',
-        streaming: 'Streaming...',
+        compacting: 'Compacting conversation...',
+        compacted: 'Compacting conversation...',
       };
 
-      // Subscribe to real-time events (primary mechanism)
       const unsubscribe = connection.subscribe((eventName, payload) => {
         if (completed) return;
-        
-        // Track event activity (for stall detection)
+
         lastEventTime = Date.now();
-        
+        resetIdleTimeout();
+
         if (eventName !== 'chat') return;
 
         const chat = (typeof payload === 'object' && payload !== null
@@ -781,19 +974,40 @@ async function sendViaTauriWs(
 
         const state = typeof chat.state === 'string' ? chat.state : '';
 
-        // Update activity label for known states
-        if (state && stateLabels[state] && onActivityChange) {
-          onActivityChange(stateLabels[state]);
+        if (state && stateLabels[state]) {
+          setAgentActivity('working', onActivityChange);
         }
-        
-        // If we see activity states after a 'final', cancel the completion timer
-        // This handles sub-agents starting new work after an initial response
-        const activityStates = ['thinking', 'reasoning', 'tool_use', 'tool_call', 'reading', 'writing', 'searching', 'executing'];
-        if (activityStates.includes(state) && sawFinal) {
+
+        if (TOOL_ACTIVITY_STATES.has(state) && sawFinal) {
           cancelFinalDebounce();
         }
 
-        if (state === 'delta') {
+        if (TYPING_ACTIVITY_STATES.has(state)) {
+          setAgentActivity('typing', onActivityChange);
+        } else if (TOOL_ACTIVITY_STATES.has(state)) {
+          setAgentActivity('working', onActivityChange);
+        } else if (TERMINAL_ACTIVITY_STATES.has(state)) {
+          setAgentActivity('idle', onActivityChange);
+        }
+
+        const announce = parseAnnounceMetadata(chat, true);
+        if (announce) {
+          const messageText =
+            typeof chat.message === 'string' ? chat.message : extractText(chat.message);
+          emit({
+            kind: 'announce',
+            sessionKey: announce.sessionKey ?? sessionKey,
+            runId: announce.runId ?? runId,
+            label: announce.label,
+            status: announce.status,
+            runtime: announce.runtime,
+            tokens: announce.tokens,
+            message: messageText || undefined,
+            raw: chat,
+          });
+        }
+
+        if (state === 'delta' || state === 'content' || state === 'streaming') {
           const deltaText = extractText(chat.message);
           if (deltaText && deltaText.length >= streamedText.length) {
             streamedText = deltaText;
@@ -806,18 +1020,19 @@ async function sendViaTauriWs(
 
         if (state === 'error') {
           cleanup();
+          clearActiveSendRun(runId);
           reject(new Error(typeof chat.errorMessage === 'string' ? chat.errorMessage : 'OpenClaw chat error'));
           return;
         }
 
         if (state === 'aborted') {
           cleanup();
+          clearActiveSendRun(runId);
           reject(new Error('OpenClaw chat aborted'));
           return;
         }
 
         if (state === 'final') {
-          // Extract final content if present
           const finalText = extractText(chat.message);
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
@@ -826,54 +1041,26 @@ async function sendViaTauriWs(
             }
           }
           sawFinal = true;
-          console.log('[Gateway] Received final event, starting 2s completion timer');
-          
-          // Start completion timer - will be canceled if activity resumes
-          // This handles sub-agents sending multiple responses in sequence
+          clearActiveSendRun(runId);
           startFinalDebounce();
         }
       });
     });
 
-    // Small delay to ensure message is persisted before fetching history
     await new Promise((r) => setTimeout(r, 50));
 
-    // Fetch history to get ALL new messages (not just the last one)
     const historyAfter = (await connection.request('chat.history', {
       sessionKey,
-      limit: 100, // Get enough to capture all new messages
+      limit: 100,
     })) as { messages?: Array<Record<string, unknown>> };
 
     const allMessages = historyAfter.messages ?? [];
-    
-    // Extract new assistant messages (messages added after our send)
-    // We sent a user message + got assistant responses, so skip the first messageCountBefore + 1
-    const newMessages: ChatMessage[] = [];
-    const startIndex = Math.max(0, allMessages.length - (allMessages.length - messageCountBefore));
-    
-    for (let i = 0; i < allMessages.length; i++) {
-      const msg = allMessages[i];
-      // Only include assistant messages that came after our user message
-      if (msg.role === 'assistant') {
-        const content = extractText(msg.content);
-        if (content.trim()) {
-          newMessages.push({
-            role: 'assistant',
-            content: content.trim(),
-            timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
-          });
-        }
-      }
-    }
 
-    // Filter to only messages we haven't seen (after messageCountBefore)
-    // History is returned newest-first, so reverse to get chronological order
     const reversedMessages = [...allMessages].reverse();
     const assistantMessages: ChatMessage[] = [];
     let foundUserMessage = false;
-    
+
     for (const msg of reversedMessages) {
-      // Look for our user message (contains the messageText we sent)
       if (msg.role === 'user') {
         const userContent = extractText(msg.content);
         if (userContent.includes(messageText.slice(0, 50))) {
@@ -881,7 +1068,7 @@ async function sendViaTauriWs(
           continue;
         }
       }
-      // Collect assistant messages after our user message
+
       if (foundUserMessage && msg.role === 'assistant') {
         const content = extractText(msg.content);
         if (content.trim()) {
@@ -894,9 +1081,6 @@ async function sendViaTauriWs(
       }
     }
 
-    console.log('[Gateway] Found', assistantMessages.length, 'new assistant messages');
-
-    // Fallback: if we couldn't find messages via history matching, use streamed text
     if (assistantMessages.length === 0 && streamedText.trim()) {
       assistantMessages.push({
         role: 'assistant',
@@ -905,14 +1089,11 @@ async function sendViaTauriWs(
       });
     }
 
-    // Safety check: if streamed text is longer than history result, prefer streamed text
-    // This handles race conditions where history hasn't fully persisted
-    const lastHistoryContent = assistantMessages.length > 0 
-      ? assistantMessages[assistantMessages.length - 1].content 
+    const lastHistoryContent = assistantMessages.length > 0
+      ? assistantMessages[assistantMessages.length - 1].content
       : '';
-    
+
     if (streamedText.trim().length > lastHistoryContent.length) {
-      console.log('[Gateway] Streamed text longer than history, using streamed text');
       if (assistantMessages.length > 0) {
         assistantMessages[assistantMessages.length - 1].content = streamedText.trim();
       } else {
@@ -924,15 +1105,21 @@ async function sendViaTauriWs(
       }
     }
 
+    setAgentActivity('idle', onActivityChange);
+    clearActiveSendRun(runId);
+
     return {
       messages: assistantMessages,
-      lastContent: assistantMessages.length > 0 
-        ? assistantMessages[assistantMessages.length - 1].content 
+      lastContent: assistantMessages.length > 0
+        ? assistantMessages[assistantMessages.length - 1].content
         : streamedText.trim(),
     };
-  } catch (e) {
-    // If WebSocket fails, don't close the connection (it might be reusable)
-    throw e;
+  } catch (error) {
+    setAgentActivity('idle', onActivityChange);
+    clearActiveSendRun(runId);
+    throw error;
+  } finally {
+    clearActiveSendRun(runId);
   }
 }
 
@@ -1092,4 +1279,57 @@ export function retryGatewayConnection(): void {
       void checkGatewayConnection();
     }
   });
+}
+
+export function subscribeConnectionState(
+  listener: (state: ChatConnectionState) => void,
+): () => void {
+  let prev = useDashboardStore.getState().wsConnectionState;
+  listener(prev);
+
+  return useDashboardStore.subscribe((state) => {
+    if (state.wsConnectionState === prev) return;
+    prev = state.wsConnectionState;
+    if (prev === 'disconnected' || prev === 'error') {
+      useDashboardStore.getState().setAgentActivity('idle');
+    }
+    listener(prev);
+  });
+}
+
+export async function pollProcessSessions(
+  sessionKeys: string[],
+  transportOverride?: GatewayTransport,
+): Promise<Array<{ sessionKey: string; exitCode: number; error?: string }>> {
+  const failures: Array<{ sessionKey: string; exitCode: number; error?: string }> = [];
+  const transport = await resolveTransport(transportOverride);
+  if (transport.mode !== 'tauri-ws') return failures;
+
+  const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+  const connection = await getTauriOpenClawConnection(
+    transport.wsUrl,
+    transport.sessionKey || DEFAULT_SESSION_KEY,
+    transport.token,
+  );
+
+  for (const sessionKey of sessionKeys) {
+    try {
+      const result = await connection.request<{ exitCode?: number; error?: string }>('process', {
+        action: 'poll',
+        sessionKey,
+      });
+
+      if (result?.exitCode !== undefined && result.exitCode !== 0) {
+        failures.push({
+          sessionKey,
+          exitCode: result.exitCode,
+          error: typeof result.error === 'string' ? result.error : undefined,
+        });
+      }
+    } catch {
+      // Ignore poll transport failures.
+    }
+  }
+
+  return failures;
 }

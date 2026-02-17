@@ -3,6 +3,7 @@ import { ArrowDown, Loader2 } from 'lucide-react';
 import type { ChatMessage } from '../../lib/gateway';
 import { cn } from '../../lib/utils';
 import { MessageBubble } from './MessageBubble';
+import { SystemBubble } from './SystemBubble';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -113,9 +114,14 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
       lastProgrammaticScrollTime.current = Date.now();
       node.scrollTop = node.scrollHeight;
     } else {
-      // User has scrolled up → only show indicator for assistant messages
+      // User has scrolled up → show indicator for assistant + important system messages
       const latestMessage = messages[messages.length - 1];
-      if (latestMessage?.role === 'assistant') {
+      if (
+        latestMessage?.role === 'assistant' ||
+        (latestMessage?.role === 'system' &&
+          latestMessage.systemMeta &&
+          ['failure', 'completion', 'compaction', 'decision'].includes(latestMessage.systemMeta.kind))
+      ) {
         setHasNewMessages(true);
       }
     }
@@ -165,12 +171,25 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
         </p>
       ) : null}
 
-      {messages.map((message, index) => (
-        <MessageBubble 
-          key={`${message.timestamp ?? index}-${message.role}-${message.content.slice(0, 20)}`} 
-          message={message} 
-        />
-      ))}
+      {messages.map((message, index) => {
+        if (message.role === 'system' && message.systemMeta) {
+          return (
+            <SystemBubble
+              key={message._id ?? `${message.timestamp ?? index}-system-${message.systemMeta.kind}`}
+              meta={message.systemMeta}
+              content={message.content}
+              timestamp={message.timestamp}
+            />
+          );
+        }
+
+        return (
+          <MessageBubble
+            key={message._id ?? `${message.timestamp ?? index}-${message.role}-${message.content.slice(0, 20)}`}
+            message={message}
+          />
+        );
+      })}
       {/* Scroll anchor - browser will try to keep this in view */}
       <div id="scroll-anchor" style={{ overflowAnchor: 'auto', height: 1 }} />
       </div>

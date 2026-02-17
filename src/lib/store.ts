@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ChatConnectionState } from '../components/chat/types';
 import type { DashboardError } from './errors';
-import type { ChatMessage } from './gateway';
+import type { ChatMessage, SystemBubbleKind, SystemBubbleMeta } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
 import { createProject, getProjects, removeProject, updateProject, type ProjectUpdate } from './projects';
 import { defaultView, type ViewContext } from './views';
@@ -21,6 +21,7 @@ interface DashboardState {
   errors: DashboardError[];
   gatewayConnected: boolean;
   wsConnectionState: ChatConnectionState;
+  agentActivity: 'idle' | 'typing' | 'working';
   viewContext: ViewContext;
   chatMessages: ChatMessage[];
   chatHasMore: boolean;
@@ -36,9 +37,18 @@ interface DashboardState {
   clearErrorsByType: (type: DashboardError['type']) => void;
   setGatewayConnected: (connected: boolean) => void;
   setWsConnectionState: (state: ChatConnectionState) => void;
+  setAgentActivity: (state: 'idle' | 'typing' | 'working') => void;
   setViewContext: (view: ViewContext) => void;
   setThemePreference: (pref: ThemePreference) => void;
   addChatMessage: (message: ChatMessage) => Promise<void>;
+  addSystemBubble: (
+    kind: SystemBubbleKind,
+    title: string,
+    details?: Record<string, string>,
+    actions?: string[],
+    runId?: string,
+    content?: string,
+  ) => Promise<void>;
   loadChatMessages: () => Promise<void>;
   loadMoreChatMessages: () => Promise<void>;
   clearChatHistory: () => Promise<void>;
@@ -57,6 +67,29 @@ function generateMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+function deserializePersistedMessage(m: PersistedChatMessage): ChatMessage {
+  let systemMeta: SystemBubbleMeta | undefined;
+
+  if (m.metadata) {
+    try {
+      const parsed = JSON.parse(m.metadata) as { systemMeta?: SystemBubbleMeta };
+      if (parsed?.systemMeta) {
+        systemMeta = parsed.systemMeta;
+      }
+    } catch {
+      // Ignore malformed metadata and fall back to plain messages.
+    }
+  }
+
+  return {
+    role: m.role as ChatMessage['role'],
+    content: m.content,
+    timestamp: m.timestamp,
+    _id: m.id,
+    ...(systemMeta ? { systemMeta } : {}),
+  };
+}
+
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
@@ -64,6 +97,7 @@ export const useDashboardStore = create<DashboardState>()(
       errors: [],
       gatewayConnected: false,
       wsConnectionState: 'disconnected' as ChatConnectionState,
+      agentActivity: 'idle',
       viewContext: defaultView(),
       chatMessages: [],
       chatHasMore: true,
@@ -103,13 +137,15 @@ export const useDashboardStore = create<DashboardState>()(
 
       setWsConnectionState: (wsConnectionState) => set({ wsConnectionState }),
 
+      setAgentActivity: (agentActivity) => set({ agentActivity }),
+
       setViewContext: (viewContext) => set({ viewContext }),
 
       setThemePreference: (themePreference) => set({ themePreference }),
 
       addChatMessage: async (message) => {
         // Generate ID upfront so state and DB use the same ID
-        const id = generateMessageId();
+        const id = message._id ?? generateMessageId();
         const timestamp = message.timestamp ?? Date.now();
         
         const messageWithMeta = {
@@ -131,11 +167,23 @@ export const useDashboardStore = create<DashboardState>()(
               role: message.role,
               content: message.content,
               timestamp,
+              metadata: message.systemMeta
+                ? JSON.stringify({ systemMeta: message.systemMeta })
+                : undefined,
             });
           } catch (error) {
             console.error('[Store] Failed to persist message:', error);
           }
         }
+      },
+
+      addSystemBubble: async (kind, title, details, actions, runId, content) => {
+        return get().addChatMessage({
+          role: 'system',
+          content: content ?? title,
+          timestamp: Date.now(),
+          systemMeta: { kind, title, details, actions, ...(runId ? { runId } : {}) },
+        });
       },
 
       loadChatMessages: async () => {
@@ -149,11 +197,7 @@ export const useDashboardStore = create<DashboardState>()(
           const total = await chatMessagesCount();
           
           set({
-            chatMessages: messages.map((m) => ({
-              role: m.role as ChatMessage['role'],
-              content: m.content,
-              timestamp: m.timestamp,
-            })),
+            chatMessages: messages.map((m) => deserializePersistedMessage(m)),
             chatHasMore: messages.length < total,
           });
           
@@ -192,11 +236,7 @@ export const useDashboardStore = create<DashboardState>()(
           
           const newMessages = olderMessages
             .filter((m) => !existingKeys.has(`${m.timestamp}-${m.content.slice(0, 50)}`))
-            .map((m) => ({
-              role: m.role as ChatMessage['role'],
-              content: m.content,
-              timestamp: m.timestamp,
-            }));
+            .map((m) => deserializePersistedMessage(m));
           
           set((state) => ({
             chatMessages: [...newMessages, ...state.chatMessages],

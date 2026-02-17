@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import {
   checkGatewayConnection,
+  parseAnnounceMetadata,
   sendMessage,
   sendMessageWithContext,
   type ChatMessage,
@@ -93,6 +94,11 @@ describe('gateway client', () => {
         role: 'user',
         content: 'status?',
         timestamp: 1234567890,
+        _id: 'local-message-id',
+        systemMeta: {
+          kind: 'info',
+          title: 'ignored',
+        },
       },
     ]);
 
@@ -100,6 +106,49 @@ describe('gateway client', () => {
     expect(parsed.messages[0]).toEqual({
       role: 'user',
       content: 'status?',
+    });
+  });
+
+  it('parses structured announce metadata', () => {
+    const parsed = parseAnnounceMetadata({
+      state: 'announce',
+      label: 'Plan review',
+      runtime: '2m 31s',
+      status: 'completed',
+      sessionKey: 'agent:main:pipeline-dashboard',
+      runId: 'run_123',
+    });
+
+    expect(parsed).toEqual({
+      label: 'Plan review',
+      runtime: '2m 31s',
+      status: 'ok',
+      sessionKey: 'agent:main:pipeline-dashboard',
+      runId: 'run_123',
+      tokens: undefined,
+    });
+  });
+
+  it('does not parse normal assistant text as announce metadata', () => {
+    const parsed = parseAnnounceMetadata({
+      message: 'Task completed. Here is your requested update.',
+    });
+
+    expect(parsed).toBeNull();
+  });
+
+  it('allows guarded fallback announce parsing only from event bus', () => {
+    const parsed = parseAnnounceMetadata(
+      {
+        message: 'Sub-agent completed in background job',
+        runId: 'run_abc',
+      },
+      true,
+    );
+
+    expect(parsed).toEqual({
+      status: 'ok',
+      runId: 'run_abc',
     });
   });
 
