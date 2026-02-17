@@ -14,9 +14,9 @@ items:
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: project-card-opens-kanban
     title: Project Card Opens Kanban Directly
-    status: up-next
+    status: complete
     priority: 1
-    nextAction: Spec written — ready for plan/build
+    nextAction: Shipped — card click opens kanban for roadmap projects, modal fallback for non-roadmap
     tags:
       - ui
       - ux

@@ -945,7 +945,13 @@ export default function App() {
                   type="button"
                   key={project.id}
                   className="rounded-full border border-neutral-300 px-3 py-1 text-xs hover:border-revival-accent-400 dark:border-neutral-600"
-                  onClick={() => setSelectedProjectId(project.id)}
+                  onClick={() => {
+                    if (project.hasRoadmap) {
+                      void openRoadmapView(project);
+                    } else {
+                      setSelectedProjectId(project.id);
+                    }
+                  }}
                 >
                   {project.title}
                 </button>
@@ -990,7 +996,13 @@ export default function App() {
                 <Board
                   columns={viewContext.columns}
                   items={topLevelProjects}
-                  onItemClick={(project) => setSelectedProjectId(project.id)}
+                  onItemClick={(project) => {
+                    if (project.hasRoadmap) {
+                      void openRoadmapView(project);
+                    } else {
+                      setSelectedProjectId(project.id);
+                    }
+                  }}
                   renderItemIndicators={(project) => {
                     const gitHubStatusMeta = getGitHubStatusMeta(project.gitStatus);
                     return (
@@ -1021,22 +1033,7 @@ export default function App() {
                       </>
                     );
                   }}
-                  renderItemActions={(project) => {
-                    if (!project.hasRoadmap) return null;
-                    return (
-                      <button
-                        type="button"
-                        className="rounded-full border border-revival-accent-400 px-2 py-0.5 text-[10px] font-semibold text-neutral-900 hover:bg-revival-accent-100 dark:text-neutral-100 dark:hover:bg-revival-accent-900/40"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void openRoadmapView(project);
-                        }}
-                        onPointerDown={(event) => event.stopPropagation()}
-                      >
-                        View Roadmap
-                      </button>
-                    );
-                  }}
+                  renderItemActions={() => null}
                   onItemsChange={(nextItems) => {
                     void persistBoardChanges(nextItems);
                   }}
@@ -1079,7 +1076,13 @@ export default function App() {
         isOpen={searchOpen}
         projects={allProjects}
         onClose={() => setSearchOpen(false)}
-        onSelect={(project) => setSelectedProjectId(project.id)}
+        onSelect={(project) => {
+          if (project.hasRoadmap) {
+            void openRoadmapView(project);
+          } else {
+            setSelectedProjectId(project.id);
+          }
+        }}
       />
 
       <AddProjectDialog
