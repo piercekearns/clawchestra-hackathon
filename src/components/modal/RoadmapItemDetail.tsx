@@ -28,7 +28,6 @@ function roadmapStatusVariant(status: RoadmapStatus): BadgeVariant {
     case 'in-progress':
       return 'accent';
     case 'complete':
-    case 'shipped':
       return 'success';
   }
 }

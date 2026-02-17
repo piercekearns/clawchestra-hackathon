@@ -9,13 +9,15 @@ import type {
 } from './schema';
 import { pathExists, readFile, writeFile } from './tauri';
 
-const VALID_ROADMAP_STATUS = new Set<RoadmapStatus>(['pending', 'up-next', 'in-progress', 'complete', 'shipped']);
+const VALID_ROADMAP_STATUS = new Set<RoadmapStatus>(['pending', 'up-next', 'in-progress', 'complete']);
 
 function sanitizeRoadmapItem(item: unknown, index: number): RoadmapItem | null {
   if (typeof item !== 'object' || item === null) return null;
 
   const record = item as Record<string, unknown>;
   if (typeof record.title !== 'string' || !record.title.trim()) return null;
+  // Migrate legacy 'shipped' status to 'complete'
+  if (record.status === 'shipped') record.status = 'complete';
   if (typeof record.status !== 'string' || !VALID_ROADMAP_STATUS.has(record.status as RoadmapStatus)) {
     return null;
   }
