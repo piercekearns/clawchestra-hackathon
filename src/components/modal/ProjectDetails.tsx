@@ -117,8 +117,8 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
                       size="sm"
                       onClick={() => actions.onOpenLinkedProject(child.id)}
                     >
-                      {child.icon ? `${child.icon} ` : ''}
                       {child.title}
+                      {child.icon ? ` ${child.icon}` : ''}
                     </Button>
                   ))}
                 </div>

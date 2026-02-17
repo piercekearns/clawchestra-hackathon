@@ -92,6 +92,7 @@ export function RoadmapItemDetail({
       <div className="mb-4 flex items-center gap-3">
         <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
           {item.title}
+          {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
         </h3>
         <StatusBadge<RoadmapStatus>
           value={item.status}

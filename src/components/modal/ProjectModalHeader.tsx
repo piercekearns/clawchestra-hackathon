@@ -52,12 +52,14 @@ export function ProjectModalHeader({
     <div className="mb-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          {project.icon && (
-            <span className="shrink-0 text-lg">{project.icon}</span>
-          )}
-          <h2 className="truncate text-xl font-semibold text-neutral-900 dark:text-neutral-100">
-            {project.title}
-          </h2>
+          <div className="min-w-0 flex items-center gap-1.5">
+            <h2 className="truncate text-xl font-semibold text-neutral-900 dark:text-neutral-100">
+              {project.title}
+            </h2>
+            {project.icon && (
+              <span className="shrink-0 text-lg" aria-hidden="true">{project.icon}</span>
+            )}
+          </div>
           <StatusBadge<ProjectStatus>
             value={localStatus}
             options={PROJECT_STATUSES}

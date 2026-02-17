@@ -85,6 +85,7 @@ export function RoadmapItemRow({
 
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
         {item.title}
+        {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
       </span>
 
       <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>

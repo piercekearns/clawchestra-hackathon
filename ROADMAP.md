@@ -38,6 +38,16 @@ items:
     tags:
       - integration
       - openclaw
+  - id: draggable-kanban-columns
+    title: Draggable Kanban Columns
+    status: pending
+    priority: 3
+    nextAction: Spec written — ready for plan/build
+    tags:
+      - ui
+      - kanban
+      - ux
+    specDoc: docs/specs/draggable-kanban-columns-spec.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: pending
@@ -47,6 +57,17 @@ items:
       - ui
       - kanban
       - ux
+  - id: deliverable-lifecycle-orchestration
+    title: Deliverable Lifecycle Orchestration
+    status: pending
+    priority: 4
+    nextAction: Spec the spec/plan/next-action workflow and chat-prefill automation from roadmap item detail
+    tags:
+      - roadmap
+      - workflow
+      - ux
+      - automation
+    specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
 ---
 
 # Pipeline Dashboard — Roadmap

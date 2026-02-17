@@ -40,8 +40,8 @@ export function Card<T extends BoardItem>({
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h3 className="line-clamp-2 text-sm font-semibold leading-tight">
-          {item.icon ? `${item.icon} ` : ''}
-          {item.title}
+          <span>{item.title}</span>
+          {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
         </h3>
         <div className="flex shrink-0 items-center gap-1">
           {renderIndicators ? renderIndicators(item) : null}

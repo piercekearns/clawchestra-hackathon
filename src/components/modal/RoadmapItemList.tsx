@@ -101,6 +101,7 @@ export function RoadmapItemList({
             </span>
             <span className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
               {activeItem.title}
+              {activeItem.icon ? <span className="ml-1 inline-block align-text-bottom">{activeItem.icon}</span> : null}
             </span>
           </div>
         ) : null}
