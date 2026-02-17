@@ -865,6 +865,7 @@ async function sendViaTauriWs(
       let completed = false;
       let finalDebounceTimer: ReturnType<typeof setTimeout> | null = null;
       let sawFinal = false;
+      let sendCompleted = false; // True once chat.send is acknowledged by gateway
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
       let unsubscribeState: (() => void) | null = null;
 
@@ -1112,7 +1113,19 @@ async function sendViaTauriWs(
 
         if (state === 'final') {
           const finalText = extractText(chat.message);
-          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
+          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, sendCompleted=${sendCompleted}`);
+
+          // Ignore stale final events that arrive before chat.send completes
+          // or that carry no content (leftover from previous responses).
+          if (!sendCompleted) {
+            console.log('[Gateway] Ignoring final event — chat.send not yet acknowledged');
+            return;
+          }
+          if (!finalText && !streamedText) {
+            console.log('[Gateway] Ignoring empty final event — likely stale from previous response');
+            return;
+          }
+
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
             if (onStreamDelta) {
@@ -1136,7 +1149,8 @@ async function sendViaTauriWs(
         idempotencyKey: runId,
         attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
       }).then(() => {
-        console.log('[Gateway] chat.send succeeded');
+        sendCompleted = true;
+        console.log('[Gateway] chat.send succeeded, sendCompleted=true');
       }).catch((err) => {
         console.error('[Gateway] REJECT via chat.send failed:', err);
         cleanup();
