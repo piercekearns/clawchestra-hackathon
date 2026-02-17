@@ -104,6 +104,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Open settings** | User clicks Settings button in header |
 | **Update paths** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings` |
 | **Trigger update** | Commit code changes; user clicks Update button |
+| **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
 | **Search/filter** | Not available via agent — UI only |
 
 ---
@@ -285,6 +286,7 @@ Current chat UX is drawer-based:
 - Top collapse control + drag handle in expanded mode
 - Free-drag drawer height (clamped)
 - Response completion toast (manual dismiss or open drawer)
+- Composer supports app-level prefill requests (text inserted + focused, user still edits and sends manually)
 
 ### Slash Commands
 

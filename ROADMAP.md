@@ -12,22 +12,11 @@ items:
       - architecture
     icon: "\U0001F527"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
-  - id: project-card-opens-kanban
-    title: Project Card Opens Kanban Directly
-    status: complete
-    priority: 1
-    completedAt: '2026-02-17'
-    nextAction: Verified and shipped
-    tags:
-      - ui
-      - ux
-      - navigation
-    specDoc: docs/specs/project-card-opens-kanban-spec.md
   - id: deliverable-lifecycle-orchestration
     title: Deliverable Lifecycle Orchestration
-    status: up-next
+    status: in-progress
     priority: 2
-    nextAction: Plan written — ready for build
+    nextAction: Code shipped - awaiting verification
     tags:
       - roadmap
       - workflow
@@ -38,7 +27,7 @@ items:
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: up-next
-    priority: 3
+    priority: 1
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -48,7 +37,7 @@ items:
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: up-next
-    priority: 4
+    priority: 2
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -58,7 +47,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: up-next
-    priority: 5
+    priority: 3
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -66,7 +55,7 @@ items:
   - id: recently-completed-lifecycle
     title: Recently Completed Lifecycle
     status: up-next
-    priority: 3
+    priority: 4
     nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
@@ -78,14 +67,16 @@ items:
     title: Deep Rename to Clawchestra
     status: pending
     priority: 1
-    nextAction: Surface rename done — deep rename needed for Cargo, data paths, session key, folder
+    nextAction: >-
+      Surface rename done — deep rename needed for Cargo, data paths, session
+      key, folder
     tags:
       - infra
       - rename
   - id: app-ux-review
     title: App UX Review & Improvements
     status: pending
-    priority: 1
+    priority: 2
     nextAction: 'Hands-on review: what works, what doesn''t, what''s missing'
     tags:
       - ui
@@ -95,7 +86,7 @@ items:
   - id: roadmap-item-quick-add
     title: Roadmap Item Quick-Add
     status: pending
-    priority: 2
+    priority: 3
     nextAction: >-
       Spec needed — define UI for manually adding roadmap items with
       schema-compliant defaults
@@ -106,8 +97,10 @@ items:
   - id: github-api-403-errors
     title: Investigate GitHub API 403 Errors
     status: pending
-    priority: 2
-    nextAction: 'Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge — likely rate limiting, may need auth token or caching'
+    priority: 4
+    nextAction: >-
+      Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
+      likely rate limiting, may need auth token or caching
     tags:
       - bug
       - github
@@ -115,11 +108,21 @@ items:
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
-    priority: 3
+    priority: 5
     nextAction: Post-V2 scope
     tags:
       - integration
       - openclaw
+  - id: project-card-opens-kanban
+    title: Project Card Opens Kanban Directly
+    status: complete
+    priority: 1
+    nextAction: Verified and shipped
+    tags:
+      - ui
+      - ux
+      - navigation
+    specDoc: docs/specs/project-card-opens-kanban-spec.md
 ---
 
 # Clawchestra — Roadmap

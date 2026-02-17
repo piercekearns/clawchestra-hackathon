@@ -11,6 +11,7 @@ interface ColumnProps<T extends BoardItem> {
   getItemWarning?: (item: T) => boolean;
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
+  renderItemHoverActions?: (item: T) => ReactNode;
 }
 
 export function Column<T extends BoardItem>({
@@ -20,6 +21,7 @@ export function Column<T extends BoardItem>({
   getItemWarning,
   renderItemIndicators,
   renderItemActions,
+  renderItemHoverActions,
 }: ColumnProps<T>) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -51,6 +53,7 @@ export function Column<T extends BoardItem>({
               onClick={onItemClick}
               renderIndicators={renderItemIndicators}
               renderActions={renderItemActions}
+              renderHoverActions={renderItemHoverActions}
             />
           ))}
 

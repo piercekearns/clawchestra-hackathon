@@ -4,13 +4,23 @@ import { GitHubStatusBadge } from './components/GitHubStatusBadge';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
+import { LifecycleActionBar } from './components/LifecycleActionBar';
 import { ProjectModal } from './components/modal';
 import type { ProjectModalActions } from './components/modal';
 import { Header } from './components/Header';
 import { SettingsDialog } from './components/SettingsDialog';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
-import type { ChatConnectionState, ChatSendPayload, QueuedMessage } from './components/chat';
+import type {
+  ChatConnectionState,
+  ChatPrefillRequest,
+  ChatSendPayload,
+  QueuedMessage,
+} from './components/chat';
+import {
+  buildLifecyclePrompt,
+  type DeliverableLifecycleAction,
+} from './lib/deliverable-lifecycle';
 import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
@@ -27,14 +37,14 @@ import {
 } from './lib/gateway';
 import { commitPlanningDocs, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
-import { readRoadmap, writeRoadmap } from './lib/roadmap';
+import { enrichItemsWithDocs, readRoadmap, resolveDocFiles, writeRoadmap } from './lib/roadmap';
 import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
 import type {
   GitStatus,
   ProjectStatus,
   ProjectViewModel,
   RoadmapDocument,
-  RoadmapItem,
+  RoadmapItemWithDocs,
   ThemePreference,
 } from './lib/schema';
 import type { DashboardSettings } from './lib/settings';
@@ -156,11 +166,12 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
   const [roadmapDocument, setRoadmapDocument] = useState<RoadmapDocument | null>(null);
-  const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>([]);
+  const [roadmapItems, setRoadmapItems] = useState<RoadmapItemWithDocs[]>([]);
   const [selectedRoadmapItemId, setSelectedRoadmapItemId] = useState<string | null>(null);
   const [chatStreamingContent, setChatStreamingContent] = useState<string | null>(null);
   const [chatSending, setChatSending] = useState(false); // Track if agent is working
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  const [chatPrefillRequest, setChatPrefillRequest] = useState<ChatPrefillRequest | null>(null);
   const [chatResponseToastMessage, setChatResponseToastMessage] = useState<string | null>(null);
   const [chatQueue, setChatQueue] = useState<QueuedMessage[]>([]); // Message queue
   const [activeBackgroundSessions, setActiveBackgroundSessions] = useState<Set<string>>(new Set());
@@ -193,6 +204,10 @@ export default function App() {
   );
 
   const isRoadmapView = viewContext.type === 'roadmap';
+  const activeRoadmapProject = useMemo(() => {
+    if (viewContext.type !== 'roadmap') return undefined;
+    return allProjects.find((project) => project.id === viewContext.projectId);
+  }, [allProjects, viewContext]);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -594,8 +609,17 @@ export default function App() {
 
     try {
       const roadmap = await readRoadmap(project.roadmapFilePath);
+      let enrichedRoadmapItems: RoadmapItemWithDocs[];
+
+      try {
+        const docsMap = await resolveDocFiles(project.dirPath, roadmap.items, project.frontmatter);
+        enrichedRoadmapItems = enrichItemsWithDocs(roadmap.items, docsMap);
+      } catch {
+        enrichedRoadmapItems = roadmap.items.map((item) => ({ ...item, docs: {} }));
+      }
+
       setRoadmapDocument(roadmap);
-      setRoadmapItems(roadmap.items);
+      setRoadmapItems(enrichedRoadmapItems);
       setViewContext(projectRoadmapView(project.id, project.title));
       setSelectedProjectId(undefined);
     } catch (error) {
@@ -606,10 +630,10 @@ export default function App() {
     }
   };
 
-  const persistRoadmapChanges = async (nextItems: RoadmapItem[]) => {
+  const persistRoadmapChanges = async (nextItems: RoadmapItemWithDocs[]) => {
     if (!roadmapDocument) return;
 
-    const orderedByColumn: RoadmapItem[] = [];
+    const orderedByColumn: RoadmapItemWithDocs[] = [];
     for (const column of viewContext.columns) {
       const itemsInColumn = nextItems
         .filter((item) => item.status === column.id)
@@ -622,7 +646,7 @@ export default function App() {
 
     const nextDocument: RoadmapDocument = {
       ...roadmapDocument,
-      items: orderedByColumn,
+      items: orderedByColumn.map(({ docs: _docs, ...item }) => item),
     };
 
     const previousItems = roadmapItems;
@@ -640,6 +664,32 @@ export default function App() {
       );
     }
   };
+
+  const handleLifecycleAction = useCallback(
+    (item: RoadmapItemWithDocs, action: DeliverableLifecycleAction) => {
+      if (!activeRoadmapProject) return;
+
+      const text = buildLifecyclePrompt(action, {
+        project: {
+          id: activeRoadmapProject.id,
+          title: activeRoadmapProject.title,
+          dirPath: activeRoadmapProject.dirPath,
+        },
+        item: {
+          id: item.id,
+          title: item.title,
+          docs: item.docs,
+        },
+      });
+
+      setChatDrawerOpen(true);
+      setChatPrefillRequest({
+        id: `prefill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        text,
+      });
+    },
+    [activeRoadmapProject],
+  );
 
   const persistBoardChanges = async (nextItems: ProjectViewModel[]) => {
     const previousItems = projects;
@@ -825,13 +875,24 @@ export default function App() {
     } catch (error) {
       console.error('[Chat] === SEND FAILED ===', error);
       const messageText = error instanceof Error ? error.message : 'Gateway request failed';
-      setGatewayConnected(false);
+      const lowerMessage = messageText.toLowerCase();
+      // Only mark gateway disconnected for actual connection failures,
+      // not for "no response" errors (gateway is reachable, agent just
+      // didn't produce output — e.g. session busy, empty response).
+      const isConnectionError =
+        lowerMessage.includes('not connected') ||
+        lowerMessage.includes('connection') ||
+        lowerMessage.includes('socket') ||
+        lowerMessage.includes('timed out waiting');
+      if (isConnectionError) {
+        setGatewayConnected(false);
+      }
       addError({ type: 'gateway_down', message: messageText });
       void addSystemBubble(
         'failure',
-        'Gateway error',
+        isConnectionError ? 'Gateway error' : 'No response from agent',
         { Error: messageText },
-        ['Check logs for details'],
+        isConnectionError ? ['Check logs for details'] : ['Agent may be busy — try again'],
       );
       return false;
     } finally {
@@ -1004,15 +1065,22 @@ export default function App() {
                   columns={viewContext.columns}
                   items={roadmapItems}
                   onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
+                  renderItemHoverActions={(item) => (
+                    <LifecycleActionBar
+                      specExists={Boolean(item.docs?.spec)}
+                      planExists={Boolean(item.docs?.plan)}
+                      onAction={(action) => handleLifecycleAction(item, action)}
+                    />
+                  )}
                   onItemsChange={(nextItems) => {
                     void persistRoadmapChanges(nextItems);
                   }}
                 />
                 <RoadmapItemDialog
                   item={roadmapItems.find((i) => i.id === selectedRoadmapItemId) ?? null}
-                  projectTitle={selectedProject?.title ?? 'Project'}
-                  projectDir={selectedProject?.dirPath ?? ''}
-                  projectFrontmatter={selectedProject?.frontmatter}
+                  projectTitle={activeRoadmapProject?.title ?? 'Project'}
+                  projectDir={activeRoadmapProject?.dirPath ?? ''}
+                  projectFrontmatter={activeRoadmapProject?.frontmatter}
                   onClose={() => setSelectedRoadmapItemId(null)}
                   onStatusChange={(itemId, status) => {
                     const updated = roadmapItems.map((i) =>
@@ -1070,6 +1138,7 @@ export default function App() {
         connectionState={chatConnectionState}
         activityLabel={chatActivityLabel}
         streamingContent={chatStreamingContent}
+        prefillRequest={chatPrefillRequest}
         drawerOpen={chatDrawerOpen}
         responseToastMessage={chatResponseToastMessage}
         isAgentWorking={chatSending}

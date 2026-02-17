@@ -10,6 +10,7 @@ interface CardProps<T extends BoardItem> {
   onClick: (item: T) => void;
   renderIndicators?: (item: T) => ReactNode;
   renderActions?: (item: T) => ReactNode;
+  renderHoverActions?: (item: T) => ReactNode;
 }
 
 export function Card<T extends BoardItem>({
@@ -18,6 +19,7 @@ export function Card<T extends BoardItem>({
   onClick,
   renderIndicators,
   renderActions,
+  renderHoverActions,
 }: CardProps<T>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -55,7 +57,25 @@ export function Card<T extends BoardItem>({
       </div>
 
       <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-300">
-        {item.nextAction ? (
+        {renderHoverActions ? (
+          <div className="relative min-h-[1.25rem]">
+            <div className="transition-opacity duration-150 group-hover:opacity-0">
+              {item.nextAction ? (
+                <p className="line-clamp-2">
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">Next:</span>{' '}
+                  {item.nextAction}
+                </p>
+              ) : (
+                <p className="line-clamp-1 opacity-0" aria-hidden>
+                  Next
+                </p>
+              )}
+            </div>
+            <div className="pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+              {renderHoverActions(item)}
+            </div>
+          </div>
+        ) : item.nextAction ? (
           <p className="line-clamp-2">
             <span className="font-medium text-neutral-800 dark:text-neutral-200">Next:</span>{' '}
             {item.nextAction}

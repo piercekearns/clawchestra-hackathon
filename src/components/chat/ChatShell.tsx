@@ -4,7 +4,15 @@ import type { ChatMessage } from '../../lib/gateway';
 import { ChatBar } from './ChatBar';
 import { MessageList } from './MessageList';
 import { ResponseToast } from './ResponseToast';
-import { createAttachmentId, createQueueId, type ChatAttachment, type ChatConnectionState, type ChatSendPayload, type QueuedMessage } from './types';
+import {
+  createAttachmentId,
+  createQueueId,
+  type ChatAttachment,
+  type ChatConnectionState,
+  type ChatPrefillRequest,
+  type ChatSendPayload,
+  type QueuedMessage,
+} from './types';
 
 const MAX_ATTACHMENTS = 4;
 const IMAGE_NAME_PATTERN = /\.(png|jpe?g|gif|webp|bmp|heic|heif|svg)$/i;
@@ -111,6 +119,7 @@ interface ChatShellProps {
   connectionState: ChatConnectionState;
   activityLabel: string | null;
   streamingContent?: string | null;
+  prefillRequest?: ChatPrefillRequest | null;
   drawerOpen: boolean;
   responseToastMessage: string | null;
   isAgentWorking: boolean; // True when agent is processing
@@ -132,6 +141,7 @@ export function ChatShell({
   connectionState,
   activityLabel,
   streamingContent,
+  prefillRequest,
   drawerOpen,
   responseToastMessage,
   isAgentWorking,
@@ -173,6 +183,21 @@ export function ChatShell({
     if (!drawerOpen || !responseToastMessage) return;
     onDismissResponseToast();
   }, [drawerOpen, responseToastMessage, onDismissResponseToast]);
+
+  useEffect(() => {
+    if (!prefillRequest) return;
+
+    setInput(prefillRequest.text);
+    setImages([]);
+
+    window.setTimeout(() => {
+      const node = textareaRef.current;
+      if (!node) return;
+      node.focus();
+      const cursor = prefillRequest.text.length;
+      node.setSelectionRange(cursor, cursor);
+    }, 0);
+  }, [prefillRequest?.id, prefillRequest]);
 
   const appendImages = async (files: File[]) => {
     const imageFiles = files.filter(isImageLikeFile);

@@ -18,6 +18,11 @@ export interface ChatSendPayload {
   images: ChatAttachment[];
 }
 
+export interface ChatPrefillRequest {
+  id: string;
+  text: string;
+}
+
 // Queued message waiting to be sent
 export interface QueuedMessage {
   id: string;

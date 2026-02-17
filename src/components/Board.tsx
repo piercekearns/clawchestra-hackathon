@@ -23,6 +23,7 @@ interface BoardProps<T extends BoardItem> {
   getItemWarning?: (item: T) => boolean;
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
+  renderItemHoverActions?: (item: T) => ReactNode;
 }
 
 const MIN_COLUMN_WIDTH = 300;
@@ -54,6 +55,7 @@ export function Board<T extends BoardItem>({
   getItemWarning,
   renderItemIndicators,
   renderItemActions,
+  renderItemHoverActions,
 }: BoardProps<T>) {
   const [localItems, setLocalItems] = useState(items);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -171,6 +173,7 @@ export function Board<T extends BoardItem>({
               getItemWarning={getItemWarning}
               renderItemIndicators={renderItemIndicators}
               renderItemActions={renderItemActions}
+              renderItemHoverActions={renderItemHoverActions}
             />
           ))}
         </div>
@@ -183,6 +186,7 @@ export function Board<T extends BoardItem>({
               item={activeItem}
               onClick={() => undefined}
               renderIndicators={renderItemIndicators}
+              renderHoverActions={renderItemHoverActions}
             />
           </div>
         ) : null}

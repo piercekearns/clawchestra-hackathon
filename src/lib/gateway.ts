@@ -1307,7 +1307,21 @@ async function sendViaTauriWs(
             return;
           }
           const finalText = extractText(chat.message);
-          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
+          const timeSinceSend = Date.now() - sendRequestedAt;
+          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, eventRunId=${eventRunId ?? 'none'}, timeSinceSend=${timeSinceSend}ms`);
+
+          // Guard against suspiciously early empty finals. The gateway may
+          // emit these when the session is already busy with another agent
+          // turn, or as a protocol-level acknowledgment artifact. Accepting
+          // them causes premature resolution with no content.
+          if (
+            (!finalText || finalText.length === 0) &&
+            streamedText.length === 0 &&
+            timeSinceSend < 5000
+          ) {
+            console.warn(`[Gateway] Ignoring suspicious empty final (${timeSinceSend}ms after send, no content yet) — will rely on poll fallback`);
+            return;
+          }
 
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
@@ -1411,7 +1425,7 @@ async function sendViaTauriWs(
 
     const finalStreamedText = streamedText.trim();
     if (assistantMessages.length === 0 && !finalStreamedText) {
-      throw new Error('No assistant response received from OpenClaw (run may have terminated)');
+      throw new Error('No response received — agent may be busy or the session is unavailable. Try again in a moment.');
     }
 
     setAgentActivity('idle', onActivityChange);
