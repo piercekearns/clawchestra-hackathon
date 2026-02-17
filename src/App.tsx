@@ -68,38 +68,39 @@ const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
 
-function getGitHubStatusMeta(status?: GitStatus): { className: string; label: string; title: string } {
-  const details = status?.details ? ` (${status.details})` : '';
+function getGitHubStatusMeta(
+  status?: GitStatus,
+): { className: string; label: string; tooltip: string } {
   switch (status?.state) {
     case 'clean':
       return {
         className: 'text-emerald-500 dark:text-emerald-400',
-        label: 'Repository clean',
-        title: `Repository clean${details}`,
+        label: 'Repository is clean',
+        tooltip: status.details || 'Repository is clean.',
       };
     case 'uncommitted':
       return {
         className: 'text-amber-500 dark:text-amber-400',
-        label: 'Uncommitted changes',
-        title: `Uncommitted changes${details}`,
+        label: 'Repository has uncommitted changes',
+        tooltip: status.details || 'Repository has uncommitted changes.',
       };
     case 'unpushed':
       return {
         className: 'text-sky-500 dark:text-sky-400',
-        label: 'Unpushed commits',
-        title: `Unpushed commits${details}`,
+        label: 'Repository has unpushed commits',
+        tooltip: status.details || 'Repository has unpushed commits.',
       };
     case 'behind':
       return {
         className: 'text-rose-500 dark:text-rose-400',
-        label: 'Behind remote',
-        title: `Behind remote${details}`,
+        label: 'Repository is behind remote',
+        tooltip: status.details || 'Repository is behind its remote.',
       };
     default:
       return {
         className: 'text-neutral-500 dark:text-neutral-400',
         label: 'Git status unavailable',
-        title: `Git status unavailable${details}`,
+        tooltip: status?.details || 'Git status unavailable.',
       };
   }
 }
@@ -996,8 +997,20 @@ export default function App() {
                       <>
                         {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
                         {project.hasRepo ? (
-                          <span title={gitHubStatusMeta.title} aria-label={gitHubStatusMeta.label}>
-                            <GitHubMark className={`h-3.5 w-3.5 ${gitHubStatusMeta.className}`} />
+                          <span className="relative inline-flex">
+                            <span
+                              className="group inline-flex"
+                              tabIndex={0}
+                              aria-label={gitHubStatusMeta.label}
+                            >
+                              <GitHubMark className={`h-3.5 w-3.5 ${gitHubStatusMeta.className}`} />
+                              <span
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-revival-accent-500/40 bg-neutral-900/95 px-2.5 py-1 text-[11px] font-medium text-neutral-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-revival-accent-500/40 dark:bg-neutral-100 dark:text-neutral-900"
+                              >
+                                {gitHubStatusMeta.tooltip}
+                              </span>
+                            </span>
                           </span>
                         ) : null}
                         {project.commitActivity ? (
