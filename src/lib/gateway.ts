@@ -1068,11 +1068,13 @@ async function sendViaTauriWs(
       const pollInterval = setInterval(async () => {
         if (completed) return;
 
-        // If events are actively streaming, let them drive — only poll as backup.
-        // But if the send itself failed, poll aggressively from the start.
+        // If events are actively arriving (content deltas OR agent tool-use
+        // events), let them drive — only poll as backup. The streamedText check
+        // was previously required, but agent events during pure tool work (no
+        // content yet) are equally valid indicators of an active send.
         if (sendAcked) {
           const timeSinceLastEvent = Date.now() - lastEventTime;
-          if (timeSinceLastEvent < 5000 && streamedText.length > 0) {
+          if (timeSinceLastEvent < 5000) {
             return;
           }
         }
@@ -1160,6 +1162,11 @@ async function sendViaTauriWs(
 
           lastEventTime = Date.now();
           resetIdleTimeout();
+
+          // Agent events mean the gateway is still processing — reset poll
+          // stability so the poll fallback doesn't prematurely resolve during
+          // long tool-use sequences (e.g. 60s+ sleeps between tmux checks).
+          pollStableCount = 0;
 
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
           if (timeSinceLastDelta > 3000) {
