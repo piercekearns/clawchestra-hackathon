@@ -933,11 +933,15 @@ export default function App() {
                   renderItemIndicators={(project) => (
                     <>
                       {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
-                      {project.hasRepo ? <Github className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" /> : null}
-                      {project.gitStatus ? (
-                        <span className="text-xs" title={project.gitStatus.details}>
-                          {gitStatusEmoji(project.gitStatus)}
-                        </span>
+                      {project.hasRepo ? (
+                        <>
+                          <Github className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
+                          {project.gitStatus ? (
+                            <span className="text-xs" title={project.gitStatus.details}>
+                              {gitStatusEmoji(project.gitStatus)}
+                            </span>
+                          ) : null}
+                        </>
                       ) : null}
                       {project.commitActivity ? (
                         <span className="rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] dark:bg-neutral-700">
