@@ -36,6 +36,8 @@ function sanitizeRoadmapItem(item: unknown, index: number): RoadmapItem | null {
       ? record.tags.filter((tag): tag is string => typeof tag === 'string')
       : undefined,
     icon: typeof record.icon === 'string' ? record.icon : undefined,
+    specDoc: typeof record.specDoc === 'string' ? record.specDoc : undefined,
+    planDoc: typeof record.planDoc === 'string' ? record.planDoc : undefined,
   };
 }
 
@@ -75,6 +77,8 @@ export async function writeRoadmap(document: RoadmapDocument): Promise<void> {
     blockedBy: item.blockedBy,
     tags: item.tags,
     icon: item.icon,
+    specDoc: item.specDoc,
+    planDoc: item.planDoc,
   }));
 
   const content = matter.stringify(document.notes ?? '', {
@@ -91,106 +95,59 @@ async function checkPath(path: string): Promise<string | undefined> {
 
 /**
  * Resolve doc files for roadmap items.
- * 1. Check frontmatter fields (specDoc / planDoc) first
- * 2. Fall back to convention-based paths
+ *
+ * Resolution order (per item):
+ *   1. Item-level specDoc / planDoc field (from ROADMAP.md YAML)
+ *   2. Convention paths: docs/specs/{id}-spec.md, docs/specs/{id}.md
+ *   3. Nothing — items do NOT inherit project-level docs
+ *
+ * Project-level specDoc/planDoc are for the project overview only;
+ * roadmap items must have their own docs or show "no spec".
  */
 export async function resolveDocFiles(
   localPath: string,
   items: RoadmapItem[],
-  frontmatter: ProjectFrontmatter,
+  _frontmatter: ProjectFrontmatter,
 ): Promise<Map<string, RoadmapItemDocs>> {
   const result = new Map<string, RoadmapItemDocs>();
 
-  // Project-level frontmatter docs (shared across items)
-  const projectSpecPath = frontmatter.specDoc
-    ? `${localPath}/${frontmatter.specDoc}`
-    : undefined;
-  const projectPlanPath = frontmatter.planDoc
-    ? `${localPath}/${frontmatter.planDoc}`
-    : undefined;
-
-  // Convention paths at project level
-  const projectConventionPaths = [
-    { type: 'spec' as const, paths: [
-      `${localPath}/SPEC.md`,
-      `${localPath}/docs/specs/SPEC.md`,
-    ]},
-    { type: 'plan' as const, paths: [
-      `${localPath}/PLAN.md`,
-      `${localPath}/docs/plans/PLAN.md`,
-    ]},
-  ];
-
-  // Resolve project-level docs once
-  let projectSpec: string | undefined;
-  let projectPlan: string | undefined;
-
-  const projectChecks: Promise<void>[] = [];
-
-  if (projectSpecPath) {
-    projectChecks.push(
-      checkPath(projectSpecPath).then((p) => { projectSpec = p; }),
-    );
-  }
-  if (projectPlanPath) {
-    projectChecks.push(
-      checkPath(projectPlanPath).then((p) => { projectPlan = p; }),
-    );
-  }
-
-  await Promise.all(projectChecks);
-
-  // For each item, check item-specific paths, then fall back to project-level
   const itemPromises = items.map(async (item) => {
     const docs: RoadmapItemDocs = {};
 
-    // Item-specific convention paths
-    const itemSpecPaths = [
-      `${localPath}/docs/specs/${item.id}-spec.md`,
-      `${localPath}/docs/specs/${item.id}.md`,
-    ];
-    const itemPlanPaths = [
-      `${localPath}/docs/plans/${item.id}-plan.md`,
-      `${localPath}/docs/plans/${item.id}.md`,
-    ];
+    // 1. Check item-level specDoc / planDoc (explicit override in ROADMAP.md)
+    if (item.specDoc) {
+      const resolved = await checkPath(`${localPath}/${item.specDoc}`);
+      if (resolved) docs.spec = resolved;
+    }
+    if (item.planDoc) {
+      const resolved = await checkPath(`${localPath}/${item.planDoc}`);
+      if (resolved) docs.plan = resolved;
+    }
 
-    // Check item-specific paths first
-    const checks = await Promise.all([
-      ...itemSpecPaths.map(checkPath),
-      ...itemPlanPaths.map(checkPath),
-    ]);
-
-    const specMatch = checks.slice(0, itemSpecPaths.length).find(Boolean);
-    const planMatch = checks.slice(itemSpecPaths.length).find(Boolean);
-
-    docs.spec = specMatch;
-    docs.plan = planMatch;
-
-    // Fall back to project-level if no item-specific docs found
-    if (!docs.spec && projectSpec) docs.spec = projectSpec;
-    if (!docs.plan && projectPlan) docs.plan = projectPlan;
-
-    // Fall back to convention paths if still no matches
-    if (!docs.spec && !projectSpecPath) {
-      for (const conv of projectConventionPaths) {
-        if (conv.type === 'spec' && !docs.spec) {
-          for (const path of conv.paths) {
-            const found = await checkPath(path);
-            if (found) { docs.spec = found; break; }
-          }
-        }
+    // 2. Convention paths (only if not already resolved)
+    if (!docs.spec) {
+      const itemSpecPaths = [
+        `${localPath}/docs/specs/${item.id}-spec.md`,
+        `${localPath}/docs/specs/${item.id}.md`,
+      ];
+      for (const path of itemSpecPaths) {
+        const found = await checkPath(path);
+        if (found) { docs.spec = found; break; }
       }
     }
-    if (!docs.plan && !projectPlanPath) {
-      for (const conv of projectConventionPaths) {
-        if (conv.type === 'plan' && !docs.plan) {
-          for (const path of conv.paths) {
-            const found = await checkPath(path);
-            if (found) { docs.plan = found; break; }
-          }
-        }
+
+    if (!docs.plan) {
+      const itemPlanPaths = [
+        `${localPath}/docs/plans/${item.id}-plan.md`,
+        `${localPath}/docs/plans/${item.id}.md`,
+      ];
+      for (const path of itemPlanPaths) {
+        const found = await checkPath(path);
+        if (found) { docs.plan = found; break; }
       }
     }
+
+    // 3. No fallback to project-level — items without their own docs show nothing
 
     result.set(item.id, docs);
   });

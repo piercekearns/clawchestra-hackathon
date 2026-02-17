@@ -105,6 +105,10 @@ export type RoadmapStatus = 'pending' | 'up-next' | 'in-progress' | 'complete' |
 export interface RoadmapItem extends BoardItem {
   id: string;
   status: RoadmapStatus;
+  /** Optional path to item-specific spec doc (relative to project dir) */
+  specDoc?: string;
+  /** Optional path to item-specific plan doc (relative to project dir) */
+  planDoc?: string;
 }
 
 export interface RoadmapDocument {

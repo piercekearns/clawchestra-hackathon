@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Send, X, Clock } from 'lucide-react';
 import { ActivityIndicator } from './ActivityIndicator';
 import { CommandDropdown } from './CommandDropdown';
@@ -99,7 +99,10 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     }
   }, [input, dropdownDismissed]);
 
-  useEffect(() => {
+  // useLayoutEffect runs BEFORE the browser paints, preventing the
+  // visible flash where the textarea momentarily shows text at the wrong
+  // height (which caused phantom line-break flickers).
+  useLayoutEffect(() => {
     const node = textareaRef.current;
     if (!node) return;
 

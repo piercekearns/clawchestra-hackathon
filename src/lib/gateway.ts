@@ -999,6 +999,7 @@ async function sendViaTauriWs(
       // delta content restarts from zero length. Without this tracking, the length
       // check silently drops the new block (it's shorter than what we accumulated).
       let sawToolSinceLastContent = false;
+      let contentBlockOffset = 0; // Byte offset where the current content block starts within streamedText
 
       const eventHandler = (eventName: string, payload: unknown) => {
         if (completed) return;
@@ -1055,15 +1056,24 @@ async function sendViaTauriWs(
           const deltaText = extractText(chat.message);
           if (deltaText) {
             if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
-              // New content block after tool calls — append with separator
+              // New content block after tool calls — append with separator.
+              // Record the prefix length so subsequent cumulative deltas in
+              // this block can be compared against their own block start,
+              // not the total accumulated length.
+              contentBlockOffset = streamedText.length + 2; // +2 for '\n\n'
               streamedText = streamedText + '\n\n' + deltaText;
+              sawToolSinceLastContent = false;
+            } else if (contentBlockOffset > 0 && deltaText.length < streamedText.length) {
+              // Cumulative delta within a post-tool content block.
+              // The delta text is relative to this block only, so splice it
+              // onto the prefix we accumulated before this block started.
+              streamedText = streamedText.slice(0, contentBlockOffset) + deltaText;
             } else if (deltaText.length >= streamedText.length) {
-              // Normal cumulative delta within same content block
+              // Normal cumulative delta within the first content block
+              // (or a single-block response).
               streamedText = deltaText;
             }
-            // else: out-of-order delta, ignore
-
-            sawToolSinceLastContent = false;
+            // else: out-of-order delta shorter than current, ignore
 
             if (onStreamDelta) {
               onStreamDelta(streamedText);
@@ -1112,31 +1122,42 @@ async function sendViaTauriWs(
 
     const allMessages = historyAfter.messages ?? [];
 
-    const reversedMessages = [...allMessages].reverse();
+    // History is chronological (oldest → newest).
+    // Walk backwards from newest to find our user message, collecting
+    // all assistant messages that came AFTER it (i.e. the response).
     const assistantMessages: ChatMessage[] = [];
-    let foundUserMessage = false;
 
-    for (const msg of reversedMessages) {
+    // Find the user message index (scan from the end)
+    let userMessageIndex = -1;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      const msg = allMessages[i];
       if (msg.role === 'user') {
         const userContent = extractText(msg.content);
         if (userContent.includes(messageText.slice(0, 50))) {
-          foundUserMessage = true;
-          continue;
-        }
-      }
-
-      if (foundUserMessage && msg.role === 'assistant') {
-        const content = extractText(msg.content);
-        if (content.trim()) {
-          assistantMessages.push({
-            role: 'assistant',
-            content: content.trim(),
-            timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
-          });
+          userMessageIndex = i;
+          break;
         }
       }
     }
 
+    // Collect all assistant messages after the user message (in chronological order)
+    if (userMessageIndex >= 0) {
+      for (let i = userMessageIndex + 1; i < allMessages.length; i++) {
+        const msg = allMessages[i];
+        if (msg.role === 'assistant') {
+          const content = extractText(msg.content);
+          if (content.trim()) {
+            assistantMessages.push({
+              role: 'assistant',
+              content: content.trim(),
+              timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
+            });
+          }
+        }
+      }
+    }
+
+    // If history extraction found nothing, fall back to streamed content
     if (assistantMessages.length === 0 && streamedText.trim()) {
       assistantMessages.push({
         role: 'assistant',
@@ -1145,6 +1166,9 @@ async function sendViaTauriWs(
       });
     }
 
+    // If streamed content is longer than what history gave us (e.g. history
+    // was truncated or split differently), prefer the streamed version for
+    // the last message to avoid losing content.
     const lastHistoryContent = assistantMessages.length > 0
       ? assistantMessages[assistantMessages.length - 1].content
       : '';
