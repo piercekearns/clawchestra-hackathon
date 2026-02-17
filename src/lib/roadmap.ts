@@ -9,7 +9,7 @@ import type {
 } from './schema';
 import { pathExists, readFile, writeFile } from './tauri';
 
-const VALID_ROADMAP_STATUS = new Set<RoadmapStatus>(['pending', 'in-progress', 'complete']);
+const VALID_ROADMAP_STATUS = new Set<RoadmapStatus>(['pending', 'up-next', 'in-progress', 'complete', 'shipped']);
 
 function sanitizeRoadmapItem(item: unknown, index: number): RoadmapItem | null {
   if (typeof item !== 'object' || item === null) return null;

@@ -1,3 +1,11 @@
+---
+title: OpenClaw Platform Interaction Audit
+id: openclaw-platform-interaction-audit
+status: pending
+tags: [openclaw, audit]
+icon: "🔍"
+---
+
 # OpenClaw Platform Interaction Audit
 
 ## Goal

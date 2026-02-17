@@ -100,7 +100,7 @@ export interface ProjectViewModel extends BoardItem {
   };
 }
 
-export type RoadmapStatus = 'pending' | 'in-progress' | 'complete';
+export type RoadmapStatus = 'pending' | 'up-next' | 'in-progress' | 'complete' | 'shipped';
 
 export interface RoadmapItem extends BoardItem {
   id: string;
@@ -144,8 +144,10 @@ export const PROJECT_COLUMNS: ColumnDefinition[] = [
 
 export const ROADMAP_COLUMNS: ColumnDefinition[] = [
   { id: 'pending', label: 'Pending' },
+  { id: 'up-next', label: 'Up Next' },
   { id: 'in-progress', label: 'In Progress' },
   { id: 'complete', label: 'Complete' },
+  { id: 'shipped', label: 'Shipped' },
 ];
 
 export const VALID_STATUSES = [

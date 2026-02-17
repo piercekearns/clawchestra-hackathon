@@ -23,10 +23,12 @@ const ROADMAP_STATUS_LABELS: Partial<Record<RoadmapStatus, string>> = {
 function roadmapStatusVariant(status: RoadmapStatus): BadgeVariant {
   switch (status) {
     case 'pending':
+    case 'up-next':
       return 'outline';
     case 'in-progress':
       return 'accent';
     case 'complete':
+    case 'shipped':
       return 'success';
   }
 }
