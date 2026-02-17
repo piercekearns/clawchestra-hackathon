@@ -58,7 +58,7 @@ export function Card<T extends BoardItem>({
 
       <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-300">
         {renderHoverActions ? (
-          <div className="relative min-h-[1.25rem]">
+          <div className="relative min-h-[1.75rem]">
             <div className="transition-opacity duration-150 group-hover:opacity-0">
               {item.nextAction ? (
                 <p className="line-clamp-2">
@@ -71,7 +71,7 @@ export function Card<T extends BoardItem>({
                 </p>
               )}
             </div>
-            <div className="pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+            <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
               {renderHoverActions(item)}
             </div>
           </div>

@@ -13,18 +13,28 @@ function stopCardEvent(event: PointerEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
+/**
+ * Proton-style action icons: bare by default, subtle container on hover.
+ * Filled/colored icons indicate existing artifacts (spec, plan).
+ */
 function actionButtonClass(filled: boolean): string {
   return [
-    'inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors',
+    'inline-flex h-6 w-6 items-center justify-center rounded transition-all',
+    // No border or background by default — bare icon
     filled
-      ? 'border-revival-accent-400/80 bg-revival-accent-200/30 text-neutral-900 dark:text-neutral-100'
-      : 'border-neutral-300/70 text-neutral-700 hover:border-revival-accent-400 hover:text-neutral-900 dark:border-neutral-600 dark:text-neutral-300 dark:hover:text-neutral-100',
+      ? 'text-revival-accent-500 dark:text-revival-accent-400'
+      : 'text-neutral-400 dark:text-neutral-500',
+    // Hover: subtle container with shadow (Proton style)
+    'hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm',
+    'dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100',
   ].join(' ');
 }
 
+const ICON_SIZE = 'h-3.5 w-3.5';
+
 export function LifecycleActionBar({ specExists, planExists, onAction }: LifecycleActionBarProps) {
   return (
-    <div className="grid w-full grid-cols-5 gap-1">
+    <div className="flex h-full w-full items-center justify-center gap-1">
       <button
         type="button"
         className={actionButtonClass(specExists)}
@@ -36,7 +46,7 @@ export function LifecycleActionBar({ specExists, planExists, onAction }: Lifecyc
         title={specExists ? 'Update Spec' : 'Create Spec'}
         aria-label={specExists ? 'Update Spec' : 'Create Spec'}
       >
-        <FileText className="h-4 w-4" fill={specExists ? 'currentColor' : 'none'} />
+        <FileText className={ICON_SIZE} fill={specExists ? 'currentColor' : 'none'} />
       </button>
 
       <button
@@ -50,7 +60,7 @@ export function LifecycleActionBar({ specExists, planExists, onAction }: Lifecyc
         title={planExists ? 'Update Plan' : 'Create Plan'}
         aria-label={planExists ? 'Update Plan' : 'Create Plan'}
       >
-        <ListChecks className="h-4 w-4" fill={planExists ? 'currentColor' : 'none'} />
+        <ListChecks className={ICON_SIZE} fill={planExists ? 'currentColor' : 'none'} />
       </button>
 
       <button
@@ -64,7 +74,7 @@ export function LifecycleActionBar({ specExists, planExists, onAction }: Lifecyc
         title="Plan Review"
         aria-label="Plan Review"
       >
-        <Search className="h-4 w-4" />
+        <Search className={ICON_SIZE} />
       </button>
 
       <button
@@ -78,7 +88,7 @@ export function LifecycleActionBar({ specExists, planExists, onAction }: Lifecyc
         title="Deliver"
         aria-label="Deliver"
       >
-        <Hammer className="h-4 w-4" />
+        <Hammer className={ICON_SIZE} />
       </button>
 
       <button
@@ -92,7 +102,7 @@ export function LifecycleActionBar({ specExists, planExists, onAction }: Lifecyc
         title="Build Workflow"
         aria-label="Build Workflow"
       >
-        <CrossedHammers className="h-4 w-4" />
+        <CrossedHammers className={ICON_SIZE} />
       </button>
     </div>
   );

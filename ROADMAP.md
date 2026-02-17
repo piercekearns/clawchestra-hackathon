@@ -111,7 +111,8 @@ items:
     priority: 5
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
-      colour theme system. Geist fonts available locally including Pixel variants.
+      colour theme system. Geist fonts available locally including Pixel
+      variants.
     tags:
       - ui
       - ux
