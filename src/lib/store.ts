@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ChatConnectionState } from '../components/chat/types';
 import type { DashboardError } from './errors';
 import type { ChatMessage } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
@@ -19,6 +20,7 @@ interface DashboardState {
   projects: ProjectViewModel[];
   errors: DashboardError[];
   gatewayConnected: boolean;
+  wsConnectionState: ChatConnectionState;
   viewContext: ViewContext;
   chatMessages: ChatMessage[];
   chatHasMore: boolean;
@@ -33,6 +35,7 @@ interface DashboardState {
   clearError: (error: DashboardError) => void;
   clearErrorsByType: (type: DashboardError['type']) => void;
   setGatewayConnected: (connected: boolean) => void;
+  setWsConnectionState: (state: ChatConnectionState) => void;
   setViewContext: (view: ViewContext) => void;
   setThemePreference: (pref: ThemePreference) => void;
   addChatMessage: (message: ChatMessage) => Promise<void>;
@@ -60,6 +63,7 @@ export const useDashboardStore = create<DashboardState>()(
       projects: [],
       errors: [],
       gatewayConnected: false,
+      wsConnectionState: 'disconnected' as ChatConnectionState,
       viewContext: defaultView(),
       chatMessages: [],
       chatHasMore: true,
@@ -96,6 +100,8 @@ export const useDashboardStore = create<DashboardState>()(
         set((state) => ({ errors: state.errors.filter((entry) => entry.type !== type) })),
 
       setGatewayConnected: (gatewayConnected) => set({ gatewayConnected }),
+
+      setWsConnectionState: (wsConnectionState) => set({ wsConnectionState }),
 
       setViewContext: (viewContext) => set({ viewContext }),
 

@@ -91,6 +91,7 @@ interface OpenClawConnection {
   close: () => void;
 }
 
+export const DEFAULT_SESSION_KEY = 'agent:main:pipeline-dashboard';
 const DEFAULT_HTTP_GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost:18789';
 const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
@@ -569,7 +570,7 @@ async function sendViaOpenClawWs(
   }
 
   const connection = await openOpenClawConnection(transport);
-  const sessionKey = transport.sessionKey?.trim() || 'main';
+  const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   const runId = getRequestId();
 
   try {
@@ -624,11 +625,11 @@ async function sendViaTauriWs(
   const { getTauriOpenClawConnection } = await import('./tauri-websocket');
   const connection = await getTauriOpenClawConnection(
     transport.wsUrl,
-    transport.sessionKey || 'agent:main:main',
+    transport.sessionKey || DEFAULT_SESSION_KEY,
     transport.token,
   );
 
-  const sessionKey = transport.sessionKey?.trim() || 'agent:main:main';
+  const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   const runId = getRequestId();
   let streamedText = '';
 
@@ -1040,7 +1041,7 @@ export async function checkGatewayConnection(options?: { transport?: GatewayTran
       const { getTauriOpenClawConnection } = await import('./tauri-websocket');
       await getTauriOpenClawConnection(
         transport.wsUrl,
-        transport.sessionKey || 'agent:main:main',
+        transport.sessionKey || DEFAULT_SESSION_KEY,
         transport.token,
       );
       console.log('[Gateway] tauri-ws connection OK');
@@ -1080,4 +1081,15 @@ export async function checkGatewayConnection(options?: { transport?: GatewayTran
   } catch {
     return false;
   }
+}
+
+export function retryGatewayConnection(): void {
+  import('./tauri-websocket').then(({ getConnectionInstance }) => {
+    const instance = getConnectionInstance();
+    if (instance) {
+      instance.retryManually();
+    } else {
+      void checkGatewayConnection();
+    }
+  });
 }

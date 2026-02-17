@@ -13,11 +13,11 @@ import type { ChatConnectionState, ChatSendPayload, QueuedMessage } from './comp
 import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
+  retryGatewayConnection,
   sendMessageWithContext,
   type ChatMessage,
   type GatewayImageAttachment,
 } from './lib/gateway';
-// Note: reconnection resilience temporarily removed - debugging WebSocket issues
 import { commitPlanningDocs, gitStatusEmoji, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
 import { readRoadmap, writeRoadmap } from './lib/roadmap';
@@ -60,6 +60,7 @@ export default function App() {
   const errors = useDashboardStore((state) => state.errors);
   const chatMessages = useDashboardStore((state) => state.chatMessages);
   const gatewayConnected = useDashboardStore((state) => state.gatewayConnected);
+  const wsConnectionState = useDashboardStore((state) => state.wsConnectionState);
   const themePreference = useDashboardStore((state) => state.themePreference);
   const viewContext = useDashboardStore((state) => state.viewContext);
   const loading = useDashboardStore((state) => state.loading);
@@ -135,10 +136,11 @@ export default function App() {
   }, [allProjects, searchQuery, statusFilter]);
 
   const chatConnectionState = useMemo<ChatConnectionState>(() => {
+    if (wsConnectionState === 'reconnecting') return 'reconnecting';
+    if (wsConnectionState === 'error') return 'error';
     if (gatewayConnected) return 'connected';
-    const hasGatewayError = errors.some((error) => error.type === 'gateway_down');
-    return hasGatewayError ? 'error' : 'disconnected';
-  }, [errors, gatewayConnected]);
+    return 'disconnected';
+  }, [gatewayConnected, wsConnectionState]);
 
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
@@ -192,27 +194,32 @@ export default function App() {
     void loadSettings();
   }, [addError]);
 
+  // Initial connection attempt — wires Zustand bridge via getTauriOpenClawConnection
   useEffect(() => {
-    let cancelled = false;
+    void checkGatewayConnection();
+  }, []);
 
-    const checkConnection = async () => {
-      const connected = await checkGatewayConnection();
-      if (!cancelled) setGatewayConnected(connected);
-    };
+  // System bubbles for connection state transitions
+  useEffect(() => {
+    let prevState: ChatConnectionState = useDashboardStore.getState().wsConnectionState;
 
-    void checkConnection();
+    const unsubscribe = useDashboardStore.subscribe((state) => {
+      const nextState = state.wsConnectionState;
+      if (nextState === prevState) return;
 
-    const interval = window.setInterval(() => {
-      void checkConnection();
-    }, 15000);
+      if (nextState === 'disconnected' && prevState === 'connected') {
+        addChatMessage({ role: 'system', content: 'Gateway connection lost, reconnecting...', timestamp: Date.now() });
+      } else if (nextState === 'connected' && (prevState === 'reconnecting' || prevState === 'error')) {
+        addChatMessage({ role: 'system', content: 'Connection restored.', timestamp: Date.now() });
+      } else if (nextState === 'error') {
+        addChatMessage({ role: 'system', content: 'Connection failed after 5 attempts. Click retry to try again.', timestamp: Date.now() });
+      }
 
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [setGatewayConnected]);
+      prevState = nextState;
+    });
 
-  // WebSocket connection state subscription removed for debugging
+    return unsubscribe;
+  }, [addChatMessage]);
 
   useEffect(() => {
     let disposed = false;
@@ -799,6 +806,7 @@ export default function App() {
         onQueueMessage={queueChatMessage}
         onRemoveFromQueue={removeFromChatQueue}
         onLoadMore={loadMoreChatMessages}
+        onRetryConnection={retryGatewayConnection}
       />
 
       <ProjectModal

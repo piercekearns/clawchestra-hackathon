@@ -123,6 +123,7 @@ interface ChatShellProps {
   onDrawerOpenChange: (open: boolean) => void;
   onDismissResponseToast: () => void;
   onLoadMore?: () => void;
+  onRetryConnection?: () => void;
 }
 
 export function ChatShell({
@@ -143,6 +144,7 @@ export function ChatShell({
   onDrawerOpenChange,
   onDismissResponseToast,
   onLoadMore,
+  onRetryConnection,
 }: ChatShellProps) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -384,7 +386,20 @@ export function ChatShell({
                 </button>
               </div>
 
-              <MessageList 
+              {connectionState === 'error' && onRetryConnection && (
+                <div className="flex items-center justify-between border-b border-status-danger/20 bg-status-danger/5 px-3 py-2 text-xs text-status-danger">
+                  <span>Connection failed after 5 attempts.</span>
+                  <button
+                    type="button"
+                    className="rounded-full border border-status-danger/50 px-2 py-0.5 hover:bg-status-danger/10"
+                    onClick={onRetryConnection}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              <MessageList
                 ref={messageListRef}
                 messages={
                   streamingContent 

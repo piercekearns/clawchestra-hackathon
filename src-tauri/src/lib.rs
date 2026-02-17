@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 
 // Embedded at compile time by build.rs
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
+const DEFAULT_SESSION_KEY: &str = "agent:main:pipeline-dashboard";
 #[derive(Serialize)]
 struct GitStatus {
     state: String,
@@ -68,7 +69,7 @@ fn default_settings_version() -> u32 {
 }
 
 fn default_migration_version() -> u32 {
-    0
+    1 // New installs start at v1 (no migration needed)
 }
 
 fn default_scan_paths() -> Vec<String> {
@@ -81,7 +82,6 @@ fn default_scan_paths() -> Vec<String> {
     let preferred = [
         Path::new(&home).join("repos").to_string_lossy().to_string(),
         Path::new(&home)
-            .join("clawdbot-sandbox")
             .join("projects")
             .to_string_lossy()
             .to_string(),
@@ -459,6 +459,32 @@ fn load_dashboard_settings() -> Result<DashboardSettings, String> {
     Ok(sanitized)
 }
 
+fn run_migrations() {
+    let mut settings = match load_dashboard_settings() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[Migration] Failed to load settings, skipping: {e}");
+            return;
+        }
+    };
+
+    if settings.migration_version < 1 {
+        println!("[Migration] Clearing chat.db for session key migration (v0 → v1)");
+        match clear_chat_database() {
+            Ok(()) => {
+                settings.migration_version = 1;
+                if let Err(e) = write_dashboard_settings_file(&settings) {
+                    eprintln!("[Migration] Failed to update settings after clear: {e}");
+                }
+            }
+            Err(e) => {
+                eprintln!("[Migration] Failed to clear chat.db: {e}");
+                // Do NOT bump migration_version — retry on next launch
+            }
+        }
+    }
+}
+
 #[tauri::command]
 fn get_dashboard_settings() -> Result<DashboardSettings, String> {
     load_dashboard_settings()
@@ -664,7 +690,7 @@ fn get_openclaw_gateway_config() -> Result<OpenClawGatewayConfig, String> {
     Ok(OpenClawGatewayConfig {
         ws_url: format!("ws://127.0.0.1:{port}"),
         token,
-        session_key: "agent:main:main".to_string(),
+        session_key: DEFAULT_SESSION_KEY.to_string(),
     })
 }
 
@@ -772,12 +798,13 @@ fn pick_attachment_names(attachments: &[OpenClawChatAttachmentInput]) -> Vec<Str
 
 fn normalize_session_key(session_key: Option<String>) -> String {
     let session = session_key
-        .unwrap_or_else(|| "agent:main:main".to_string())
+        .unwrap_or_else(|| DEFAULT_SESSION_KEY.to_string())
         .trim()
         .to_string();
 
+    // Normalize legacy "main" values for backwards compatibility with older configs
     if session.is_empty() || session == "main" {
-        "agent:main:main".to_string()
+        DEFAULT_SESSION_KEY.to_string()
     } else {
         session
     }
@@ -1822,15 +1849,19 @@ fn chat_message_save(message: ChatMessage) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn chat_messages_clear() -> Result<(), String> {
+/// Low-level DB clear that returns errors (unlike the Tauri command which is fire-and-forget).
+/// Used by migrations and the `chat_messages_clear` Tauri command.
+fn clear_chat_database() -> Result<(), String> {
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
-
     conn.execute("DELETE FROM messages", [])
         .map_err(|e| e.to_string())?;
-
     Ok(())
+}
+
+#[tauri::command]
+fn chat_messages_clear() -> Result<(), String> {
+    clear_chat_database()
 }
 
 #[tauri::command]
@@ -1852,6 +1883,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_fs::init())
+        .setup(|_app| {
+            run_migrations();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_dashboard_settings,
             update_dashboard_settings,

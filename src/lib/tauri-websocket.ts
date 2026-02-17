@@ -1,11 +1,16 @@
 /**
  * Tauri WebSocket service for OpenClaw gateway streaming
- * 
+ *
  * Uses @tauri-apps/plugin-websocket which bypasses browser CORS restrictions
  * and works with the tauri://localhost origin.
+ *
+ * Includes a connection state machine with automatic reconnection
+ * and Zustand bridge for UI state propagation.
  */
 
 import WebSocket from '@tauri-apps/plugin-websocket';
+import type { ChatConnectionState } from '../components/chat/types';
+import { useDashboardStore } from './store';
 
 export interface OpenClawMessage {
   type: string;
@@ -26,73 +31,84 @@ type MessageHandler = (event: string, payload: unknown) => void;
 export class TauriOpenClawConnection {
   private ws: Awaited<ReturnType<typeof WebSocket.connect>> | null = null;
   private handlers: Set<MessageHandler> = new Set();
-  private requestCallbacks: Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }> = new Map();
+  private requestCallbacks: Map<string, {
+    resolve: (v: unknown) => void;
+    reject: (e: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }> = new Map();
   private messageIdCounter = 0;
   private sessionKey: string;
   private token?: string;
+
+  // State machine fields
+  private _state: ChatConnectionState = 'disconnected';
+  private stateListeners = new Set<(state: ChatConnectionState) => void>();
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private maxReconnectAttempts = 5;
+  private disposed = false;
 
   constructor(private wsUrl: string, sessionKey: string, token?: string) {
     this.sessionKey = sessionKey;
     this.token = token;
   }
 
+  get state(): ChatConnectionState { return this._state; }
+
+  private setState(next: ChatConnectionState): void {
+    if (this._state === next) return;
+    this._state = next;
+    this.stateListeners.forEach(fn => {
+      try { fn(next); } catch (e) { console.warn('[TauriWS] State listener error:', e); }
+    });
+  }
+
+  onStateChange(listener: (s: ChatConnectionState) => void): () => void {
+    this.stateListeners.add(listener);
+    return () => this.stateListeners.delete(listener);
+  }
+
   async connect(): Promise<void> {
-    // Connect without token in URL - auth is sent in connect message
     const connectUrl = this.wsUrl;
     console.log('[TauriWS] Connecting to:', connectUrl);
-    console.log('[TauriWS] WebSocket plugin available:', typeof WebSocket, typeof WebSocket.connect);
+    this.setState('connecting');
 
     try {
-      console.log('[TauriWS] Calling WebSocket.connect with config...');
-      // Use tauri://localhost origin - this is in the allowedOrigins list
       this.ws = await WebSocket.connect(connectUrl, {
         headers: {
           'Origin': 'tauri://localhost',
           'User-Agent': 'Pipeline-Dashboard/1.0',
         },
       });
-      console.log('[TauriWS] WebSocket.connect returned:', this.ws);
-      console.log('[TauriWS] WebSocket object keys:', this.ws ? Object.keys(this.ws) : 'null');
-      console.log('[TauriWS] WebSocket object JSON:', JSON.stringify(this.ws));
-      // The plugin returns an object with an `id` property that's needed for send
-      const wsAny = this.ws as unknown as Record<string, unknown>;
-      console.log('[TauriWS] ws.id:', wsAny.id, 'type:', typeof wsAny.id);
-      for (const key of Object.keys(wsAny)) {
-        console.log(`[TauriWS] ws.${key}:`, typeof wsAny[key], wsAny[key]);
-      }
     } catch (err) {
       console.error('[TauriWS] Connection failed:', err);
-      console.error('[TauriWS] Error type:', typeof err);
-      console.error('[TauriWS] Error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
       throw err;
     }
-    
-    console.log('[TauriWS] Adding message listener...');
+
     this.ws.addListener((msg) => {
-      console.log('[TauriWS] Received message:', msg.type, typeof msg.data === 'string' ? msg.data.slice(0, 200) : msg.data);
       if (msg.type === 'Close') {
-        console.error('[TauriWS] Server sent Close frame!', msg);
+        console.warn('[TauriWS] Server sent Close frame');
+        this.ws = null;
+        this.rejectPendingCallbacks('WebSocket closed');
+        this.setState('disconnected');
+        this.scheduleReconnect();
+        return;
       }
       if (msg.type === 'Text' && typeof msg.data === 'string') {
         this.handleMessage(msg.data);
       }
     });
-    console.log('[TauriWS] Listener added');
 
     // WORKAROUND: Tauri WebSocket plugin has a race condition - the connection ID
     // is returned before the async task inserts it into the ConnectionManager.
-    // Wait longer to let the spawn complete before sending.
-    console.log('[TauriWS] Waiting for connection to stabilize (500ms)...');
     await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('[TauriWS] Connection stabilized, ws id:', (this.ws as unknown as { id?: unknown })?.id);
 
     // Send connect message with auth (required by OpenClaw gateway protocol)
-    console.log('[TauriWS] Sending connect handshake...');
-    const connectResult = await this.request<{ ok?: boolean; error?: { message?: string } }>('connect', {
+    await this.request<{ ok?: boolean; error?: { message?: string } }>('connect', {
       minProtocol: 3,
       maxProtocol: 3,
       client: {
-        id: 'openclaw-control-ui',  // Must match the expected client ID
+        id: 'openclaw-control-ui',
         version: '0.1.0',
         platform: 'tauri',
         mode: 'webchat',
@@ -103,7 +119,9 @@ export class TauriOpenClawConnection {
       userAgent: 'Pipeline-Dashboard/1.0',
       locale: 'en-US',
     });
-    console.log('[TauriWS] Connect response:', connectResult);
+
+    this.setState('connected');
+    this.reconnectAttempt = 0;
     console.log('[TauriWS] Connected and authenticated');
   }
 
@@ -112,16 +130,14 @@ export class TauriOpenClawConnection {
       const message = JSON.parse(raw) as Record<string, unknown>;
       const type = message.type as string;
       const id = message.id as string | undefined;
-      
+
       // Handle RPC responses (type: 'res' or 'err')
       if (id && this.requestCallbacks.has(id)) {
         const callbacks = this.requestCallbacks.get(id)!;
         this.requestCallbacks.delete(id);
-        
-        // Check for error response (type: 'err' OR ok: false)
+
         if (type === 'err' || message.ok === false) {
           const errorMsg = (message.error as { message?: string })?.message ?? 'Unknown error';
-          console.error('[TauriWS] Request failed:', id, errorMsg);
           callbacks.reject(new Error(errorMsg));
         } else {
           callbacks.resolve(message.result ?? message.payload);
@@ -132,7 +148,7 @@ export class TauriOpenClawConnection {
       // Handle events (type: 'event')
       if (type === 'event') {
         const eventName = message.event as string;
-        const eventData = message.payload;  // Fixed: payload not data
+        const eventData = message.payload;
         if (eventName) {
           this.handlers.forEach((handler) => {
             handler(eventName, eventData);
@@ -140,7 +156,7 @@ export class TauriOpenClawConnection {
         }
       }
     } catch (e) {
-      console.error('Failed to parse WebSocket message:', e);
+      console.error('[TauriWS] Failed to parse message:', e);
     }
   }
 
@@ -150,14 +166,7 @@ export class TauriOpenClawConnection {
     }
 
     const id = `req-${++this.messageIdCounter}-${Date.now()}`;
-    
-    // Match the format expected by OpenClaw gateway
-    const message = {
-      type: 'req',
-      id,
-      method,
-      params,
-    };
+    const message = { type: 'req', id, method, params };
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -168,23 +177,16 @@ export class TauriOpenClawConnection {
       this.requestCallbacks.set(id, {
         resolve: (v) => {
           clearTimeout(timeout);
-          console.log('[TauriWS] Request resolved:', method, v);
           resolve(v as T);
         },
         reject: (e) => {
           clearTimeout(timeout);
-          console.error('[TauriWS] Request rejected:', method, e);
           reject(e);
         },
+        timeout,
       });
 
-      console.log('[TauriWS] Sending request:', method, JSON.stringify(message).slice(0, 500));
-      console.log('[TauriWS] ws object before send:', this.ws, 'id:', (this.ws as unknown as { id?: unknown })?.id);
-      this.ws!.send(JSON.stringify(message)).then(() => {
-        console.log('[TauriWS] Send succeeded for:', method);
-      }).catch((err) => {
-        console.error('[TauriWS] Send failed:', err);
-        console.error('[TauriWS] Send error type:', typeof err, 'keys:', err ? Object.keys(err) : 'none');
+      this.ws!.send(JSON.stringify(message)).catch((err) => {
         this.requestCallbacks.delete(id);
         clearTimeout(timeout);
         reject(err);
@@ -197,18 +199,76 @@ export class TauriOpenClawConnection {
     return () => this.handlers.delete(handler);
   }
 
+  private rejectPendingCallbacks(reason: string): void {
+    const pending = new Map(this.requestCallbacks);
+    this.requestCallbacks.clear();
+    for (const [, { reject, timeout }] of pending) {
+      clearTimeout(timeout);
+      try { reject(new Error(reason)); } catch (e) { console.warn('[TauriWS] Reject error:', e); }
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.disposed || this.reconnectAttempt >= this.maxReconnectAttempts) {
+      if (!this.disposed) this.setState('error');
+      return;
+    }
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 30_000);
+    this.reconnectAttempt++;
+    this.setState('reconnecting');
+    this.reconnectTimer = setTimeout(() => void this.attemptReconnect(), delay);
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (this.disposed) return;
+    try {
+      if (this.ws) {
+        try { await this.ws.disconnect(); } catch (e) { console.warn('[TauriWS] Pre-reconnect disconnect error:', e); }
+        this.ws = null;
+      }
+      await this.connect();
+    } catch {
+      this.scheduleReconnect();
+    }
+  }
+
+  retryManually(): void {
+    if (this.disposed) {
+      // Reset disposed state — allows retry after clean disconnect
+      this.disposed = false;
+    }
+    this.reconnectAttempt = 0;
+    this.scheduleReconnect();
+  }
+
   async disconnect(): Promise<void> {
+    this.disposed = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.setState('disconnected');  // Notify listeners BEFORE clearing them
+    this.rejectPendingCallbacks('Connection disposed');
     if (this.ws) {
       await this.ws.disconnect();
       this.ws = null;
     }
     this.handlers.clear();
-    this.requestCallbacks.clear();
+    this.stateListeners.clear();
   }
 
   get connected(): boolean {
-    return this.ws !== null;
+    return this._state === 'connected' && this.ws !== null;
   }
+}
+
+// Zustand bridge — wires connection state changes to the store
+function wireConnectionStateToStore(connection: TauriOpenClawConnection): void {
+  const { setWsConnectionState, setGatewayConnected } = useDashboardStore.getState();
+  connection.onStateChange((state) => {
+    setWsConnectionState(state);
+    setGatewayConnected(state === 'connected');
+  });
 }
 
 // Singleton connection
@@ -220,12 +280,13 @@ export async function getTauriOpenClawConnection(
   sessionKey: string,
   token?: string,
 ): Promise<TauriOpenClawConnection> {
-  // Reuse existing connection if available
-  if (connectionInstance?.connected) {
-    console.log('[TauriWS] Reusing existing connection, ws.id:', (connectionInstance as unknown as { ws?: { id?: unknown } }).ws?.id);
-    return connectionInstance;
+  // Reuse existing connection if connected or reconnecting (don't create duplicates)
+  if (connectionInstance) {
+    const state = connectionInstance.state;
+    if (state === 'connected' || state === 'reconnecting') {
+      return connectionInstance;
+    }
   }
-  console.log('[TauriWS] Creating new connection (existing:', !!connectionInstance, 'connected:', connectionInstance?.connected, ')');
 
   // Avoid multiple concurrent connection attempts
   if (connectionPromise) {
@@ -233,8 +294,13 @@ export async function getTauriOpenClawConnection(
   }
 
   connectionPromise = (async () => {
+    // Clean up disposed instance before creating new one
+    if (connectionInstance) {
+      try { await connectionInstance.disconnect(); } catch { /* ignore */ }
+    }
     connectionInstance = new TauriOpenClawConnection(wsUrl, sessionKey, token);
-    await connectionInstance.connect();
+    wireConnectionStateToStore(connectionInstance); // Wire BEFORE connect so all transitions are captured
+    await connectionInstance.connect();  // setState('connecting') → setState('connected')
     return connectionInstance;
   })();
 
@@ -250,4 +316,8 @@ export function closeTauriOpenClawConnection(): void {
     connectionInstance.disconnect();
     connectionInstance = null;
   }
+}
+
+export function getConnectionInstance(): TauriOpenClawConnection | null {
+  return connectionInstance;
 }
