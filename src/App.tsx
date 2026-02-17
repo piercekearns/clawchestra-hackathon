@@ -183,7 +183,7 @@ export default function App() {
 
   const chatActivityLabel = useMemo(() => {
     if (agentActivity === 'typing') return 'Typing...';
-    if (agentActivity === 'working') return '⚙️ Working...';
+    if (agentActivity === 'working') return 'Working...';
     return null;
   }, [agentActivity]);
 
