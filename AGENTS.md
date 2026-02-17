@@ -26,6 +26,27 @@ If any answer is YES → update AGENTS.md.
 
 ---
 
+## Rule One: Never Touch the Running App
+
+**Agents must NEVER:**
+- Open, close, restart, or relaunch the app (`open`, `kill`, etc.)
+- Install the app to `/Applications/` or anywhere else
+- Run `tauri build` with DMG bundling (use `--no-bundle` always)
+- Run `open` on built binaries or `.app` bundles
+- Do anything that interrupts the user's running app session
+
+**The correct workflow is:**
+1. Make code changes and commit
+2. Build with `npx tauri build --no-bundle` (or just `pnpm build` for frontend-only)
+3. Tell the user the build is ready
+4. **User** decides when to restart/update via the in-app Update button
+
+The user may be mid-conversation in the chat drawer. Killing the app means lost context, interrupted work, and a bad experience. App lifecycle is always the user's choice.
+
+**Only exception:** User explicitly asks you to restart or relaunch the app.
+
+---
+
 ## Operations Reference
 
 ### Projects (Top-Level Board)
@@ -263,9 +284,12 @@ Primary frontend chat implementation lives in `src/components/chat/`.
 
 ## Build & Update
 
-- `pnpm tauri:dev` — development mode
-- `./update.sh` — build and install to /Applications
+- `pnpm build` — frontend only (fast, for TS/React changes)
+- `npx tauri build --no-bundle` — full release build (frontend + Rust, no DMG)
+- **Never use `tauri build` without `--no-bundle`** — DMG bundler can install to /Applications
+- **Never `open` the built binary** — user updates via in-app Update button
 - The app embeds its git commit at build time; Update button appears when HEAD differs
+- After building, tell the user "build ready" and let them update on their own schedule
 
 ---
 
