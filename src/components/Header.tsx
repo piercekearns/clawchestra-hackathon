@@ -7,6 +7,8 @@ import { ErrorBadge } from './ErrorBadge';
 import type { DashboardError } from '../lib/errors';
 import { Button } from './ui/button';
 import { isTauriRuntime, checkForUpdate, runAppUpdate } from '../lib/tauri';
+import logoChartreuse from '../assets/logo.png';
+import logoDark from '../assets/logo-dark.png';
 
 interface HeaderProps {
   errors: DashboardError[];
@@ -81,6 +83,18 @@ export function Header({
     <header className="sticky top-0 z-20 mb-4 rounded-2xl border border-neutral-200 bg-neutral-0/95 p-4 backdrop-blur dark:border-neutral-700 dark:bg-neutral-950/95">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
+          <img
+            src={logoDark}
+            alt=""
+            className="h-7 w-auto dark:hidden"
+            aria-hidden="true"
+          />
+          <img
+            src={logoChartreuse}
+            alt=""
+            className="hidden h-7 w-auto dark:block"
+            aria-hidden="true"
+          />
           <h1 className="text-2xl font-semibold text-neutral-950 dark:text-neutral-100">
             Clawchestra
           </h1>
