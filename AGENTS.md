@@ -92,6 +92,41 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 
 ---
 
+## Document Format (Specs, Plans, etc.)
+
+Documents in `docs/specs/` and `docs/plans/` are read by both agents and humans. The UI surfaces them in modals when users click roadmap items. **Format for human readability first.**
+
+### Required format:
+
+```markdown
+# Title
+
+> One-line summary of what this does.
+
+## Summary
+
+2-3 sentence executive summary. What problem does it solve? What's the approach?
+
+---
+
+**Roadmap Item:** `item-id`
+**Status:** Draft | Ready | Locked
+**Created:** YYYY-MM-DD
+
+---
+
+## Details...
+```
+
+### Rules:
+1. **NO YAML frontmatter** — no `---` delimited metadata blocks at the top
+2. **Title and summary first** — the human-readable content goes above any metadata
+3. **Metadata pushed below the summary** — status, dates, parent references go after the summary separator
+4. **One-liner blockquote** under the title for at-a-glance understanding
+
+### Why:
+These documents appear in the UI when users click roadmap items. If the first thing they see is `title: "Chat Infrastructure Phase A: Reliability" / status: draft / type: spec`, it's a bad experience. Lead with what matters.
+
 ## Project Structure
 
 ```
@@ -135,6 +170,15 @@ When the user says **"add X to the roadmap"**:
    ```
 2. If it has a spec, create `docs/specs/{item-id}-spec.md`
 3. If it has a plan, create `docs/plans/{item-id}-plan.md`
+
+### Keep `nextAction` in sync (CRITICAL)
+
+When you create or update an artifact for a roadmap item (spec, plan, etc.), **always update the item's `nextAction` field** in ROADMAP.md to reflect the new state. Examples:
+- Wrote a spec → `nextAction: Spec written — ready for plan/build`
+- Wrote a plan → `nextAction: Plan written — ready for build`
+- Started building → `nextAction: Build in progress`
+
+The `nextAction` is what humans see in the UI. If you write a spec but leave `nextAction` saying "Spec needed", the user sees stale/contradictory info.
 
 When the user says **"mark X as done"** or **"X is complete"**:
 1. Change item `status: complete` in ROADMAP.md — this triggers auto-migration:
