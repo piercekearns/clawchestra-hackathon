@@ -134,3 +134,14 @@
     transform: translateX(200%);
   }
 }
+
+@keyframes reading-dot {
+  0%, 100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}

@@ -182,10 +182,14 @@ export default function App() {
   }, [gatewayConnected, wsConnectionState]);
 
   const chatActivityLabel = useMemo(() => {
+    // Event-driven labels take priority when they're more specific
     if (agentActivity === 'typing') return 'Typing...';
     if (agentActivity === 'working') return 'Working...';
+    // Fallback: if a send is in-flight, always show activity
+    // (mirrors OpenClaw webchat: indicator persists from send to final)
+    if (chatSending) return 'Working...';
     return null;
-  }, [agentActivity]);
+  }, [agentActivity, chatSending]);
 
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);

@@ -405,7 +405,9 @@ export function ChatShell({
                   streamingContent 
                     ? [...messages, { role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }]
                     : messages
-                } 
+                }
+                // Show reading indicator when agent is working but no text has streamed yet
+                showReadingIndicator={isAgentWorking && !streamingContent}
                 className="flex-1"
                 hasMore={hasMoreMessages}
                 loadingMore={loadingMoreMessages}

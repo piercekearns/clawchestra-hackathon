@@ -10,6 +10,7 @@ interface MessageListProps {
   className?: string;
   hasMore?: boolean;
   loadingMore?: boolean;
+  showReadingIndicator?: boolean;
   onLoadMore?: () => void;
 }
 
@@ -17,7 +18,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
   messages, 
   className, 
   hasMore, 
-  loadingMore, 
+  loadingMore,
+  showReadingIndicator,
   onLoadMore 
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -190,6 +192,26 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           />
         );
       })}
+      {/* Reading indicator — bouncing dots while agent works before text streams */}
+      {showReadingIndicator && (
+        <div className="flex items-start">
+          <div
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300/80 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900"
+            aria-label="Agent is working"
+          >
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
+                style={{
+                  animation: 'reading-dot 1.2s ease-in-out infinite',
+                  animationDelay: `${i * 0.15}s`,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {/* Scroll anchor - browser will try to keep this in view */}
       <div id="scroll-anchor" style={{ overflowAnchor: 'auto', height: 1 }} />
       </div>

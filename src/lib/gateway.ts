@@ -882,10 +882,15 @@ async function sendViaTauriWs(
       };
 
       const resetIdleTimeout = () => {
+        // Don't idle-timeout during an active send. The activity label
+        // in App.tsx already falls back to "Working..." while chatSending
+        // is true, so we only need this timeout as a safety net for truly
+        // orphaned sends (e.g. missed final event). 5 minutes matches
+        // OPENCLAW_CHAT_TIMEOUT_MS.
         if (idleTimeout) clearTimeout(idleTimeout);
         idleTimeout = setTimeout(() => {
           setAgentActivity('idle', onActivityChange);
-        }, 15_000);
+        }, 5 * 60 * 1000);
       };
 
       const startFinalDebounce = () => {
