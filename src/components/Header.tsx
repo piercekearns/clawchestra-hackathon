@@ -94,9 +94,9 @@ export function Header({
               className="inline-flex items-center rounded-full bg-[#DFFF00] px-2.5 py-0.5 text-xs font-medium text-neutral-800 transition-colors hover:bg-[#e9ff4d] disabled:cursor-wait"
             >
               {updating ? (
-                <span className="inline-flex items-center">
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  Updating...
+                <span className="inline-flex items-center gap-1">
+                  Updating
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 </span>
               ) : (
                 'Update'
