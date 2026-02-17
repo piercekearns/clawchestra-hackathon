@@ -174,10 +174,26 @@ def main():
     )
     print("  Saved icon.ico")
     
-    # Generate .icns (macOS) — use sips as Pillow doesn't support icns natively
-    png_1024_path = os.path.join(ICONS_DIR, 'icon-1024.png')
+    # Generate .icns (macOS) — use iconutil which handles multi-resolution properly
+    import tempfile, shutil
+    iconset_dir = os.path.join(tempfile.gettempdir(), 'Clawchestra.iconset')
+    if os.path.exists(iconset_dir):
+        shutil.rmtree(iconset_dir)
+    os.makedirs(iconset_dir)
+    
+    iconset_sizes = {
+        'icon_16x16.png': 16, 'icon_16x16@2x.png': 32,
+        'icon_32x32.png': 32, 'icon_32x32@2x.png': 64,
+        'icon_128x128.png': 128, 'icon_128x128@2x.png': 256,
+        'icon_256x256.png': 256, 'icon_256x256@2x.png': 512,
+        'icon_512x512.png': 512, 'icon_512x512@2x.png': 1024,
+    }
+    for name, size in iconset_sizes.items():
+        icon_1024.resize((size, size), Image.LANCZOS).save(os.path.join(iconset_dir, name))
+    
     icns_path = os.path.join(ICONS_DIR, 'icon.icns')
-    os.system(f'sips -s format icns "{png_1024_path}" --out "{icns_path}" 2>/dev/null')
+    os.system(f'iconutil -c icns "{iconset_dir}" -o "{icns_path}"')
+    shutil.rmtree(iconset_dir)
     print("  Saved icon.icns")
     
     print("Done!")
