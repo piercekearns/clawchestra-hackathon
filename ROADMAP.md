@@ -12,10 +12,29 @@ items:
       - architecture
     icon: "\U0001F527"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
+  - id: roadmap-item-quick-add
+    title: Roadmap Item Quick-Add
+    status: up-next
+    priority: 1
+    nextAction: Spec needed — define UI for manually adding roadmap items with schema-compliant defaults
+    tags:
+      - roadmap
+      - ux
+      - workflow
+  - id: project-card-opens-kanban
+    title: Project Card Opens Kanban Directly
+    status: up-next
+    priority: 1
+    nextAction: Spec written — ready for plan/build
+    tags:
+      - ui
+      - ux
+      - navigation
+    specDoc: docs/specs/project-card-opens-kanban-spec.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: up-next
-    priority: 1
+    priority: 2
     nextAction: >-
       Define interaction model for column-level collapse/expand across all board
       levels
@@ -26,7 +45,7 @@ items:
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: up-next
-    priority: 2
+    priority: 3
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -36,7 +55,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: up-next
-    priority: 3
+    priority: 4
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -44,7 +63,7 @@ items:
   - id: deliverable-lifecycle-orchestration
     title: Deliverable Lifecycle Orchestration
     status: up-next
-    priority: 4
+    priority: 5
     nextAction: >-
       Spec the spec/plan/next-action workflow and chat-prefill automation from
       roadmap item detail
@@ -72,18 +91,6 @@ items:
     tags:
       - integration
       - openclaw
-  - id: roadmap-authoring-and-navigation
-    title: Roadmap Authoring & Direct Project Navigation
-    status: pending
-    priority: 3
-    nextAction: >-
-      Define and implement quick-add roadmap item UI plus direct card click to
-      open project roadmap kanban by default
-    tags:
-      - roadmap
-      - ux
-      - navigation
-      - workflow
 ---
 
 # Pipeline Dashboard — Roadmap
