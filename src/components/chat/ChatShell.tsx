@@ -158,6 +158,7 @@ export function ChatShell({
   const resizeStartHeightRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
+  const composerContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onResize = () => {
@@ -293,32 +294,30 @@ export function ChatShell({
     document.body.style.userSelect = 'none';
   };
 
-  // When composer grows/shrinks, adjust message list scroll to keep the viewport
-  // anchored. We can't adjust immediately because ChatBar's useLayoutEffect fires
-  // before ChatShell re-renders, so flex layout still reflects the OLD composer
-  // height. Instead, stash the delta in a ref and apply it in ChatShell's own
-  // useLayoutEffect — which runs after React commits the re-render (flex
-  // recalculated) but before the browser paints (no visual jank).
-  const pendingScrollDeltaRef = useRef(0);
-  const [scrollDeltaTick, setScrollDeltaTick] = useState(0);
-
-  const handleComposerHeightChange = useCallback((delta: number) => {
-    if (delta === 0) return;
-    pendingScrollDeltaRef.current += delta;
-    // Trigger a re-render so ChatShell's layout effect fires
-    setScrollDeltaTick((t) => t + 1);
-  }, []);
-
-  // Apply pending scroll adjustment synchronously after React commits (flex
-  // recalculated) but before browser paints — zero visual jank.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Keep chat content anchored to the top edge of the composer container.
+  // When the composer grows/shrinks (Shift+Enter, queued rows, images), adjust
+  // message scroll by the exact composer height delta so visible content above
+  // the bar stays stable.
   useLayoutEffect(() => {
-    const delta = pendingScrollDeltaRef.current;
-    if (delta === 0) return;
-    pendingScrollDeltaRef.current = 0;
-    const node = messageListRef.current;
-    if (node) node.scrollTop += delta;
-  }, [scrollDeltaTick]);
+    if (!drawerOpen || typeof ResizeObserver === 'undefined') return;
+    const composerNode = composerContainerRef.current;
+    const messageNode = messageListRef.current;
+    if (!composerNode || !messageNode) return;
+
+    let previousHeight = composerNode.getBoundingClientRect().height;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const nextHeight = entry.contentRect.height;
+      const delta = nextHeight - previousHeight;
+      previousHeight = nextHeight;
+      if (delta === 0) return;
+      messageNode.scrollTop += delta;
+    });
+
+    observer.observe(composerNode);
+    return () => observer.disconnect();
+  }, [drawerOpen]);
 
   const latestResponsePreview = useMemo(() => {
     if (!responseToastMessage) return null;
@@ -433,7 +432,10 @@ export function ChatShell({
                 onLoadMore={onLoadMore}
               />
 
-              <div className="border-t border-neutral-300/80 dark:border-neutral-700/80">
+              <div
+                ref={composerContainerRef}
+                className="border-t border-neutral-300/80 dark:border-neutral-700/80"
+              >
                 <ChatBar
                   ref={textareaRef}
                   variant="embedded"
@@ -462,7 +464,6 @@ export function ChatShell({
                     setDragActive(active);
                     if (!active) setDragDepth(0);
                   }}
-                  onComposerHeightChange={handleComposerHeightChange}
                 />
               </div>
             </section>
