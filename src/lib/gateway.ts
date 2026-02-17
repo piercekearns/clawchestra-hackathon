@@ -1144,6 +1144,16 @@ async function sendViaTauriWs(
         lastEventTime = Date.now();
         resetIdleTimeout();
 
+        // Agent events indicate tool use (reading files, running commands, etc.).
+        // The send handler must track these to detect new content blocks after
+        // tool calls — without this, post-tool text is silently dropped because
+        // the delta is shorter than accumulated content from the first block.
+        if (eventName === 'agent') {
+          sawToolSinceLastContent = true;
+          setAgentActivity('working', onActivityChange);
+          return;
+        }
+
         if (eventName !== 'chat') return;
 
         const chat = (typeof payload === 'object' && payload !== null
@@ -1153,12 +1163,11 @@ async function sendViaTauriWs(
         if (typeof chat.sessionKey === 'string' && chat.sessionKey !== sessionKey) return;
         const state = typeof chat.state === 'string' ? chat.state : '';
         const eventRunId = typeof chat.runId === 'string' ? chat.runId : undefined;
-        if (eventRunId !== runId) {
-          // Some gateway events omit runId. During an active send we ignore
-          // run-less/unrelated events and rely on history polling instead.
-          if (!eventRunId && TERMINAL_ACTIVITY_STATES.has(state)) {
-            console.log(`[Gateway] Ignoring terminal event without runId during active send: ${state}`);
-          }
+
+        // RunId filter: if the event has a runId that doesn't match ours,
+        // skip it. Events WITHOUT a runId are allowed through — many
+        // legitimate gateway events omit runId.
+        if (eventRunId && eventRunId !== runId) {
           return;
         }
 
