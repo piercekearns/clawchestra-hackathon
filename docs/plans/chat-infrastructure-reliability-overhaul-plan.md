@@ -25,6 +25,7 @@ This plan replaces heuristic completion with a run-scoped state machine, adds du
 4. History stitching relies on fragile content matching and lossy dedupe keys.
 5. Idle websocket drops (`1006`) surface as user-visible instability.
 6. Current coverage is insufficient for run lifecycle edge cases.
+7. OpenClaw settings (`openclawWorkspacePath`, `openclawContextPolicy`) are surfaced in UI but not consistently applied to runtime routing.
 
 ## Success Criteria
 
@@ -34,6 +35,7 @@ This plan replaces heuristic completion with a run-scoped state machine, adds du
 4. No message loss from pagination/dedupe across load more and reconnect paths.
 5. Idle websocket interruptions auto-recover without losing user turn state.
 6. Automated tests cover terminal, reconnect, and late-output scenarios.
+7. OpenClaw settings shown in UI are either enforced by runtime transport or explicitly marked unsupported in runtime routing.
 
 ## Non-Goals
 
@@ -65,6 +67,18 @@ Rules:
 3. Treat tool events as progress, not completion.
 4. Use a quiet window only after terminal + candidate output.
 
+Ownership precedence (deterministic):
+
+1. `runId` exact match (strongest)
+2. `turnToken` exact match (fallback when `runId` absent)
+3. Session + temporal window + role constraints (last resort; reject ambiguous matches)
+
+Rejection rules:
+
+1. Ignore terminal events that cannot be mapped to current pending turn by precedence.
+2. Ignore out-of-order terminal events older than latest accepted progress marker.
+3. Never downgrade a turn from `awaiting-text` to `failed` until timeout boundary is reached.
+
 ### B. Deterministic Completion Contract
 
 A turn is complete only when one of these is true:
@@ -81,6 +95,13 @@ On app startup and reconnect:
 2. Reconcile local pending turns by runId/turnToken.
 3. Persist recovered assistant messages into local chat DB.
 
+Single-writer contract:
+
+1. Gateway reducer decides turn state transitions.
+2. Store persistence writes are idempotent and keyed by stable message identity.
+3. Backfill writes use the same persistence path as live events.
+4. Any duplicate insert resolves via conflict strategy, never via lossy frontend-only filtering.
+
 ### D. Transport Resilience
 
 1. Add keepalive strategy for idle periods.
@@ -92,6 +113,7 @@ On app startup and reconnect:
 1. Replace substring user message matching with stable turn identity.
 2. Replace lossy dedupe keys with `{id}` or `{timestamp,id}` tuple cursor semantics.
 3. Prevent pagination duplicates at DB query boundary.
+4. Add DB uniqueness/index strategy so dedupe is guaranteed at persistence layer, not only UI memory.
 
 ## Workstreams
 
@@ -130,6 +152,8 @@ Tasks:
 3. Add gateway history backfill API path in startup/reconnect flow.
 4. Update DB pagination cursor to deterministic boundary (`timestamp,id`) instead of `<= timestamp`.
 5. Align frontend dedupe to stable message identity.
+6. Add/confirm DB index and uniqueness constraints for chat message identity and cursor scans.
+7. Define conflict behavior (`INSERT OR IGNORE` or equivalent) for idempotent backfill/live writes.
 
 Acceptance:
 
@@ -151,6 +175,7 @@ Tasks:
 3. Ensure reconnect does not clear pending turn context.
 4. Improve gateway error surfacing: non-blocking toast + recovery messaging.
 5. Keep transport error UI independent from turn lifecycle state.
+6. Audit OpenClaw settings bridge so runtime transport configuration is consistent with UI settings exposure.
 
 Acceptance:
 
@@ -170,7 +195,7 @@ Tasks:
 1. Add structured logs with turnToken/runId/sessionKey correlation.
 2. Add explicit reason codes for completion path selection.
 3. Record reconciliation actions and recovered message counts.
-4. Add lightweight diagnostics panel payload (dev-only) for active/pending turns.
+4. Add lightweight diagnostics payload (dev-only, log-first); UI diagnostics panel deferred unless needed.
 
 Acceptance:
 
@@ -221,6 +246,14 @@ Rationale:
 3. Validate against real OpenClaw sessions before defaulting on.
 4. Remove legacy completion path after one stable cycle.
 
+Go/No-Go gates before default-on:
+
+1. Premature completion rate: 0 confirmed cases across 100+ real turns.
+2. "No assistant response" false-failure rate: <1% over 100+ real turns.
+3. Reconnect recovery success: >=99% of idle-drop reconnects preserve/restore pending turn state.
+4. Duplicate message insertion rate: 0 known duplicates after load-more and reconnect tests.
+5. Median send-to-first-text latency: no regression beyond 10% from current baseline.
+
 ## Risks And Mitigations
 
 1. Risk: state machine complexity increases maintenance burden.
@@ -231,6 +264,8 @@ Rationale:
    Mitigation: stable IDs and DB-level uniqueness where possible.
 4. Risk: keepalive interval could be too aggressive.
    Mitigation: tune interval and backoff with config constants.
+5. Risk: settings-runtime mismatch remains partially unresolved.
+   Mitigation: either wire runtime to settings now or reduce UI to declared-effective settings only.
 
 ## Plan Review Prompts
 

@@ -110,7 +110,7 @@ const DEFAULT_HTTP_GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://loc
 const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
-const FINAL_DEBOUNCE_MS = 8000;
+const FINAL_NO_CONTENT_TIMEOUT_MS = 45000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -352,6 +352,105 @@ function extractAssistantMessagesFromHistory(
     if (id && options.baselineIds.has(id)) continue;
     if (timestamp !== undefined && timestamp < options.minTimestamp) continue;
 
+    const content = extractText(message.content).trim();
+    if (!content) continue;
+
+    const dedupeKey = id ?? `${timestamp ?? 'na'}:${content}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    assistantMessages.push({
+      role: 'assistant',
+      content,
+      timestamp: timestamp ?? Date.now(),
+      ...(id ? { _id: id } : {}),
+    });
+  }
+
+  return assistantMessages;
+}
+
+function normalizeTextForMatch(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function isMessageNewForTurn(
+  message: GatewayHistoryMessage,
+  options: { baselineIds: Set<string>; minTimestamp: number },
+): boolean {
+  const id = getHistoryMessageId(message);
+  if (id) return !options.baselineIds.has(id);
+  const timestamp = getHistoryMessageTimestamp(message);
+  return timestamp !== undefined && timestamp >= options.minTimestamp;
+}
+
+function findUserAnchorIndex(
+  chronological: GatewayHistoryMessage[],
+  options: {
+    baselineIds: Set<string>;
+    minTimestamp: number;
+    expectedUserText?: string;
+  },
+): number {
+  const normalizedExpected =
+    typeof options.expectedUserText === 'string' && options.expectedUserText.trim().length > 0
+      ? normalizeTextForMatch(options.expectedUserText)
+      : '';
+
+  for (let index = 0; index < chronological.length; index += 1) {
+    const message = chronological[index];
+    if (message.role !== 'user') continue;
+    if (!isMessageNewForTurn(message, options)) continue;
+
+    if (!normalizedExpected) return index;
+
+    const content = normalizeTextForMatch(extractText(message.content));
+    if (content === normalizedExpected) {
+      return index;
+    }
+  }
+
+  if (!normalizedExpected) return -1;
+
+  // Fallback for wrapped/normalized gateway content: anchor to first new user turn.
+  for (let index = 0; index < chronological.length; index += 1) {
+    const message = chronological[index];
+    if (message.role !== 'user') continue;
+    if (!isMessageNewForTurn(message, options)) continue;
+    return index;
+  }
+
+  return -1;
+}
+
+function extractAssistantMessagesForTurn(
+  rawMessages: GatewayHistoryMessage[],
+  options: {
+    baselineIds: Set<string>;
+    minTimestamp: number;
+    expectedUserText?: string;
+  },
+): ChatMessage[] {
+  const chronological = toChronologicalHistory(rawMessages);
+  const anchorIndex = findUserAnchorIndex(chronological, options);
+  if (anchorIndex < 0) {
+    return extractAssistantMessagesFromHistory(rawMessages, options);
+  }
+
+  const seen = new Set<string>();
+  const assistantMessages: ChatMessage[] = [];
+
+  for (let index = anchorIndex + 1; index < chronological.length; index += 1) {
+    const message = chronological[index];
+
+    if (message.role === 'user' && isMessageNewForTurn(message, options)) {
+      break;
+    }
+    if (message.role !== 'assistant') continue;
+    if (!isMessageNewForTurn(message, options)) continue;
+
+    const id = getHistoryMessageId(message);
+    const timestamp = getHistoryMessageTimestamp(message);
     const content = extractText(message.content).trim();
     if (!content) continue;
 
@@ -976,17 +1075,10 @@ async function sendViaTauriWs(
 
     await new Promise<void>((resolve, reject) => {
       let completed = false;
-      let finalDebounceTimer: ReturnType<typeof setTimeout> | null = null;
       let sawFinal = false;
+      let sawFinalAt = 0;
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
       let unsubscribeState: (() => void) | null = null;
-
-      const cancelFinalDebounce = () => {
-        if (finalDebounceTimer) {
-          clearTimeout(finalDebounceTimer);
-          finalDebounceTimer = null;
-        }
-      };
 
       const resetIdleTimeout = () => {
         // Don't idle-timeout during an active send. The activity label
@@ -1000,19 +1092,10 @@ async function sendViaTauriWs(
         }, 5 * 60 * 1000);
       };
 
-      const startFinalDebounce = () => {
-        cancelFinalDebounce();
-        finalDebounceTimer = setTimeout(() => {
-          console.log(`[Gateway] RESOLVE via finalDebounce (${FINAL_DEBOUNCE_MS}ms after final event)`);
-          cleanup('finalDebounce');
-          resolve();
-        }, FINAL_DEBOUNCE_MS);
-      };
-
       const clearSawFinal = (reason: string) => {
         if (!sawFinal) return;
         sawFinal = false;
-        cancelFinalDebounce();
+        sawFinalAt = 0;
         console.log(`[Gateway] Final signal cleared due to ${reason}`);
       };
 
@@ -1023,7 +1106,6 @@ async function sendViaTauriWs(
         console.trace('[Gateway] cleanup stack');
         clearTimeout(safetyTimeout);
         clearInterval(pollInterval);
-        cancelFinalDebounce();
         if (idleTimeout) {
           clearTimeout(idleTimeout);
           idleTimeout = null;
@@ -1099,9 +1181,10 @@ async function sendViaTauriWs(
             ? pollHistory.messages.filter(isHistoryMessage)
             : [];
 
-          const assistantMessages = extractAssistantMessagesFromHistory(historyMessages, {
+          const assistantMessages = extractAssistantMessagesForTurn(historyMessages, {
             baselineIds: baselineMessageIds,
             minTimestamp: minNewMessageTimestamp,
+            expectedUserText: messageText,
           });
 
           if (assistantMessages.length > 0) {
@@ -1131,6 +1214,17 @@ async function sendViaTauriWs(
               );
               cleanup('pollStability');
               resolve();
+            }
+          } else if (sawFinal && sawFinalAt > 0) {
+            if (streamedText.trim().length > 0 && Date.now() - sawFinalAt >= 1500) {
+              cleanup('finalWithStreamedContent');
+              resolve();
+              return;
+            }
+            const finalWithoutContentMs = Date.now() - sawFinalAt;
+            if (finalWithoutContentMs >= FINAL_NO_CONTENT_TIMEOUT_MS) {
+              cleanup('finalWithoutContentTimeout');
+              reject(new Error('No assistant response received from OpenClaw (run may have terminated).'));
             }
           }
         } catch (error) {
@@ -1330,8 +1424,8 @@ async function sendViaTauriWs(
             }
           }
           sawFinal = true;
+          sawFinalAt = Date.now();
           clearActiveSendRun(runId);
-          startFinalDebounce();
         }
       };
 
@@ -1350,9 +1444,10 @@ async function sendViaTauriWs(
       ? historyAfter.messages.filter(isHistoryMessage)
       : [];
 
-    let assistantMessages = extractAssistantMessagesFromHistory(allMessages, {
+    let assistantMessages = extractAssistantMessagesForTurn(allMessages, {
       baselineIds: baselineMessageIds,
       minTimestamp: minNewMessageTimestamp,
+      expectedUserText: messageText,
     });
 
     // History is the source of truth for final messages.
@@ -1408,9 +1503,10 @@ async function sendViaTauriWs(
           const recoveryMessages = Array.isArray(recoveryHistory.messages)
             ? recoveryHistory.messages.filter(isHistoryMessage)
             : [];
-          const recovered = extractAssistantMessagesFromHistory(recoveryMessages, {
+          const recovered = extractAssistantMessagesForTurn(recoveryMessages, {
             baselineIds: baselineMessageIds,
             minTimestamp: minNewMessageTimestamp,
+            expectedUserText: messageText,
           });
           if (recovered.length > 0) {
             assistantMessages = recovered;

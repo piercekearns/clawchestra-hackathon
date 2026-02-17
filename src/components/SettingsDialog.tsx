@@ -116,6 +116,9 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
                 onChange={(event) => setOpenclawWorkspacePath(event.target.value)}
                 placeholder="~/clawdbot-sandbox"
               />
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Used for chat context injection. Gateway session routing still follows OpenClaw runtime config.
+              </span>
             </label>
 
             <label className="grid gap-1 text-sm">
@@ -159,6 +162,9 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
               </div>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Controls prompt context priority only (selected project vs workspace path).
+              </span>
             </label>
           </div>
         </div>

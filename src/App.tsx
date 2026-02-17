@@ -830,6 +830,10 @@ export default function App() {
       dataUrl: image.dataUrl,
     }));
 
+    // Read a fresh store snapshot here so send context doesn't rely on a stale
+    // render-captured `chatMessages` array.
+    const priorMessages = useDashboardStore.getState().chatMessages;
+
     addChatMessage(userMessage);
     setChatSending(true);
     setChatStreamingContent(null);
@@ -837,7 +841,7 @@ export default function App() {
 
     try {
       const result = await sendMessageWithContext(
-        [...chatMessages, userMessage],
+        [...priorMessages, userMessage],
         {
           view: viewContext.type,
           selectedProject: selectedProject?.title,
