@@ -64,23 +64,23 @@ These decisions were made during design discussion and override the original spe
 
 ### Work
 
-- Define lifecycle action types: `create-spec`, `update-spec`, `create-plan`, `update-plan`, `review-plan`, `deliver`, `build`.
-- `getArtifactState(item)` — returns `{ spec: 'present' | 'missing', plan: 'present' | 'missing' }` derived from `item.docs`.
+- Define lifecycle action types: `spec`, `plan`, `review`, `deliver`, `build`. Artifact state (create vs update) is derived at prompt-build time from the enriched item — no separate `create-*`/`update-*` action enums needed.
+- Artifact state is derived from `RoadmapItemWithDocs` (the enriched type from `enrichItemsWithDocs()` in `roadmap.ts`). The `docs` field contains `{ spec?: string, plan?: string }` — the resolved file paths. **Note:** raw `RoadmapItem` does NOT have a `docs` field; the lifecycle bar must receive the enriched `RoadmapItemWithDocs` type, which is produced by the existing `enrichItemsWithDocs()` pipeline in `App.tsx`.
 - Prompt template builders for each action type. Each prompt includes:
   - Project title/id
   - Roadmap item title/id
   - Known artifact paths (specDoc, planDoc) when they exist
   - Explicit requested action
-- Spec prompt differs based on artifact state: "create spec for..." vs "update the spec at {path} for..."
+- Spec prompt differs based on artifact state: "create spec for..." (when `item.docs.spec` is undefined) vs "update the spec at {path} for..." (when present).
 - Plan prompt similarly adapts.
-- Review prompt references the plan path.
-- Deliver prompt includes spec + plan paths and a direct build instruction.
-- Build prompt includes spec + plan paths and references formal workflow commands.
+- Review prompt references the plan path. When plan doesn't exist: prompt says "no plan exists yet — create one first or review the spec".
+- Deliver prompt includes spec + plan paths and a direct build instruction. When artifacts missing: prompt acknowledges what's missing and asks the agent to work with what's available.
+- Build prompt includes spec + plan paths and references formal workflow commands (`/build`, `/work`).
 
 ### Exit criteria
 
 - Prompt builder returns non-empty editable plain text for all action types.
-- Prompt adapts based on whether spec/plan artifacts exist.
+- Prompt adapts based on whether spec/plan artifacts exist, including explicit fallback text for missing artifacts.
 - Unit tests cover all action types and both present/missing artifact combinations.
 
 ## Phase 2: Card Hover Action Bar
@@ -92,23 +92,26 @@ These decisions were made during design discussion and override the original spe
 
 ### Files to modify
 
-- `src/components/Card.tsx` (add hover state + action bar slot)
-- `src/App.tsx` (pass lifecycle action handler to Board for roadmap views)
+- `src/components/Card.tsx` (add hover state + action bar rendering via existing `renderActions` slot)
+- `src/App.tsx` (pass lifecycle action handler via existing `renderItemActions` prop on Board)
+
+**Note on prop threading:** `renderItemActions` already threads from Board → Column → Card via existing props. No changes needed to `Board.tsx` or `Column.tsx` — the existing `renderItemActions` pipeline handles this.
 
 ### Work
 
 - **`CrossedHammers` icon**: Simple custom SVG — two hammers crossed. Same pattern as existing `GitHubMark` custom icon.
 - **`LifecycleActionBar` component**: Renders 5 icon buttons in a horizontal row.
-  - Props: `specExists: boolean`, `planExists: boolean`, `onAction: (action: ActionType) => void`
-  - Spec icon: `FileText` — filled variant when `specExists`, outline when not. Use Lucide's fill prop or opacity/color difference.
-  - Plan icon: `ListChecks` — filled variant when `planExists`, outline when not.
+  - Props: `item: RoadmapItemWithDocs`, `onAction: (action: ActionType) => void`
+  - Artifact state derived from `item.docs.spec` and `item.docs.plan` (present = file path string, missing = undefined).
+  - Spec icon: `FileText` — filled variant when `item.docs.spec` exists, outline when not. Use Lucide's fill prop or opacity/color difference.
+  - Plan icon: `ListChecks` — filled variant when `item.docs.plan` exists, outline when not.
   - Review, Deliver, Build: always outline style.
   - Each button has a small tooltip on hover (e.g., "Create Spec", "Update Plan", "Plan Review", "Deliver", "Build").
   - Tooltip text adapts: "Create Spec" when missing, "Update Spec" when present. Same for Plan.
   - Icons are fixed position — always in the same horizontal slot regardless of state.
   - `stopPropagation` on click/pointerDown to prevent card click-through (same pattern as `GitHubStatusBadge`).
-- **`Card.tsx` changes**: On hover, hide the nextAction text line and show `LifecycleActionBar` in its place. CSS transition for smooth swap. Only applies when a `renderHoverActions` prop is provided (so project cards are unaffected).
-- **`App.tsx` changes**: When rendering the roadmap Board, pass `renderHoverActions` that creates `LifecycleActionBar` with the item's artifact state and an action handler.
+- **`Card.tsx` changes**: On hover, hide the nextAction text line and show `LifecycleActionBar` in its place. CSS transition for smooth swap. Use the existing `renderActions` slot with hover-conditional rendering, or add a `renderHoverActions` prop (so project cards are unaffected).
+- **`App.tsx` changes**: When rendering the roadmap Board, pass `renderItemActions` that creates `LifecycleActionBar` with the enriched item (from `enrichItemsWithDocs()` — already called in App.tsx) and an action handler.
 
 ### Exit criteria
 
@@ -189,16 +192,16 @@ These decisions were made during design discussion and override the original spe
 
 | File | Change |
 |------|--------|
-| `src/lib/deliverable-lifecycle.ts` | New — lifecycle helpers + prompt builders |
+| `src/lib/deliverable-lifecycle.ts` | New — action types + prompt builders (~15-30 lines) |
 | `src/lib/deliverable-lifecycle.test.ts` | New — unit tests |
 | `src/components/LifecycleActionBar.tsx` | New — 5-icon hover action bar |
 | `src/components/icons/CrossedHammers.tsx` | New — custom SVG icon |
-| `src/components/Card.tsx` | Hover state + renderHoverActions slot |
-| `src/components/chat/types.ts` | Prefill request type |
-| `src/components/chat/ChatShell.tsx` | Prefill effect |
-| `src/components/chat/ChatBar.tsx` | Optional focus/selection tweaks |
-| `src/App.tsx` | Action handler, prefill wiring, renderHoverActions |
+| `src/components/Card.tsx` | Hover state + conditional action bar rendering |
+| `src/components/chat/ChatShell.tsx` | Prefill effect (useEffect keyed by prefill request) |
+| `src/App.tsx` | Action handler, prefill wiring via existing `renderItemActions` prop |
 | `AGENTS.md` | Capability documentation |
+
+**Not modified:** `Board.tsx`, `Column.tsx` (existing `renderItemActions` prop threading is sufficient), `chat/types.ts` (prefill can be a plain `{ id: string; text: string }` inlined or in ChatShell), `ChatBar.tsx` (focus handled in ChatShell useEffect).
 
 ## Acceptance Criteria
 
