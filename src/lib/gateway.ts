@@ -1409,6 +1409,11 @@ async function sendViaTauriWs(
       }
     }
 
+    const finalStreamedText = streamedText.trim();
+    if (assistantMessages.length === 0 && !finalStreamedText) {
+      throw new Error('No assistant response received from OpenClaw (run may have terminated)');
+    }
+
     setAgentActivity('idle', onActivityChange);
     clearActiveSendRun(runId);
 
@@ -1416,7 +1421,7 @@ async function sendViaTauriWs(
       messages: assistantMessages,
       lastContent: assistantMessages.length > 0
         ? assistantMessages[assistantMessages.length - 1].content
-        : streamedText.trim(),
+        : finalStreamedText,
     };
   } catch (error) {
     setAgentActivity('idle', onActivityChange);
