@@ -73,6 +73,8 @@ export interface GitStatus {
   state: GitStatusState;
   branch?: string;
   details?: string;
+  /** Origin remote URL (auto-detected from git config) */
+  remote?: string;
 }
 
 export interface ProjectViewModel extends BoardItem {

@@ -16,6 +16,22 @@ import {
 } from './schema';
 import { deleteFile, pathExists, readFile, scanProjects, writeFile } from './tauri';
 
+/**
+ * Extract "owner/repo" slug from a GitHub remote URL.
+ * Handles HTTPS (https://github.com/owner/repo.git) and
+ * SSH (git@github.com:owner/repo.git) formats.
+ */
+function extractGitHubSlug(remoteUrl?: string): string | undefined {
+  if (!remoteUrl) return undefined;
+  // HTTPS: https://github.com/owner/repo.git
+  const httpsMatch = remoteUrl.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (httpsMatch) return httpsMatch[1];
+  // SSH: git@github.com:owner/repo.git
+  const sshMatch = remoteUrl.match(/github\.com:([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (sshMatch) return sshMatch[1];
+  return undefined;
+}
+
 export type ProjectUpdate = {
   [K in keyof ProjectFrontmatter]?: ProjectFrontmatter[K] | null;
 };
@@ -100,7 +116,10 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
       ]);
 
       const gitStatus = hasGit ? await fetchGitStatus(dirPath) : undefined;
-      const hasRepo = Boolean(frontmatter.repo);
+      // Auto-detect GitHub linkage: frontmatter repo field takes priority,
+      // otherwise check if git remote points to GitHub
+      const hasRepo = Boolean(frontmatter.repo) ||
+        Boolean(gitStatus?.remote && gitStatus.remote.includes('github.com'));
 
       projects.push({
         id,
@@ -143,10 +162,11 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
   }
 
   // Fetch commit activity for GitHub-linked projects
-  const withRepoSlug = projects.filter((project) => Boolean(project.frontmatter.repo));
+  const withRepoSlug = projects.filter((project) => project.hasRepo);
   await Promise.all(
     withRepoSlug.map(async (project) => {
-      const repoSlug = project.frontmatter.repo;
+      // Use frontmatter repo slug, or extract from git remote URL
+      const repoSlug = project.frontmatter.repo ?? extractGitHubSlug(project.gitStatus?.remote);
       if (!repoSlug) return;
 
       const activity = await fetchCommitActivity(repoSlug);

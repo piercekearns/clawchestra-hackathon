@@ -18,6 +18,7 @@ struct GitStatus {
     state: String,
     branch: Option<String>,
     details: Option<String>,
+    remote: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1133,6 +1134,7 @@ fn probe_repo(repo_path: String) -> Result<RepoProbe, String> {
 #[tauri::command]
 fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
     let branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
+    let remote = run_git(&repo_path, &["config", "--get", "remote.origin.url"]).ok();
     let status_porcelain = run_git(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
 
     if !status_porcelain.is_empty() {
@@ -1140,6 +1142,7 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
             state: "uncommitted".to_string(),
             branch,
             details: Some("Repository has uncommitted changes".to_string()),
+            remote,
         });
     }
 
@@ -1152,6 +1155,7 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
             state: "clean".to_string(),
             branch,
             details: Some("No upstream configured".to_string()),
+            remote,
         });
     }
 
@@ -1165,6 +1169,7 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
             state: "behind".to_string(),
             branch,
             details: Some(format!("Behind upstream by {} commit(s)", behind_count)),
+            remote,
         });
     }
 
@@ -1178,6 +1183,7 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
             state: "unpushed".to_string(),
             branch,
             details: Some(format!("Ahead of upstream by {} commit(s)", ahead_count)),
+            remote,
         });
     }
 
@@ -1185,6 +1191,7 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
         state: "clean".to_string(),
         branch,
         details: Some("Working tree clean".to_string()),
+        remote,
     })
 }
 
