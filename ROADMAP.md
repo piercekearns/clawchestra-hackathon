@@ -26,9 +26,7 @@ items:
     title: Deliverable Lifecycle Orchestration
     status: up-next
     priority: 2
-    nextAction: >-
-      Spec the spec/plan/next-action workflow and chat-prefill automation from
-      roadmap item detail
+    nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
       - workflow
