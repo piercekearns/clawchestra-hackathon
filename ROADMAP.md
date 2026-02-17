@@ -2,9 +2,9 @@
 items:
   - id: chat-infrastructure
     title: "Chat Infrastructure Overhaul"
-    status: pending
+    status: testing
     priority: 1
-    nextAction: "Phase A specced — ready to build (scoped sessions + WS reconnection + scan path fix)"
+    nextAction: "Code complete — needs manual testing in Tauri app (build, reconnection, activity indicator)"
     tags: [chat, infra, openclaw, architecture]
     icon: "\U0001F527"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
