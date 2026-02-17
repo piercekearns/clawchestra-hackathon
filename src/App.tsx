@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock4, Link2 } from 'lucide-react';
+import { Clock4, Github } from 'lucide-react';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
@@ -933,7 +933,7 @@ export default function App() {
                   renderItemIndicators={(project) => (
                     <>
                       {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
-                      {project.hasRepo ? <Link2 className="h-4 w-4 text-status-info" /> : null}
+                      {project.hasRepo ? <Github className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" /> : null}
                       {project.gitStatus ? (
                         <span className="text-xs" title={project.gitStatus.details}>
                           {gitStatusEmoji(project.gitStatus)}
