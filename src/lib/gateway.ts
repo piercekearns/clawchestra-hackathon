@@ -872,6 +872,7 @@ async function sendViaTauriWs(
       let finalDebounceTimer: ReturnType<typeof setTimeout> | null = null;
       let sawFinal = false;
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
+      let unsubscribeState: (() => void) | null = null;
 
       const cancelFinalDebounce = () => {
         if (finalDebounceTimer) {
@@ -884,7 +885,7 @@ async function sendViaTauriWs(
         if (idleTimeout) clearTimeout(idleTimeout);
         idleTimeout = setTimeout(() => {
           setAgentActivity('idle', onActivityChange);
-        }, 60_000);
+        }, 15_000);
       };
 
       const startFinalDebounce = () => {
@@ -905,6 +906,10 @@ async function sendViaTauriWs(
           clearTimeout(idleTimeout);
           idleTimeout = null;
         }
+        if (unsubscribeState) {
+          unsubscribeState();
+          unsubscribeState = null;
+        }
         unsubscribe();
       };
 
@@ -915,12 +920,33 @@ async function sendViaTauriWs(
       }, 30 * 60 * 1000);
 
       let lastEventTime = Date.now();
+      let resubscribeCount = 0;
+
+      // Watch for WS connection state changes during send.
+      // If connection drops and reconnects, re-subscribe to events so we
+      // don't lose streaming deltas.
+      unsubscribeState = connection.onStateChange((wsState) => {
+        if (completed) return;
+        if (wsState === 'disconnected' || wsState === 'reconnecting') {
+          console.warn('[Gateway] WS connection lost during active send, state:', wsState);
+          // Keep activity visible so user knows we're aware
+          setAgentActivity('working', onActivityChange);
+        } else if (wsState === 'connected' && resubscribeCount < 3) {
+          // Connection restored — re-subscribe to pick up remaining events
+          console.log('[Gateway] WS reconnected during send, re-subscribing (attempt', resubscribeCount + 1, ')');
+          resubscribeCount++;
+          unsubscribe();
+          unsubscribe = connection.subscribe(eventHandler);
+          // Reset event timer so poll doesn't fire immediately
+          lastEventTime = Date.now();
+        }
+      });
 
       const pollInterval = setInterval(async () => {
         if (completed) return;
 
         const timeSinceLastEvent = Date.now() - lastEventTime;
-        if (timeSinceLastEvent < 30000) {
+        if (timeSinceLastEvent < 10000) {
           return;
         }
 
@@ -957,7 +983,7 @@ async function sendViaTauriWs(
         compacted: 'Compacting conversation...',
       };
 
-      const unsubscribe = connection.subscribe((eventName, payload) => {
+      const eventHandler = (eventName: string, payload: unknown) => {
         if (completed) return;
 
         lastEventTime = Date.now();
@@ -1044,7 +1070,9 @@ async function sendViaTauriWs(
           clearActiveSendRun(runId);
           startFinalDebounce();
         }
-      });
+      };
+
+      let unsubscribe = connection.subscribe(eventHandler);
     });
 
     await new Promise((r) => setTimeout(r, 50));
