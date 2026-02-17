@@ -1062,23 +1062,20 @@ async function sendViaTauriWs(
           if (deltaText) {
             if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
               // New content block after tool calls — append with separator.
-              // Record the prefix length so subsequent cumulative deltas in
-              // this block can be compared against their own block start,
-              // not the total accumulated length.
               contentBlockOffset = streamedText.length + 2; // +2 for '\n\n'
               streamedText = streamedText + '\n\n' + deltaText;
               sawToolSinceLastContent = false;
+              console.log(`[Gateway] New content block after tools, offset=${contentBlockOffset}, total=${streamedText.length}`);
             } else if (contentBlockOffset > 0 && deltaText.length < streamedText.length) {
               // Cumulative delta within a post-tool content block.
-              // The delta text is relative to this block only, so splice it
-              // onto the prefix we accumulated before this block started.
               streamedText = streamedText.slice(0, contentBlockOffset) + deltaText;
             } else if (deltaText.length >= streamedText.length) {
-              // Normal cumulative delta within the first content block
-              // (or a single-block response).
+              // Normal cumulative delta within current content block.
               streamedText = deltaText;
+            } else {
+              // Out-of-order / shorter delta — log for diagnostics
+              console.warn(`[Gateway] Dropped delta: deltaLen=${deltaText.length}, streamedLen=${streamedText.length}, offset=${contentBlockOffset}, sawTool=${sawToolSinceLastContent}`);
             }
-            // else: out-of-order delta shorter than current, ignore
 
             if (onStreamDelta) {
               onStreamDelta(streamedText);
@@ -1103,6 +1100,7 @@ async function sendViaTauriWs(
 
         if (state === 'final') {
           const finalText = extractText(chat.message);
+          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
             if (onStreamDelta) {
@@ -1162,32 +1160,20 @@ async function sendViaTauriWs(
       }
     }
 
-    // If history extraction found nothing, fall back to streamed content
+    // History is the source of truth for final messages.
+    // Streaming was only for the live preview — it can be truncated if
+    // deltas stopped arriving (WS hiccup, timing issues).
+    // Only fall back to streaming if history extraction found nothing.
+    const historyTotalLength = assistantMessages.reduce((sum, m) => sum + m.content.length, 0);
+    console.log(`[Gateway] Post-send: history found ${assistantMessages.length} messages (${historyTotalLength} chars), streamed ${streamedText.trim().length} chars`);
+
     if (assistantMessages.length === 0 && streamedText.trim()) {
+      console.log('[Gateway] No history messages found, falling back to streamed content');
       assistantMessages.push({
         role: 'assistant',
         content: streamedText.trim(),
         timestamp: Date.now(),
       });
-    }
-
-    // If streamed content is longer than what history gave us (e.g. history
-    // was truncated or split differently), prefer the streamed version for
-    // the last message to avoid losing content.
-    const lastHistoryContent = assistantMessages.length > 0
-      ? assistantMessages[assistantMessages.length - 1].content
-      : '';
-
-    if (streamedText.trim().length > lastHistoryContent.length) {
-      if (assistantMessages.length > 0) {
-        assistantMessages[assistantMessages.length - 1].content = streamedText.trim();
-      } else {
-        assistantMessages.push({
-          role: 'assistant',
-          content: streamedText.trim(),
-          timestamp: Date.now(),
-        });
-      }
     }
 
     setAgentActivity('idle', onActivityChange);
