@@ -858,14 +858,23 @@ async function sendViaTauriWs(
     setAgentActivity('working', onActivityChange);
     console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
 
-    // Subscribe to events BEFORE sending so we never miss early deltas.
-    // The gateway may start emitting events as soon as chat.send is acknowledged,
-    // and if we subscribe after, fast responses can be completely lost.
+    // Send FIRST, then subscribe to events. This ordering is critical:
+    // the gateway acks the send before processing it, so any stale events
+    // from previous responses pass through during the await. By the time
+    // we subscribe, only events from the current response will arrive.
+    await connection.request('chat.send', {
+      sessionKey,
+      message: messageText,
+      deliver: false,
+      idempotencyKey: runId,
+      attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
+    });
+    console.log('[Gateway] chat.send acknowledged');
+
     await new Promise<void>((resolve, reject) => {
       let completed = false;
       let finalDebounceTimer: ReturnType<typeof setTimeout> | null = null;
       let sawFinal = false;
-      let sendCompleted = false; // True once chat.send is acknowledged by gateway
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
       let unsubscribeState: (() => void) | null = null;
 
@@ -1113,18 +1122,7 @@ async function sendViaTauriWs(
 
         if (state === 'final') {
           const finalText = extractText(chat.message);
-          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, sendCompleted=${sendCompleted}`);
-
-          // Ignore stale final events that arrive before chat.send completes
-          // or that carry no content (leftover from previous responses).
-          if (!sendCompleted) {
-            console.log('[Gateway] Ignoring final event — chat.send not yet acknowledged');
-            return;
-          }
-          if (!finalText && !streamedText) {
-            console.log('[Gateway] Ignoring empty final event — likely stale from previous response');
-            return;
-          }
+          console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
 
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
@@ -1139,24 +1137,6 @@ async function sendViaTauriWs(
       };
 
       let unsubscribe = connection.subscribe(eventHandler);
-
-      // Now that events are subscribed, send the message.
-      console.log('[Gateway] Sending chat.send via tauri-ws, connection.connected:', connection.connected);
-      connection.request('chat.send', {
-        sessionKey,
-        message: messageText,
-        deliver: false,
-        idempotencyKey: runId,
-        attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
-      }).then(() => {
-        sendCompleted = true;
-        console.log('[Gateway] chat.send succeeded, sendCompleted=true');
-      }).catch((err) => {
-        console.error('[Gateway] REJECT via chat.send failed:', err);
-        cleanup();
-        clearActiveSendRun(runId);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      });
     });
 
     await new Promise((r) => setTimeout(r, 50));
