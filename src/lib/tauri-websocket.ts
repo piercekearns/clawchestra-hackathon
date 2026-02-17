@@ -130,6 +130,11 @@ export class TauriOpenClawConnection {
       const message = JSON.parse(raw) as Record<string, unknown>;
       const type = message.type as string;
       const id = message.id as string | undefined;
+      
+      // Log all incoming WS messages for diagnostics
+      if (type !== 'event') {
+        console.log(`[TauriWS] Message: type=${type}, id=${id ?? 'none'}`);
+      }
 
       // Handle RPC responses (type: 'res' or 'err')
       if (id && this.requestCallbacks.has(id)) {
@@ -149,6 +154,10 @@ export class TauriOpenClawConnection {
       if (type === 'event') {
         const eventName = message.event as string;
         const eventData = message.payload;
+        const chatState = typeof eventData === 'object' && eventData !== null
+          ? (eventData as Record<string, unknown>).state
+          : undefined;
+        console.log(`[TauriWS] Event received: ${eventName}, state=${chatState ?? '?'}, handlers=${this.handlers.size}`);
         if (eventName) {
           this.handlers.forEach((handler) => {
             handler(eventName, eventData);
