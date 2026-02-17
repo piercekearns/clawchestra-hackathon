@@ -103,6 +103,15 @@ items:
       - roadmap
       - ux
       - workflow
+  - id: github-api-403-errors
+    title: Investigate GitHub API 403 Errors
+    status: pending
+    priority: 2
+    nextAction: 'Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge — likely rate limiting, may need auth token or caching'
+    tags:
+      - bug
+      - github
+      - api
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
