@@ -1,116 +1,106 @@
 # Deliverable Lifecycle Orchestration
 
-> Make roadmap deliverables operationally obvious: what exists, what is missing, and the single next action to run.
+> Hover a roadmap card to see five lifecycle actions — Spec, Plan, Review, Deliver, Build — each one click from a chat prompt.
+
+## Summary
+
+Working a roadmap item currently requires manual context-switching: check if artifacts exist, decide the next step, open chat, type a context-heavy prompt. This feature replaces that friction with a Proton Mail-style hover action bar on kanban cards. On hover, the card's nextAction text swaps for five fixed-position icon buttons. Spec and Plan icons show filled/outline states indicating whether the artifact exists. Clicking any icon opens the chat drawer with an editable, contextual prompt pre-filled. The user can append instructions (e.g., "do with codex") and send when ready.
 
 ---
 
 **Roadmap Item:** `deliverable-lifecycle-orchestration`
-**Status:** Draft
+**Status:** Ready
 **Created:** 2026-02-17
+**Updated:** 2026-02-17
 
-## Problem
+---
 
-Working a roadmap item currently requires manual context switching:
+## The Five Actions
 
-1. Open item
-2. Inspect if spec/plan exist
-3. Decide next action manually
-4. Open chat and retype context-heavy prompts
+| # | Action | Icon | Filled state? | What it does |
+|---|--------|------|---------------|-------------|
+| 1 | **Spec** | `FileText` (Lucide) | Yes — file exists | Prefills "create spec" or "update spec" prompt |
+| 2 | **Plan** | `ListChecks` (Lucide) | Yes — file exists | Prefills "create plan" or "update plan" prompt |
+| 3 | **Review** | `Search` (Lucide) | No — always outline | Prefills plan review prompt |
+| 4 | **Deliver** | `Hammer` (Lucide) | No — always outline | Prefills direct build prompt (agent does the work) |
+| 5 | **Build** | `CrossedHammers` (custom SVG) | No — always outline | Prefills formal multi-agent workflow prompt |
 
-This adds friction and causes drift between roadmap intent and execution cadence.
+### Filled vs Outline
 
-## Product Goal
+- **Spec**: Filled if `specDoc` resolves to an existing file. Outline if missing.
+- **Plan**: Filled if `planDoc` resolves to an existing file. Outline if missing.
+- **Review, Deliver, Build**: Always outline. No file-backed artifact to detect state.
 
-From a roadmap item detail view, show the current lifecycle state and one primary action button that prepares a high-quality, editable chat prompt.
+### Always clickable
 
-## Lifecycle Model (MVP)
+All five icons are always present and always clickable, even if the artifact exists. Clicking a filled Spec icon prefills an "update spec" prompt instead of "create spec". This lets the user redo any stage.
 
-Use file-backed detection plus roadmap status:
+## UX: Hover Action Bar
 
-1. `spec` artifact present if `specDoc` resolves and file exists
-2. `plan` artifact present if `planDoc` resolves and file exists
-3. `build` is inferred from roadmap status:
-   `in-progress` or `complete` => build started
+**Trigger:** Mouse hover on a roadmap kanban card.
 
-No manual toggles for artifact status.
+**Behavior:**
+1. On hover, the nextAction text line fades out.
+2. In its place, five icon buttons appear, horizontally spaced across the card width.
+3. Icons are in fixed positions — they never shift based on state.
+4. On mouse-out, icons disappear and nextAction text returns.
+5. Clicking an icon fires the action. `stopPropagation` prevents card click-through.
 
-## UX Requirements
+**Inspiration:** Proton Mail email row hover actions — small icon buttons appear on hover, replacing inline text.
 
-### 1) Artifact State Badges
+## Chat Prefill
 
-For each roadmap item detail:
+Clicking any icon:
+1. Opens the chat drawer.
+2. Pre-fills the composer with an editable prompt.
+3. User can edit, append context (e.g., "do with codex"), then send.
+4. **Never auto-submits.** The user always has final control.
 
-- `Spec: Present|Missing`
-- `Plan: Present|Missing`
-- `Build: Not Started|In Progress|Complete` (derived from status)
+### Prompt content
 
-Badge states must be deterministic from files + item status to avoid drift.
+Each prompt includes:
+- Project title and ID
+- Roadmap item title and ID
+- Known artifact paths (specDoc, planDoc) when they exist
+- Explicit requested action
 
-### 2) Single Dynamic Next Action
+Prompts adapt: "create spec for {item}" when none exists, "update the spec at {path}" when it does.
 
-Show one primary CTA based on lifecycle state:
+## Deliver vs Build
 
-1. Missing spec => `Create Spec`
-2. Spec present, missing plan => `Create Plan`
-3. Spec+plan present, build not started => `Run Build`
-4. Build in progress/complete => `Continue Build` (or hidden if not needed)
+Two separate actions for different scales of work:
 
-### 3) Chat Prefill Automation
+- **Deliver** (single hammer): The agent builds it directly. Suitable for small-medium features where the agent can handle the implementation in a single session.
+- **Build** (crossed hammers): Triggers a formal multi-agent workflow — `/build`, `/work`, or similar compound-engineering commands. Suitable for larger features that benefit from structured multi-agent execution.
 
-Clicking CTA should:
-
-1. Open the chat drawer
-2. Prefill composer with an editable prompt
-3. Include concrete context:
-   - project title/id
-   - roadmap item id/title
-   - known artifact paths (`specDoc`, `planDoc`)
-   - requested action (`create spec`, `create plan`, `run build`)
-
-User must be able to edit before send.
-
-## Prompt Templates (Initial)
-
-### Create Spec
-
-"Please create a technical spec for roadmap item `{item.title}` (`{item.id}`) in project `{project.title}`. Use repository conventions and write to `{specDocPath}`."
-
-### Create Plan
-
-"Please create an implementation plan for roadmap item `{item.title}` (`{item.id}`) in project `{project.title}` based on `{specDocPath}`. Save to `{planDocPath}`."
-
-### Run Build
-
-"Please execute the build workflow for roadmap item `{item.title}` (`{item.id}`) in project `{project.title}`, using `{specDocPath}` and `{planDocPath}` as source of truth."
+The user chooses which is appropriate and can append routing instructions to the prefilled prompt.
 
 ## Scope
 
-In scope:
+**In scope:**
+- Hover action bar on roadmap kanban cards (5 icons)
+- Artifact state detection (spec/plan filled vs outline)
+- Chat drawer open + composer prefill
+- Prompt templates for all 5 actions
+- Custom CrossedHammers SVG icon
 
-- roadmap-item lifecycle detection
-- lifecycle badges
-- single dynamic CTA
-- chat open + composer prefill
+**Out of scope:**
+- Auto-submitting prompts
+- Tracking review/build completion state
+- Detail dialog changes (future enhancement)
+- Lifecycle badges in the detail dialog (replaced by hover action bar on cards)
 
-Out of scope:
+## Edge Cases
 
-- auto-submitting prompts
-- deep multi-stage workflow orchestration UI
-- backend task engine changes
+| Scenario | Behavior |
+|----------|----------|
+| Item with no spec, no plan | Both outline. All actions available. |
+| Click Spec when spec exists | Prefills "update spec" prompt (not "create") |
+| Drag card from non-icon area | Normal drag behavior — icons use stopPropagation |
+| Drag started, then hover icon area | Icons don't interfere with active drag |
+| Composer has unsaved text when icon clicked | Prefill replaces current input |
+| Card in "complete" status | All icons still available (can redo any stage) |
 
-## Technical Notes
+---
 
-Likely touchpoints:
-
-- `src/components/modal/RoadmapItemDetail.tsx`
-- `src/components/chat/ChatShell.tsx`
-- `src/App.tsx` (state plumbing for chat open + prefill action)
-- `src/lib/roadmap.ts` (artifact resolution helpers if needed)
-
-## Acceptance Criteria
-
-1. Roadmap detail shows deterministic Spec/Plan/Build states.
-2. Only one primary CTA is visible at a time.
-3. CTA opens chat and inserts contextual prompt text.
-4. Prompt is editable before send.
-5. State remains correct after refresh/reload without manual syncing.
+*Spec is a living document. Update as decisions are made during build.*
