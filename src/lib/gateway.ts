@@ -983,6 +983,12 @@ async function sendViaTauriWs(
         compacted: 'Compacting conversation...',
       };
 
+      // Track whether we've crossed a tool-call boundary since the last content block.
+      // When the agent sends text → tool calls → more text, the second text block's
+      // delta content restarts from zero length. Without this tracking, the length
+      // check silently drops the new block (it's shorter than what we accumulated).
+      let sawToolSinceLastContent = false;
+
       const eventHandler = (eventName: string, payload: unknown) => {
         if (completed) return;
 
@@ -1012,6 +1018,7 @@ async function sendViaTauriWs(
           setAgentActivity('typing', onActivityChange);
         } else if (TOOL_ACTIVITY_STATES.has(state)) {
           setAgentActivity('working', onActivityChange);
+          sawToolSinceLastContent = true;
         } else if (TERMINAL_ACTIVITY_STATES.has(state)) {
           setAgentActivity('idle', onActivityChange);
         }
@@ -1035,8 +1042,18 @@ async function sendViaTauriWs(
 
         if (state === 'delta' || state === 'content' || state === 'streaming') {
           const deltaText = extractText(chat.message);
-          if (deltaText && deltaText.length >= streamedText.length) {
-            streamedText = deltaText;
+          if (deltaText) {
+            if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
+              // New content block after tool calls — append with separator
+              streamedText = streamedText + '\n\n' + deltaText;
+            } else if (deltaText.length >= streamedText.length) {
+              // Normal cumulative delta within same content block
+              streamedText = deltaText;
+            }
+            // else: out-of-order delta, ignore
+
+            sawToolSinceLastContent = false;
+
             if (onStreamDelta) {
               onStreamDelta(streamedText);
             }
