@@ -906,6 +906,71 @@ addSystemBubble('completion', 'Sub-agent completed', { 'Runtime': '2m 10s' }, un
 
 ---
 
+### Step 11: Activity Indicator During Tool-Heavy Turns
+
+After Phase A, the WS connection stays open for the entire model turn — including when the agent is making tool calls (e.g., polling tmux, running exec commands) without streaming text. The gateway sends tool call events over the WS during these periods. The dashboard should interpret these events to show an activity indicator so the user knows background work is happening.
+
+**Problem:** During tool-heavy turns (the agent is polling a coding agent build, running grep, checking git status), no text chunks stream. The chat bar shows nothing — the user sees silence even though the agent's turn is active.
+
+**Solution:** Track WS event types and show a contextual status indicator:
+- **Text chunks flowing** → "Typing..." (existing behavior after Phase A)
+- **Tool call events flowing, no text** → "⚙️ Working..." 
+- **Neither** → nothing (turn is complete)
+
+**`src/components/chat/ChatBar.tsx`** (or wherever the typing indicator lives):
+
+The existing typing/streaming indicator logic needs one addition — detect tool call events from the WS and treat them as "active but not typing."
+
+```typescript
+type AgentActivityState = 'idle' | 'typing' | 'working';
+
+// In the chat bar component:
+const agentActivity = useDashboardStore((state) => state.agentActivity);
+
+// Render:
+{agentActivity === 'typing' && (
+  <span className="text-xs text-neutral-400 animate-pulse">Typing...</span>
+)}
+{agentActivity === 'working' && (
+  <span className="text-xs text-neutral-400 animate-pulse">⚙️ Working...</span>
+)}
+```
+
+**`src/lib/store.ts`** — Add to Zustand store:
+
+```typescript
+agentActivity: AgentActivityState;
+setAgentActivity: (state: AgentActivityState) => void;
+```
+
+**`src/lib/gateway.ts`** — Update WS event handling in `sendViaTauriWs`:
+
+The existing event listener that processes `state === 'streaming'`, `state === 'content'`, etc. should also detect tool call events:
+
+```typescript
+// Inside the WS event subscription within sendViaTauriWs:
+if (state === 'content' || state === 'streaming') {
+  useDashboardStore.getState().setAgentActivity('typing');
+} else if (state === 'tool_use' || state === 'tool_result' || state === 'thinking') {
+  useDashboardStore.getState().setAgentActivity('working');
+} else if (state === 'final' || state === 'error' || state === 'aborted') {
+  useDashboardStore.getState().setAgentActivity('idle');
+}
+```
+
+**Discovery needed:** The exact gateway event `state` values for tool calls need to be confirmed. Candidates: `tool_use`, `tool_result`, `tool_call`, `thinking`. Add the same `console.log` from Discovery Item 1 to capture the actual event states during a tool-heavy turn. This is trivial to adapt once the real state strings are known.
+
+**Reset logic:** `agentActivity` must reset to `'idle'` on:
+- `state === 'final'` (turn complete)
+- `state === 'error'` (turn failed)
+- `state === 'aborted'` (turn cancelled)
+- WS disconnect (connection lost — don't show stale "Working...")
+- Timeout (if no event received for 60s, reset to idle as a safety net)
+
+**Files:** `src/lib/store.ts` (new slice), `src/lib/gateway.ts` (event detection), `src/components/chat/ChatBar.tsx` or `ChatShell.tsx` (render indicator)
+
+---
+
 ## Files Modified (Summary)
 
 | File | Changes |
@@ -919,6 +984,7 @@ addSystemBubble('completion', 'Sub-agent completed', { 'Runtime': '2m 10s' }, un
 | `src/lib/tauri.ts` | No changes (existing `PersistedChatMessage` already has `metadata?: string`) |
 | `src-tauri/src/lib.rs` | No changes (existing `ChatMessage` struct already has `metadata: Option<String>`, schema already has `metadata TEXT` column) |
 | `src/App.tsx` | Wire durable event bus on mount, subscribe to system events for compaction/announce/error, implement announce lifecycle `runId` set/clear + terminal dedup window, re-wire on reconnect, process session health polling with reactive `useState` session tracking, teardown on unmount |
+| `src/components/chat/ChatBar.tsx` or `ChatShell.tsx` | Activity indicator — "Typing..." vs "⚙️ Working..." based on WS event types |
 | `AGENTS.md` (this repo only) | Add Decision Escalation rules |
 
 ---
@@ -943,6 +1009,9 @@ addSystemBubble('completion', 'Sub-agent completed', { 'Runtime': '2m 10s' }, un
 14. **Reconnect rebinding:** Disconnect WS → reconnect → trigger a system event → verify the durable event bus still receives it (no stale subscription)
 15. **Mobile overflow:** Add a system bubble with a very long label or error message → verify text wraps properly on narrow screens (no horizontal overflow)
 16. **Accessibility:** Use a screen reader with a failure bubble → verify it is announced as an alert
+17. **Activity indicator (typing):** Send a message → verify "Typing..." appears while text streams
+18. **Activity indicator (working):** Send a message that triggers tool calls (e.g., ask agent to check a file) → verify "⚙️ Working..." appears during tool call events, transitions to "Typing..." when text starts streaming, and disappears when turn completes
+19. **Activity indicator (idle reset):** After turn completes → verify indicator disappears. Disconnect WS → verify indicator disappears (no stale "Working...")
 
 ### Automated
 
@@ -989,5 +1058,6 @@ addSystemBubble('completion', 'Sub-agent completed', { 'Runtime': '2m 10s' }, un
 - Steps 5-6 (durable event bus + compaction): ~0.5 day
 - Steps 7-8 (completion + failure with structured parsing + process polling): ~1 day
 - Steps 9-10 (decision rules + helper): ~0.5 day
+- Step 11 (activity indicator): ~0.25 day
 
-**Total: ~3 days of focused build time.**
+**Total: ~3.25 days of focused build time.**
