@@ -942,6 +942,9 @@ async function sendViaTauriWs(
         }
       });
 
+      // Record when the send started so the poll can ignore older messages
+      const sendStartedAt = Date.now();
+
       const pollInterval = setInterval(async () => {
         if (completed) return;
 
@@ -957,7 +960,15 @@ async function sendViaTauriWs(
           })) as { messages?: Array<Record<string, unknown>> };
 
           const messages = pollHistory.messages ?? [];
-          const latestAssistant = messages.find((m) => m.role === 'assistant');
+
+          // Find the latest assistant message that arrived AFTER we sent our request.
+          // Without this check, the poll resolves with a previous response when
+          // the agent is doing tool calls and hasn't sent any text yet.
+          const latestAssistant = messages.find((m) => {
+            if (m.role !== 'assistant') return false;
+            const ts = typeof m.timestamp === 'number' ? m.timestamp : 0;
+            return ts > sendStartedAt;
+          });
 
           if (latestAssistant) {
             const content = extractText(latestAssistant.content);
