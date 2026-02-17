@@ -4,6 +4,7 @@ id: collapsible-sidebar
 status: pending
 tags: [ui, navigation]
 icon: "📐"
+specDoc: docs/specs/collapsible-sidebar-spec.md
 ---
 
 # Collapsible Sidebar

@@ -1,7 +1,7 @@
 ---
 title: Chat Infrastructure Overhaul
 id: chat-infrastructure
-status: pending
+status: in-progress
 tags: [chat, infra, openclaw, architecture]
 icon: "🔧"
 specDoc: docs/specs/scoped-chat-sessions-spec.md
