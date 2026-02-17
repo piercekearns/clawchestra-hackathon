@@ -1003,14 +1003,16 @@ async function sendViaTauriWs(
         cancelFinalDebounce();
         finalDebounceTimer = setTimeout(() => {
           console.log('[Gateway] RESOLVE via finalDebounce (2s after final event)');
-          cleanup();
+          cleanup('finalDebounce');
           resolve();
         }, 2000);
       };
 
-      const cleanup = () => {
+      const cleanup = (reason: string) => {
         if (completed) return;
         completed = true;
+        console.log(`[Gateway] CLEANUP reason=${reason}, streamedLen=${streamedText.length}, handlers=${connection.handlerCount?.() ?? '?'}`);
+        console.trace('[Gateway] cleanup stack');
         clearTimeout(safetyTimeout);
         clearInterval(pollInterval);
         cancelFinalDebounce();
@@ -1027,7 +1029,7 @@ async function sendViaTauriWs(
 
       const safetyTimeout = setTimeout(() => {
         console.warn('[Gateway] RESOLVE via safetyTimeout (30min)');
-        cleanup();
+        cleanup('safetyTimeout');
         resolve();
       }, 30 * 60 * 1000);
 
@@ -1119,7 +1121,7 @@ async function sendViaTauriWs(
               console.log(
                 `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}/${stabilityThreshold}, sawFinal=${sawFinal}`,
               );
-              cleanup();
+              cleanup('pollStability');
               resolve();
             }
           }
@@ -1263,7 +1265,7 @@ async function sendViaTauriWs(
             return;
           }
           console.log('[Gateway] REJECT via error event:', chat.errorMessage);
-          cleanup();
+          cleanup('errorEvent');
           clearActiveSendRun(runId);
           reject(new Error(typeof chat.errorMessage === 'string' ? chat.errorMessage : 'OpenClaw chat error'));
           return;
@@ -1275,7 +1277,7 @@ async function sendViaTauriWs(
             return;
           }
           console.log('[Gateway] REJECT via aborted event');
-          cleanup();
+          cleanup('abortedEvent');
           clearActiveSendRun(runId);
           reject(new Error('OpenClaw chat aborted'));
           return;
@@ -1302,6 +1304,7 @@ async function sendViaTauriWs(
       };
 
       let unsubscribe = connection.subscribe(eventHandler);
+      console.log('[Gateway] Send handler subscribed, total handlers:', connection.handlerCount?.() ?? 'unknown');
     });
 
     await new Promise((r) => setTimeout(r, 50));

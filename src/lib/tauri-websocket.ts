@@ -243,6 +243,10 @@ export class TauriOpenClawConnection {
     return () => this.handlers.delete(handler);
   }
 
+  handlerCount(): number {
+    return this.handlers.size;
+  }
+
   private rejectPendingCallbacks(reason: string): void {
     const pending = new Map(this.requestCallbacks);
     this.requestCallbacks.clear();
