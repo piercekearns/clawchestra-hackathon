@@ -1106,11 +1106,16 @@ async function sendViaTauriWs(
             pollStableCount = signature === lastPollSignature ? pollStableCount + 1 : 0;
             lastPollSignature = signature;
 
-            // Content is stable (same signature for 2 consecutive polls = ~6 seconds)
-            // OR we received a final event — resolve.
-            if ((pollStableCount >= 2 || sawFinal) && combined.length > 0) {
+            // Content stability check. Two thresholds:
+            // 1. With final event: resolve immediately (agent confirmed done)
+            // 2. Without final event: require 8 consecutive stable polls (~24s at 3s
+            //    intervals). This prevents premature resolution during tool use where
+            //    visible content is stable but the agent is still working in the
+            //    background (reading files, running commands, etc.).
+            const stabilityThreshold = sawFinal ? 1 : 8;
+            if (pollStableCount >= stabilityThreshold && combined.length > 0) {
               console.log(
-                `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}, sawFinal=${sawFinal}`,
+                `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}/${stabilityThreshold}, sawFinal=${sawFinal}`,
               );
               cleanup();
               resolve();
