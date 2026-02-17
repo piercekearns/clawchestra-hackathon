@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Moon, RefreshCcw, Settings, Sun, SunMoon } from 'lucide-react';
 import { Input } from './ui/input';
 import type { ThemePreference } from '../lib/schema';
@@ -36,6 +36,7 @@ export function Header({
 }: HeaderProps) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const updateTriggeredRef = useRef(false);
 
   // Check for updates on mount and every 30 seconds
   useEffect(() => {
@@ -56,13 +57,14 @@ export function Header({
   }, []);
 
   const handleUpdate = async () => {
-    if (!isTauriRuntime() || updating) return;
+    if (!isTauriRuntime() || updating || updateTriggeredRef.current) return;
+    updateTriggeredRef.current = true;
     setUpdating(true);
     try {
       await runAppUpdate(); // Build runs in background, app stays open until done
     } catch (error) {
       console.error('Failed to start update:', error);
-    } finally {
+      updateTriggeredRef.current = false;
       setUpdating(false);
     }
   };

@@ -11,6 +11,41 @@ APP_NAME="Pipeline Dashboard"
 BUNDLE_PATH="$SCRIPT_DIR/src-tauri/target/release/bundle/macos/$APP_NAME.app"
 INSTALL_PATH="${PIPELINE_DASHBOARD_INSTALL_PATH:-/Applications/$APP_NAME.app}"
 RESTART_AFTER_BUILD="${PIPELINE_DASHBOARD_RESTART_AFTER_BUILD:-1}"
+LOCK_DIR="/tmp/pipeline-dashboard-update.lock"
+LOCK_PID_FILE="$LOCK_DIR/pid"
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "$$" > "$LOCK_PID_FILE"
+    return 0
+  fi
+
+  # Lock exists. If the process is still alive, another update is running.
+  if [ -f "$LOCK_PID_FILE" ]; then
+    EXISTING_PID="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
+      echo "ℹ️ Update already in progress (pid $EXISTING_PID)."
+      exit 0
+    fi
+  fi
+
+  # Stale lock: clear and retry once.
+  rm -rf "$LOCK_DIR"
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "$$" > "$LOCK_PID_FILE"
+    return 0
+  fi
+
+  echo "❌ Could not acquire update lock."
+  exit 1
+}
+
+cleanup_lock() {
+  rm -rf "$LOCK_DIR" 2>/dev/null || true
+}
+
+acquire_lock
+trap cleanup_lock EXIT
 
 echo "🔨 Building Pipeline Dashboard..."
 cd "$SCRIPT_DIR"
