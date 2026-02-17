@@ -22,17 +22,10 @@ items:
     nextAction: "Spec written — ready for plan/build"
     tags: [ui]
     specDoc: docs/specs/collapsible-sidebar-spec.md
-  - id: fix-roadmap-spec-links
-    title: "Fix: Roadmap Item Spec Links"
-    status: pending
-    priority: 4
-    nextAction: "specDoc on items ignored, fallback shows project SPEC.md"
-    tags: [bug, roadmap, ui]
-    icon: "\U0001F41B"
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
-    priority: 5
+    priority: 4
     nextAction: Post-V2 scope
     tags: [integration, openclaw]
 ---
