@@ -942,12 +942,19 @@ async function sendViaTauriWs(
 
       // Record when the send started so the poll can ignore older messages
       const sendStartedAt = Date.now();
+      let lastPollLength = 0; // Track content growth across polls
+      let pollStableCount = 0; // How many consecutive polls returned the same length
 
+      // Aggressive poll fallback — events may not be delivered reliably
+      // (WS drops, event subscription issues), so poll frequently.
+      // Poll every 3 seconds. If content is found AND stable for 2 consecutive
+      // polls, treat it as complete.
       const pollInterval = setInterval(async () => {
         if (completed) return;
 
+        // If events are actively streaming, let them drive — only poll as backup
         const timeSinceLastEvent = Date.now() - lastEventTime;
-        if (timeSinceLastEvent < 10000) {
+        if (timeSinceLastEvent < 5000 && streamedText.length > 0) {
           return;
         }
 
@@ -960,8 +967,6 @@ async function sendViaTauriWs(
           const messages = pollHistory.messages ?? [];
 
           // Find the latest assistant message that arrived AFTER we sent our request.
-          // Without this check, the poll resolves with a previous response when
-          // the agent is doing tool calls and hasn't sent any text yet.
           const latestAssistant = messages.find((m) => {
             if (m.role !== 'assistant') return false;
             const ts = typeof m.timestamp === 'number' ? m.timestamp : 0;
@@ -970,22 +975,32 @@ async function sendViaTauriWs(
 
           if (latestAssistant) {
             const content = extractText(latestAssistant.content);
-            if (content && content.length > streamedText.length) {
-              streamedText = content;
-              if (onStreamDelta) {
-                onStreamDelta(streamedText);
-              }
-            }
-
             if (content) {
-              cleanup();
-              resolve();
+              // Update streaming display with polled content
+              if (content.length > streamedText.length) {
+                streamedText = content;
+                pollStableCount = 0;
+                if (onStreamDelta) {
+                  onStreamDelta(streamedText);
+                }
+              } else if (content.length === lastPollLength && content.length > 0) {
+                pollStableCount++;
+              }
+              lastPollLength = content.length;
+
+              // Content is stable (same length for 2 consecutive polls = ~6 seconds)
+              // OR we received a final event — resolve
+              if (pollStableCount >= 2 || sawFinal) {
+                console.log(`[Gateway] Poll resolved: ${content.length} chars, stable=${pollStableCount}, sawFinal=${sawFinal}`);
+                cleanup();
+                resolve();
+              }
             }
           }
         } catch (error) {
           console.warn('[Gateway] Poll failed:', error);
         }
-      }, 10000);
+      }, 3000);
 
       const stateLabels: Record<string, string> = {
         compacting: 'Compacting conversation...',
