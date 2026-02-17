@@ -38,6 +38,15 @@ items:
     tags:
       - integration
       - openclaw
+  - id: collapsible-kanban-columns
+    title: Collapsible Kanban Columns
+    status: pending
+    priority: 3
+    nextAction: Define interaction model for column-level collapse/expand across all board levels
+    tags:
+      - ui
+      - kanban
+      - ux
 ---
 
 # Pipeline Dashboard — Roadmap

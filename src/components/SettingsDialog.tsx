@@ -110,7 +110,7 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="grid gap-1 text-sm">
-              <span>OpenClaw Workspace Path (optional)</span>
+              <span>Chat Context Workspace Path (optional)</span>
               <Input
                 value={openclawWorkspacePath}
                 onChange={(event) => setOpenclawWorkspacePath(event.target.value)}
@@ -145,7 +145,7 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
             </label>
 
             <label className="grid gap-1 text-sm">
-              <span>OpenClaw Context Policy</span>
+              <span>Chat Context Policy</span>
               <div className="relative">
                 <select
                   value={openclawContextPolicy}

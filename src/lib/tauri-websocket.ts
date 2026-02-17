@@ -318,30 +318,60 @@ function wireConnectionStateToStore(connection: TauriOpenClawConnection): void {
 // Singleton connection
 let connectionInstance: TauriOpenClawConnection | null = null;
 let connectionPromise: Promise<TauriOpenClawConnection> | null = null;
+let connectionConfigKey: string | null = null;
+
+function getConnectionConfigKey(wsUrl: string, sessionKey: string, token?: string): string {
+  return JSON.stringify({
+    wsUrl,
+    sessionKey,
+    token: token ?? null,
+  });
+}
 
 export async function getTauriOpenClawConnection(
   wsUrl: string,
   sessionKey: string,
   token?: string,
 ): Promise<TauriOpenClawConnection> {
+  const requestedConfigKey = getConnectionConfigKey(wsUrl, sessionKey, token);
+
   // Reuse existing connection if connected or reconnecting (don't create duplicates)
   if (connectionInstance) {
     const state = connectionInstance.state;
-    if (state === 'connected' || state === 'reconnecting') {
+    if (
+      connectionConfigKey === requestedConfigKey &&
+      (state === 'connected' || state === 'reconnecting' || state === 'connecting')
+    ) {
       return connectionInstance;
     }
   }
 
   // Avoid multiple concurrent connection attempts
-  if (connectionPromise) {
+  if (connectionPromise && connectionConfigKey === requestedConfigKey) {
     return connectionPromise;
   }
-
-  connectionPromise = (async () => {
-    // Clean up disposed instance before creating new one
-    if (connectionInstance) {
-      try { await connectionInstance.disconnect(); } catch { /* ignore */ }
+  if (connectionPromise && connectionConfigKey !== requestedConfigKey) {
+    try {
+      await connectionPromise;
+    } catch {
+      // ignore failed previous attempt
+    } finally {
+      connectionPromise = null;
     }
+  }
+
+  // Existing connection is for different parameters; force a clean reconnect.
+  if (connectionInstance) {
+    try {
+      await connectionInstance.disconnect();
+    } catch {
+      // ignore disconnect failures and continue with a fresh connection
+    }
+    connectionInstance = null;
+  }
+
+  connectionConfigKey = requestedConfigKey;
+  connectionPromise = (async () => {
     connectionInstance = new TauriOpenClawConnection(wsUrl, sessionKey, token);
     wireConnectionStateToStore(connectionInstance); // Wire BEFORE connect so all transitions are captured
     await connectionInstance.connect();  // setState('connecting') → setState('connected')
@@ -360,6 +390,7 @@ export function closeTauriOpenClawConnection(): void {
     connectionInstance.disconnect();
     connectionInstance = null;
   }
+  connectionConfigKey = null;
 }
 
 export function getConnectionInstance(): TauriOpenClawConnection | null {

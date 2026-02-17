@@ -216,33 +216,38 @@ export const useDashboardStore = create<DashboardState>()(
         set({ chatLoadingMore: true });
         
         try {
-          const oldestTimestamp = chatMessages[0]?.timestamp;
-          if (!oldestTimestamp) {
+          const oldestMessage = chatMessages[0];
+          if (!oldestMessage?.timestamp) {
             set({ chatLoadingMore: false, chatHasMore: false });
             return;
           }
           
-          const olderMessages = await chatMessagesLoad(oldestTimestamp, 50);
+          const olderMessages = await chatMessagesLoad(
+            oldestMessage.timestamp,
+            50,
+            oldestMessage._id,
+          );
           
           if (olderMessages.length === 0) {
             set({ chatLoadingMore: false, chatHasMore: false });
             return;
           }
           
-          // Deduplicate: filter out messages we already have (by timestamp+content)
-          const existingKeys = new Set(
-            chatMessages.map((m) => `${m.timestamp}-${m.content.slice(0, 50)}`)
+          // Deduplicate by persisted message id.
+          const existingIds = new Set(
+            chatMessages
+              .map((m) => m._id)
+              .filter((id): id is string => typeof id === 'string' && id.length > 0),
           );
           
           const newMessages = olderMessages
-            .filter((m) => !existingKeys.has(`${m.timestamp}-${m.content.slice(0, 50)}`))
+            .filter((m) => !existingIds.has(m.id))
             .map((m) => deserializePersistedMessage(m));
           
           set((state) => ({
             chatMessages: [...newMessages, ...state.chatMessages],
             chatLoadingMore: false,
-            // If we filtered all messages or got fewer than 50, might be at the end
-            chatHasMore: newMessages.length > 0 && olderMessages.length === 50,
+            chatHasMore: olderMessages.length === 50,
           }));
           
           console.log(`[Store] Loaded ${newMessages.length} more messages (${olderMessages.length - newMessages.length} duplicates filtered)`);

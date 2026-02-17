@@ -74,7 +74,7 @@ type TauriCommands = {
   list_slash_commands: { args: Record<string, never>; return: TauriSlashCommand[] };
   // Chat persistence commands
   chat_messages_load: {
-    args: { beforeTimestamp?: number; limit?: number };
+    args: { beforeTimestamp?: number; beforeId?: string; limit?: number };
     return: Array<{ id: string; role: string; content: string; timestamp: number; metadata?: string }>;
   };
   chat_message_save: {
@@ -227,8 +227,9 @@ export interface PersistedChatMessage {
 export async function chatMessagesLoad(
   beforeTimestamp?: number,
   limit?: number,
+  beforeId?: string,
 ): Promise<PersistedChatMessage[]> {
-  return typedInvoke('chat_messages_load', { beforeTimestamp, limit });
+  return typedInvoke('chat_messages_load', { beforeTimestamp, beforeId, limit });
 }
 
 export async function chatMessageSave(message: PersistedChatMessage): Promise<void> {

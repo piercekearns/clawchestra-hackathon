@@ -723,6 +723,8 @@ export default function App() {
         {
           view: viewContext.type,
           selectedProject: selectedProject?.title,
+          openclawWorkspacePath: dashboardSettings?.openclawWorkspacePath,
+          openclawContextPolicy: dashboardSettings?.openclawContextPolicy,
         },
         {
           attachments,

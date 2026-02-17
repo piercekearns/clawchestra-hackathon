@@ -1401,7 +1401,7 @@ async fn run_app_update() -> Result<String, String> {
         .spawn()
         .map_err(|error| error.to_string())?;
 
-    Ok("Update started - app will restart when build completes".to_string())
+    Ok("Update build started in background (no restart performed)".to_string())
 }
 
 fn unix_timestamp_secs() -> u64 {
@@ -1769,6 +1769,7 @@ struct ChatMessage {
 #[tauri::command]
 fn chat_messages_load(
     before_timestamp: Option<i64>,
+    before_id: Option<String>,
     limit: Option<i64>,
 ) -> Result<Vec<ChatMessage>, String> {
     let limit = limit.unwrap_or(50);
@@ -1777,19 +1778,68 @@ fn chat_messages_load(
 
     let mut messages: Vec<ChatMessage> = Vec::new();
 
-    let mut stmt = match before_timestamp {
+    match before_timestamp {
         Some(ts) => {
-            // Use <= to avoid skipping messages with same timestamp
-            // ORDER BY timestamp DESC, id DESC ensures consistent ordering
+            if let Some(cursor_id) = before_id {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, role, content, timestamp, metadata FROM messages
+                         WHERE (timestamp < ?1) OR (timestamp = ?1 AND id < ?2)
+                         ORDER BY timestamp DESC, id DESC LIMIT ?3",
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                let rows = stmt
+                    .query_map(params![ts, cursor_id, limit], |row| {
+                        Ok(ChatMessage {
+                            id: row.get(0)?,
+                            role: row.get(1)?,
+                            content: row.get(2)?,
+                            timestamp: row.get(3)?,
+                            metadata: row.get(4)?,
+                        })
+                    })
+                    .map_err(|e| e.to_string())?;
+
+                for row in rows {
+                    messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+                }
+            } else {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, role, content, timestamp, metadata FROM messages
+                         WHERE timestamp < ?1
+                         ORDER BY timestamp DESC, id DESC LIMIT ?2",
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                let rows = stmt
+                    .query_map(params![ts, limit], |row| {
+                        Ok(ChatMessage {
+                            id: row.get(0)?,
+                            role: row.get(1)?,
+                            content: row.get(2)?,
+                            timestamp: row.get(3)?,
+                            metadata: row.get(4)?,
+                        })
+                    })
+                    .map_err(|e| e.to_string())?;
+
+                for row in rows {
+                    messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+                }
+            }
+        }
+        None => {
             let mut stmt = conn
                 .prepare(
-                    "SELECT id, role, content, timestamp, metadata FROM messages 
-                 WHERE timestamp <= ?1 ORDER BY timestamp DESC, id DESC LIMIT ?2",
+                    "SELECT id, role, content, timestamp, metadata FROM messages
+                     ORDER BY timestamp DESC, id DESC LIMIT ?1",
                 )
                 .map_err(|e| e.to_string())?;
 
             let rows = stmt
-                .query_map(params![ts, limit], |row| {
+                .query_map(params![limit], |row| {
                     Ok(ChatMessage {
                         id: row.get(0)?,
                         role: row.get(1)?,
@@ -1803,30 +1853,7 @@ fn chat_messages_load(
             for row in rows {
                 messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
             }
-            return Ok(messages.into_iter().rev().collect());
         }
-        None => conn
-            .prepare(
-                "SELECT id, role, content, timestamp, metadata FROM messages 
-                 ORDER BY timestamp DESC LIMIT ?1",
-            )
-            .map_err(|e| e.to_string())?,
-    };
-
-    let rows = stmt
-        .query_map(params![limit], |row| {
-            Ok(ChatMessage {
-                id: row.get(0)?,
-                role: row.get(1)?,
-                content: row.get(2)?,
-                timestamp: row.get(3)?,
-                metadata: row.get(4)?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-
-    for row in rows {
-        messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
     }
 
     // Reverse to get chronological order (oldest first)

@@ -62,6 +62,7 @@ export function Header({
       await runAppUpdate(); // Build runs in background, app stays open until done
     } catch (error) {
       console.error('Failed to start update:', error);
+    } finally {
       setUpdating(false);
     }
   };

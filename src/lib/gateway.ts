@@ -297,6 +297,78 @@ function extractText(content: unknown): string {
   return '';
 }
 
+type GatewayHistoryMessage = Record<string, unknown>;
+
+function isHistoryMessage(value: unknown): value is GatewayHistoryMessage {
+  return typeof value === 'object' && value !== null;
+}
+
+function getHistoryMessageId(message: GatewayHistoryMessage): string | undefined {
+  return typeof message.id === 'string' && message.id.trim().length > 0 ? message.id : undefined;
+}
+
+function getHistoryMessageTimestamp(message: GatewayHistoryMessage): number | undefined {
+  return typeof message.timestamp === 'number' ? message.timestamp : undefined;
+}
+
+function toChronologicalHistory(
+  messages: GatewayHistoryMessage[],
+): GatewayHistoryMessage[] {
+  if (messages.length < 2) return [...messages];
+
+  const firstTimestamp = messages.find((message) => getHistoryMessageTimestamp(message) !== undefined);
+  const lastTimestamp = [...messages]
+    .reverse()
+    .find((message) => getHistoryMessageTimestamp(message) !== undefined);
+
+  const first = firstTimestamp ? getHistoryMessageTimestamp(firstTimestamp) : undefined;
+  const last = lastTimestamp ? getHistoryMessageTimestamp(lastTimestamp) : undefined;
+
+  if (first !== undefined && last !== undefined && first > last) {
+    return [...messages].reverse();
+  }
+
+  return [...messages];
+}
+
+function extractAssistantMessagesFromHistory(
+  rawMessages: GatewayHistoryMessage[],
+  options: {
+    baselineIds: Set<string>;
+    minTimestamp: number;
+  },
+): ChatMessage[] {
+  const chronological = toChronologicalHistory(rawMessages);
+  const seen = new Set<string>();
+  const assistantMessages: ChatMessage[] = [];
+
+  for (const message of chronological) {
+    if (message.role !== 'assistant') continue;
+
+    const id = getHistoryMessageId(message);
+    const timestamp = getHistoryMessageTimestamp(message);
+
+    if (id && options.baselineIds.has(id)) continue;
+    if (timestamp !== undefined && timestamp < options.minTimestamp) continue;
+
+    const content = extractText(message.content).trim();
+    if (!content) continue;
+
+    const dedupeKey = id ?? `${timestamp ?? 'na'}:${content}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    assistantMessages.push({
+      role: 'assistant',
+      content,
+      timestamp: timestamp ?? Date.now(),
+      ...(id ? { _id: id } : {}),
+    });
+  }
+
+  return assistantMessages;
+}
+
 function toOpenAIMessagePayload(
   messages: ChatMessage[],
   attachments: GatewayImageAttachment[] = [],
@@ -851,7 +923,27 @@ async function sendViaTauriWs(
 
   const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   const runId = getRequestId();
+  const sendRequestedAt = Date.now();
   let streamedText = '';
+  const baselineMessageIds = new Set<string>();
+
+  try {
+    const historyBefore = (await connection.request('chat.history', {
+      sessionKey,
+      limit: 200,
+    })) as { messages?: unknown[] };
+
+    const baselineMessages = Array.isArray(historyBefore.messages)
+      ? historyBefore.messages.filter(isHistoryMessage)
+      : [];
+
+    for (const message of baselineMessages) {
+      const id = getHistoryMessageId(message);
+      if (id) baselineMessageIds.add(id);
+    }
+  } catch (error) {
+    console.warn('[Gateway] Failed to load baseline history before send:', error);
+  }
 
   try {
     markActiveSendRun(runId);
@@ -878,6 +970,8 @@ async function sendViaTauriWs(
       // Don't throw — fall through to polling. The message may have been
       // delivered before the connection dropped.
     }
+
+    const minNewMessageTimestamp = sendAcked ? sendRequestedAt : sendRequestedAt - 5000;
 
     await new Promise<void>((resolve, reject) => {
       let completed = false;
@@ -961,10 +1055,9 @@ async function sendViaTauriWs(
       });
 
       // Record when the send started so the poll can ignore older messages.
-      // If the send wasn't acked, widen the window — the message may have
-      // arrived slightly before or after our timestamp.
-      const sendStartedAt = sendAcked ? Date.now() : Date.now() - 5000;
-      let lastPollLength = 0; // Track content growth across polls
+      // If the send wasn't acked, minNewMessageTimestamp already widens the
+      // matching window.
+      let lastPollSignature = '';
       let pollStableCount = 0; // How many consecutive polls returned the same length
 
       // Aggressive poll fallback — events may not be delivered reliably
@@ -987,40 +1080,40 @@ async function sendViaTauriWs(
         try {
           const pollHistory = (await connection.request('chat.history', {
             sessionKey,
-            limit: 5,
-          })) as { messages?: Array<Record<string, unknown>> };
+            limit: 30,
+          })) as { messages?: unknown[] };
 
-          const messages = pollHistory.messages ?? [];
+          const historyMessages = Array.isArray(pollHistory.messages)
+            ? pollHistory.messages.filter(isHistoryMessage)
+            : [];
 
-          // Find the latest assistant message that arrived AFTER we sent our request.
-          const latestAssistant = messages.find((m) => {
-            if (m.role !== 'assistant') return false;
-            const ts = typeof m.timestamp === 'number' ? m.timestamp : 0;
-            return ts > sendStartedAt;
+          const assistantMessages = extractAssistantMessagesFromHistory(historyMessages, {
+            baselineIds: baselineMessageIds,
+            minTimestamp: minNewMessageTimestamp,
           });
 
-          if (latestAssistant) {
-            const content = extractText(latestAssistant.content);
-            if (content) {
-              // Update streaming display with polled content
-              if (content.length > streamedText.length) {
-                streamedText = content;
-                pollStableCount = 0;
-                if (onStreamDelta) {
-                  onStreamDelta(streamedText);
-                }
-              } else if (content.length === lastPollLength && content.length > 0) {
-                pollStableCount++;
-              }
-              lastPollLength = content.length;
+          if (assistantMessages.length > 0) {
+            const combined = assistantMessages.map((message) => message.content).join('\n\n').trim();
+            const signature = assistantMessages
+              .map((message) => message._id ?? `${message.timestamp ?? 'na'}:${message.content.length}`)
+              .join('|');
 
-              // Content is stable (same length for 2 consecutive polls = ~6 seconds)
-              // OR we received a final event — resolve
-              if (pollStableCount >= 2 || sawFinal) {
-                console.log(`[Gateway] Poll resolved: ${content.length} chars, stable=${pollStableCount}, sawFinal=${sawFinal}`);
-                cleanup();
-                resolve();
-              }
+            if (combined.length > 0 && combined.length >= streamedText.length) {
+              streamedText = combined;
+              if (onStreamDelta) onStreamDelta(streamedText);
+            }
+
+            pollStableCount = signature === lastPollSignature ? pollStableCount + 1 : 0;
+            lastPollSignature = signature;
+
+            // Content is stable (same signature for 2 consecutive polls = ~6 seconds)
+            // OR we received a final event — resolve.
+            if ((pollStableCount >= 2 || sawFinal) && combined.length > 0) {
+              console.log(
+                `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}, sawFinal=${sawFinal}`,
+              );
+              cleanup();
+              resolve();
             }
           }
         } catch (error) {
@@ -1053,9 +1146,16 @@ async function sendViaTauriWs(
           : {}) as Record<string, unknown>;
 
         if (typeof chat.sessionKey === 'string' && chat.sessionKey !== sessionKey) return;
-        if (typeof chat.runId === 'string' && chat.runId !== runId) return;
-
         const state = typeof chat.state === 'string' ? chat.state : '';
+        const eventRunId = typeof chat.runId === 'string' ? chat.runId : undefined;
+        if (eventRunId !== runId) {
+          // Some gateway events omit runId. During an active send we ignore
+          // run-less/unrelated events and rely on history polling instead.
+          if (!eventRunId && TERMINAL_ACTIVITY_STATES.has(state)) {
+            console.log(`[Gateway] Ignoring terminal event without runId during active send: ${state}`);
+          }
+          return;
+        }
 
         if (state && stateLabels[state]) {
           setAgentActivity('working', onActivityChange);
@@ -1138,18 +1238,6 @@ async function sendViaTauriWs(
           const finalText = extractText(chat.message);
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
 
-          // A legitimate final means "the response is complete." If we have
-          // no content — neither from streaming deltas nor in the final itself —
-          // then this final isn't from our send. It's a stale broadcast from
-          // another source on the same session (e.g. webchat responses).
-          // The gateway broadcasts all session events to all WS subscribers
-          // without per-send runId matching, so this semantic check is how
-          // we distinguish real completions from noise.
-          if (!finalText && !streamedText) {
-            console.log('[Gateway] Ignoring final with no content — not from this send');
-            return;
-          }
-
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
             if (onStreamDelta) {
@@ -1169,55 +1257,17 @@ async function sendViaTauriWs(
 
     const historyAfter = (await connection.request('chat.history', {
       sessionKey,
-      limit: 100,
-    })) as { messages?: Array<Record<string, unknown>> };
+      limit: 200,
+    })) as { messages?: unknown[] };
 
-    const allMessages = historyAfter.messages ?? [];
+    const allMessages = Array.isArray(historyAfter.messages)
+      ? historyAfter.messages.filter(isHistoryMessage)
+      : [];
 
-    // History is chronological (oldest → newest).
-    // Walk backwards from newest to find our user message, collecting
-    // all assistant messages that came AFTER it (i.e. the response).
-    const assistantMessages: ChatMessage[] = [];
-
-    // Find the user message index (scan from the end)
-    let userMessageIndex = -1;
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-      const msg = allMessages[i];
-      if (msg.role === 'user') {
-        const userContent = extractText(msg.content);
-        if (userContent.includes(messageText.slice(0, 50))) {
-          userMessageIndex = i;
-          break;
-        }
-      }
-    }
-
-    // Collect all assistant messages after the user message (in chronological order)
-    if (userMessageIndex >= 0) {
-      for (let i = userMessageIndex + 1; i < allMessages.length; i++) {
-        const msg = allMessages[i];
-        // Log raw content format for diagnostics
-        const contentType = Array.isArray(msg.content)
-          ? `array[${msg.content.length}]`
-          : typeof msg.content;
-        console.log(`[Gateway] History msg[${i}] role=${msg.role}, contentType=${contentType}, raw preview:`, 
-          typeof msg.content === 'string' 
-            ? msg.content.slice(0, 120) 
-            : Array.isArray(msg.content) 
-              ? msg.content.slice(0, 3).map((b: Record<string, unknown>) => ({ type: b.type, len: typeof b.text === 'string' ? b.text.length : '?' }))
-              : '(object)');
-        if (msg.role === 'assistant') {
-          const content = extractText(msg.content);
-          if (content.trim()) {
-            assistantMessages.push({
-              role: 'assistant',
-              content: content.trim(),
-              timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
-            });
-          }
-        }
-      }
-    }
+    const assistantMessages = extractAssistantMessagesFromHistory(allMessages, {
+      baselineIds: baselineMessageIds,
+      minTimestamp: minNewMessageTimestamp,
+    });
 
     // History is the source of truth for final messages.
     // Streaming was only for the live preview — it can be truncated if
@@ -1316,16 +1366,32 @@ export async function sendMessage(messages: ChatMessage[], options?: GatewayOpti
 
 export async function sendMessageWithContext(
   messages: ChatMessage[],
-  context: { view: string; selectedProject?: string },
+  context: {
+    view: string;
+    selectedProject?: string;
+    openclawWorkspacePath?: string | null;
+    openclawContextPolicy?: 'selected-project-first' | 'workspace-default';
+  },
   options?: GatewayOptions,
 ): Promise<SendResult> {
   const transport = await resolveTransport(options?.transport);
   const attachments = options?.attachments ?? [];
   const onStreamDelta = options?.onStreamDelta;
   const onActivityChange = options?.onActivityChange;
-  const contextMessage = context.selectedProject
-    ? `User is viewing project: ${context.selectedProject}`
-    : `User is viewing: ${context.view}`;
+  const policy = context.openclawContextPolicy ?? 'selected-project-first';
+  const workspacePath = context.openclawWorkspacePath?.trim();
+  const contextMessage =
+    policy === 'workspace-default'
+      ? workspacePath
+        ? `User workspace path: ${workspacePath}`
+        : context.selectedProject
+          ? `User is viewing project: ${context.selectedProject}`
+          : `User is viewing: ${context.view}`
+      : context.selectedProject
+        ? `User is viewing project: ${context.selectedProject}`
+        : workspacePath
+          ? `User workspace path: ${workspacePath}`
+          : `User is viewing: ${context.view}`;
 
   if (transport.mode === 'tauri-ws') {
     const userText = latestUserContent(messages);
