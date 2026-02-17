@@ -1389,19 +1389,33 @@ async fn run_app_update() -> Result<String, String> {
         }
     }
 
-    let escaped_project_dir = project_dir.replace('\'', "'\\''");
+    let install_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| {
+            let mut current = exe.as_path();
+            loop {
+                if current
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext.eq_ignore_ascii_case("app"))
+                    .unwrap_or(false)
+                {
+                    return Some(current.to_string_lossy().to_string());
+                }
+                current = current.parent()?;
+            }
+        })
+        .unwrap_or_else(|| "/Applications/Pipeline Dashboard.app".to_string());
+
     let _ = Command::new("/bin/sh")
-        .args([
-            "-c",
-            &format!(
-                r#"cd '{}' && ./update.sh > /tmp/pipeline-update.log 2>&1"#,
-                escaped_project_dir
-            ),
-        ])
+        .current_dir(&project_dir)
+        .env("PIPELINE_DASHBOARD_INSTALL_PATH", install_path)
+        .env("PIPELINE_DASHBOARD_RESTART_AFTER_BUILD", "1")
+        .args(["-c", "./update.sh > /tmp/pipeline-update.log 2>&1"])
         .spawn()
         .map_err(|error| error.to_string())?;
 
-    Ok("Update build started in background (no restart performed)".to_string())
+    Ok("Update started - app will restart after build completes".to_string())
 }
 
 fn unix_timestamp_secs() -> u64 {
