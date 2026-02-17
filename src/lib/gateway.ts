@@ -1124,6 +1124,18 @@ async function sendViaTauriWs(
           const finalText = extractText(chat.message);
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}`);
 
+          // A legitimate final means "the response is complete." If we have
+          // no content — neither from streaming deltas nor in the final itself —
+          // then this final isn't from our send. It's a stale broadcast from
+          // another source on the same session (e.g. webchat responses).
+          // The gateway broadcasts all session events to all WS subscribers
+          // without per-send runId matching, so this semantic check is how
+          // we distinguish real completions from noise.
+          if (!finalText && !streamedText) {
+            console.log('[Gateway] Ignoring final with no content — not from this send');
+            return;
+          }
+
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
             if (onStreamDelta) {
