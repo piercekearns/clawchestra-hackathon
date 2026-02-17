@@ -105,10 +105,22 @@ items:
       - bug
       - github
       - api
+  - id: app-customisation
+    title: App Customisation (Themes & Fonts)
+    status: pending
+    priority: 5
+    nextAction: >-
+      Spec needed — define font theme packages (Standard, Terminal, Geist) and
+      colour theme system. Geist fonts available locally including Pixel variants.
+    tags:
+      - ui
+      - ux
+      - theming
+    icon: "\U0001F3A8"
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
-    priority: 5
+    priority: 6
     nextAction: Post-V2 scope
     tags:
       - integration

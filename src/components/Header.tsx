@@ -95,7 +95,7 @@ export function Header({
             className="hidden h-7 w-auto dark:block"
             aria-hidden="true"
           />
-          <h1 className="text-2xl text-neutral-950 dark:text-neutral-100" style={{ fontFamily: "'Geist Pixel Circle', sans-serif", fontWeight: 100 }}>
+          <h1 className="text-2xl font-semibold text-neutral-950 dark:text-neutral-100">
             Clawchestra
           </h1>
           {(updateAvailable || updating) && (
