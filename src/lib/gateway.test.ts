@@ -59,13 +59,13 @@ describe('gateway client', () => {
     const userMessages: ChatMessage[] = [{ role: 'user', content: 'status?' }];
     await sendMessageWithContext(userMessages, {
       view: 'projects',
-      selectedProject: 'Pipeline Dashboard',
+      selectedProject: 'Clawchestra',
     });
 
     const parsed = JSON.parse(String(capturedBody)) as { messages: ChatMessage[] };
     expect(parsed.messages[0]).toEqual({
       role: 'system',
-      content: 'User is viewing project: Pipeline Dashboard',
+      content: 'User is viewing project: Clawchestra',
     });
     expect(parsed.messages[1]).toEqual(userMessages[0]);
   });

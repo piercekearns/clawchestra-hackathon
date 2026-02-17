@@ -11,19 +11,19 @@ describe('views', () => {
   });
 
   it('creates a roadmap drill-down view', () => {
-    const view = projectRoadmapView('pipeline-dashboard', 'Pipeline Dashboard');
+    const view = projectRoadmapView('clawchestra', 'Clawchestra');
 
     expect(view.type).toBe('roadmap');
     if (view.type !== 'roadmap') {
       throw new Error('Expected roadmap view');
     }
-    expect(view.projectId).toBe('pipeline-dashboard');
+    expect(view.projectId).toBe('clawchestra');
     expect(view.breadcrumbs[1]).toEqual({
-      id: 'pipeline-dashboard',
-      label: 'Pipeline Dashboard',
+      id: 'clawchestra',
+      label: 'Clawchestra',
     });
     expect(view.breadcrumbs[2]).toEqual({
-      id: 'pipeline-dashboard:roadmap',
+      id: 'clawchestra:roadmap',
       label: 'Roadmap',
     });
   });

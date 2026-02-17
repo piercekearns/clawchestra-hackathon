@@ -288,7 +288,7 @@ export const useDashboardStore = create<DashboardState>()(
       },
     }),
     {
-      name: 'pipeline-dashboard-state',
+      name: 'clawchestra-state',
       partialize: (state) => ({
         themePreference: state.themePreference,
       }),

@@ -1,5 +1,5 @@
 ---
-title: Pipeline Dashboard
+title: Clawchestra
 status: in-flight
 priority: 1
 type: project

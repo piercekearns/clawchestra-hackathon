@@ -74,6 +74,14 @@ items:
       - agents
       - changelog
     specDoc: docs/specs/recently-completed-lifecycle-spec.md
+  - id: deep-rename-clawchestra
+    title: Deep Rename to Clawchestra
+    status: pending
+    priority: 1
+    nextAction: Surface rename done — deep rename needed for Cargo, data paths, session key, folder
+    tags:
+      - infra
+      - rename
   - id: app-ux-review
     title: App UX Review & Improvements
     status: pending
@@ -105,6 +113,6 @@ items:
       - openclaw
 ---
 
-# Pipeline Dashboard — Roadmap
+# Clawchestra — Roadmap
 
 Individual roadmap item docs live in `roadmap/` folder. Spec/plan docs in `docs/specs/` and `docs/plans/`.

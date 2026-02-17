@@ -1,5 +1,5 @@
 /**
- * Pipeline Dashboard Schema
+ * Clawchestra Schema
  * 
  * IMPORTANT: Keep docs/AGENTS.md and docs/SCHEMA.md in sync with this file.
  * 

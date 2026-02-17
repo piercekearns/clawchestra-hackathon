@@ -8,7 +8,7 @@ import {
 describe('schema', () => {
   it('validates a minimal project frontmatter payload', () => {
     const result = validateProject({
-      title: 'Pipeline Dashboard',
+      title: 'Clawchestra',
       status: 'up-next',
       type: 'project',
     });

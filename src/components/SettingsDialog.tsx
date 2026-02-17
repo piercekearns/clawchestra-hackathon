@@ -123,7 +123,7 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
               <Input
                 value={appSourcePath}
                 onChange={(event) => setAppSourcePath(event.target.value)}
-                placeholder="~/repos/pipeline-dashboard"
+                placeholder="~/repos/clawchestra"
               />
             </label>
           </div>

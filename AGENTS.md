@@ -1,6 +1,6 @@
-# AGENTS.md — Pipeline Dashboard
+# AGENTS.md — Clawchestra
 
-Instructions for agents interacting with the Pipeline Dashboard.
+Instructions for agents interacting with Clawchestra (formerly Pipeline Dashboard).
 
 **This document is the source of truth** for what operations are possible. If something can be done in the UI, it should be documented here so agents can replicate it.
 
