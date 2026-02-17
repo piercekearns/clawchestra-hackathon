@@ -26,6 +26,22 @@ If any answer is YES → update AGENTS.md.
 
 ---
 
+## Rule Two: Completion Requires Human Sign-Off
+
+**Agents must NEVER mark a roadmap item as `complete` on their own.**
+
+The workflow is:
+1. Agent ships the code, commits, builds
+2. Item stays `in-progress` with `nextAction` like "Code shipped — awaiting verification"
+3. **Human** tests and explicitly says it's verified/complete
+4. Only then does the agent set `status: complete` and `completedAt: YYYY-MM-DD`
+
+Shipping code ≠ complete. The human decides when something is done.
+
+When setting `status: complete`, always set `completedAt` to the current ISO date (e.g. `2026-02-17`).
+
+---
+
 ## Rule One: Never Touch the Running App
 
 **Agents must NEVER:**

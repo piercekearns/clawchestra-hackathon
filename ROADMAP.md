@@ -16,6 +16,7 @@ items:
     title: Project Card Opens Kanban Directly
     status: complete
     priority: 1
+    completedAt: '2026-02-17'
     nextAction: Verified and shipped
     tags:
       - ui
@@ -61,6 +62,17 @@ items:
     tags:
       - ui
     specDoc: docs/specs/collapsible-sidebar-spec.md
+  - id: recently-completed-lifecycle
+    title: Recently Completed Lifecycle
+    status: up-next
+    priority: 3
+    nextAction: Spec written — ready for plan/build
+    tags:
+      - roadmap
+      - workflow
+      - agents
+      - changelog
+    specDoc: docs/specs/recently-completed-lifecycle-spec.md
   - id: app-ux-review
     title: App UX Review & Improvements
     status: pending
