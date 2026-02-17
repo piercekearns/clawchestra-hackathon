@@ -14,9 +14,9 @@ items:
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: project-card-opens-kanban
     title: Project Card Opens Kanban Directly
-    status: in-progress
+    status: complete
     priority: 1
-    nextAction: Code shipped — awaiting Pierce's verification before complete
+    nextAction: Verified and shipped
     tags:
       - ui
       - ux
