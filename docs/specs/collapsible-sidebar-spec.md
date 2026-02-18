@@ -104,12 +104,16 @@ The sidebar toggle lives in the **title bar** (the draggable area alongside the 
 
 ```
 ┌─────┬──────────────────────────────────────────────────────┐
-│●●●  │ ◧  Clawchestra  [Update]              [⌘K] [⚙] ... │
-└─────┴──────────────────────────────────────────────────────┘
+│●●●  │ ◧  Clawchestra  [Update]                            │  ← Title bar (slightly taller)
+├─────┴──────────────────────────────────────────────────────┤
+│ 🔍 Search by title, id, tag...  [⌘K]  [All ▼]  [↻ Refresh] [Add Project] [⚙] [☀🌙] │  ← Header bar (unchanged)
+└────────────────────────────────────────────────────────────┘
  ↑        ↑      ↑          ↑
  traffic   toggle  title     update badge
  lights    btn
 ```
+
+The title bar and the header bar are **two separate rows**. The title bar is the narrow draggable strip containing only the traffic lights, sidebar toggle, app title, and Update badge. Below it, the existing header bar (search, filters, Refresh, Add Project, settings gear, theme toggle) remains exactly as-is — except the Settings gear moves into the sidebar.
 
 ### Toggle Button
 
@@ -125,12 +129,15 @@ The sidebar toggle lives in the **title bar** (the draggable area alongside the 
 
 The title bar may need to be **slightly deeper** to comfortably accommodate the toggle button alongside the traffic lights. Currently the header is a content-area element; the title bar (Tauri's decorations area) is minimal.
 
-Changes:
-- **Title bar height:** Increase if needed to fit the toggle icon comfortably (aim for ~36-40px draggable region)
+Changes to **title bar** (top strip):
+- **Title bar height:** Slightly taller to comfortably fit the toggle icon + Update badge (aim for ~36-40px draggable region)
 - **Sidebar toggle:** Added immediately right of traffic lights
 - **"Clawchestra" title:** Moves right to sit after the toggle button
 - **"Update" badge moved into title bar:** Currently in the header content area, the Update badge relocates into the title bar next to the "Clawchestra" title (Codex puts its Update badge in the title bar too — see screenshots). This is what necessitates the title shifting right.
-- **Right-side controls** (⌘K search, settings gear, theme toggle, etc.): Stay on the right, no change
+
+Changes to **header bar** (below title bar):
+- **Stays as-is.** Search bar, ⌘K shortcut, status filter, Refresh button, Add Project button, theme toggle — all remain in the header bar in their current positions.
+- **Settings gear removed** — moves into the sidebar (bottom, Codex-style). This is the only element that leaves the header bar.
 
 ### Title Bar Drag Region
 
@@ -235,19 +242,25 @@ interface SidebarState {
 
 ```
 App.tsx
-├── TitleBar (deepened, contains traffic lights region + toggle + title)
+├── TitleBar (slightly taller draggable strip)
 │   ├── SidebarToggle (◧/◨ icon button)
-│   ├── AppTitle ("Clawchestra" + Update badge)
-│   └── HeaderActions (search, settings gear, theme, etc.)
-├── MainLayout (CSS grid: sidebar? + board, full-width chat below)
+│   └── AppTitle ("Clawchestra" + Update badge)
+├── Header (existing bar — search, filters, buttons, theme toggle)
+│   ├── SearchBar + ⌘K
+│   ├── StatusFilter
+│   ├── Refresh / Add Project buttons
+│   └── Theme toggle
+│   (Settings gear REMOVED from here → moved to sidebar)
+├── MainLayout (sidebar + content column)
 │   ├── Sidebar                          ← NEW
 │   │   ├── (placeholder / empty state for Phase 1)
 │   │   └── ⚙ Settings button (bottom, Codex-style)
-│   ├── Board
-│   │   ├── Column[]
-│   │   │   └── Card[]
-│   │   └── ProjectModal
-│   └── ChatBar (always at the bottom, full width)
+│   └── ContentColumn
+│       ├── Board
+│       │   ├── Column[]
+│       │   │   └── Card[]
+│       │   └── ProjectModal
+│       └── ChatBar (bottom of content column)
 └── Overlays (modals, search, toasts)
 ```
 
@@ -262,8 +275,8 @@ App.tsx
 
 | File | Change |
 |------|--------|
-| `src/components/Header.tsx` | Restructure into title bar layout, add toggle, shift title right |
-| `src/App.tsx` | Add sidebar to layout grid, enforce chat-bar-at-bottom layout |
+| `src/components/Header.tsx` | Remove settings gear (moves to sidebar). Otherwise unchanged. |
+| `src/App.tsx` | Add title bar row above header, add sidebar to layout, enforce content-column structure |
 | `tauri.conf.json` | Add `minWidth` / `minHeight` |
 | Zustand store | Add `sidebarOpen` / `toggleSidebar` |
 
@@ -279,8 +292,9 @@ App.tsx
 - Dedicated toggle icon in title bar (Codex-style, not hamburger)
 - Two icon states: open (◧) and close (◨)
 - `Cmd+B` keyboard shortcut
-- Title bar deepened to accommodate toggle alongside traffic lights
-- "Clawchestra" title + "Update" badge moved into the title bar (shifted right of toggle)
+- New title bar row (slightly taller) above the existing header, containing: traffic lights, sidebar toggle, "Clawchestra" title, Update badge
+- Existing header bar (search, filters, buttons, theme toggle) stays as-is below the title bar
+- Settings gear moves from header bar into sidebar (bottom, Codex-style)
 - Sidebar persists open/closed state across restarts
 - Chat bar remains at the bottom at all times
 - Minimum window dimensions enforced via Tauri
