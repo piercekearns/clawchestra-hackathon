@@ -116,7 +116,7 @@ const FINAL_STABILITY_POLLS = 2;
 const FINAL_SETTLE_WINDOW_MS = 15000;
 const FINAL_SETTLE_POLL_MS = 2000;
 const FINAL_SETTLE_STABLE_POLLS = 2;
-const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 75000;
+const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 45000;
 const NO_FINAL_RESOLVE_MIN_QUIET_MS = 25000;
 const NO_FINAL_STABILITY_POLLS = 4;
 const NO_FINAL_MAX_WAIT_MS = 120000;
@@ -433,7 +433,7 @@ function isMessageNewForTurn(
 function isSyntheticSystemExecUserMessage(message: GatewayHistoryMessage): boolean {
   if (message.role !== 'user') return false;
   const content = extractText(message.content).trim();
-  return /^System:\s*\[[^\]]+\]\s*Exec completed\b/i.test(content);
+  return /^System:\s*\[[^\]]+\]\s*Exec\b/i.test(content);
 }
 
 function findUserAnchorIndex(
@@ -1155,6 +1155,7 @@ async function sendViaTauriWs(
   let resolvedWithoutFinal = false;
   let requiresFinalSettlePass = false;
   let sawRunOwnedProgress = false;
+  let sawUnscopedAgentProgress = false;
   let sawRunOwnedContent = false;
   let lastObservedRunActivityAt = sendRequestedAt;
   const baselineMessageIds = new Set<string>();
@@ -1359,6 +1360,8 @@ async function sendViaTauriWs(
             const wsState = connection.state;
             const connectionUnstable =
               wsState === 'reconnecting' || wsState === 'disconnected' || wsState === 'error';
+            const allowEarlyNoFinalByAge =
+              !sawRunOwnedProgress && sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS;
             const canResolveWithoutFinal =
               !sawFinal &&
               combined.length > 0 &&
@@ -1369,7 +1372,7 @@ async function sendViaTauriWs(
               (
                 connectionUnstable ||
                 !sendAcked ||
-                sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS ||
+                allowEarlyNoFinalByAge ||
                 sendAgeMs >= NO_FINAL_MAX_WAIT_MS
               );
             const noFinalLooksIncomplete = likelyNeedsFinalSettlePass(assistantMessages);
@@ -1467,10 +1470,30 @@ async function sendViaTauriWs(
           const agentSessionKey =
             typeof agentPayload.sessionKey === 'string' ? agentPayload.sessionKey : undefined;
           const agentRunId = typeof agentPayload.runId === 'string' ? agentPayload.runId : undefined;
+          const hasScope = agentSessionKey !== undefined || agentRunId !== undefined;
           const belongsToRun =
             (agentSessionKey !== undefined && agentSessionKey === sessionKey) ||
             (agentRunId !== undefined && agentRunId === runId);
-          if (!belongsToRun) return;
+          if (!belongsToRun) {
+            if (!hasScope) {
+              // Some gateway builds emit unscoped agent events during active turns.
+              // Treat these as weak liveness signals so we don't prematurely
+              // conclude "NO_REPLY" while work is still running.
+              sawUnscopedAgentProgress = true;
+              const now = Date.now();
+              lastEventTime = now;
+              lastObservedRunActivityAt = now;
+              resetIdleTimeout();
+              pollStableCount = 0;
+              clearSawFinal('unscoped agent activity');
+              const timeSinceLastDelta = Date.now() - lastDeltaTime;
+              if (timeSinceLastDelta > 3000) {
+                sawToolSinceLastContent = true;
+                setAgentActivity('working', onActivityChange);
+              }
+            }
+            return;
+          }
 
           // Scope timing/stability updates to this session only. Some gateway
           // broadcasts include agent events from other sessions; those should
@@ -1482,7 +1505,10 @@ async function sendViaTauriWs(
           pollStableCount = 0;
           clearSawFinal('agent activity');
 
-          if (agentRunId === runId) {
+          if (
+            agentRunId === runId ||
+            (agentRunId === undefined && agentSessionKey === sessionKey)
+          ) {
             sawRunOwnedProgress = true;
           }
 
@@ -1703,7 +1729,11 @@ async function sendViaTauriWs(
     if (assistantMessages.length === 0 && !streamedTrimmed) {
       const recoveryWindowMs =
         NO_RESPONSE_RECOVERY_BASE_MS +
-        (sawRunOwnedProgress && !sawRunOwnedContent ? NO_RESPONSE_RECOVERY_PROGRESS_MS : 0);
+        (
+          (sawRunOwnedProgress || sawUnscopedAgentProgress) && !sawRunOwnedContent
+            ? NO_RESPONSE_RECOVERY_PROGRESS_MS
+            : 0
+        );
       const recoveryDeadline = Date.now() + recoveryWindowMs;
       while (Date.now() < recoveryDeadline) {
         await new Promise((resolve) => setTimeout(resolve, 3000));

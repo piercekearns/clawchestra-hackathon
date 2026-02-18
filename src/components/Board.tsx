@@ -8,6 +8,7 @@ import {
   useSensors,
   type DragCancelEvent,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 import {
@@ -119,6 +120,7 @@ export function Board<T extends BoardItem>({
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+  const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalItems(items);
@@ -178,10 +180,32 @@ export function Board<T extends BoardItem>({
     }
   };
 
+  const handleDragOver = (event: DragOverEvent) => {
+    // Track which column a card is hovering over (for glow effect)
+    if (!activeCardId) {
+      setCardDragOverColumnId(null);
+      return;
+    }
+    const { over } = event;
+    if (!over) {
+      setCardDragOverColumnId(null);
+      return;
+    }
+    const overId = String(over.id);
+    // Resolve over target to a column ID
+    const targetCol = columnIdSet.has(overId)
+      ? overId
+      : localItems.find((entry) => entry.id === overId)?.status ?? null;
+    // Only glow if it's a different column from the card's source
+    const sourceCol = localItems.find((entry) => entry.id === activeCardId)?.status ?? null;
+    setCardDragOverColumnId(targetCol && targetCol !== sourceCol ? targetCol : null);
+  };
+
   const handleDragCancel = (_event: DragCancelEvent) => {
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
+    setCardDragOverColumnId(null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -192,6 +216,7 @@ export function Board<T extends BoardItem>({
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
+    setCardDragOverColumnId(null);
 
     if (!over) return;
     const overId = String(over.id);
@@ -261,6 +286,7 @@ export function Board<T extends BoardItem>({
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
@@ -281,6 +307,7 @@ export function Board<T extends BoardItem>({
                     column={column}
                     items={grouped[column.id] ?? []}
                     collapsed={collapsedSet.has(column.id)}
+                    highlighted={cardDragOverColumnId === column.id}
                     onToggleCollapse={() => handleToggleCollapse(column.id)}
                     onItemClick={onItemClick}
                     getItemWarning={getItemWarning}
