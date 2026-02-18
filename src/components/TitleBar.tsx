@@ -17,16 +17,18 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 items-center bg-page px-4 md:px-6"
+      className="flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       {/* Left padding for macOS traffic lights — standard inset ~78px */}
-      <div className="w-[78px] shrink-0" data-tauri-drag-region />
+      <div className="w-[78px] shrink-0" />
 
       {/* Sidebar toggle */}
       <button
         type="button"
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         aria-expanded={sidebarOpen}
         aria-controls="sidebar"
         aria-label="Toggle sidebar"
@@ -81,7 +83,10 @@ export function TitleBar() {
       <div className="flex-1" data-tauri-drag-region />
 
       {/* Theme toggle */}
-      <div className="pointer-events-auto inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600">
+      <div
+        className="pointer-events-auto inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600"
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      >
         <ThemeButton
           pref="light"
           current={themePreference}
