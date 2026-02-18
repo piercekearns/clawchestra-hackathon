@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { isTauriRuntime, checkForUpdate, pathExists, runAppUpdate } from '../lib/tauri';
+import {
+  isTauriRuntime,
+  checkForUpdate,
+  getAppUpdateLockState,
+  runAppUpdate,
+} from '../lib/tauri';
 
-const UPDATE_LOCK_PATH = '/tmp/pipeline-dashboard-update.lock';
 const UPDATE_MONITOR_INTERVAL_MS = 2000;
 const UPDATE_LOCK_APPEAR_GRACE_MS = 15_000;
 const UPDATE_STUCK_TIMEOUT_MS = 20 * 60_000;
@@ -46,13 +50,17 @@ export function useAppUpdate() {
       if (!mountedRef.current) return;
 
       let lockPresent = false;
+      let lockStale = false;
       try {
-        lockPresent = await pathExists(UPDATE_LOCK_PATH);
+        const lockState = await getAppUpdateLockState();
+        lockPresent = lockState.lockPresent;
+        lockStale = lockState.stale;
       } catch {
         lockPresent = false;
+        lockStale = false;
       }
 
-      if (lockPresent) {
+      if (lockPresent && !lockStale) {
         sawUpdateLockRef.current = true;
         return;
       }
@@ -61,7 +69,7 @@ export function useAppUpdate() {
 
       // If we never saw a lock shortly after clicking update, the update
       // script likely failed to start.
-      if (!sawUpdateLockRef.current && elapsed < UPDATE_LOCK_APPEAR_GRACE_MS) {
+      if (!lockStale && !sawUpdateLockRef.current && elapsed < UPDATE_LOCK_APPEAR_GRACE_MS) {
         return;
       }
 

@@ -8,6 +8,13 @@ type UpdateStatus = {
   current_commit: string | null;
 };
 
+export type UpdateLockState = {
+  lockPresent: boolean;
+  processAlive: boolean;
+  stale: boolean;
+  ageSecs: number | null;
+};
+
 type TauriSlashCommand = {
   name: string;
   desc: string;
@@ -70,6 +77,7 @@ type TauriCommands = {
     return: void;
   };
   check_for_update: { args: Record<string, never>; return: UpdateStatus };
+  get_app_update_lock_state: { args: Record<string, never>; return: UpdateLockState };
   run_app_update: { args: Record<string, never>; return: string };
   list_slash_commands: { args: Record<string, never>; return: TauriSlashCommand[] };
   // Chat persistence commands
@@ -233,6 +241,10 @@ export async function gitInitRepo(
 
 export async function checkForUpdate(): Promise<UpdateStatus> {
   return typedInvoke('check_for_update');
+}
+
+export async function getAppUpdateLockState(): Promise<UpdateLockState> {
+  return typedInvoke('get_app_update_lock_state');
 }
 
 export async function runAppUpdate(): Promise<string> {

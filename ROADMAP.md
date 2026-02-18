@@ -12,18 +12,17 @@ items:
       - architecture
     icon: "\U0001F527"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
-  - id: deliverable-lifecycle-orchestration
-    title: Deliverable Lifecycle Orchestration
+  - id: github-api-403-errors
+    title: Investigate GitHub API 403 Errors
     status: in-progress
     priority: 2
-    nextAction: Code shipped - awaiting verification
+    nextAction: >-
+      Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
+      likely rate limiting, may need auth token or caching
     tags:
-      - roadmap
-      - workflow
-      - ux
-      - automation
-    specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
-    planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
+      - bug
+      - github
+      - api
   - id: sidebar-enhancements
     title: Sidebar Enhancements
     status: up-next
@@ -45,17 +44,6 @@ items:
       - agents
       - changelog
     specDoc: docs/specs/recently-completed-lifecycle-spec.md
-  - id: github-api-403-errors
-    title: Investigate GitHub API 403 Errors
-    status: up-next
-    priority: 3
-    nextAction: >-
-      Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
-      likely rate limiting, may need auth token or caching
-    tags:
-      - bug
-      - github
-      - api
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: pending
@@ -162,6 +150,18 @@ items:
     icon: "\U0001F4D0"
     specDoc: docs/specs/collapsible-sidebar-spec.md
     planDoc: docs/plans/collapsible-sidebar-plan.md
+  - id: deliverable-lifecycle-orchestration
+    title: Deliverable Lifecycle Orchestration
+    status: complete
+    priority: 5
+    nextAction: Code shipped - awaiting verification
+    tags:
+      - roadmap
+      - workflow
+      - ux
+      - automation
+    specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
+    planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
 ---
 
 # Clawchestra — Roadmap

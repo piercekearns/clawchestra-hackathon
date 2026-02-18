@@ -127,12 +127,16 @@ function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage
   const incomingNorm = comparableMessageContent(incoming);
   if (!existingNorm || !incomingNorm) return false;
 
+  if (existing.role === 'user') {
+    // User turns should only dedupe on exact normalized equality.
+    // Prefix/substring matching can collapse distinct user prompts.
+    return existingNorm === incomingNorm;
+  }
+
   return (
     existingNorm === incomingNorm ||
     incomingNorm.startsWith(existingNorm) ||
-    existingNorm.startsWith(incomingNorm) ||
-    incomingNorm.includes(existingNorm) ||
-    existingNorm.includes(incomingNorm)
+    existingNorm.startsWith(incomingNorm)
   );
 }
 
@@ -166,9 +170,7 @@ function collapseTrailingAssistantRun(
   const overlaps =
     incomingNorm === runNorm ||
     incomingNorm.startsWith(runNorm) ||
-    runNorm.startsWith(incomingNorm) ||
-    incomingNorm.includes(runNorm) ||
-    runNorm.includes(incomingNorm);
+    runNorm.startsWith(incomingNorm);
   if (!overlaps) return null;
 
   const newestRunTimestamp = run.reduce((max, message) => Math.max(max, message.timestamp ?? 0), 0);

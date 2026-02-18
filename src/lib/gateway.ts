@@ -805,7 +805,7 @@ function normalizeTextForMatch(text: string): string {
   return normalizeChatContentForMatch(text);
 }
 
-const ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS = 10 * 60_000;
+const ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS = 90_000;
 
 function assistantMessagesOverlap(a: ChatMessage, b: ChatMessage): boolean {
   const aNorm = normalizeTextForMatch(a.content);
@@ -814,10 +814,18 @@ function assistantMessagesOverlap(a: ChatMessage, b: ChatMessage): boolean {
   return (
     aNorm === bNorm ||
     aNorm.startsWith(bNorm) ||
-    bNorm.startsWith(aNorm) ||
-    aNorm.includes(bNorm) ||
-    bNorm.includes(aNorm)
+    bNorm.startsWith(aNorm)
   );
+}
+
+function assistantRunLooksProgressive(run: ChatMessage[], incoming: ChatMessage): boolean {
+  const incomingNorm = normalizeTextForMatch(incoming.content);
+  if (!incomingNorm) return false;
+  return run.every((message) => {
+    const norm = normalizeTextForMatch(message.content);
+    if (!norm) return false;
+    return incomingNorm.startsWith(norm) || norm.startsWith(incomingNorm);
+  });
 }
 
 function choosePreferredAssistantMessage(a: ChatMessage, b: ChatMessage): ChatMessage {
@@ -869,20 +877,16 @@ function collapseAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
       if (runStart < collapsed.length - 1) {
         const run = collapsed.slice(runStart);
         const newestRunTs = run.reduce((latest, item) => Math.max(latest, item.timestamp ?? 0), 0);
-        if (Math.abs((message.timestamp ?? 0) - newestRunTs) <= ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS) {
-          const runCombined: ChatMessage = {
-            role: 'assistant',
-            content: run.map((item) => item.content).join('\n\n'),
-            timestamp: newestRunTs,
-          };
-          if (assistantMessagesOverlap(runCombined, message)) {
-            while (collapsed.length > runStart) {
-              collapsed.pop();
-            }
-            const anchor = run[run.length - 1] ?? runCombined;
-            collapsed.push(choosePreferredAssistantMessage(anchor, message));
-            continue;
+        if (
+          Math.abs((message.timestamp ?? 0) - newestRunTs) <= ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS &&
+          assistantRunLooksProgressive(run, message)
+        ) {
+          while (collapsed.length > runStart) {
+            collapsed.pop();
           }
+          const anchor = run[run.length - 1] ?? message;
+          collapsed.push(choosePreferredAssistantMessage(anchor, message));
+          continue;
         }
       }
     }
@@ -1335,32 +1339,37 @@ export async function wireSystemEventBus(): Promise<void> {
         typeof eventRecord.sessionKey === 'string' ? eventRecord.sessionKey : undefined;
       const runId = typeof eventRecord.runId === 'string' ? eventRecord.runId : undefined;
       const announce = parseAnnounceMetadata(eventRecord, true);
+
+      // Only emit announce events for agent events that actually carry
+      // announce metadata (sub-agent results, task completions, etc.).
+      // Plain agent heartbeat/status events should NOT be emitted —
+      // they carry sessionKeys from other sessions (e.g. agent:main)
+      // that would be misidentified as active background sessions,
+      // causing the activity indicator to stay on permanently.
+      if (!announce) return;
+
       const messageText =
         typeof eventRecord.message === 'string'
           ? eventRecord.message
           : extractText(eventRecord.message);
-      const status =
-        announce?.status ??
-        (typeof eventRecord.status === 'string' ? normalizeAnnounceStatus(eventRecord.status, messageText) : undefined) ??
-        'running';
 
-      if (shouldSuppressForActiveSend(runId) && Boolean(announce)) {
+      if (shouldSuppressForActiveSend(runId)) {
         return;
       }
 
       emit({
         kind: 'announce',
-        sessionKey: announce?.sessionKey ?? sessionKey,
-        runId: announce?.runId ?? runId,
+        sessionKey: announce.sessionKey ?? sessionKey,
+        runId: announce.runId ?? runId,
         label:
-          announce?.label ??
+          announce.label ??
           (typeof eventRecord.label === 'string' ? eventRecord.label : undefined),
-        status,
+        status: announce.status,
         runtime:
-          announce?.runtime ??
+          announce.runtime ??
           (typeof eventRecord.runtime === 'string' ? eventRecord.runtime : undefined),
         tokens:
-          announce?.tokens ??
+          announce.tokens ??
           (typeof eventRecord.tokens === 'string' ? eventRecord.tokens : undefined),
         message: messageText || undefined,
         raw: eventRecord,

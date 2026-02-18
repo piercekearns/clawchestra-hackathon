@@ -1324,6 +1324,72 @@ struct UpdateStatus {
     current_commit: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateLockState {
+    lock_present: bool,
+    process_alive: bool,
+    stale: bool,
+    age_secs: Option<u64>,
+}
+
+fn read_update_lock_state() -> UpdateLockState {
+    let lock_dir = Path::new("/tmp/pipeline-dashboard-update.lock");
+    if !lock_dir.exists() {
+        return UpdateLockState {
+            lock_present: false,
+            process_alive: false,
+            stale: false,
+            age_secs: None,
+        };
+    }
+
+    let age_secs = fs::metadata(lock_dir)
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|modified| modified.elapsed().ok())
+        .map(|elapsed| elapsed.as_secs());
+
+    let pid_path = lock_dir.join("pid");
+    let pid = fs::read_to_string(pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok());
+
+    let process_alive = {
+        #[cfg(unix)]
+        {
+            if let Some(pid) = pid {
+                Command::new("kill")
+                    .arg("-0")
+                    .arg(pid.to_string())
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    };
+
+    let stale = !process_alive;
+
+    UpdateLockState {
+        lock_present: true,
+        process_alive,
+        stale,
+        age_secs,
+    }
+}
+
+#[tauri::command]
+fn get_app_update_lock_state() -> Result<UpdateLockState, String> {
+    Ok(read_update_lock_state())
+}
+
 #[tauri::command]
 fn check_for_update() -> Result<UpdateStatus, String> {
     let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
@@ -1353,6 +1419,14 @@ fn check_for_update() -> Result<UpdateStatus, String> {
 
 #[tauri::command]
 async fn run_app_update() -> Result<String, String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        return Err(
+            "updateSourceUnavailable: source-rebuild update flow currently supports macOS only"
+                .to_string(),
+        );
+    }
+
     let settings = load_dashboard_settings()?;
     if settings.update_mode != "source-rebuild" {
         return Err("updateSourceUnavailable: updateMode is set to none".to_string());
@@ -1395,7 +1469,7 @@ async fn run_app_update() -> Result<String, String> {
                 current = current.parent()?;
             }
         })
-        .unwrap_or_else(|| "/Applications/Pipeline Dashboard.app".to_string());
+        .unwrap_or_else(|| "/Applications/Clawchestra.app".to_string());
 
     let _ = Command::new("/bin/sh")
         .current_dir(&project_dir)
@@ -2124,6 +2198,7 @@ pub fn run() {
             git_push,
             git_init_repo,
             check_for_update,
+            get_app_update_lock_state,
             run_app_update,
             list_slash_commands,
             chat_messages_load,
