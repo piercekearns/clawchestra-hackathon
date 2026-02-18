@@ -19,6 +19,15 @@ Make chat turn lifecycle deterministic so users always get:
 2. Final assistant output without manual refresh/restart.
 3. Reliable recovery across websocket reconnects and app restarts.
 
+## Build Progress
+
+- [x] Step 1: Introduce turn registry/types and durable pending-turn ledger plumbing.
+- [x] Step 2: Tighten send lifecycle ownership to avoid unrelated terminal resolution.
+- [x] Step 3: Extend active backfill window/cadence to avoid premature `NO_REPLY` while work continues.
+- [x] Step 4: Hydrate unresolved turns on startup and keep active recovery polling while turns remain unresolved.
+- [ ] Step 5: Complete message persistence correlation hardening audit and remove any remaining fragile pairing paths.
+- [ ] Step 6: Expand regression coverage for reconnect/no-final timeout classes and crash-recovery replay.
+
 ## Non-Goals
 
 1. Rebuilding chat UI visuals beyond reliability/status correctness.

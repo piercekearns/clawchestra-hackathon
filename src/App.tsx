@@ -25,9 +25,12 @@ import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
   DEFAULT_SESSION_KEY,
+  getActiveTurnCount,
+  hydratePendingTurns,
   pollProcessSessions,
   recoverRecentSessionMessages,
   subscribeConnectionState,
+  subscribeTurnRegistry,
   subscribeSystemEvents,
   retryGatewayConnection,
   sendMessageWithContext,
@@ -175,6 +178,7 @@ export default function App() {
   const [chatPrefillRequest, setChatPrefillRequest] = useState<ChatPrefillRequest | null>(null);
   const [chatResponseToastMessage, setChatResponseToastMessage] = useState<string | null>(null);
   const [chatQueue, setChatQueue] = useState<QueuedMessage[]>([]); // Message queue
+  const [gatewayActiveTurns, setGatewayActiveTurns] = useState<number>(getActiveTurnCount());
   const [activeBackgroundSessions, setActiveBackgroundSessions] = useState<Set<string>>(new Set());
   const activeAnnounceRunsRef = useRef<Map<string, number>>(new Map());
   const seenTerminalAnnounceRunsRef = useRef<Map<string, number>>(new Map());
@@ -212,6 +216,30 @@ export default function App() {
     return allProjects.find((project) => project.id === viewContext.projectId);
   }, [allProjects, viewContext]);
 
+  // Re-resolve roadmap item docs (spec/plan existence) without leaving the view.
+  // Stored in a ref so the file watcher can call it without adding deps.
+  const refreshRoadmapDocsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  useEffect(() => {
+    refreshRoadmapDocsRef.current = async () => {
+      if (!activeRoadmapProject || !roadmapDocument) return;
+      try {
+        const docsMap = await resolveDocFiles(
+          activeRoadmapProject.dirPath,
+          roadmapDocument.items,
+          activeRoadmapProject.frontmatter,
+        );
+        setRoadmapItems((prev) => {
+          const enriched = enrichItemsWithDocs(roadmapDocument.items, docsMap);
+          // Preserve current ordering/status from prev (user may have dragged items)
+          const docsById = new Map(enriched.map((item) => [item.id, item.docs]));
+          return prev.map((item) => ({ ...item, docs: docsById.get(item.id) ?? item.docs }));
+        });
+      } catch {
+        // silently fail — items keep existing docs
+      }
+    };
+  }, [activeRoadmapProject, roadmapDocument]);
+
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -247,9 +275,9 @@ export default function App() {
     if (agentActivity === 'working') return 'Working...';
     // Fallback: if a send is in-flight, always show activity
     // (mirrors OpenClaw webchat: indicator persists from send to final)
-    if (chatSending) return 'Working...';
+    if (chatSending || gatewayActiveTurns > 0) return 'Working...';
     return null;
-  }, [agentActivity, chatSending]);
+  }, [agentActivity, chatSending, gatewayActiveTurns]);
 
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
@@ -266,6 +294,22 @@ export default function App() {
   useEffect(() => {
     chatQueueRef.current = chatQueue;
   }, [chatQueue]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTurnRegistry((turns) => {
+      const active = turns.filter(
+        (turn) =>
+          turn.status === 'queued' ||
+          turn.status === 'running' ||
+          turn.status === 'awaiting_output',
+      ).length;
+      setGatewayActiveTurns(active);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     applyTheme(themePreference);
@@ -287,6 +331,11 @@ export default function App() {
   useEffect(() => {
     void loadChatMessages();
   }, [loadChatMessages]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void hydratePendingTurns(DEFAULT_SESSION_KEY);
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -458,64 +507,74 @@ export default function App() {
     };
   }, [addSystemBubble]);
 
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    if (wsConnectionState !== 'connected') return;
-
+  const reconcileRecentHistory = useCallback(async (): Promise<number> => {
     const now = Date.now();
     if (now - lastChatRecoveryAtRef.current < 5000) {
-      return;
+      return 0;
     }
     lastChatRecoveryAtRef.current = now;
 
-    let cancelled = false;
+    try {
+      const recovered = await recoverRecentSessionMessages({ limit: 200 });
+      if (recovered.length === 0) return 0;
 
-    const reconcileRecentHistory = async () => {
-      try {
-        const recovered = await recoverRecentSessionMessages({ limit: 200 });
-        if (cancelled || recovered.length === 0) return;
+      const current = useDashboardStore.getState().chatMessages;
+      const existingIds = new Set(
+        current
+          .map((message) => message._id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      );
+      const existingFallbackKeys = new Set(
+        current.map(
+          (message) =>
+            `${message.role}:${message.timestamp ?? 0}:${message.content}`,
+        ),
+      );
 
-        const current = useDashboardStore.getState().chatMessages;
-        const existingIds = new Set(
-          current
-            .map((message) => message._id)
-            .filter((id): id is string => typeof id === 'string' && id.length > 0),
-        );
-        const existingFallbackKeys = new Set(
-          current.map(
-            (message) =>
-              `${message.role}:${message.timestamp ?? 0}:${message.content}`,
-          ),
-        );
+      let recoveredCount = 0;
+      for (const message of recovered) {
+        if (message._id && existingIds.has(message._id)) continue;
+        const fallbackKey = `${message.role}:${message.timestamp ?? 0}:${message.content}`;
+        if (existingFallbackKeys.has(fallbackKey)) continue;
 
-        let recoveredCount = 0;
-        for (const message of recovered) {
-          if (message._id && existingIds.has(message._id)) continue;
-          const fallbackKey = `${message.role}:${message.timestamp ?? 0}:${message.content}`;
-          if (existingFallbackKeys.has(fallbackKey)) continue;
-
-          await addChatMessage(message);
-          if (message._id) existingIds.add(message._id);
-          existingFallbackKeys.add(fallbackKey);
-          recoveredCount += 1;
-        }
-
-        if (!cancelled && recoveredCount > 0) {
-          await addSystemBubble('info', 'Recovered recent chat messages', {
-            Recovered: String(recoveredCount),
-          });
-        }
-      } catch (error) {
-        console.warn('[Chat] Failed to reconcile recent gateway history:', error);
+        await addChatMessage(message);
+        if (message._id) existingIds.add(message._id);
+        existingFallbackKeys.add(fallbackKey);
+        recoveredCount += 1;
       }
-    };
 
+      if (recoveredCount > 0) {
+        await addSystemBubble('info', 'Recovered recent chat messages', {
+          Recovered: String(recoveredCount),
+        });
+      }
+
+      return recoveredCount;
+    } catch (error) {
+      console.warn('[Chat] Failed to reconcile recent gateway history:', error);
+      return 0;
+    }
+  }, [addChatMessage, addSystemBubble]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    if (wsConnectionState !== 'connected') return;
     void reconcileRecentHistory();
+  }, [reconcileRecentHistory, wsConnectionState]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    if (wsConnectionState !== 'connected') return;
+    if (gatewayActiveTurns <= 0) return;
+
+    const interval = window.setInterval(() => {
+      void reconcileRecentHistory();
+    }, 5000);
 
     return () => {
-      cancelled = true;
+      window.clearInterval(interval);
     };
-  }, [addChatMessage, addSystemBubble, wsConnectionState]);
+  }, [gatewayActiveTurns, reconcileRecentHistory, wsConnectionState]);
 
   useEffect(() => {
     let disposed = false;
@@ -528,6 +587,7 @@ export default function App() {
       try {
         const unwatch = await watchProjects(dashboardSettings.scanPaths, async () => {
           await loadProjects();
+          void refreshRoadmapDocsRef.current();
           void addSystemBubble(
             'info',
             'File watcher refresh',
@@ -1050,7 +1110,7 @@ export default function App() {
       <div className="flex h-full min-h-0 w-full flex-col">
         <Header
           errors={errors}
-          onRefresh={loadProjects}
+          onRefresh={async () => { await loadProjects(); void refreshRoadmapDocsRef.current(); }}
           onAddProject={() => setAddDialogOpen(true)}
           onOpenSettings={() => setSettingsDialogOpen(true)}
           themePreference={themePreference}
@@ -1210,7 +1270,7 @@ export default function App() {
         prefillRequest={chatPrefillRequest}
         drawerOpen={chatDrawerOpen}
         responseToastMessage={chatResponseToastMessage}
-        isAgentWorking={chatSending}
+        isAgentWorking={chatSending || gatewayActiveTurns > 0}
         queue={chatQueue}
         hasMoreMessages={chatHasMore}
         loadingMoreMessages={chatLoadingMore}

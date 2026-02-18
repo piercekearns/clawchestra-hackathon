@@ -1,6 +1,10 @@
 import {
+  chatPendingTurnRemove,
+  chatPendingTurnSave,
+  chatPendingTurnsLoad,
   checkOpenClawGatewayConnection,
   getOpenClawGatewayConfig,
+  isTauriRuntime,
   sendOpenClawMessage,
 } from './tauri';
 import type { ChatConnectionState } from '../components/chat/types';
@@ -122,12 +126,18 @@ const NO_FINAL_STABILITY_POLLS = 4;
 const NO_FINAL_MAX_WAIT_MS = 120000;
 const NO_FINAL_RECENT_ACTIVITY_GRACE_MS = 30000;
 const NO_FINAL_FORCE_RESOLVE_MS = 180000;
-const NO_RESPONSE_RECOVERY_BASE_MS = 30000;
-const NO_RESPONSE_RECOVERY_PROGRESS_MS = 120000;
-const UNSCOPED_TERMINAL_MIN_SEND_AGE_MS = 8000;
+const NO_EVENTS_AFTER_SEND_TIMEOUT_MS = 180000;
+const ACTIVE_RUN_NO_FINAL_TIMEOUT_MS = 12 * 60_000;
+const BACKFILL_POLL_FAST_MS = 1000;
+const BACKFILL_POLL_MEDIUM_MS = 2000;
+const BACKFILL_POLL_SLOW_MS = 5000;
+const BACKFILL_POLL_MAX_MS = 15000;
+const BACKFILL_JITTER_RATIO = 0.2;
+const TURN_PERSIST_THROTTLE_MS = 1500;
 const GATEWAY_DEBUG_LOG = import.meta.env.DEV || import.meta.env.VITE_GATEWAY_DEBUG === '1';
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
+const TURN_TERMINAL_RETENTION_MS = 60_000;
 
 let cachedOpenClawTransportPromise: Promise<GatewayTransport | null> | null = null;
 
@@ -156,8 +166,33 @@ export interface SystemEvent {
 
 type SystemEventListener = (event: SystemEvent) => void;
 
+export type TurnStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_output'
+  | 'completed'
+  | 'failed'
+  | 'timed_out';
+
+export interface PendingTurn {
+  turnToken: string;
+  sessionKey: string;
+  runId?: string;
+  status: TurnStatus;
+  submittedAt: number;
+  lastSignalAt: number;
+  completedAt?: number;
+  hasAssistantOutput: boolean;
+  completionReason?: string;
+}
+
+type TurnRegistryListener = (turns: PendingTurn[]) => void;
+
 let systemEventUnsubscribe: (() => void) | null = null;
 const systemEventListeners = new Set<SystemEventListener>();
+const turnRegistry = new Map<string, PendingTurn>();
+const turnRegistryListeners = new Set<TurnRegistryListener>();
+const turnLastPersistAt = new Map<string, number>();
 const ACTIVE_SEND_DEDUP_WINDOW_MS = 120_000;
 let activeSendRun: { runId: string; startedAt: number } | null = null;
 const TOOL_ACTIVITY_STATES = new Set([
@@ -285,6 +320,193 @@ export function parseAnnounceMetadata(
   }
 
   return null;
+}
+
+function snapshotTurnRegistry(): PendingTurn[] {
+  return [...turnRegistry.values()].sort((a, b) => a.submittedAt - b.submittedAt);
+}
+
+function emitTurnRegistry(): void {
+  const snapshot = snapshotTurnRegistry();
+  for (const listener of turnRegistryListeners) {
+    try {
+      listener(snapshot);
+    } catch (error) {
+      console.error('[Gateway] Turn registry listener error:', error);
+    }
+  }
+}
+
+function persistPendingTurn(turn: PendingTurn, force: boolean = false): void {
+  if (!isTauriRuntime()) return;
+  const now = Date.now();
+  const lastPersist = turnLastPersistAt.get(turn.turnToken) ?? 0;
+  if (!force && now - lastPersist < TURN_PERSIST_THROTTLE_MS) {
+    return;
+  }
+  turnLastPersistAt.set(turn.turnToken, now);
+  void chatPendingTurnSave({
+    turnToken: turn.turnToken,
+    sessionKey: turn.sessionKey,
+    runId: turn.runId,
+    status: turn.status,
+    submittedAt: turn.submittedAt,
+    lastSignalAt: turn.lastSignalAt,
+    completedAt: turn.completedAt,
+    hasAssistantOutput: turn.hasAssistantOutput,
+    completionReason: turn.completionReason,
+  }).catch((error) => {
+    console.warn('[Gateway] Failed to persist pending turn:', error);
+  });
+}
+
+function removePersistedPendingTurn(turnToken: string): void {
+  if (!isTauriRuntime()) return;
+  turnLastPersistAt.delete(turnToken);
+  void chatPendingTurnRemove(turnToken).catch((error) => {
+    console.warn('[Gateway] Failed to remove pending turn:', error);
+  });
+}
+
+function isTurnActive(status: TurnStatus): boolean {
+  return status === 'queued' || status === 'running' || status === 'awaiting_output';
+}
+
+function upsertTurn(
+  turnToken: string,
+  updates: Partial<PendingTurn> & Pick<PendingTurn, 'sessionKey'>,
+): PendingTurn {
+  const current = turnRegistry.get(turnToken);
+  const base: PendingTurn = current ?? {
+    turnToken,
+    sessionKey: updates.sessionKey,
+    status: 'queued',
+    submittedAt: Date.now(),
+    lastSignalAt: Date.now(),
+    hasAssistantOutput: false,
+  };
+
+  const next: PendingTurn = {
+    ...base,
+    ...updates,
+    turnToken,
+    sessionKey: updates.sessionKey || base.sessionKey,
+    lastSignalAt: updates.lastSignalAt ?? Date.now(),
+  };
+
+  turnRegistry.set(turnToken, next);
+  if (isTurnActive(next.status)) {
+    const forcePersist =
+      !current ||
+      current.status !== next.status ||
+      current.runId !== next.runId ||
+      current.hasAssistantOutput !== next.hasAssistantOutput ||
+      current.completionReason !== next.completionReason;
+    persistPendingTurn(next, forcePersist);
+  }
+  emitTurnRegistry();
+  return next;
+}
+
+function touchTurnSignal(turnToken: string): void {
+  const current = turnRegistry.get(turnToken);
+  if (!current) return;
+  const nextTurn: PendingTurn = {
+    ...current,
+    lastSignalAt: Date.now(),
+  };
+  turnRegistry.set(turnToken, nextTurn);
+  persistPendingTurn(nextTurn);
+  emitTurnRegistry();
+}
+
+function finalizeTurn(
+  turnToken: string,
+  status: Extract<TurnStatus, 'completed' | 'failed' | 'timed_out'>,
+  updates?: Partial<PendingTurn>,
+): void {
+  const current = turnRegistry.get(turnToken);
+  if (!current) return;
+
+  turnRegistry.set(turnToken, {
+    ...current,
+    ...updates,
+    status,
+    completedAt: Date.now(),
+    lastSignalAt: Date.now(),
+  });
+  removePersistedPendingTurn(turnToken);
+  emitTurnRegistry();
+
+  setTimeout(() => {
+    const latest = turnRegistry.get(turnToken);
+    if (!latest) return;
+    if (!latest.completedAt) return;
+    if (Date.now() - latest.completedAt < TURN_TERMINAL_RETENTION_MS) return;
+    turnRegistry.delete(turnToken);
+    emitTurnRegistry();
+  }, TURN_TERMINAL_RETENTION_MS + 250);
+}
+
+function getBackfillPollIntervalMs(submittedAt: number): number {
+  const age = Date.now() - submittedAt;
+  const base =
+    age < 30_000
+      ? BACKFILL_POLL_FAST_MS
+      : age < 120_000
+        ? BACKFILL_POLL_MEDIUM_MS
+        : age < 10 * 60_000
+          ? BACKFILL_POLL_SLOW_MS
+          : BACKFILL_POLL_MAX_MS;
+
+  const jitterWindow = Math.round(base * BACKFILL_JITTER_RATIO);
+  const jittered = base + Math.round((Math.random() * 2 - 1) * jitterWindow);
+  return Math.max(250, jittered);
+}
+
+export function getActiveTurnCount(): number {
+  let count = 0;
+  for (const turn of turnRegistry.values()) {
+    if (isTurnActive(turn.status)) count += 1;
+  }
+  return count;
+}
+
+export function subscribeTurnRegistry(listener: TurnRegistryListener): () => void {
+  turnRegistryListeners.add(listener);
+  listener(snapshotTurnRegistry());
+  return () => {
+    turnRegistryListeners.delete(listener);
+  };
+}
+
+export async function hydratePendingTurns(sessionKey?: string): Promise<PendingTurn[]> {
+  if (!isTauriRuntime()) return snapshotTurnRegistry();
+
+  try {
+    const persisted = await chatPendingTurnsLoad(sessionKey);
+    turnRegistry.clear();
+    turnLastPersistAt.clear();
+    for (const turn of persisted) {
+      if (!isTurnActive(turn.status as TurnStatus)) continue;
+      turnRegistry.set(turn.turnToken, {
+        turnToken: turn.turnToken,
+        sessionKey: turn.sessionKey,
+        runId: turn.runId,
+        status: turn.status as TurnStatus,
+        submittedAt: turn.submittedAt,
+        lastSignalAt: turn.lastSignalAt,
+        completedAt: turn.completedAt,
+        hasAssistantOutput: turn.hasAssistantOutput,
+        completionReason: turn.completionReason,
+      });
+    }
+    emitTurnRegistry();
+  } catch (error) {
+    console.warn('[Gateway] Failed to hydrate pending turns:', error);
+  }
+
+  return snapshotTurnRegistry();
 }
 
 function extractText(content: unknown): string {
@@ -1148,7 +1370,8 @@ async function sendViaTauriWs(
   );
 
   const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
-  const runId = getRequestId();
+  const turnToken = getRequestId();
+  let runId = turnToken;
   const sendRequestedAt = Date.now();
   let streamedText = '';
   let sawFinalEvent = false;
@@ -1160,6 +1383,15 @@ async function sendViaTauriWs(
   let sawRunOwnedContent = false;
   let lastObservedRunActivityAt = sendRequestedAt;
   const baselineMessageIds = new Set<string>();
+  upsertTurn(turnToken, {
+    sessionKey,
+    runId,
+    status: 'queued',
+    submittedAt: sendRequestedAt,
+    lastSignalAt: sendRequestedAt,
+    hasAssistantOutput: false,
+    completionReason: 'queued',
+  });
 
   try {
     const historyBefore = (await connection.request('chat.history', {
@@ -1181,6 +1413,12 @@ async function sendViaTauriWs(
 
   try {
     markActiveSendRun(runId);
+    upsertTurn(turnToken, {
+      sessionKey,
+      runId,
+      status: 'running',
+      completionReason: 'chat_send_started',
+    });
     setAgentActivity('working', onActivityChange);
     console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
 
@@ -1190,17 +1428,34 @@ async function sendViaTauriWs(
     // the polling phase regardless, because the response may still arrive.
     let sendAcked = false;
     try {
-      await connection.request('chat.send', {
+      const sendResponse = (await connection.request('chat.send', {
         sessionKey,
         message: messageText,
         deliver: false,
         idempotencyKey: runId,
         attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
-      });
+      })) as Record<string, unknown> | undefined;
       sendAcked = true;
+      const ackRunId = typeof sendResponse?.runId === 'string' ? sendResponse.runId : undefined;
+      if (ackRunId && ackRunId !== runId) {
+        runId = ackRunId;
+        markActiveSendRun(runId);
+      }
+      upsertTurn(turnToken, {
+        sessionKey,
+        runId,
+        status: 'running',
+        completionReason: 'chat_send_acknowledged',
+      });
       console.log('[Gateway] chat.send acknowledged');
     } catch (sendErr) {
       console.warn('[Gateway] chat.send failed — will poll for response:', sendErr);
+      upsertTurn(turnToken, {
+        sessionKey,
+        runId,
+        status: 'running',
+        completionReason: 'chat_send_unacked_polling',
+      });
       // Don't throw — fall through to polling. The message may have been
       // delivered before the connection dropped.
     }
@@ -1215,28 +1470,19 @@ async function sendViaTauriWs(
       let unsubscribeState: (() => void) | null = null;
 
       const ownsTerminalEvent = (eventRunId?: string): boolean => {
-        if (eventRunId === runId) return true;
-        if (eventRunId) return false;
-        // Fallback path for gateways that omit runId on terminal events.
-        // Only trust unscoped terminal events after run-owned progress/content.
-        // Guard with a minimum send age to avoid attaching stale early terminal
-        // events from neighboring runs.
-        const sendAgeMs = Date.now() - sendRequestedAt;
-        return (
-          sawRunOwnedContent ||
-          (sawRunOwnedProgress && sendAgeMs >= UNSCOPED_TERMINAL_MIN_SEND_AGE_MS)
-        );
+        return Boolean(eventRunId && eventRunId === runId);
       };
 
       const resetIdleTimeout = () => {
-        // Don't idle-timeout during an active send. The activity label
-        // in App.tsx already falls back to "Working..." while chatSending
-        // is true, so we only need this timeout as a safety net for truly
-        // orphaned sends (e.g. missed final event). 5 minutes matches
-        // OPENCLAW_CHAT_TIMEOUT_MS.
+        touchTurnSignal(turnToken);
         if (idleTimeout) clearTimeout(idleTimeout);
         idleTimeout = setTimeout(() => {
-          setAgentActivity('idle', onActivityChange);
+          upsertTurn(turnToken, {
+            sessionKey,
+            runId,
+            status: 'awaiting_output',
+            completionReason: 'idle_signal_gap_recovery',
+          });
         }, 5 * 60 * 1000);
       };
 
@@ -1489,6 +1735,12 @@ async function sendViaTauriWs(
               const now = Date.now();
               lastEventTime = now;
               lastObservedRunActivityAt = now;
+              upsertTurn(turnToken, {
+                sessionKey,
+                runId,
+                status: 'running',
+                completionReason: 'unscoped_agent_progress',
+              });
               resetIdleTimeout();
               pollStableCount = 0;
               clearSawFinal('unscoped agent activity');
@@ -1507,6 +1759,12 @@ async function sendViaTauriWs(
           const now = Date.now();
           lastEventTime = now;
           lastObservedRunActivityAt = now;
+          upsertTurn(turnToken, {
+            sessionKey,
+            runId,
+            status: 'running',
+            completionReason: 'agent_progress',
+          });
           resetIdleTimeout();
           pollStableCount = 0;
           clearSawFinal('agent activity');
@@ -1574,7 +1832,7 @@ async function sendViaTauriWs(
           setAgentActivity('working', onActivityChange);
           sawToolSinceLastContent = true;
         } else if (TERMINAL_ACTIVITY_STATES.has(state) && ownsTerminalEvent(eventRunId)) {
-          setAgentActivity('idle', onActivityChange);
+          touchTurnSignal(turnToken);
         }
 
         const announce = parseAnnounceMetadata(chat, true);
@@ -1599,6 +1857,13 @@ async function sendViaTauriWs(
           const deltaText = extractText(chat.message);
           if (deltaText) {
             sawRunOwnedContent = true;
+            upsertTurn(turnToken, {
+              sessionKey,
+              runId,
+              status: 'running',
+              hasAssistantOutput: true,
+              completionReason: 'stream_delta',
+            });
             if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
               // New content block after tool calls — append with separator.
               contentBlockOffset = streamedText.length + 2; // +2 for '\n\n'
@@ -1629,6 +1894,11 @@ async function sendViaTauriWs(
             return;
           }
           console.log('[Gateway] REJECT via error event:', chat.errorMessage);
+          finalizeTurn(turnToken, 'failed', {
+            sessionKey,
+            runId,
+            completionReason: 'chat_error_event',
+          });
           cleanup('errorEvent');
           clearActiveSendRun(runId);
           reject(new Error(typeof chat.errorMessage === 'string' ? chat.errorMessage : 'OpenClaw chat error'));
@@ -1641,6 +1911,11 @@ async function sendViaTauriWs(
             return;
           }
           console.log('[Gateway] REJECT via aborted event');
+          finalizeTurn(turnToken, 'failed', {
+            sessionKey,
+            runId,
+            completionReason: 'chat_aborted_event',
+          });
           cleanup('abortedEvent');
           clearActiveSendRun(runId);
           reject(new Error('OpenClaw chat aborted'));
@@ -1679,6 +1954,13 @@ async function sendViaTauriWs(
           sawFinalEvent = true;
           sawFinalEventAt = Date.now();
           sawFinalAt = Date.now();
+          upsertTurn(turnToken, {
+            sessionKey,
+            runId,
+            status: 'awaiting_output',
+            completionReason: finalText?.trim().length ? 'final_seen' : 'final_seen_without_content',
+            hasAssistantOutput: streamedText.trim().length > 0,
+          });
           clearActiveSendRun(runId);
         }
       };
@@ -1742,19 +2024,30 @@ async function sendViaTauriWs(
     }
 
     // Recovery path: if completion resolved but we still have no content,
-    // keep polling history briefly before returning an empty response.
+    // keep polling history according to timeout class:
+    // - no observed progress -> 3 minutes
+    // - observed run activity -> 12 minutes
     if (assistantMessages.length === 0 && !streamedTrimmed) {
-      const recoveryWindowMs =
-        NO_RESPONSE_RECOVERY_BASE_MS +
-        (
-          (sawRunOwnedProgress || sawUnscopedAgentProgress) && !sawRunOwnedContent
-            ? NO_RESPONSE_RECOVERY_PROGRESS_MS
-            : 0
-        );
-      const recoveryDeadline = Date.now() + recoveryWindowMs;
+      const sawAnyProgress =
+        sawRunOwnedProgress || sawUnscopedAgentProgress || sawRunOwnedContent || sawFinalEvent;
+      const hardDeadline = sendRequestedAt + (
+        sawAnyProgress ? ACTIVE_RUN_NO_FINAL_TIMEOUT_MS : NO_EVENTS_AFTER_SEND_TIMEOUT_MS
+      );
+      upsertTurn(turnToken, {
+        sessionKey,
+        runId,
+        status: 'awaiting_output',
+        completionReason: sawAnyProgress
+          ? 'awaiting_output_active_backfill'
+          : 'awaiting_output_no_event_backfill',
+      });
+
+      const recoveryDeadline = Math.max(Date.now(), hardDeadline);
       while (Date.now() < recoveryDeadline) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const waitMs = getBackfillPollIntervalMs(sendRequestedAt);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
         setAgentActivity('working', onActivityChange);
+        touchTurnSignal(turnToken);
         try {
           const recoveryHistory = (await connection.request('chat.history', {
             sessionKey,
@@ -1770,6 +2063,13 @@ async function sendViaTauriWs(
           });
           if (recovered.length > 0) {
             assistantMessages = recovered;
+            upsertTurn(turnToken, {
+              sessionKey,
+              runId,
+              status: 'running',
+              hasAssistantOutput: true,
+              completionReason: 'recovered_from_history_backfill',
+            });
             console.log(`[Gateway] Recovery poll captured ${recovered.length} assistant message(s)`);
             break;
           }
@@ -1844,9 +2144,24 @@ async function sendViaTauriWs(
 
     const finalStreamedText = streamedText.trim();
     if (assistantMessages.length === 0 && !finalStreamedText) {
+      const timedOutWithProgress =
+        sawRunOwnedProgress || sawUnscopedAgentProgress || sawRunOwnedContent || sawFinalEvent;
+      finalizeTurn(turnToken, 'timed_out', {
+        sessionKey,
+        runId,
+        completionReason: timedOutWithProgress
+          ? 'timeout_active_no_final'
+          : 'timeout_no_events',
+      });
       throw new Error('No response received — agent may be busy or the session is unavailable. Try again in a moment.');
     }
 
+    finalizeTurn(turnToken, 'completed', {
+      sessionKey,
+      runId,
+      hasAssistantOutput: true,
+      completionReason: sawFinalEvent ? 'completed_from_final_or_history' : 'completed_from_history_without_final',
+    });
     setAgentActivity('idle', onActivityChange);
     clearActiveSendRun(runId);
 
@@ -1857,6 +2172,22 @@ async function sendViaTauriWs(
         : finalStreamedText,
     };
   } catch (error) {
+    const existingTurn = turnRegistry.get(turnToken);
+    if (!existingTurn || isTurnActive(existingTurn.status)) {
+      const message = normalizeErrorMessage(error);
+      const lower = message.toLowerCase();
+      const reason =
+        lower.includes('no response')
+          ? 'timeout_no_output'
+          : lower.includes('timeout')
+            ? 'timeout_request'
+            : 'send_failed';
+      finalizeTurn(turnToken, 'failed', {
+        sessionKey,
+        runId,
+        completionReason: reason,
+      });
+    }
     setAgentActivity('idle', onActivityChange);
     clearActiveSendRun(runId);
     throw error;
@@ -2048,7 +2379,7 @@ export function subscribeConnectionState(
   return useDashboardStore.subscribe((state) => {
     if (state.wsConnectionState === prev) return;
     prev = state.wsConnectionState;
-    if (prev === 'disconnected' || prev === 'error') {
+    if ((prev === 'disconnected' || prev === 'error') && getActiveTurnCount() === 0) {
       useDashboardStore.getState().setAgentActivity('idle');
     }
     listener(prev);
@@ -2058,6 +2389,16 @@ export function subscribeConnectionState(
 export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
   likelyNeedsFinalSettlePass,
+  getActiveTurnCount,
+  clearTurnRegistryForTests: () => {
+    turnRegistry.clear();
+    turnLastPersistAt.clear();
+    emitTurnRegistry();
+  },
+  upsertTurnForTests: (turn: PendingTurn) => {
+    turnRegistry.set(turn.turnToken, turn);
+    emitTurnRegistry();
+  },
 };
 
 export async function pollProcessSessions(

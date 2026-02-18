@@ -83,6 +83,37 @@ type TauriCommands = {
   };
   chat_messages_clear: { args: Record<string, never>; return: void };
   chat_messages_count: { args: Record<string, never>; return: number };
+  chat_pending_turn_save: {
+    args: {
+      turn: {
+        turnToken: string;
+        sessionKey: string;
+        runId?: string;
+        status: string;
+        submittedAt: number;
+        lastSignalAt: number;
+        completedAt?: number;
+        hasAssistantOutput: boolean;
+        completionReason?: string;
+      };
+    };
+    return: void;
+  };
+  chat_pending_turn_remove: { args: { turnToken: string }; return: void };
+  chat_pending_turns_load: {
+    args: { sessionKey?: string };
+    return: Array<{
+      turnToken: string;
+      sessionKey: string;
+      runId?: string;
+      status: string;
+      submittedAt: number;
+      lastSignalAt: number;
+      completedAt?: number;
+      hasAssistantOutput: boolean;
+      completionReason?: string;
+    }>;
+  };
 };
 
 export function isTauriRuntime(): boolean {
@@ -224,6 +255,18 @@ export interface PersistedChatMessage {
   metadata?: string;
 }
 
+export interface PersistedPendingTurn {
+  turnToken: string;
+  sessionKey: string;
+  runId?: string;
+  status: string;
+  submittedAt: number;
+  lastSignalAt: number;
+  completedAt?: number;
+  hasAssistantOutput: boolean;
+  completionReason?: string;
+}
+
 export async function chatMessagesLoad(
   beforeTimestamp?: number,
   limit?: number,
@@ -242,4 +285,16 @@ export async function chatMessagesClear(): Promise<void> {
 
 export async function chatMessagesCount(): Promise<number> {
   return typedInvoke('chat_messages_count');
+}
+
+export async function chatPendingTurnSave(turn: PersistedPendingTurn): Promise<void> {
+  return typedInvoke('chat_pending_turn_save', { turn });
+}
+
+export async function chatPendingTurnRemove(turnToken: string): Promise<void> {
+  return typedInvoke('chat_pending_turn_remove', { turnToken });
+}
+
+export async function chatPendingTurnsLoad(sessionKey?: string): Promise<PersistedPendingTurn[]> {
+  return typedInvoke('chat_pending_turns_load', { sessionKey });
 }

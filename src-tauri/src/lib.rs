@@ -514,14 +514,7 @@ struct SkippedDirectory {
     reason: String,
 }
 
-const SCAN_SKIP_DIRS: [&str; 6] = [
-    "node_modules",
-    ".git",
-    "target",
-    "dist",
-    ".next",
-    ".cache",
-];
+const SCAN_SKIP_DIRS: [&str; 6] = ["node_modules", ".git", "target", "dist", ".next", ".cache"];
 
 #[tauri::command]
 fn scan_projects(scan_paths: Vec<String>) -> Result<ScanResult, String> {
@@ -560,10 +553,7 @@ fn scan_projects(scan_paths: Vec<String>) -> Result<ScanResult, String> {
                 continue;
             }
 
-            let dir_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
             // Skip hidden directories and known noise
             if dir_name.starts_with('.') || SCAN_SKIP_DIRS.contains(&dir_name) {
@@ -1764,6 +1754,30 @@ fn init_chat_db() -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pending_turns (
+            turn_token TEXT PRIMARY KEY,
+            session_key TEXT NOT NULL,
+            run_id TEXT,
+            status TEXT NOT NULL,
+            submitted_at INTEGER NOT NULL,
+            last_signal_at INTEGER NOT NULL,
+            completed_at INTEGER,
+            has_assistant_output INTEGER NOT NULL DEFAULT 0,
+            completion_reason TEXT,
+            updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pending_turns_session_status
+         ON pending_turns(session_key, status)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(conn)
 }
 
@@ -1784,6 +1798,23 @@ struct ChatMessage {
     timestamp: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PendingTurn {
+    turn_token: String,
+    session_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    run_id: Option<String>,
+    status: String,
+    submitted_at: i64,
+    last_signal_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed_at: Option<i64>,
+    has_assistant_output: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completion_reason: Option<String>,
 }
 
 #[tauri::command]
@@ -1930,6 +1961,137 @@ fn chat_messages_count() -> Result<i64, String> {
     Ok(count)
 }
 
+#[tauri::command]
+fn chat_pending_turn_save(turn: PendingTurn) -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO pending_turns (
+            turn_token,
+            session_key,
+            run_id,
+            status,
+            submitted_at,
+            last_signal_at,
+            completed_at,
+            has_assistant_output,
+            completion_reason,
+            updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, (strftime('%s', 'now') * 1000))",
+        params![
+            turn.turn_token,
+            turn.session_key,
+            turn.run_id,
+            turn.status,
+            turn.submitted_at,
+            turn.last_signal_at,
+            turn.completed_at,
+            if turn.has_assistant_output { 1 } else { 0 },
+            turn.completion_reason,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn chat_pending_turn_remove(turn_token: String) -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    conn.execute(
+        "DELETE FROM pending_turns WHERE turn_token = ?1",
+        params![turn_token],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn chat_pending_turns_load(session_key: Option<String>) -> Result<Vec<PendingTurn>, String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    let mut turns: Vec<PendingTurn> = Vec::new();
+
+    let active_statuses = ["queued", "running", "awaiting_output"];
+
+    if let Some(session) = session_key {
+        let mut stmt = conn
+            .prepare(
+                "SELECT turn_token, session_key, run_id, status, submitted_at, last_signal_at,
+                        completed_at, has_assistant_output, completion_reason
+                 FROM pending_turns
+                 WHERE session_key = ?1 AND status IN (?2, ?3, ?4)
+                 ORDER BY submitted_at ASC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map(
+                params![
+                    session,
+                    active_statuses[0],
+                    active_statuses[1],
+                    active_statuses[2]
+                ],
+                |row| {
+                    Ok(PendingTurn {
+                        turn_token: row.get(0)?,
+                        session_key: row.get(1)?,
+                        run_id: row.get(2)?,
+                        status: row.get(3)?,
+                        submitted_at: row.get(4)?,
+                        last_signal_at: row.get(5)?,
+                        completed_at: row.get(6)?,
+                        has_assistant_output: row.get::<_, i64>(7)? != 0,
+                        completion_reason: row.get(8)?,
+                    })
+                },
+            )
+            .map_err(|e| e.to_string())?;
+
+        for row in rows {
+            turns.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+        }
+    } else {
+        let mut stmt = conn
+            .prepare(
+                "SELECT turn_token, session_key, run_id, status, submitted_at, last_signal_at,
+                        completed_at, has_assistant_output, completion_reason
+                 FROM pending_turns
+                 WHERE status IN (?1, ?2, ?3)
+                 ORDER BY submitted_at ASC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map(
+                params![active_statuses[0], active_statuses[1], active_statuses[2]],
+                |row| {
+                    Ok(PendingTurn {
+                        turn_token: row.get(0)?,
+                        session_key: row.get(1)?,
+                        run_id: row.get(2)?,
+                        status: row.get(3)?,
+                        submitted_at: row.get(4)?,
+                        last_signal_at: row.get(5)?,
+                        completed_at: row.get(6)?,
+                        has_assistant_output: row.get::<_, i64>(7)? != 0,
+                        completion_reason: row.get(8)?,
+                    })
+                },
+            )
+            .map_err(|e| e.to_string())?;
+
+        for row in rows {
+            turns.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+        }
+    }
+
+    Ok(turns)
+}
+
 // =============================================================================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1968,6 +2130,9 @@ pub fn run() {
             chat_message_save,
             chat_messages_clear,
             chat_messages_count,
+            chat_pending_turn_save,
+            chat_pending_turn_remove,
+            chat_pending_turns_load,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2033,5 +2198,4 @@ mod hardening_tests {
 
         let _ = fs::remove_dir_all(dir);
     }
-
 }

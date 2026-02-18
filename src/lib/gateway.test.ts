@@ -12,6 +12,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  __gatewayTestUtils.clearTurnRegistryForTests();
 });
 
 describe('gateway client', () => {
@@ -387,5 +388,43 @@ describe('gateway client', () => {
     ]);
 
     expect(needsSettle).toBe(false);
+  });
+
+  it('counts only active lifecycle turns', () => {
+    __gatewayTestUtils.upsertTurnForTests({
+      turnToken: 'turn-a',
+      sessionKey: 'agent:main:pipeline-dashboard',
+      status: 'queued',
+      submittedAt: 1,
+      lastSignalAt: 1,
+      hasAssistantOutput: false,
+    });
+    __gatewayTestUtils.upsertTurnForTests({
+      turnToken: 'turn-b',
+      sessionKey: 'agent:main:pipeline-dashboard',
+      status: 'running',
+      submittedAt: 2,
+      lastSignalAt: 2,
+      hasAssistantOutput: false,
+    });
+    __gatewayTestUtils.upsertTurnForTests({
+      turnToken: 'turn-c',
+      sessionKey: 'agent:main:pipeline-dashboard',
+      status: 'awaiting_output',
+      submittedAt: 3,
+      lastSignalAt: 3,
+      hasAssistantOutput: false,
+    });
+    __gatewayTestUtils.upsertTurnForTests({
+      turnToken: 'turn-d',
+      sessionKey: 'agent:main:pipeline-dashboard',
+      status: 'completed',
+      submittedAt: 4,
+      lastSignalAt: 4,
+      completedAt: 5,
+      hasAssistantOutput: true,
+    });
+
+    expect(__gatewayTestUtils.getActiveTurnCount()).toBe(3);
   });
 });
