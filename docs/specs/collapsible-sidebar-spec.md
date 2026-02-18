@@ -46,14 +46,15 @@ The sidebar provides a **persistent but collapsible** home for this secondary UI
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ ●●● ◧  Clawchestra  [Update]                  [⌘K] [⚙] ... │  ← Title bar (full width, deepened)
+│ ●●● ◧  Clawchestra  [Update]                    [☀ 🌙 ⚙️]  │  ← Title bar
 ├──────────┬───────────────────────────────────────────────────┤
+│          │ [🔍 Search...                    ⌘K] [↻] [+ Add] │  ← Header bar
+│          ├───────────────────────────────────────────────────┤
 │          │                                                   │
 │ SIDEBAR  │              KANBAN BOARD                         │
 │ (left)   │                                                   │
 │          │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐     │
 │          │  │IN FLGHT│ │UP NEXT │ │SIMMER  │ │SHIPPED │     │
-│          │  │        │ │        │ │        │ │        │     │
 │ ┌──────┐ │  │ ┌────┐ │ │ ┌────┐ │ │ ┌────┐ │ │        │     │
 │ │      │ │  │ │Card│ │ │ │Card│ │ │ │Card│ │ │        │     │
 │ │(TBD) │ │  │ └────┘ │ │ └────┘ │ │ └────┘ │ │        │     │
@@ -71,14 +72,15 @@ The sidebar provides a **persistent but collapsible** home for this secondary UI
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ ●●● ◨  Clawchestra  [Update]                  [⌘K] [⚙] ... │  ← Title bar
+│ ●●● ◨  Clawchestra  [Update]                    [☀ 🌙 ⚙️]  │  ← Title bar
+├──────────────────────────────────────────────────────────────┤
+│ [🔍 Search by title, id, tag...              ⌘K] [↻] [+ Add]│  ← Header bar
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │                       KANBAN BOARD                           │
 │                                                              │
 │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                │
 │  │IN FLGHT│ │UP NEXT │ │SIMMER  │ │SHIPPED │                │
-│  │        │ │        │ │        │ │        │                │
 │  │ ┌────┐ │ │ ┌────┐ │ │ ┌────┐ │ │        │                │
 │  │ │Card│ │ │ │Card│ │ │ │Card│ │ │        │                │
 │  │ └────┘ │ │ └────┘ │ │ └────┘ │ │        │                │
@@ -100,20 +102,34 @@ The sidebar provides a **persistent but collapsible** home for this secondary UI
 
 The sidebar toggle lives in the **title bar** (the draggable area alongside the macOS traffic lights ●●●). This follows the Codex pattern where the toggle sits immediately to the right of the traffic lights.
 
-### Codex-Inspired Title Bar Layout
+### Title Bar & Header Bar Layout
 
 ```
-┌─────┬──────────────────────────────────────────────────────┐
-│●●●  │ ◧  Clawchestra  [Update]                            │  ← Title bar (slightly taller)
-├─────┴──────────────────────────────────────────────────────┤
-│ 🔍 Search by title, id, tag...  [⌘K]  [All ▼]  [↻ Refresh] [Add Project] [⚙] [☀🌙] │  ← Header bar (unchanged)
-└────────────────────────────────────────────────────────────┘
- ↑        ↑      ↑          ↑
- traffic   toggle  title     update badge
- lights    btn
+┌─────┬────────────────────────────────────────────────────────────┐
+│●●●  │ ◧  Clawchestra  [Update]                      [☀] [🌙] [⚙️] │  ← Title bar (slightly taller)
+├─────┴────────────────────────────────────────────────────────────┤
+│ [🔍 Search by title, id, tag...              ⌘K]  [↻] [+ Add]  │  ← Header bar (simplified single row)
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-The title bar and the header bar are **two separate rows**. The title bar is the narrow draggable strip containing only the traffic lights, sidebar toggle, app title, and Update badge. Below it, the existing header bar (search, filters, Refresh, Add Project, settings gear, theme toggle) remains exactly as-is — except the Settings gear moves into the sidebar.
+The title bar and the header bar are **two separate rows**:
+
+**Title bar** (top strip, draggable) contains:
+- Traffic lights (●●●)
+- Sidebar toggle (◧/◨)
+- "Clawchestra" title + Update badge
+- Theme toggle (☀/🌙/⚙️ for light/dark/system) — **promoted from the old header bar**
+
+**Header bar** (below, single row) contains:
+- Search bar with ⌘K hint (kept for discoverability — not all users know keyboard shortcuts)
+- Refresh button (compact, icon-only or small)
+- Add Project button
+
+**Removed entirely:**
+- Status filter dropdown ("All statuses") — unused, adds noise
+- Settings gear — moves into sidebar (bottom, Codex-style)
+
+This collapses what was previously a two-section header (buttons row + search row) into a single clean search row with minimal actions.
 
 ### Toggle Button
 
@@ -130,14 +146,16 @@ The title bar and the header bar are **two separate rows**. The title bar is the
 The title bar may need to be **slightly deeper** to comfortably accommodate the toggle button alongside the traffic lights. Currently the header is a content-area element; the title bar (Tauri's decorations area) is minimal.
 
 Changes to **title bar** (top strip):
-- **Title bar height:** Slightly taller to comfortably fit the toggle icon + Update badge (aim for ~36-40px draggable region)
+- **Title bar height:** Slightly taller to comfortably fit the toggle icon, Update badge, and theme toggles (aim for ~36-40px draggable region)
 - **Sidebar toggle:** Added immediately right of traffic lights
-- **"Clawchestra" title:** Moves right to sit after the toggle button
-- **"Update" badge moved into title bar:** Currently in the header content area, the Update badge relocates into the title bar next to the "Clawchestra" title (Codex puts its Update badge in the title bar too — see screenshots). This is what necessitates the title shifting right.
+- **"Clawchestra" title + Update badge:** Moved into title bar, shifted right of toggle
+- **Theme toggle (☀/🌙/⚙️):** Promoted from the old header bar to the title bar right side — these are global app-level controls that belong alongside the app title
 
 Changes to **header bar** (below title bar):
-- **Stays as-is.** Search bar, ⌘K shortcut, status filter, Refresh button, Add Project button, theme toggle — all remain in the header bar in their current positions.
-- **Settings gear removed** — moves into the sidebar (bottom, Codex-style). This is the only element that leaves the header bar.
+- **Simplified to a single row.** Search bar with ⌘K hint on the left, Refresh + Add Project buttons on the right.
+- **Status filter ("All statuses") removed** — unused, was adding noise
+- **Settings gear removed** — moves into the sidebar (bottom, Codex-style)
+- **Theme toggle removed** — promoted to title bar (see above)
 
 ### Title Bar Drag Region
 
@@ -244,13 +262,15 @@ interface SidebarState {
 App.tsx
 ├── TitleBar (slightly taller draggable strip)
 │   ├── SidebarToggle (◧/◨ icon button)
-│   └── AppTitle ("Clawchestra" + Update badge)
-├── Header (existing bar — search, filters, buttons, theme toggle)
-│   ├── SearchBar + ⌘K
-│   ├── StatusFilter
-│   ├── Refresh / Add Project buttons
-│   └── Theme toggle
-│   (Settings gear REMOVED from here → moved to sidebar)
+│   ├── AppTitle ("Clawchestra" + Update badge)
+│   └── ThemeToggle (☀/🌙/⚙️ — promoted from old header)
+├── Header (simplified single row)
+│   ├── SearchBar + ⌘K hint
+│   ├── Refresh button (compact)
+│   └── Add Project button
+│   (Status filter REMOVED — unused)
+│   (Settings gear REMOVED → sidebar)
+│   (Theme toggle REMOVED → title bar)
 ├── MainLayout (sidebar + content column)
 │   ├── Sidebar                          ← NEW
 │   │   ├── (placeholder / empty state for Phase 1)
@@ -275,8 +295,8 @@ App.tsx
 
 | File | Change |
 |------|--------|
-| `src/components/Header.tsx` | Remove settings gear (moves to sidebar). Otherwise unchanged. |
-| `src/App.tsx` | Add title bar row above header, add sidebar to layout, enforce content-column structure |
+| `src/components/Header.tsx` | Major simplification: remove settings gear, theme toggle, status filter. Collapse to single row (search + Refresh + Add Project). |
+| `src/App.tsx` | Add title bar row above header (with toggle, title, Update badge, theme toggle), add sidebar to layout, enforce content-column structure |
 | `tauri.conf.json` | Add `minWidth` / `minHeight` |
 | Zustand store | Add `sidebarOpen` / `toggleSidebar` |
 
@@ -292,9 +312,11 @@ App.tsx
 - Dedicated toggle icon in title bar (Codex-style, not hamburger)
 - Two icon states: open (◧) and close (◨)
 - `Cmd+B` keyboard shortcut
-- New title bar row (slightly taller) above the existing header, containing: traffic lights, sidebar toggle, "Clawchestra" title, Update badge
-- Existing header bar (search, filters, buttons, theme toggle) stays as-is below the title bar
+- New title bar row (slightly taller) above the header, containing: traffic lights, sidebar toggle, "Clawchestra" title, Update badge, theme toggle (right side)
+- Header bar simplified to single row: search bar (with ⌘K hint) + Refresh button + Add Project button
+- Status filter ("All statuses") removed entirely — unused noise
 - Settings gear moves from header bar into sidebar (bottom, Codex-style)
+- Theme toggle promoted from header bar to title bar (right side)
 - Sidebar persists open/closed state across restarts
 - Chat bar remains at the bottom at all times
 - Minimum window dimensions enforced via Tauri
