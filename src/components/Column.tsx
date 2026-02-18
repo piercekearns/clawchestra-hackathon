@@ -15,6 +15,8 @@ interface ColumnProps<T extends BoardItem> {
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
   renderItemHoverActions?: (item: T) => ReactNode;
+  /** Spread onto the header to make it a drag handle for column reordering */
+  headerDragHandleProps?: Record<string, unknown>;
 }
 
 export function Column<T extends BoardItem>({
@@ -23,6 +25,7 @@ export function Column<T extends BoardItem>({
   collapsed = false,
   onToggleCollapse,
   onItemClick,
+  headerDragHandleProps,
   getItemWarning,
   renderItemIndicators,
   renderItemActions,
@@ -40,8 +43,7 @@ export function Column<T extends BoardItem>({
       }`}
     >
       <header
-        className="mb-3 flex cursor-pointer items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 transition-colors hover:bg-neutral-200/80 dark:bg-neutral-800 dark:hover:bg-neutral-700/80"
-        onClick={onToggleCollapse}
+        className="mb-3 flex cursor-grab items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 transition-colors hover:bg-neutral-200/80 active:cursor-grabbing dark:bg-neutral-800 dark:hover:bg-neutral-700/80"
         role="button"
         aria-label={collapsed ? `Expand ${column.label} cards` : `Collapse ${column.label} cards`}
         tabIndex={0}
@@ -51,12 +53,24 @@ export function Column<T extends BoardItem>({
             onToggleCollapse?.();
           }
         }}
+        {...headerDragHandleProps}
       >
-        {collapsed ? (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-neutral-500" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-neutral-500" />
-        )}
+        <button
+          type="button"
+          className="shrink-0 rounded p-0.5 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCollapse?.();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label={collapsed ? 'Expand' : 'Collapse'}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </button>
         <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
           {column.label}
         </h2>

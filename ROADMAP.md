@@ -24,20 +24,10 @@ items:
       - automation
     specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
     planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
-  - id: collapsible-kanban-columns
-    title: Collapsible Kanban Columns
-    status: in-progress
-    priority: 3
-    nextAction: Code shipped — awaiting verification
-    tags:
-      - ui
-      - kanban
-      - ux
-    specDoc: docs/specs/collapsible-kanban-columns-spec.md
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -47,7 +37,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -55,7 +45,7 @@ items:
   - id: recently-completed-lifecycle
     title: Recently Completed Lifecycle
     status: up-next
-    priority: 4
+    priority: 3
     nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
@@ -63,6 +53,17 @@ items:
       - agents
       - changelog
     specDoc: docs/specs/recently-completed-lifecycle-spec.md
+  - id: github-api-403-errors
+    title: Investigate GitHub API 403 Errors
+    status: up-next
+    priority: 4
+    nextAction: >-
+      Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
+      likely rate limiting, may need auth token or caching
+    tags:
+      - bug
+      - github
+      - api
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: pending
@@ -94,21 +95,10 @@ items:
       - roadmap
       - ux
       - workflow
-  - id: github-api-403-errors
-    title: Investigate GitHub API 403 Errors
-    status: pending
-    priority: 4
-    nextAction: >-
-      Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
-      likely rate limiting, may need auth token or caching
-    tags:
-      - bug
-      - github
-      - api
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
-    priority: 5
+    priority: 4
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
       colour theme system. Geist fonts available locally including Pixel
@@ -121,15 +111,25 @@ items:
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
-    priority: 6
+    priority: 5
     nextAction: Post-V2 scope
     tags:
       - integration
       - openclaw
+  - id: collapsible-kanban-columns
+    title: Collapsible Kanban Columns
+    status: complete
+    priority: 1
+    nextAction: Code shipped — awaiting verification
+    tags:
+      - ui
+      - kanban
+      - ux
+    specDoc: docs/specs/collapsible-kanban-columns-spec.md
   - id: project-card-opens-kanban
     title: Project Card Opens Kanban Directly
     status: complete
-    priority: 1
+    priority: 2
     nextAction: Verified and shipped
     tags:
       - ui

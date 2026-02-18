@@ -31,6 +31,8 @@ interface DashboardState {
   selectedProjectId?: string;
   /** Collapsed columns per board. Key: board id ("projects" | "roadmap:{projectId}"), Value: collapsed column status ids */
   collapsedColumns: Record<string, string[]>;
+  /** Custom column order per board. Key: board id, Value: ordered status ids */
+  columnOrder: Record<string, string[]>;
 
   setProjects: (projects: ProjectViewModel[]) => void;
   loadProjects: () => Promise<void>;
@@ -57,6 +59,7 @@ interface DashboardState {
   setSelectedProjectId: (id?: string) => void;
   toggleColumnCollapse: (boardId: string, columnId: string) => void;
   isColumnCollapsed: (boardId: string, columnId: string) => boolean;
+  setColumnOrder: (boardId: string, order: string[]) => void;
   updateProjectAndReload: (project: ProjectViewModel, updates: ProjectUpdate) => Promise<void>;
   createProjectAndReload: (
     dirPath: string,
@@ -110,6 +113,7 @@ export const useDashboardStore = create<DashboardState>()(
       loading: false,
       selectedProjectId: undefined,
       collapsedColumns: {},
+      columnOrder: {},
 
       setProjects: (projects) => set({ projects }),
 
@@ -313,6 +317,14 @@ export const useDashboardStore = create<DashboardState>()(
         return current.includes(columnId);
       },
 
+      setColumnOrder: (boardId, order) =>
+        set((state) => ({
+          columnOrder: {
+            ...state.columnOrder,
+            [boardId]: order,
+          },
+        })),
+
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
         await get().loadProjects();
@@ -333,6 +345,7 @@ export const useDashboardStore = create<DashboardState>()(
       partialize: (state) => ({
         themePreference: state.themePreference,
         collapsedColumns: state.collapsedColumns,
+        columnOrder: state.columnOrder,
       }),
     },
   ),
