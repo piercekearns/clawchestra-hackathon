@@ -1,11 +1,12 @@
 # Git Sync — Technical Specification
 
-> Surface uncommitted changes and let users commit + push project metadata to GitHub on demand — without auto-pushing.
+> Surface uncommitted changes and let users commit + push project metadata to GitHub on demand. For the common case, a simple Sync Dialog. For complex git situations, the AI handles it through chat.
 
-The dashboard writes to PROJECT.md frontmatter when users drag kanban cards, update priorities, or change roadmap item statuses. These changes exist only locally until explicitly committed and pushed. This spec adds visibility into that drift and a safe, deliberate sync workflow.
+The dashboard writes to PROJECT.md frontmatter when users drag kanban cards, update priorities, or change roadmap item statuses. These changes exist only locally until explicitly committed and pushed. This spec adds visibility into that drift and a safe, deliberate sync workflow — with an AI-assisted layer for anything beyond the basics.
 
 **Status:** Spec Draft
 **Created:** 2026-02-18
+**Updated:** 2026-02-18
 **Author:** Clawdbot
 **Roadmap Item:** `roadmap/git-sync.md`
 
@@ -15,16 +16,20 @@ The dashboard writes to PROJECT.md frontmatter when users drag kanban cards, upd
 
 1. [Problem](#problem)
 2. [Design Principles](#design-principles)
-3. [Dirty State Detection](#dirty-state-detection)
-4. [UI: Card-Level Indicators](#ui-card-level-indicators)
-5. [UI: Global Sync Action](#ui-global-sync-action)
-6. [Commit Strategy](#commit-strategy)
-7. [Push Behavior](#push-behavior)
-8. [Edge Cases](#edge-cases)
-9. [What This Does NOT Do](#what-this-does-not-do)
-10. [Component Hierarchy](#component-hierarchy)
-11. [State Management](#state-management)
-12. [Build Scope](#build-scope)
+3. [Two-Layer Architecture](#two-layer-architecture)
+4. [Dirty State Detection](#dirty-state-detection)
+5. [UI: Card-Level Indicators](#ui-card-level-indicators)
+6. [UI: Global Sync Action](#ui-global-sync-action)
+7. [Branch Awareness](#branch-awareness)
+8. [Change Categories](#change-categories)
+9. [Commit Strategy](#commit-strategy)
+10. [Push Behavior](#push-behavior)
+11. [Edge Cases](#edge-cases)
+12. [What Phase 1 Does NOT Do](#what-phase-1-does-not-do)
+13. [Component Hierarchy](#component-hierarchy)
+14. [State Management](#state-management)
+15. [Build Scope](#build-scope)
+16. [Future: AI-Assisted Git Management](#future-ai-assisted-git-management)
 
 ---
 
@@ -45,8 +50,37 @@ There's no visibility into this drift, and no way to sync it short of opening a 
 1. **Never auto-push** — committing to a remote repo is a deliberate act. The dashboard is not a CI pipeline.
 2. **Visibility first** — show users what's drifted before offering to fix it.
 3. **Batch over granular** — one commit per sync action, not one commit per drag. Noisy git history helps no one.
-4. **Safe by default** — only commit files the dashboard knows it wrote to (PROJECT.md, ROADMAP.md, CHANGELOG.md). Never commit unrelated changes.
-5. **Leverage existing infrastructure** — the app already scans `gitStatus` with state `clean | uncommitted | unpushed | behind | unknown`. Build on that, don't duplicate it.
+4. **Safe by default** — only commit files the dashboard knows it wrote to. Never commit unrelated changes.
+5. **All selected by default** — every dirty project is checked on by default. Users uncheck what they want to skip, rather than having to opt-in per project.
+6. **Smart defaults, manual overrides** — push defaults to on for clean branches, off for risky ones. User can always override.
+7. **Leverage existing infrastructure** — the app already scans `gitStatus` with state `clean | uncommitted | unpushed | behind | unknown`. Build on that, don't duplicate it.
+8. **Simple UI for common cases, AI for complex ones** — the Sync Dialog handles commit + push to current branch. Branch management, conflict resolution, and cross-branch sync go through the chat agent.
+
+---
+
+## Two-Layer Architecture
+
+Git operations in Clawchestra span two layers:
+
+### Layer 1: Sync Dialog (Phase 1)
+
+A mechanical, UI-driven tool for the 80% case:
+- See which projects have uncommitted dashboard changes
+- Commit selected projects with one click
+- Push to current branch's upstream
+- No branch switching, no merging, no conflict resolution
+
+### Layer 2: AI-Assisted Git Management (Phase 2+)
+
+For everything the Sync Dialog can't handle, the chat agent steps in. The agent already has full project context, can see git state, and can run commands. Examples:
+
+- *"ClawOS is 3 commits behind origin/main — want me to rebase and push?"*
+- *"Memestr has diverged. Here's the diff — I can merge or rebase, your call."*
+- *"You have uncommitted spec changes on a feature branch. Want me to cherry-pick them to main?"*
+
+The Sync Dialog surfaces problems it can't solve (branch behind, diverged, no upstream) with a **"Ask agent to help"** action that pre-fills the chat with context.
+
+This is the key insight: **you don't need to build a git client UI because the AI already is one.** The dashboard provides visibility and handles the easy cases; the agent handles the hard ones.
 
 ---
 
@@ -69,7 +103,7 @@ interface GitStatus {
 
 The current `state` is coarse-grained — it tells us "this repo has uncommitted changes" but not *which files* changed or *whether those changes were from the dashboard*.
 
-**Enhancement**: Add a `dashboardDirty` flag to `GitStatus`:
+**Enhancement**: Extend `GitStatus` with dashboard-specific fields:
 
 ```typescript
 interface GitStatus {
@@ -77,21 +111,30 @@ interface GitStatus {
   branch?: string;
   details?: string;
   remote?: string;
-  /** True when PROJECT.md / ROADMAP.md / CHANGELOG.md have uncommitted changes */
+  /** True when dashboard-managed files have uncommitted changes */
   dashboardDirty?: boolean;
   /** List of dashboard-managed files with uncommitted changes */
   dirtyFiles?: string[];
+  /** Commits ahead of upstream (0 = in sync, undefined = no upstream) */
+  ahead?: number;
+  /** Commits behind upstream (0 = in sync, undefined = no upstream) */
+  behind?: number;
+  /** True when local and remote have diverged (both ahead and behind) */
+  diverged?: boolean;
 }
 ```
 
-The Tauri backend checks `git diff --name-only` for the project directory and filters for known dashboard-managed files:
+The Tauri backend checks `git diff --name-only` (unstaged) and `git diff --name-only --cached` (staged) for the project directory, filtering for dashboard-managed files:
 - `PROJECT.md`
 - `ROADMAP.md`
 - `CHANGELOG.md`
 - `roadmap/*.md` (roadmap item files)
-- `docs/specs/*.md` and `docs/plans/*.md` (lifecycle artifacts)
+- `docs/specs/*.md` (spec documents)
+- `docs/plans/*.md` (plan documents)
 
 If any of these have uncommitted changes, `dashboardDirty = true`.
+
+Branch tracking comes from `git rev-list --left-right --count HEAD...@{upstream}`.
 
 ---
 
@@ -138,44 +181,99 @@ Add a sync button to the Header bar (alongside Refresh and Add Project):
 
 ### Sync Dialog
 
-A modal listing all projects with uncommitted dashboard changes:
+A modal listing all projects with uncommitted dashboard changes. Each project row includes branch context and per-project actions:
 
 ```
-┌──────────────────────────────────────────────┐
-│  Sync Changes to GitHub                      │
-│                                              │
-│  3 projects have uncommitted changes:        │
-│                                              │
-│  ☑ ClawOS                                    │
-│    PROJECT.md — status: active → in-progress │
-│                                              │
-│  ☑ Memestr                                   │
-│    ROADMAP.md — 2 items updated              │
-│                                              │
-│  ☑ piercekearns.com                          │
-│    PROJECT.md — priority: 3 → 1              │
-│                                              │
-│  ☐ Pipeline Dashboard  (no remote)           │
-│    PROJECT.md — modified                     │
-│                                              │
-│  Commit message:                             │
-│  ┌────────────────────────────────────────┐  │
-│  │ chore: sync project metadata           │  │
-│  └────────────────────────────────────────┘  │
-│                                              │
-│  ☑ Push after commit                         │
-│                                              │
-│  [Cancel]                      [Commit (3)]  │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Sync Changes                                                │
+│                                                              │
+│  3 projects have uncommitted changes                         │
+│                                                              │
+│  ☑ ClawOS                       main ↑2        [Commit & Push]
+│    ┊ Metadata: PROJECT.md — status changed                   │
+│    ┊ Documents: docs/specs/new-feature-spec.md (new)         │
+│                                                              │
+│  ☑ Memestr                      main ✓         [Commit & Push]
+│    ┊ Metadata: ROADMAP.md — 2 items updated                  │
+│                                                              │
+│  ☑ piercekearns.com             dev ↓3 ⚠       [Commit only]
+│    ┊ Metadata: PROJECT.md — priority changed                 │
+│    ┊ ⚠ Branch is behind remote — push may fail               │
+│    ┊ [Ask agent to help]                                     │
+│                                                              │
+│  ☑ Pipeline Dashboard           main (no remote)  [Commit]  │
+│    ┊ Metadata: PROJECT.md — modified                         │
+│                                                              │
+│  Commit message:                                             │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │ chore: sync project metadata (ClawOS, Memestr, ...)  │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                                                              │
+│  [Cancel]                              [Sync All Selected]   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 **Features:**
-- Checkbox per project (all checked by default, except repos without a remote)
-- Brief description of what changed per project (from `dirtyFiles` + `git diff --stat`)
-- Editable commit message with sensible default: `"chore: sync project metadata"`
-- "Push after commit" toggle (on by default for repos with a remote)
-- Projects without a GitHub remote shown but disabled for push — can still commit locally
-- Commit button shows count of selected projects
+
+- **All checked by default** — users uncheck projects they want to skip, rather than opting in per project. Exception: projects where push would likely fail default to "Commit only" (not unchecked — still committed, just not pushed).
+- **Per-project action button** — each row has its own [Commit & Push] / [Commit only] button for granular control. Click one project at a time when you want to be selective.
+- **"Sync All Selected" button** — batch action at the bottom for when everything looks good.
+- **Branch indicator** per project:
+  - `main ✓` — in sync with upstream
+  - `main ↑2` — 2 commits ahead (will push fine)
+  - `dev ↓3 ⚠` — 3 commits behind (push risky)
+  - `main (no remote)` — local only, commit available, push disabled
+- **Change categories** — dirty files grouped as "Metadata" vs "Documents" (see [Change Categories](#change-categories))
+- **Warning badges** for risky branches (behind, diverged) with "Ask agent to help" link
+- **Editable commit message** with auto-generated default including project names: `"chore: sync project metadata (ClawOS, Memestr)"`
+- Commit message applies to all batch-synced projects. Per-project commits use the same message.
+
+---
+
+## Branch Awareness
+
+The Sync Dialog shows branch context to help users make informed decisions, but does **not** manage branches.
+
+### Branch Status Indicators
+
+| Indicator | Meaning | Default Action |
+|---|---|---|
+| `main ✓` | In sync with upstream | Commit & Push |
+| `main ↑2` | 2 commits ahead, clean fast-forward | Commit & Push |
+| `dev ↓3 ⚠` | 3 commits behind remote | Commit only (push disabled by default) |
+| `main ↑1 ↓2 ⚠` | Diverged (ahead and behind) | Commit only + warning |
+| `main (no remote)` | No upstream configured | Commit only |
+| `feature-x` | On a non-default branch | Commit & Push (to feature-x) |
+
+### What the dialog does NOT do
+
+- Switch branches
+- Create branches
+- Merge or rebase
+- Handle multiple remotes
+- Determine which branch "should" have the changes
+
+These are git workflow decisions that belong in [Layer 2 (AI-assisted)](#future-ai-assisted-git-management).
+
+---
+
+## Change Categories
+
+Dirty files are grouped into two visual categories in the Sync Dialog:
+
+### Metadata Changes (low risk)
+- `PROJECT.md` — status, priority, tags, frontmatter fields
+- `ROADMAP.md` — item ordering, status changes, priority
+- `CHANGELOG.md` — completed item entries
+
+These are small, mechanical changes made by the dashboard. Always safe to commit.
+
+### Document Changes (review-worthy)
+- `docs/specs/*.md` — spec documents (often agent-written)
+- `docs/plans/*.md` — plan documents (often agent-written)
+- `roadmap/*.md` — roadmap item detail files
+
+These can be large and may be drafts. Still included in the dirty check and committed by default, but the visual distinction lets users quickly identify whether a sync is "just metadata" or includes substantive document changes they might want to review first.
 
 ---
 
@@ -195,9 +293,17 @@ This is a targeted `git add <specific-files>` followed by `git commit`, NOT `git
 
 ### Commit message
 
-Default: `"chore: sync project metadata"`
+Default: `"chore: sync project metadata (ClawOS, Memestr)"` — auto-includes the names of synced projects.
 
 The user can edit this in the dialog. If syncing multiple projects, each project gets its own commit in its own repo with the same message.
+
+### Per-project vs batch commit
+
+Both are available:
+- **Per-project**: Click the action button on a single row. That project is committed immediately with the current commit message. The row updates to show success.
+- **Batch**: Click "Sync All Selected". All checked projects are committed sequentially, each in its own repo.
+
+In both cases, each project gets exactly one commit in its own git repository.
 
 ### Execution
 
@@ -212,19 +318,32 @@ All via Tauri `Command` — not through the chat/OpenClaw. This is a direct Taur
 
 ## Push Behavior
 
-- **Push is optional** — the toggle defaults to on, but the user can commit without pushing
+- **Push is optional** — defaults to on for clean branches, off for risky ones
 - **Only pushes to current branch's upstream** — no force-push, no branch creation
-- **Fast-forward only** — if the push would require a merge/rebase, show an error and suggest resolving manually
+- **Fast-forward only** — if the push would require a merge/rebase, show an error and offer "Ask agent to help"
 - **Auth**: Uses whatever git credentials are configured locally (SSH keys, credential helper, etc.) — the app does not manage git auth
+
+### Smart Push Defaults
+
+| Branch State | Push Default | Rationale |
+|---|---|---|
+| In sync or ahead | ✅ Push enabled | Safe fast-forward |
+| Behind remote | ❌ Push disabled | Would fail or require force |
+| Diverged | ❌ Push disabled | Needs merge/rebase first |
+| No remote | ❌ Push disabled | Nowhere to push |
+| No upstream | ❌ Push disabled | Needs upstream set first |
+
+Users can override any of these — the defaults just protect against accidental failures.
 
 ### Error Handling
 
 | Scenario | Behavior |
 |---|---|
-| Commit succeeds, push fails | Show warning: "Committed locally but push failed: {error}. Changes are saved — push manually when ready." |
-| No remote configured | Commit locally only, skip push silently |
-| Merge conflict on push | Show error: "Remote has changes not in your local branch. Pull and resolve before pushing." |
-| Nothing to commit | Skip project, don't show error |
+| Commit succeeds, push fails | Show warning: "Committed locally but push failed: {error}. Changes are saved." + offer "Ask agent to help" |
+| No remote configured | Commit locally only, push button disabled |
+| Merge conflict on push | Show error + "Ask agent to help" link |
+| Nothing to commit | Skip project silently, don't show error |
+| Branch behind remote | Push disabled by default, warning shown |
 
 ---
 
@@ -249,14 +368,15 @@ All via Tauri `Command` — not through the chat/OpenClaw. This is a direct Taur
 
 ---
 
-## What This Does NOT Do
+## What Phase 1 Does NOT Do
 
 - ❌ **Auto-commit or auto-push** — ever
 - ❌ **Commit user code** — only dashboard-managed metadata files
-- ❌ **Create branches** — commits to the current branch only
-- ❌ **Resolve merge conflicts** — that's manual work
+- ❌ **Create or switch branches** — commits to the current branch only
+- ❌ **Merge or rebase** — that's Layer 2 (AI-assisted)
+- ❌ **Resolve merge conflicts** — that's Layer 2 (AI-assisted)
 - ❌ **Manage git credentials** — uses whatever's configured locally
-- ❌ **Track per-field diffs** — the diff description is file-level, not "status changed from X to Y" (that's a nice-to-have for later)
+- ❌ **Track per-field diffs** — the diff description is file-level for now ("PROJECT.md — modified"). Per-field diffs ("status: active → in-progress") are Phase 2 polish.
 
 ---
 
@@ -265,13 +385,14 @@ All via Tauri `Command` — not through the chat/OpenClaw. This is a direct Taur
 ```
 Header.tsx
   └── SyncButton (new) — badge + click handler
-        └── SyncDialog (new) — modal with project list, commit message, push toggle
+        └── SyncDialog (new) — project list, branch indicators, commit controls
 
 Tauri Backend
   └── git_sync commands (new):
         ├── get_dirty_projects() → DirtyProject[]
-        ├── commit_projects(projectIds, message) → CommitResult[]
-        └── push_projects(projectIds) → PushResult[]
+        ├── get_branch_status(projectId) → BranchStatus
+        ├── commit_project(projectId, message, files) → CommitResult
+        └── push_project(projectId) → PushResult
 ```
 
 ---
@@ -300,23 +421,50 @@ Dirty state is derived from the filesystem on every scan. Nothing to persist.
 
 ## Build Scope
 
-### Phase 1 — Visibility
-- Extend Tauri git status scanning to detect `dashboardDirty`
+### Phase 1 — Sync Dialog
+- Extend Tauri git status scanning: `dashboardDirty`, `dirtyFiles`, `ahead`, `behind`, `diverged`
 - Add orange dot indicator to project cards
-- Add Sync button with badge count to Header
-- Basic Sync Dialog (list dirty projects, default commit message, commit + push)
+- Add Sync button with badge count to Header (hidden when 0)
+- Sync Dialog: project list with branch indicators, change categories, per-project + batch commit, push toggle with smart defaults
+- Auto-generated commit message including project names
+- Error handling with clear feedback
 
-### Phase 2 — Polish (deferred)
+### Phase 2 — AI-Assisted Git Management
+- "Ask agent to help" actions that pre-fill chat with git context
+- Agent can see branch status, suggest and execute: rebase, merge, cherry-pick, upstream setup
+- Agent proactively flags sync issues during heartbeats ("3 projects have unpushed changes")
+- Agent-initiated sync suggestions after completing work ("I updated the spec — want me to commit and push?")
+
+### Phase 3 — Polish
 - Per-field diff descriptions ("status: active → in-progress")
 - Commit history view per project (last N syncs)
-- Keyboard shortcut for Sync (e.g., `Cmd+Shift+S`)
+- Keyboard shortcut for Sync (`Cmd+Shift+S`)
 - Roadmap item dirty indicators
 - Pre-commit re-check for concurrent modifications
+- Branch overview panel in sidebar (future sidebar content candidate)
 
 ---
 
-## Open Questions
+## Future: AI-Assisted Git Management
 
-1. **Should `docs/specs/` and `docs/plans/` be included in the dirty check?** These are written by agents during lifecycle orchestration, and may be large. Including them means agent-written specs get synced too, which is probably desirable but worth confirming.
-2. **Should the commit message auto-include which projects were synced?** e.g., `"chore: sync metadata (ClawOS, Memestr)"` — more useful git history but longer messages for many-project syncs.
-3. **Should there be a per-project commit option?** The current spec batches all selected projects into one action per repo. Some users might want to review and commit one at a time.
+The Sync Dialog solves the common case. But real git workflows are messy — diverged branches, stale feature branches, repos that haven't been pushed in weeks, upstream conflicts. Building UI for all of this is a git client. We don't want to build a git client.
+
+Instead, the AI agent handles complex git operations through the existing chat interface. The dashboard provides the context (which repos are dirty, which branches are behind, what diverged) and the agent provides the intelligence.
+
+### How it connects
+
+1. **Sync Dialog → Chat handoff**: When the Sync Dialog encounters a situation it can't handle (branch behind, diverged, no upstream), it shows an "Ask agent to help" link. Clicking it opens the chat drawer with a pre-filled message like: *"ClawOS is on branch `dev`, which is 3 commits behind `origin/dev`. The following dashboard files have uncommitted changes: PROJECT.md, ROADMAP.md. Can you help me sync these?"*
+
+2. **Agent proactive checks**: During heartbeats, the agent can scan project git status and proactively alert: *"Heads up — 3 projects have unpushed dashboard changes. Want me to open Sync, or should I handle it?"*
+
+3. **Post-work sync offers**: After the agent completes work that modifies project files (writing specs, updating roadmap items), it can offer: *"I updated the ClawOS spec. Want me to commit and push that?"*
+
+4. **Git context in project data**: The agent already receives project context when chatting. Extending that context with branch status and dirty state means the agent can give informed git advice without the user having to explain the situation.
+
+### Why this works
+
+- The AI already knows how to run git commands (commit, push, rebase, merge, cherry-pick)
+- The AI already has project context from the dashboard
+- Natural language is actually better than UI for complex git decisions ("rebase this onto main but skip the migration commit")
+- The user stays in control — the agent proposes, the user approves
+- No complex branch management UI to build or maintain
