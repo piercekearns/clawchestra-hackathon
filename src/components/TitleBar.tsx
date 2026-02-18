@@ -1,4 +1,4 @@
-import { Loader2, Moon, PanelLeft, PanelLeftClose, Sun, SunMoon } from 'lucide-react';
+import { Loader2, Monitor, Moon, PanelLeft, PanelLeftClose, Sun } from 'lucide-react';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import type { ThemePreference } from '../lib/schema';
@@ -105,7 +105,7 @@ export function TitleBar() {
           pref="system"
           current={themePreference}
           onClick={setThemePreference}
-          icon={SunMoon}
+          icon={Monitor}
           label="System theme"
         />
       </div>
