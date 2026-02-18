@@ -570,17 +570,19 @@ describe('gateway client', () => {
 
   it('expires stale active turns during hydration replay', () => {
     const now = 1_000_000;
+    // Hydration uses a shorter window (2 min) than active-run timeout (12 min)
+    // because at startup there's no WS connection confirming the run is alive.
 
     expect(
       __gatewayTestUtils.isPendingTurnExpiredForHydration(
-        { status: 'running', lastSignalAt: now - (12 * 60_000 + 1) },
+        { status: 'running', lastSignalAt: now - (2 * 60_000 + 1) },
         now,
       ),
     ).toBe(true);
 
     expect(
       __gatewayTestUtils.isPendingTurnExpiredForHydration(
-        { status: 'running', lastSignalAt: now - (12 * 60_000 - 1) },
+        { status: 'running', lastSignalAt: now - (2 * 60_000 - 1) },
         now,
       ),
     ).toBe(false);

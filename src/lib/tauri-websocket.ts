@@ -214,7 +214,16 @@ export class TauriOpenClawConnection {
         this.requestCallbacks.delete(id);
 
         if (type === 'err' || message.ok === false) {
-          const errorMsg = (message.error as { message?: string })?.message ?? 'Unknown error';
+          // Handle error as string, object with .message, or nested object
+          const rawError = message.error;
+          let errorMsg = 'Unknown error';
+          if (typeof rawError === 'string') {
+            errorMsg = rawError;
+          } else if (typeof rawError === 'object' && rawError !== null) {
+            const errorObj = rawError as Record<string, unknown>;
+            if (typeof errorObj.message === 'string') errorMsg = errorObj.message;
+            else if (typeof errorObj.error === 'string') errorMsg = errorObj.error;
+          }
           callbacks.reject(new Error(errorMsg));
         } else {
           callbacks.resolve(message.result ?? message.payload);

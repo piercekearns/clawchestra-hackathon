@@ -379,6 +379,12 @@ function normalizeErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
     const record = error as Record<string, unknown>;
     if (typeof record.message === 'string') return record.message;
+    // Some WS responses carry the message in .error (string or nested object)
+    if (typeof record.error === 'string') return record.error;
+    if (typeof record.error === 'object' && record.error !== null) {
+      const nested = record.error as Record<string, unknown>;
+      if (typeof nested.message === 'string') return nested.message;
+    }
     if (typeof record.code === 'string') return record.code;
   }
 
@@ -601,12 +607,17 @@ function getBackfillPollIntervalMs(submittedAt: number): number {
   return Math.max(250, jittered);
 }
 
+// Hydration uses a shorter window than active-run timeout. At startup,
+// we have no WS connection confirming the run is alive, so stale turns
+// should expire quickly (2 min) rather than waiting the full 12 min.
+const HYDRATION_STALE_MS = 2 * 60_000;
+
 function isPendingTurnExpiredForHydration(turn: {
   status: TurnStatus;
   lastSignalAt: number;
 }, now: number): boolean {
   if (!isTurnActive(turn.status)) return false;
-  return now - turn.lastSignalAt > ACTIVE_RUN_NO_FINAL_TIMEOUT_MS;
+  return now - turn.lastSignalAt > HYDRATION_STALE_MS;
 }
 
 export function getActiveTurnCount(): number {
@@ -1986,6 +1997,8 @@ async function sendViaTauriWs(
       let noFinalBlockedLogged = false;
       let processPollUnavailable = false;
       let processPollUnavailableLogged = false;
+      let processPollFailCount = 0;
+      const PROCESS_POLL_MAX_FAILURES = 3;
 
       // Aggressive poll fallback — events may not be delivered reliably
       // (WS drops, event subscription issues), so poll frequently.
@@ -2146,16 +2159,18 @@ async function sendViaTauriWs(
                       return;
                     }
                   } catch (error) {
+                    processPollFailCount += 1;
                     const normalizedError = normalizeErrorMessage(error).toLowerCase();
-                    if (
+                    const isScopeError =
                       normalizedError.includes('missing scope') ||
-                      normalizedError.includes('operator.admin')
-                    ) {
+                      normalizedError.includes('operator.admin');
+
+                    if (isScopeError || processPollFailCount >= PROCESS_POLL_MAX_FAILURES) {
                       processPollUnavailable = true;
                       if (!processPollUnavailableLogged) {
                         processPollUnavailableLogged = true;
                         console.warn(
-                          '[Gateway] process.poll unavailable (missing scope) — using time-based no-final fallback',
+                          `[Gateway] process.poll unavailable (${isScopeError ? 'missing scope' : `${processPollFailCount} consecutive failures`}) — using time-based no-final fallback`,
                         );
                       }
                     } else {
