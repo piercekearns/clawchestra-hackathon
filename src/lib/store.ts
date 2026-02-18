@@ -74,6 +74,119 @@ function generateMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+const CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS = 10 * 60_000;
+const CHAT_RECOVERY_BUBBLE_DEDUPE_WINDOW_MS = 30_000;
+
+function normalizeChatContent(content: string): string {
+  return content.replace(/\s+/g, ' ').trim();
+}
+
+function isRecoverySystemBubble(message: ChatMessage): boolean {
+  return (
+    message.role === 'system' &&
+    message.systemMeta?.kind === 'info' &&
+    message.systemMeta?.title === 'Recovered recent chat messages'
+  );
+}
+
+function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage): boolean {
+  if (existing.role !== incoming.role) return false;
+  if (existing.role !== 'assistant' && existing.role !== 'user') return false;
+
+  const existingTs = existing.timestamp ?? 0;
+  const incomingTs = incoming.timestamp ?? 0;
+  if (Math.abs(incomingTs - existingTs) > CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS) return false;
+
+  const existingNorm = normalizeChatContent(existing.content);
+  const incomingNorm = normalizeChatContent(incoming.content);
+  if (!existingNorm || !incomingNorm) return false;
+
+  return (
+    existingNorm === incomingNorm ||
+    incomingNorm.startsWith(existingNorm) ||
+    existingNorm.startsWith(incomingNorm)
+  );
+}
+
+function shouldPreferIncoming(existing: ChatMessage, incoming: ChatMessage): boolean {
+  const existingNorm = normalizeChatContent(existing.content);
+  const incomingNorm = normalizeChatContent(incoming.content);
+  if (incomingNorm.length > existingNorm.length) return true;
+  if (incomingNorm.length < existingNorm.length) return false;
+  return (incoming.timestamp ?? 0) >= (existing.timestamp ?? 0);
+}
+
+function collapseChatDuplicates(messages: ChatMessage[]): ChatMessage[] {
+  const collapsed: ChatMessage[] = [];
+
+  for (const message of messages) {
+    if (collapsed.length === 0) {
+      collapsed.push(message);
+      continue;
+    }
+
+    if (message._id) {
+      const sameIdIndex = collapsed.findIndex((existing) => existing._id === message._id);
+      if (sameIdIndex >= 0) {
+        collapsed[sameIdIndex] = message;
+        continue;
+      }
+    }
+
+    if (isRecoverySystemBubble(message)) {
+      const incomingRecovered = message.systemMeta?.details?.Recovered ?? '';
+      const incomingTs = message.timestamp ?? 0;
+      let seenEquivalentRecentBubble = false;
+      for (let i = collapsed.length - 1; i >= 0; i -= 1) {
+        const existing = collapsed[i];
+        const existingTs = existing.timestamp ?? 0;
+        if (incomingTs > 0 && existingTs > 0) {
+          const ageDelta = Math.abs(incomingTs - existingTs);
+          if (ageDelta > CHAT_RECOVERY_BUBBLE_DEDUPE_WINDOW_MS) {
+            break;
+          }
+        }
+        if (
+          isRecoverySystemBubble(existing) &&
+          (existing.systemMeta?.details?.Recovered ?? '') === incomingRecovered
+        ) {
+          seenEquivalentRecentBubble = true;
+          break;
+        }
+      }
+      if (seenEquivalentRecentBubble) {
+        continue;
+      }
+    }
+
+    let mergeIndex = -1;
+    for (let i = collapsed.length - 1; i >= 0; i -= 1) {
+      const existing = collapsed[i];
+      if (existing.role === 'system') continue;
+      if (existing.role !== message.role) break;
+      if (canMergeProgressiveMessage(existing, message)) {
+        mergeIndex = i;
+      }
+      break;
+    }
+
+    if (mergeIndex >= 0) {
+      const existing = collapsed[mergeIndex];
+      if (shouldPreferIncoming(existing, message)) {
+        collapsed[mergeIndex] = {
+          ...message,
+          _id: message._id ?? existing._id,
+        };
+      }
+      continue;
+    }
+
+    collapsed.push(message);
+  }
+
+  return collapsed;
+}
+
 function deserializePersistedMessage(m: PersistedChatMessage): ChatMessage {
   let systemMeta: SystemBubbleMeta | undefined;
 
@@ -178,7 +291,7 @@ export const useDashboardStore = create<DashboardState>()(
         
         // Add to state immediately (optimistic)
         set((state) => ({
-          chatMessages: [...state.chatMessages, messageWithMeta],
+          chatMessages: collapseChatDuplicates([...state.chatMessages, messageWithMeta]),
         }));
         
         // Persist to SQLite if in Tauri (fire-and-forget, acceptable if lost on quick close)
@@ -222,7 +335,7 @@ export const useDashboardStore = create<DashboardState>()(
           const total = await chatMessagesCount();
           
           set({
-            chatMessages: messages.map((m) => deserializePersistedMessage(m)),
+            chatMessages: collapseChatDuplicates(messages.map((m) => deserializePersistedMessage(m))),
             chatHasMore: messages.length < total,
           });
           
@@ -270,7 +383,7 @@ export const useDashboardStore = create<DashboardState>()(
             .map((m) => deserializePersistedMessage(m));
           
           set((state) => ({
-            chatMessages: [...newMessages, ...state.chatMessages],
+            chatMessages: collapseChatDuplicates([...newMessages, ...state.chatMessages]),
             chatLoadingMore: false,
             chatHasMore: olderMessages.length === 50,
           }));

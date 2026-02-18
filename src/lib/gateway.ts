@@ -1750,6 +1750,27 @@ async function sendViaTauriWs(
               requiresFinalSettlePass = true;
             }
             if (pollStableCount >= stabilityThreshold && combined.length > 0) {
+              if (!sawFinal) {
+                try {
+                  const processState = await connection.request<{ exitCode?: number }>('process', {
+                    action: 'poll',
+                    sessionKey,
+                  });
+                  if (
+                    processState &&
+                    processState.exitCode === undefined &&
+                    Date.now() - sendRequestedAt < ACTIVE_RUN_NO_FINAL_TIMEOUT_MS
+                  ) {
+                    // No terminal process state yet: keep waiting so we don't
+                    // cut off long sub-agent runs that pause output between phases.
+                    pollStableCount = 0;
+                    return;
+                  }
+                } catch (error) {
+                  // If process polling is unavailable, fall back to chat-history stability.
+                  console.warn('[Gateway] process.poll check failed during no-final resolve:', error);
+                }
+              }
               resolvedWithoutFinal = !sawFinal;
               if (sawFinal) {
                 requiresFinalSettlePass = likelyNeedsFinalSettlePass(assistantMessages);

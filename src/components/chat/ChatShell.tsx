@@ -113,6 +113,10 @@ function getDefaultDrawerHeightPx(): number {
   return clampDrawerHeight(window.innerHeight * DEFAULT_DRAWER_HEIGHT_PERCENT);
 }
 
+function normalizePreviewContent(content: string): string {
+  return content.replace(/\s+/g, ' ').trim();
+}
+
 interface ChatShellProps {
   messages: ChatMessage[];
   gatewayConnected: boolean;
@@ -361,6 +365,39 @@ export function ChatShell({
     return responseToastMessage;
   }, [responseToastMessage]);
 
+  const displayMessages = useMemo(() => {
+    if (!streamingContent) return messages;
+
+    const next = [...messages];
+    const streamingNormalized = normalizePreviewContent(streamingContent);
+    if (!streamingNormalized) return messages;
+
+    for (let i = next.length - 1; i >= 0; i -= 1) {
+      const candidate = next[i];
+      if (candidate.role === 'system') continue;
+      if (candidate.role !== 'assistant') break;
+
+      const existingNormalized = normalizePreviewContent(candidate.content);
+      const closeInTime =
+        Math.abs((candidate.timestamp ?? 0) - Date.now()) <= 10 * 60_000;
+      if (
+        closeInTime &&
+        (streamingNormalized.startsWith(existingNormalized) ||
+          existingNormalized.startsWith(streamingNormalized))
+      ) {
+        next[i] = {
+          ...candidate,
+          content: streamingContent,
+          timestamp: Date.now(),
+        };
+        return next;
+      }
+      break;
+    }
+
+    return [...messages, { role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }];
+  }, [messages, streamingContent]);
+
   const submit = async () => {
     const text = input.trim();
     const currentImages = [...images];
@@ -456,11 +493,7 @@ export function ChatShell({
 
               <MessageList
                 ref={messageListRef}
-                messages={
-                  streamingContent 
-                    ? [...messages, { role: 'assistant' as const, content: streamingContent, timestamp: Date.now() }]
-                    : messages
-                }
+                messages={displayMessages}
                 // Show reading indicator when agent is working but no text has streamed yet
                 showReadingIndicator={isAgentWorking && !streamingContent}
                 className="flex-1"

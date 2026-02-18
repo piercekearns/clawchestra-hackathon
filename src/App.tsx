@@ -80,6 +80,7 @@ function applyTheme(preference: ThemePreference) {
 
 const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
+const BACKGROUND_SESSION_STALE_MS = 3 * 60_000;
 const CONNECTION_LOSS_BUBBLE_DELAY_MS = 5000;
 const RECOVERY_NEAR_DUP_WINDOW_MS = 10 * 60_000;
 const RECOVERY_BUBBLE_DEDUP_MS = 15_000;
@@ -192,9 +193,11 @@ export default function App() {
   const chatQueueRef = useRef(chatQueue);
   const lastChatRecoveryAtRef = useRef(0);
   const lastRecoveryBubbleRef = useRef<{ signature: string; at: number } | null>(null);
+  const backgroundSessionLastSeenRef = useRef<Map<string, number>>(new Map());
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
+    backgroundSessionLastSeenRef.current.set(sessionKey, Date.now());
 
     setActiveBackgroundSessions((prev) => {
       if (prev.has(sessionKey)) return prev;
@@ -434,6 +437,7 @@ export default function App() {
 
         const backgroundSessionKey = event.sessionKey;
         if (isTerminal && backgroundSessionKey && backgroundSessionKey !== DEFAULT_SESSION_KEY) {
+          backgroundSessionLastSeenRef.current.delete(backgroundSessionKey);
           setActiveBackgroundSessions((prev) => {
             if (!prev.has(backgroundSessionKey)) return prev;
             const next = new Set(prev);
@@ -950,7 +954,10 @@ export default function App() {
       if (sessionKeys.length === 0) return;
 
       void pollProcessSessions(sessionKeys).then(({ completed, failures }) => {
-        if (completed.length > 0) {
+      if (completed.length > 0) {
+          for (const terminal of completed) {
+            backgroundSessionLastSeenRef.current.delete(terminal.sessionKey);
+          }
           setActiveBackgroundSessions((prev) => {
             const next = new Set(prev);
             for (const terminal of completed) {
@@ -977,10 +984,31 @@ export default function App() {
           );
         }
       });
+
+      if (gatewayActiveTurns <= 0 && !chatSending) {
+        const cutoff = Date.now() - BACKGROUND_SESSION_STALE_MS;
+        const staleKeys = sessionKeys.filter((sessionKey) => {
+          const lastSeen = backgroundSessionLastSeenRef.current.get(sessionKey) ?? 0;
+          return lastSeen < cutoff;
+        });
+
+        if (staleKeys.length > 0) {
+          for (const sessionKey of staleKeys) {
+            backgroundSessionLastSeenRef.current.delete(sessionKey);
+          }
+          setActiveBackgroundSessions((prev) => {
+            const next = new Set(prev);
+            for (const sessionKey of staleKeys) {
+              next.delete(sessionKey);
+            }
+            return next;
+          });
+        }
+      }
     }, BACKGROUND_POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [activeBackgroundSessions, addSystemBubble]);
+  }, [activeBackgroundSessions, addSystemBubble, chatSending, gatewayActiveTurns]);
 
   const sendChatMessage = async (payload: ChatSendPayload) => {
     const text = payload.text.trim();
