@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { resolveColumnOrder } from '../lib/columns';
 import { useDashboardStore } from '../lib/store';
@@ -142,7 +142,7 @@ export function Board<T extends BoardItem>({
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [activeColumnWidth, setActiveColumnWidth] = useState<number | null>(null);
-  const [activeColumnHeight, setActiveColumnHeight] = useState<number | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -198,7 +198,6 @@ export function Board<T extends BoardItem>({
     if (isColumnId(id)) {
       setActiveColumnId(id.replace(/^col:/, ''));
       setActiveColumnWidth(event.active.rect.current.initial?.width ?? null);
-      setActiveColumnHeight(event.active.rect.current.initial?.height ?? null);
     } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
@@ -231,7 +230,6 @@ export function Board<T extends BoardItem>({
     setActiveCardWidth(null);
     setActiveColumnId(null);
     setActiveColumnWidth(null);
-    setActiveColumnHeight(null);
     setCardDragOverColumnId(null);
   };
 
@@ -244,7 +242,6 @@ export function Board<T extends BoardItem>({
     setActiveCardWidth(null);
     setActiveColumnId(null);
     setActiveColumnWidth(null);
-    setActiveColumnHeight(null);
     setCardDragOverColumnId(null);
 
     if (!over) return;
@@ -322,6 +319,7 @@ export function Board<T extends BoardItem>({
       <div className="kanban-scroll -mb-2 h-full min-h-[24rem] min-w-0 overflow-x-auto overflow-y-hidden pb-0">
         <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
           <div
+            ref={gridRef}
             className="grid h-full min-h-[24rem] w-full gap-4"
             style={{
               gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
@@ -367,7 +365,7 @@ export function Board<T extends BoardItem>({
             className="flex flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
             style={{
               width: activeColumnWidth ? `${activeColumnWidth}px` : `${MIN_COLUMN_WIDTH}px`,
-              height: activeColumnHeight ? `${activeColumnHeight}px` : undefined,
+              height: gridRef.current ? `${gridRef.current.clientHeight}px` : undefined,
             }}
           >
             {/* Header */}
