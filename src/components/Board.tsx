@@ -31,6 +31,7 @@ interface BoardProps<T extends BoardItem> {
 
 const MIN_COLUMN_WIDTH = 300;
 const COLUMN_GAP = 16;
+const EMPTY_COLLAPSED_COLUMNS: string[] = [];
 
 function groupByStatus<T extends BoardItem>(
   items: T[],
@@ -63,7 +64,9 @@ export function Board<T extends BoardItem>({
   renderItemActions,
   renderItemHoverActions,
 }: BoardProps<T>) {
-  const collapsedColumns = useDashboardStore((s) => s.collapsedColumns[boardId] ?? []);
+  const collapsedColumns = useDashboardStore(
+    (s) => s.collapsedColumns[boardId] ?? EMPTY_COLLAPSED_COLUMNS,
+  );
   const toggleColumnCollapse = useDashboardStore((s) => s.toggleColumnCollapse);
 
   const handleToggleCollapse = useCallback(
