@@ -329,6 +329,29 @@ describe('gateway client', () => {
     expect(extracted.map((message) => message._id)).toEqual(['a-1', 'a-2']);
   });
 
+  it('ignores synthetic exec user entries when status is not "completed"', () => {
+    const messages = [
+      { id: 'u-1', role: 'user', content: 'actual prompt', timestamp: 10 },
+      { id: 'a-1', role: 'assistant', content: 'step one', timestamp: 11 },
+      {
+        id: 'u-sys',
+        role: 'user',
+        content: 'System: [2026-02-18 02:21:14 GMT] Exec failed (agent-x, code 1) :: build output',
+        timestamp: 12,
+      },
+      { id: 'a-2', role: 'assistant', content: 'recovered and completed', timestamp: 13 },
+      { id: 'u-2', role: 'user', content: 'next real prompt', timestamp: 14 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 0,
+      expectedUserText: 'actual prompt',
+    });
+
+    expect(extracted.map((message) => message._id)).toEqual(['a-1', 'a-2']);
+  });
+
   it('does not anchor on synthetic exec-completed user entries', () => {
     const messages = [
       {
