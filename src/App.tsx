@@ -25,6 +25,7 @@ import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
   DEFAULT_SESSION_KEY,
+  finalizeActiveTurnsForSession,
   getActiveTurnCount,
   hydratePendingTurns,
   pollProcessSessions,
@@ -348,6 +349,40 @@ export default function App() {
     if (!isTauriRuntime()) return;
     void hydratePendingTurns(DEFAULT_SESSION_KEY);
   }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    if (wsConnectionState !== 'connected') return;
+    if (chatSending) return;
+    if (gatewayActiveTurns <= 0) return;
+
+    let cancelled = false;
+
+    const probeDefaultSession = async () => {
+      try {
+        const { completed } = await pollProcessSessions([DEFAULT_SESSION_KEY]);
+        if (cancelled) return;
+        const defaultSessionTerminal = completed.some(
+          (entry) => entry.sessionKey === DEFAULT_SESSION_KEY,
+        );
+        if (defaultSessionTerminal) {
+          finalizeActiveTurnsForSession(DEFAULT_SESSION_KEY, 'session_process_terminal');
+        }
+      } catch {
+        // Keep current turn state when probe transport is unavailable.
+      }
+    };
+
+    void probeDefaultSession();
+    const interval = window.setInterval(() => {
+      void probeDefaultSession();
+    }, 10_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [chatSending, gatewayActiveTurns, wsConnectionState]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;

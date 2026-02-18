@@ -489,6 +489,25 @@ export function subscribeTurnRegistry(listener: TurnRegistryListener): () => voi
   };
 }
 
+export function finalizeActiveTurnsForSession(
+  sessionKey: string,
+  reason: string = 'session_terminal_probe',
+): void {
+  if (!sessionKey) return;
+  for (const [turnToken, turn] of [...turnRegistry.entries()]) {
+    if (!isTurnActive(turn.status)) continue;
+    if (turn.sessionKey !== sessionKey) continue;
+    const terminalStatus: Extract<TurnStatus, 'completed' | 'timed_out'> =
+      turn.hasAssistantOutput ? 'completed' : 'timed_out';
+    finalizeTurn(turnToken, terminalStatus, {
+      sessionKey,
+      runId: turn.runId,
+      hasAssistantOutput: turn.hasAssistantOutput,
+      completionReason: reason,
+    });
+  }
+}
+
 export async function hydratePendingTurns(sessionKey?: string): Promise<PendingTurn[]> {
   if (!isTauriRuntime()) return snapshotTurnRegistry();
 
