@@ -5,6 +5,19 @@ import type { ThemePreference } from '../lib/schema';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
 
+/** Start window drag via Tauri API (fallback: no-op in browser) */
+function startWindowDrag() {
+  try {
+    // @ts-expect-error — __TAURI__ is injected by Tauri runtime
+    const w = window.__TAURI__?.window;
+    if (w) {
+      void w.getCurrentWindow().startDragging();
+    }
+  } catch {
+    // Not in Tauri context — ignore
+  }
+}
+
 export function TitleBar() {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
@@ -18,17 +31,17 @@ export function TitleBar() {
     <div
       data-tauri-drag-region
       className="flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      onMouseDown={startWindowDrag}
     >
-      {/* Left padding for macOS traffic lights — standard inset ~78px */}
-      <div className="w-[78px] shrink-0" />
+      {/* Left padding for macOS traffic lights (trafficLightPosition: x=16) */}
+      <div className="w-[70px] shrink-0" />
 
       {/* Sidebar toggle */}
       <button
         type="button"
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        onMouseDown={(e) => e.stopPropagation()}
         aria-expanded={sidebarOpen}
         aria-controls="sidebar"
         aria-label="Toggle sidebar"
@@ -64,6 +77,7 @@ export function TitleBar() {
           <button
             type="button"
             onClick={() => void handleUpdate()}
+            onMouseDown={(e) => e.stopPropagation()}
             disabled={updating}
             className="pointer-events-auto inline-flex items-center rounded-full bg-[#DFFF00] px-2 py-0.5 text-[11px] font-medium text-neutral-800 transition-colors hover:bg-[#e9ff4d] disabled:cursor-wait"
           >
@@ -85,7 +99,7 @@ export function TitleBar() {
       {/* Theme toggle */}
       <div
         className="pointer-events-auto inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <ThemeButton
           pref="light"
