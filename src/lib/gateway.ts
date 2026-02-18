@@ -120,6 +120,7 @@ const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 45000;
 const NO_FINAL_RESOLVE_MIN_QUIET_MS = 25000;
 const NO_FINAL_STABILITY_POLLS = 4;
 const NO_FINAL_MAX_WAIT_MS = 120000;
+const NO_FINAL_RECENT_ACTIVITY_GRACE_MS = 30000;
 const NO_FINAL_FORCE_RESOLVE_MS = 180000;
 const NO_RESPONSE_RECOVERY_BASE_MS = 30000;
 const NO_RESPONSE_RECOVERY_PROGRESS_MS = 120000;
@@ -1361,19 +1362,24 @@ async function sendViaTauriWs(
             const connectionUnstable =
               wsState === 'reconnecting' || wsState === 'disconnected' || wsState === 'error';
             const allowEarlyNoFinalByAge =
-              !sawRunOwnedProgress && sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS;
+              !sawRunOwnedProgress &&
+              !sawUnscopedAgentProgress &&
+              sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS;
+            const allowMaxWaitNoFinal =
+              sendAgeMs >= NO_FINAL_MAX_WAIT_MS &&
+              Date.now() - lastObservedRunActivityAt >= NO_FINAL_RECENT_ACTIVITY_GRACE_MS;
             const canResolveWithoutFinal =
               !sawFinal &&
               combined.length > 0 &&
               (
                 quietForMs >= NO_FINAL_RESOLVE_MIN_QUIET_MS ||
-                sendAgeMs >= NO_FINAL_MAX_WAIT_MS
+                allowMaxWaitNoFinal
               ) &&
               (
                 connectionUnstable ||
                 !sendAcked ||
                 allowEarlyNoFinalByAge ||
-                sendAgeMs >= NO_FINAL_MAX_WAIT_MS
+                allowMaxWaitNoFinal
               );
             const noFinalLooksIncomplete = likelyNeedsFinalSettlePass(assistantMessages);
             const allowNoFinalResolve =
@@ -1536,7 +1542,18 @@ async function sendViaTauriWs(
         if (eventRunId && eventRunId !== runId) {
           return;
         }
-        if (state && state !== 'final' && eventRunId === runId) {
+        if (
+          state &&
+          state !== 'final' &&
+          (
+            eventRunId === runId ||
+            (
+              !eventRunId &&
+              typeof chat.sessionKey === 'string' &&
+              chat.sessionKey === sessionKey
+            )
+          )
+        ) {
           sawRunOwnedProgress = true;
         }
         const now = Date.now();
