@@ -139,7 +139,7 @@ export function buildLifecyclePrompt(
 
       return [
         ...header,
-        `Requested action: Run formal build workflow using /work.${sourceRef} Keep ROADMAP nextAction in sync while building.`,
+        `Requested action: Run formal /build command / the /build skill to deliver this roadmap item.${sourceRef} Keep ROADMAP nextAction in sync while building. Surface to the user any non-critical recommendations surfaced throughout the build phase for them to decide next steps against.`,
       ].join('\n');
     }
 
