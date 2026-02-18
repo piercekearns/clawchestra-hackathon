@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ProjectViewModel } from '../../lib/schema';
 import { useProjectModal } from '../../hooks/useProjectModal';
 import { ProjectModalHeader } from './ProjectModalHeader';
@@ -117,7 +118,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
           </div>
         ) : (
           <div className="prose mb-4 max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
-            <ReactMarkdown>{project.content || '_No markdown content_'}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{project.content || '_No markdown content_'}</ReactMarkdown>
           </div>
         )}
 

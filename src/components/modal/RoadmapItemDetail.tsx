@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ArrowLeft } from 'lucide-react';
 import type { RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import type { BadgeProps } from '../ui/badge';
@@ -141,7 +142,7 @@ export function RoadmapItemDetail({
                 ))}
               </div>
             ) : activeDocContent !== undefined ? (
-              <ReactMarkdown>{activeDocContent}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeDocContent}</ReactMarkdown>
             ) : (
               <p className="text-neutral-500">Could not load document</p>
             )}
