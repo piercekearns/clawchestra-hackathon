@@ -110,6 +110,18 @@ items:
     tags:
       - integration
       - openclaw
+  - id: git-sync
+    title: Git Sync
+    status: pending
+    priority: 7
+    nextAction: Spec written — ready for plan/build
+    tags:
+      - git
+      - github
+      - sync
+      - workflow
+    icon: "\U0001F504"
+    specDoc: docs/specs/git-sync-spec.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: complete
