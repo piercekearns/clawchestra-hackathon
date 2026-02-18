@@ -17,7 +17,7 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
+      className="relative z-50 flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
     >
       {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
       <div className="w-[78px] shrink-0" />

@@ -24,29 +24,20 @@ items:
       - automation
     specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
     planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
-  - id: collapsible-sidebar
-    title: Collapsible Sidebar
-    status: in-progress
-    priority: 3
-    nextAction: Built — needs manual testing
-    tags:
-      - ui
-    icon: "\U0001F4D0"
-    specDoc: docs/specs/collapsible-sidebar-spec.md
-    planDoc: docs/plans/collapsible-sidebar-plan.md
   - id: sidebar-enhancements
     title: Sidebar Enhancements
-    status: pending
+    status: up-next
+    priority: 1
     nextAction: Define which panel(s) to build first
     tags:
       - ui
       - navigation
       - orchestration
-    icon: "\U0001F5C2\uFE0F"
+    icon: "\U0001F5C2️"
   - id: recently-completed-lifecycle
     title: Recently Completed Lifecycle
     status: up-next
-    priority: 1
+    priority: 2
     nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
@@ -57,7 +48,7 @@ items:
   - id: github-api-403-errors
     title: Investigate GitHub API 403 Errors
     status: up-next
-    priority: 2
+    priority: 3
     nextAction: >-
       Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
       likely rate limiting, may need auth token or caching
@@ -161,6 +152,16 @@ items:
       - kanban
       - ux
     specDoc: docs/specs/draggable-kanban-columns-spec.md
+  - id: collapsible-sidebar
+    title: Collapsible Sidebar
+    status: complete
+    priority: 4
+    nextAction: Built — needs manual testing
+    tags:
+      - ui
+    icon: "\U0001F4D0"
+    specDoc: docs/specs/collapsible-sidebar-spec.md
+    planDoc: docs/plans/collapsible-sidebar-plan.md
 ---
 
 # Clawchestra — Roadmap
