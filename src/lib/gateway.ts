@@ -128,6 +128,7 @@ const NO_FINAL_RECENT_ACTIVITY_GRACE_MS = 30000;
 const NO_FINAL_FORCE_RESOLVE_MS = 180000;
 const NO_EVENTS_AFTER_SEND_TIMEOUT_MS = 180000;
 const ACTIVE_RUN_NO_FINAL_TIMEOUT_MS = 12 * 60_000;
+const UNSCOPED_AGENT_PROGRESS_GRACE_MS = 15_000;
 const BACKFILL_POLL_FAST_MS = 1000;
 const BACKFILL_POLL_MEDIUM_MS = 2000;
 const BACKFILL_POLL_SLOW_MS = 5000;
@@ -649,6 +650,16 @@ function normalizeTextForMatch(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function unwrapGatewayContextWrappedUserContent(content: string): string | null {
+  const normalized = content.replace(/\r\n/g, '\n');
+  const match = normalized.match(
+    /^(User workspace path:[^\n]*|User is viewing project:[^\n]*|User is viewing:[^\n]*)\n\n([\s\S]+)$/u,
+  );
+  if (!match) return null;
+  const unwrapped = match[2]?.trim();
+  return unwrapped && unwrapped.length > 0 ? unwrapped : null;
+}
+
 function stableSyntheticTimestamp(role: string, content: string): number {
   let hash = 2166136261;
   const input = `${role}:${content}`;
@@ -844,7 +855,13 @@ export async function recoverRecentSessionMessages(options?: {
       continue;
     }
 
-    const content = extractText(message.content).trim();
+    let content = extractText(message.content).trim();
+    if (role === 'user') {
+      const unwrapped = unwrapGatewayContextWrappedUserContent(content);
+      if (unwrapped) {
+        content = unwrapped;
+      }
+    }
     if (!content) continue;
 
     const id = getHistoryMessageId(message);
@@ -1726,7 +1743,6 @@ async function sendViaTauriWs(
               wsState === 'reconnecting' || wsState === 'disconnected' || wsState === 'error';
             const allowEarlyNoFinalByAge =
               !sawRunOwnedProgress &&
-              !sawUnscopedAgentProgress &&
               sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS;
             const allowMaxWaitNoFinal =
               sendAgeMs >= NO_FINAL_MAX_WAIT_MS &&
@@ -1866,22 +1882,32 @@ async function sendViaTauriWs(
             (agentRunId !== undefined && agentRunId === runId);
           if (!belongsToRun) {
             if (!hasScope) {
-              // Some gateway builds emit unscoped agent events during active turns.
-              // Treat these as weak liveness signals so we don't prematurely
-              // conclude "NO_REPLY" while work is still running.
-              sawUnscopedAgentProgress = true;
               const now = Date.now();
+              const hasScopedProgress =
+                sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent;
+              const withinGraceWindow =
+                now - sendRequestedAt <= UNSCOPED_AGENT_PROGRESS_GRACE_MS;
+
+              // Unscoped agent noise should only influence liveness briefly
+              // after send, or after we've already seen scoped run activity.
+              if (!withinGraceWindow && !hasScopedProgress) {
+                return;
+              }
+
+              sawUnscopedAgentProgress = true;
               lastEventTime = now;
-              lastObservedRunActivityAt = now;
-              upsertTurn(turnToken, {
-                sessionKey,
-                runId,
-                status: 'running',
-                completionReason: 'unscoped_agent_progress',
-              });
-              resetIdleTimeout();
-              pollStableCount = 0;
-              clearSawFinal('unscoped agent activity');
+              if (hasScopedProgress) {
+                lastObservedRunActivityAt = now;
+                upsertTurn(turnToken, {
+                  sessionKey,
+                  runId,
+                  status: 'running',
+                  completionReason: 'unscoped_agent_progress',
+                });
+                resetIdleTimeout();
+                pollStableCount = 0;
+                clearSawFinal('unscoped agent activity');
+              }
               const timeSinceLastDelta = Date.now() - lastDeltaTime;
               if (timeSinceLastDelta > 3000) {
                 sawToolSinceLastContent = true;
@@ -2168,7 +2194,7 @@ async function sendViaTauriWs(
     // - observed run activity -> 12 minutes
     if (assistantMessages.length === 0 && !streamedTrimmed) {
       const sawAnyProgress =
-        sawRunOwnedProgress || sawUnscopedAgentProgress || sawRunOwnedContent || sawFinalEvent;
+        sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent;
       const hardDeadline = sendRequestedAt + (
         sawAnyProgress ? ACTIVE_RUN_NO_FINAL_TIMEOUT_MS : NO_EVENTS_AFTER_SEND_TIMEOUT_MS
       );
@@ -2286,7 +2312,7 @@ async function sendViaTauriWs(
     const finalStreamedText = streamedText.trim();
     if (assistantMessages.length === 0 && !finalStreamedText) {
       const timedOutWithProgress =
-        sawRunOwnedProgress || sawUnscopedAgentProgress || sawRunOwnedContent || sawFinalEvent;
+        sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent;
       finalizeTurn(turnToken, 'timed_out', {
         sessionKey,
         runId,

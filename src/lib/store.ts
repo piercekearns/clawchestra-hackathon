@@ -81,6 +81,26 @@ function normalizeChatContent(content: string): string {
   return content.replace(/\s+/g, ' ').trim();
 }
 
+function unwrapGatewayContextWrappedUserContent(content: string): string | null {
+  const normalized = content.replace(/\r\n/g, '\n');
+  const match = normalized.match(
+    /^(User workspace path:[^\n]*|User is viewing project:[^\n]*|User is viewing:[^\n]*)\n\n([\s\S]+)$/u,
+  );
+  if (!match) return null;
+  const unwrapped = match[2]?.trim();
+  return unwrapped && unwrapped.length > 0 ? unwrapped : null;
+}
+
+function sanitizeIncomingChatMessage(message: ChatMessage): ChatMessage {
+  if (message.role !== 'user') return message;
+  const unwrapped = unwrapGatewayContextWrappedUserContent(message.content);
+  if (!unwrapped) return message;
+  return {
+    ...message,
+    content: unwrapped,
+  };
+}
+
 function isRecoverySystemBubble(message: ChatMessage): boolean {
   return (
     message.role === 'system' &&
@@ -201,13 +221,14 @@ function deserializePersistedMessage(m: PersistedChatMessage): ChatMessage {
     }
   }
 
-  return {
+  const message: ChatMessage = {
     role: m.role as ChatMessage['role'],
     content: m.content,
     timestamp: m.timestamp,
     _id: m.id,
     ...(systemMeta ? { systemMeta } : {}),
   };
+  return sanitizeIncomingChatMessage(message);
 }
 
 export const useDashboardStore = create<DashboardState>()(
@@ -266,17 +287,18 @@ export const useDashboardStore = create<DashboardState>()(
       setThemePreference: (themePreference) => set({ themePreference }),
 
       addChatMessage: async (message) => {
+        const normalizedMessage = sanitizeIncomingChatMessage(message);
         // Generate ID upfront so state and DB use the same ID
-        const id = message._id ?? generateMessageId();
-        const timestamp = message.timestamp ?? Date.now();
+        const id = normalizedMessage._id ?? generateMessageId();
+        const timestamp = normalizedMessage.timestamp ?? Date.now();
         const existingMessages = get().chatMessages;
         const duplicateById = existingMessages.some((existing) => existing._id === id);
         const duplicateByContentAndTime = existingMessages.some(
           (existing) =>
             existing._id === undefined &&
-            existing.role === message.role &&
+            existing.role === normalizedMessage.role &&
             existing.timestamp === timestamp &&
-            existing.content === message.content,
+            existing.content === normalizedMessage.content,
         );
 
         if (duplicateById || duplicateByContentAndTime) {
@@ -284,7 +306,7 @@ export const useDashboardStore = create<DashboardState>()(
         }
 
         const messageWithMeta = {
-          ...message,
+          ...normalizedMessage,
           timestamp,
           _id: id, // Store ID for potential future updates
         };
@@ -299,11 +321,11 @@ export const useDashboardStore = create<DashboardState>()(
           try {
             await chatMessageSave({
               id,
-              role: message.role,
-              content: message.content,
+              role: normalizedMessage.role,
+              content: normalizedMessage.content,
               timestamp,
-              metadata: message.systemMeta
-                ? JSON.stringify({ systemMeta: message.systemMeta })
+              metadata: normalizedMessage.systemMeta
+                ? JSON.stringify({ systemMeta: normalizedMessage.systemMeta })
                 : undefined,
             });
           } catch (error) {
