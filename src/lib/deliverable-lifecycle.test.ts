@@ -43,7 +43,8 @@ describe('deliverable lifecycle helpers', () => {
       },
     });
 
-    expect(prompt).toContain('/plan_review command / plan_review skill');
+    expect(prompt).toContain('Run /plan_review in Claude Code');
+    expect(prompt).toContain('NOT /review');
     expect(prompt).toContain('Surface the recommended plan changes');
   });
 });

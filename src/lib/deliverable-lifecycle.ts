@@ -108,10 +108,12 @@ export function buildLifecyclePrompt(
     }
 
     case 'review': {
+      const planRef = planPath ? ` The plan to review is: ${planPath}` : '';
       return [
         ...header,
-        'Requested action: Review implementation plan using the /plan_review command / plan_review skill.',
-        'Outputs: Surface the recommended plan changes from the plan_review outputs to the user to decide next steps.',
+        `Requested action: Run /plan_review in Claude Code (NOT /review — /plan_review spawns sub-agents for deeper validation).${planRef}`,
+        'Steps: Launch Claude Code via tmux, send "/plan_review <path-to-plan>" as the command, wait for sub-agents to complete, then surface the FULL raw output to the user.',
+        'Outputs: Surface the recommended plan changes from the /plan_review outputs to the user to decide next steps.',
       ].join('\n');
     }
 
