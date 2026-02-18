@@ -1253,6 +1253,12 @@ function latestUserContent(messages: ChatMessage[]): string {
   return messages[messages.length - 1]?.content?.trim() ?? '';
 }
 
+function composeContextWrappedUserMessage(contextMessage: string, userText: string): string {
+  // Explicit marker makes history unwrapping deterministic even if transport
+  // flattens newlines to spaces.
+  return `${contextMessage}\n\nUser request:\n${userText}`;
+}
+
 async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return null;
 
@@ -2766,7 +2772,7 @@ export async function sendMessageWithContext(
     const userText = latestUserContent(messages);
     if (!userText) throw new Error('No message content to send');
 
-    const composed = `${contextMessage}\n\n${userText}`;
+    const composed = composeContextWrappedUserMessage(contextMessage, userText);
     return sendViaTauriWs(composed, attachments, transport, onStreamDelta, onActivityChange);
   }
 
@@ -2774,7 +2780,7 @@ export async function sendMessageWithContext(
     const userText = latestUserContent(messages);
     if (!userText) throw new Error('No message content to send');
 
-    const composed = `${contextMessage}\n\n${userText}`;
+    const composed = composeContextWrappedUserMessage(contextMessage, userText);
     // Note: Tauri CLI transport doesn't support streaming or multiple messages
     const content = await sendViaTauriOpenClaw(composed, attachments, transport);
     return {
@@ -2787,7 +2793,7 @@ export async function sendMessageWithContext(
     const userText = latestUserContent(messages);
     if (!userText) throw new Error('No message content to send');
 
-    const composed = `${contextMessage}\n\n${userText}`;
+    const composed = composeContextWrappedUserMessage(contextMessage, userText);
     const content = await sendViaOpenClawWs(composed, attachments, transport, onStreamDelta);
     return {
       messages: [{ role: 'assistant', content, timestamp: Date.now() }],

@@ -413,6 +413,26 @@ describe('gateway client', () => {
     expect(matched).toBe(true);
   });
 
+  it('detects accepted user turn when marker-wrapped text is present in history', () => {
+    const messages = [
+      {
+        id: 'u-new',
+        role: 'user',
+        content:
+          'User is viewing project: Clawchestra\n\nUser request:\nRun /plan_review now',
+        timestamp: 10,
+      },
+    ];
+
+    const matched = __gatewayTestUtils.hasMatchingUserTurnInHistory(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 5,
+      expectedUserText: 'User is viewing project: Clawchestra User request: Run /plan_review now',
+    });
+
+    expect(matched).toBe(true);
+  });
+
   it('does not report accepted user turn when only unrelated new turns exist', () => {
     const messages = [
       { id: 'u-new', role: 'user', content: 'totally different prompt', timestamp: 10 },

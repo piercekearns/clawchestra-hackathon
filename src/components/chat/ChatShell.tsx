@@ -120,6 +120,23 @@ function normalizePreviewContent(content: string): string {
   return content.replace(/\s+/g, ' ').trim();
 }
 
+function previewContentOverlaps(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+function looksLikeProgressiveAssistantRun(run: ChatMessage[]): boolean {
+  if (run.length < 2) return false;
+  const normalized = run.map((message) => normalizePreviewContent(message.content));
+  if (normalized.some((value) => !value)) return false;
+  for (let i = 1; i < normalized.length; i += 1) {
+    if (!previewContentOverlaps(normalized[i - 1], normalized[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 interface ChatShellProps {
   messages: ChatMessage[];
   gatewayConnected: boolean;
@@ -442,7 +459,13 @@ export function ChatShell({
         0,
       );
       const closeInTime = Math.abs(Date.now() - newestRunTimestamp) <= 10 * 60_000;
-      if (closeInTime && run.length >= 2) {
+      const runNormalized = normalizePreviewContent(run.map((message) => message.content).join('\n\n'));
+      const overlapsRun =
+        runNormalized.length > 0 &&
+        closeInTime &&
+        previewContentOverlaps(streamingNormalized, runNormalized);
+      const runIsProgressive = looksLikeProgressiveAssistantRun(run);
+      if (overlapsRun) {
         const anchor = run[run.length - 1];
         return [
           ...messages.slice(0, assistantRunStart),
@@ -453,18 +476,7 @@ export function ChatShell({
           },
         ];
       }
-      const runNormalized = normalizePreviewContent(run.map((message) => message.content).join('\n\n'));
-      const overlapsRun =
-        runNormalized.length > 0 &&
-        closeInTime &&
-        (
-          streamingNormalized === runNormalized ||
-          streamingNormalized.startsWith(runNormalized) ||
-          runNormalized.startsWith(streamingNormalized) ||
-          streamingNormalized.includes(runNormalized) ||
-          runNormalized.includes(streamingNormalized)
-        );
-      if (overlapsRun) {
+      if (closeInTime && runIsProgressive) {
         const anchor = run[run.length - 1];
         return [
           ...messages.slice(0, assistantRunStart),
@@ -489,10 +501,7 @@ export function ChatShell({
         Math.abs((candidate.timestamp ?? 0) - Date.now()) <= 10 * 60_000;
       if (
         closeInTime &&
-        (streamingNormalized.startsWith(existingNormalized) ||
-          existingNormalized.startsWith(streamingNormalized) ||
-          streamingNormalized.includes(existingNormalized) ||
-          existingNormalized.includes(streamingNormalized))
+        previewContentOverlaps(streamingNormalized, existingNormalized)
       ) {
         next[i] = {
           ...candidate,

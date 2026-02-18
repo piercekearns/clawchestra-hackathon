@@ -195,7 +195,10 @@ export default function App() {
   const chatQueueRef = useRef(chatQueue);
   const lastChatRecoveryAtRef = useRef(0);
   const lastRecoveryBubbleRef = useRef<{ signature: string; at: number } | null>(null);
+  const recoveryInFlightRef = useRef<Promise<number> | null>(null);
   const backgroundSessionLastSeenRef = useRef<Map<string, number>>(new Map());
+  const queueDrainInFlightRef = useRef(false);
+  const blockedQueueMessageIdRef = useRef<string | null>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
@@ -564,82 +567,95 @@ export default function App() {
   }, [addSystemBubble]);
 
   const reconcileRecentHistory = useCallback(async (): Promise<number> => {
-    const now = Date.now();
-    if (now - lastChatRecoveryAtRef.current < 5000) {
-      return 0;
+    if (recoveryInFlightRef.current) {
+      return recoveryInFlightRef.current;
     }
-    lastChatRecoveryAtRef.current = now;
 
-    try {
-      const recovered = await recoverRecentSessionMessages({ limit: 200 });
-      if (recovered.length === 0) return 0;
-
-      const current = useDashboardStore.getState().chatMessages;
-      const existingIds = new Set(
-        current
-          .map((message) => message._id)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0),
-      );
-      const timestampsBySignature = new Map<string, number[]>();
-      for (const message of current) {
-        const signature = `${message.role}:${normalizeMessageContent(message.content)}`;
-        const timestamp = message.timestamp ?? 0;
-        const bucket = timestampsBySignature.get(signature) ?? [];
-        bucket.push(timestamp);
-        timestampsBySignature.set(signature, bucket);
+    const run = (async (): Promise<number> => {
+      const now = Date.now();
+      if (now - lastChatRecoveryAtRef.current < 5000) {
+        return 0;
       }
+      lastChatRecoveryAtRef.current = now;
 
-      let recoveredCount = 0;
-      const recoveredSignatures: string[] = [];
-      const shouldSuppressDuringActiveRun =
-        chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
-      for (const message of recovered) {
-        if (shouldSuppressDuringActiveRun && message.role === 'assistant') {
-          // During active runs, assistant deltas are already surfaced via
-          // streaming. Deferring history backfill avoids duplicate fragment
-          // bubbles that can later overlap with combined streamed output.
-          continue;
-        }
-        const timestamp = message.timestamp ?? Date.now();
-        if (message._id && existingIds.has(message._id)) continue;
+      try {
+        const recovered = await recoverRecentSessionMessages({ limit: 200 });
+        if (recovered.length === 0) return 0;
 
-        const contentSignature = `${message.role}:${normalizeMessageContent(message.content)}`;
-        const priorTimestamps = timestampsBySignature.get(contentSignature) ?? [];
-        const isNearDuplicate = priorTimestamps.some(
-          (existingTimestamp) =>
-            Math.abs(existingTimestamp - timestamp) <= RECOVERY_NEAR_DUP_WINDOW_MS,
+        const current = useDashboardStore.getState().chatMessages;
+        const existingIds = new Set(
+          current
+            .map((message) => message._id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0),
         );
-        if (isNearDuplicate) continue;
-
-        await addChatMessage({ ...message, timestamp });
-        if (message._id) existingIds.add(message._id);
-        priorTimestamps.push(timestamp);
-        timestampsBySignature.set(contentSignature, priorTimestamps);
-        recoveredCount += 1;
-        recoveredSignatures.push(message._id ?? `${contentSignature}:${timestamp}`);
-      }
-
-      if (recoveredCount > 0) {
-        const bubbleSignature = `${recoveredCount}:${recoveredSignatures.join('|')}`;
-        const lastBubble = lastRecoveryBubbleRef.current;
-        const shouldSuppressBubble =
-          shouldSuppressDuringActiveRun ||
-          lastBubble &&
-          lastBubble.signature === bubbleSignature &&
-          now - lastBubble.at <= RECOVERY_BUBBLE_DEDUP_MS;
-
-        if (!shouldSuppressBubble) {
-          await addSystemBubble('info', 'Recovered recent chat messages', {
-            Recovered: String(recoveredCount),
-          });
-          lastRecoveryBubbleRef.current = { signature: bubbleSignature, at: now };
+        const timestampsBySignature = new Map<string, number[]>();
+        for (const message of current) {
+          const signature = `${message.role}:${normalizeMessageContent(message.content)}`;
+          const timestamp = message.timestamp ?? 0;
+          const bucket = timestampsBySignature.get(signature) ?? [];
+          bucket.push(timestamp);
+          timestampsBySignature.set(signature, bucket);
         }
-      }
 
-      return recoveredCount;
-    } catch (error) {
-      console.warn('[Chat] Failed to reconcile recent gateway history:', error);
-      return 0;
+        let recoveredCount = 0;
+        const recoveredSignatures: string[] = [];
+        const shouldSuppressDuringActiveRun =
+          chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
+        for (const message of recovered) {
+          if (shouldSuppressDuringActiveRun && message.role === 'assistant') {
+            // During active runs, assistant deltas are already surfaced via
+            // streaming. Deferring history backfill avoids duplicate fragment
+            // bubbles that can later overlap with combined streamed output.
+            continue;
+          }
+          const timestamp = message.timestamp ?? Date.now();
+          if (message._id && existingIds.has(message._id)) continue;
+
+          const contentSignature = `${message.role}:${normalizeMessageContent(message.content)}`;
+          const priorTimestamps = timestampsBySignature.get(contentSignature) ?? [];
+          const isNearDuplicate = priorTimestamps.some(
+            (existingTimestamp) =>
+              Math.abs(existingTimestamp - timestamp) <= RECOVERY_NEAR_DUP_WINDOW_MS,
+          );
+          if (isNearDuplicate) continue;
+
+          await addChatMessage({ ...message, timestamp });
+          if (message._id) existingIds.add(message._id);
+          priorTimestamps.push(timestamp);
+          timestampsBySignature.set(contentSignature, priorTimestamps);
+          recoveredCount += 1;
+          recoveredSignatures.push(message._id ?? `${contentSignature}:${timestamp}`);
+        }
+
+        if (recoveredCount > 0) {
+          const bubbleSignature = `${recoveredCount}:${recoveredSignatures.join('|')}`;
+          const lastBubble = lastRecoveryBubbleRef.current;
+          const shouldSuppressBubble =
+            shouldSuppressDuringActiveRun ||
+            lastBubble &&
+            lastBubble.signature === bubbleSignature &&
+            now - lastBubble.at <= RECOVERY_BUBBLE_DEDUP_MS;
+
+          if (!shouldSuppressBubble) {
+            await addSystemBubble('info', 'Recovered recent chat messages', {
+              Recovered: String(recoveredCount),
+            });
+            lastRecoveryBubbleRef.current = { signature: bubbleSignature, at: now };
+          }
+        }
+
+        return recoveredCount;
+      } catch (error) {
+        console.warn('[Chat] Failed to reconcile recent gateway history:', error);
+        return 0;
+      }
+    })();
+
+    recoveryInFlightRef.current = run;
+    try {
+      return await run;
+    } finally {
+      recoveryInFlightRef.current = null;
     }
   }, [
     activeBackgroundSessions.size,
@@ -977,6 +993,7 @@ export default function App() {
 
   // Queue a message while agent is working
   const queueChatMessage = (payload: ChatSendPayload) => {
+    blockedQueueMessageIdRef.current = null;
     const queued: QueuedMessage = {
       id: createQueueId(),
       text: payload.text,
@@ -988,25 +1005,47 @@ export default function App() {
 
   // Remove a message from the queue
   const removeFromChatQueue = (id: string) => {
+    if (blockedQueueMessageIdRef.current === id) {
+      blockedQueueMessageIdRef.current = null;
+    }
     setChatQueue((current) => current.filter((item) => item.id !== id));
   };
 
   // Process the next queued message (called after a send completes)
   const processNextQueuedMessage = async () => {
+    if (queueDrainInFlightRef.current) return;
+    if (chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0) return;
+
     const next = chatQueueRef.current[0];
     if (!next) return;
+    if (blockedQueueMessageIdRef.current === next.id) return;
 
+    queueDrainInFlightRef.current = true;
     setChatQueue((current) => current.slice(1));
 
     // Let UI settle after dequeue before issuing next send.
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const ok = await sendChatMessage({ text: next.text, images: next.attachments });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const ok = await sendChatMessage({ text: next.text, images: next.attachments });
 
-    if (!ok) {
-      // Reinsert at the front so failed messages aren't dropped.
-      setChatQueue((current) => [next, ...current]);
+      if (!ok) {
+        // Reinsert at the front and block auto-drain for this item so we
+        // don't enter a tight retry loop on persistent transport failures.
+        blockedQueueMessageIdRef.current = next.id;
+        setChatQueue((current) => [next, ...current]);
+      } else {
+        blockedQueueMessageIdRef.current = null;
+      }
+    } finally {
+      queueDrainInFlightRef.current = false;
     }
   };
+
+  useEffect(() => {
+    if (chatQueue.length === 0) return;
+    if (chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0) return;
+    void processNextQueuedMessage();
+  }, [activeBackgroundSessions.size, chatQueue.length, chatSending, gatewayActiveTurns]);
 
   useEffect(() => {
     if (activeBackgroundSessions.size === 0) return;
@@ -1121,6 +1160,7 @@ export default function App() {
 
       setChatStreamingContent(null);
       setGatewayConnected(true);
+      blockedQueueMessageIdRef.current = null;
       
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {

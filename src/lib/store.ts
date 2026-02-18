@@ -351,7 +351,6 @@ export const useDashboardStore = create<DashboardState>()(
         const duplicateById = existingMessages.some((existing) => existing._id === id);
         const duplicateByContentAndTime = existingMessages.some(
           (existing) =>
-            existing._id === undefined &&
             existing.role === normalizedMessage.role &&
             existing.timestamp === timestamp &&
             existing.content === normalizedMessage.content,
