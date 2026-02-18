@@ -13,7 +13,6 @@ import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
 
 const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
-const WS_STALE_SOCKET_MS = 60_000;       // Force reconnect after 60s without inbound
 
 export interface OpenClawMessage {
   type: string;
@@ -92,15 +91,6 @@ export class TauriOpenClawConnection {
       if (this.disposed) return;
       if (!this.ws || this._state !== 'connected') return;
 
-      const idleForMs = Date.now() - this.lastSocketActivityAt;
-      if (idleForMs > WS_STALE_SOCKET_MS) {
-        console.warn(
-          `[TauriWS] Stale socket detected (${idleForMs}ms without inbound traffic), forcing reconnect`,
-        );
-        this.forceReconnect('stale socket');
-        return;
-      }
-
       // Send a protocol-level ping as a JSON text message.
       // The Tauri WS plugin's { type: 'Ping' } format may not work
       // reliably — use a lightweight RPC request instead, which the
@@ -109,6 +99,10 @@ export class TauriOpenClawConnection {
       this.ws
         .send(JSON.stringify({ type: 'req', id: pingId, method: 'ping', params: {} }))
         .then(() => {
+          // Outbound ping success is a valid liveness signal. Rely on
+          // ping send failures/Close frames for reconnect, rather than
+          // forcing reconnects purely on inbound silence during long turns.
+          this.markSocketActivity();
           console.log('[TauriWS] Keepalive ping sent');
         })
         .catch((err) => {

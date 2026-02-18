@@ -33,7 +33,7 @@ describe('deliverable lifecycle helpers', () => {
     expect(prompt).toContain('Requested action: Update existing plan at docs/plans/item-1-plan.md');
   });
 
-  it('builds review prompt with required reviewer agents', () => {
+  it('builds review prompt referencing plan_review skill', () => {
     const prompt = buildLifecyclePrompt('review', {
       project: { id: 'project-1', title: 'Project One' },
       item: {
@@ -43,9 +43,7 @@ describe('deliverable lifecycle helpers', () => {
       },
     });
 
-    expect(prompt).toContain('Use the plan_review skill.');
-    expect(prompt).toContain('@agent-dhh-rails-reviewer');
-    expect(prompt).toContain('@agent-kieran-rails-reviewer');
-    expect(prompt).toContain('@agent-code-simplicity-reviewer');
+    expect(prompt).toContain('/plan_review command / plan_review skill');
+    expect(prompt).toContain('Surface the recommended plan changes');
   });
 });

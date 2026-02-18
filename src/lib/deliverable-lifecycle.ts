@@ -108,16 +108,10 @@ export function buildLifecyclePrompt(
     }
 
     case 'review': {
-      const planReference = planPath
-        ? `Use plan file: ${planPath}`
-        : 'No plan file found. Create or update a plan first, then run review.';
-
       return [
         ...header,
-        'Requested action: Review implementation plan',
-        planReference,
-        'Use the plan_review skill.',
-        'Have @agent-dhh-rails-reviewer @agent-kieran-rails-reviewer @agent-code-simplicity-reviewer review this plan in parallel.',
+        'Requested action: Review implementation plan using the /plan_review command / plan_review skill.',
+        'Outputs: Surface the recommended plan changes from the plan_review outputs to the user to decide next steps.',
       ].join('\n');
     }
 

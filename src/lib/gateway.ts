@@ -111,6 +111,9 @@ const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
 const FINAL_NO_CONTENT_TIMEOUT_MS = 45000;
+const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 180000;
+const NO_FINAL_RESOLVE_MIN_QUIET_MS = 90000;
+const NO_FINAL_STABILITY_POLLS = 10;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -1088,6 +1091,8 @@ async function sendViaTauriWs(
   const runId = getRequestId();
   const sendRequestedAt = Date.now();
   let streamedText = '';
+  let sawFinalEvent = false;
+  let resolvedWithoutFinal = false;
   const baselineMessageIds = new Set<string>();
 
   try {
@@ -1168,6 +1173,7 @@ async function sendViaTauriWs(
       const clearSawFinal = (reason: string) => {
         if (!sawFinal) return;
         sawFinal = false;
+        sawFinalEvent = false;
         sawFinalAt = 0;
         console.log(`[Gateway] Final signal cleared due to ${reason}`);
       };
@@ -1279,8 +1285,28 @@ async function sendViaTauriWs(
             //    intervals). This prevents premature resolution during tool use where
             //    visible content is stable but the agent is still working in the
             //    background (reading files, running commands, etc.).
-            const stabilityThreshold = sawFinal ? 1 : 8;
+            const sendAgeMs = Date.now() - sendRequestedAt;
+            const quietForMs = Date.now() - lastEventTime;
+            const wsState = connection.state;
+            const connectionUnstable =
+              wsState === 'reconnecting' || wsState === 'disconnected' || wsState === 'error';
+            const canResolveWithoutFinal =
+              !sawFinal &&
+              combined.length > 0 &&
+              quietForMs >= NO_FINAL_RESOLVE_MIN_QUIET_MS &&
+              (
+                connectionUnstable ||
+                !sendAcked ||
+                sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS
+              );
+
+            const stabilityThreshold = sawFinal
+              ? 1
+              : canResolveWithoutFinal
+                ? NO_FINAL_STABILITY_POLLS
+                : Number.POSITIVE_INFINITY;
             if (pollStableCount >= stabilityThreshold && combined.length > 0) {
+              resolvedWithoutFinal = !sawFinal;
               console.log(
                 `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}/${stabilityThreshold}, sawFinal=${sawFinal}`,
               );
@@ -1504,6 +1530,7 @@ async function sendViaTauriWs(
             }
           }
           sawFinal = true;
+          sawFinalEvent = true;
           sawFinalAt = Date.now();
           clearActiveSendRun(runId);
         }
@@ -1595,6 +1622,57 @@ async function sendViaTauriWs(
           }
         } catch (error) {
           console.warn('[Gateway] Recovery poll failed:', error);
+        }
+      }
+    }
+
+    if (resolvedWithoutFinal && !sawFinalEvent && assistantMessages.length > 0) {
+      const settleDeadline = Date.now() + 30_000;
+      let lastSignature = assistantMessages
+        .map((message) => message._id ?? `${message.timestamp ?? 'na'}:${message.content.length}`)
+        .join('|');
+      let stablePolls = 0;
+
+      while (Date.now() < settleDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        try {
+          const settleHistory = (await connection.request('chat.history', {
+            sessionKey,
+            limit: 30,
+          })) as { messages?: unknown[] };
+          const settleMessages = Array.isArray(settleHistory.messages)
+            ? settleHistory.messages.filter(isHistoryMessage)
+            : [];
+          const extracted = extractAssistantMessagesForTurn(settleMessages, {
+            baselineIds: baselineMessageIds,
+            minTimestamp: minNewMessageTimestamp,
+            expectedUserText: messageText,
+          });
+          if (extracted.length === 0) {
+            stablePolls += 1;
+            if (stablePolls >= 2) break;
+            continue;
+          }
+
+          const signature = extracted
+            .map((message) => message._id ?? `${message.timestamp ?? 'na'}:${message.content.length}`)
+            .join('|');
+          if (signature !== lastSignature) {
+            assistantMessages = extracted;
+            lastSignature = signature;
+            stablePolls = 0;
+            continue;
+          }
+
+          stablePolls += 1;
+          if (stablePolls >= 2) {
+            break;
+          }
+        } catch {
+          // Keep best known assistant messages.
+          stablePolls += 1;
+          if (stablePolls >= 2) break;
         }
       }
     }
