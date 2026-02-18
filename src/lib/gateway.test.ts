@@ -409,6 +409,43 @@ describe('gateway client', () => {
     expect(needsSettle).toBe(false);
   });
 
+  it('treats process poll status=completed as terminal even without exitCode', () => {
+    const snapshot = __gatewayTestUtils.parseProcessPollSnapshot({
+      status: 'completed',
+    });
+
+    expect(snapshot).toEqual({
+      terminal: true,
+      exitCode: 0,
+    });
+  });
+
+  it('treats process poll state=failed as terminal failure without exitCode', () => {
+    const snapshot = __gatewayTestUtils.parseProcessPollSnapshot({
+      state: 'failed',
+      error: 'synthetic transcript repair error',
+    });
+
+    expect(snapshot).toEqual({
+      terminal: true,
+      exitCode: 1,
+      error: 'synthetic transcript repair error',
+    });
+  });
+
+  it('reads terminal process snapshot from nested payload object', () => {
+    const snapshot = __gatewayTestUtils.parseProcessPollSnapshot({
+      payload: {
+        completed: true,
+      },
+    });
+
+    expect(snapshot).toEqual({
+      terminal: true,
+      exitCode: 0,
+    });
+  });
+
   it('counts only active lifecycle turns', () => {
     __gatewayTestUtils.upsertTurnForTests({
       turnToken: 'turn-a',

@@ -1,19 +1,85 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { isTauriRuntime, checkForUpdate, runAppUpdate } from '../lib/tauri';
+import { isTauriRuntime, checkForUpdate, pathExists, runAppUpdate } from '../lib/tauri';
+
+const UPDATE_LOCK_PATH = '/tmp/pipeline-dashboard-update.lock';
+const UPDATE_MONITOR_INTERVAL_MS = 2000;
+const UPDATE_LOCK_APPEAR_GRACE_MS = 15_000;
+const UPDATE_STUCK_TIMEOUT_MS = 20 * 60_000;
 
 export function useAppUpdate() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updating, setUpdating] = useState(false);
   const updateTriggeredRef = useRef(false);
+  const monitorTimerRef = useRef<number | null>(null);
+  const monitorStartedAtRef = useRef(0);
+  const sawUpdateLockRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  const clearUpdateMonitor = () => {
+    if (monitorTimerRef.current !== null) {
+      window.clearInterval(monitorTimerRef.current);
+      monitorTimerRef.current = null;
+    }
+  };
+
+  const resetUpdatingState = async () => {
+    if (!mountedRef.current) return;
+    updateTriggeredRef.current = false;
+    setUpdating(false);
+    try {
+      const status = await checkForUpdate();
+      if (mountedRef.current) {
+        setUpdateAvailable(status.update_available);
+      }
+    } catch {
+      // Ignore refresh failure and keep current button state.
+    }
+  };
+
+  const startUpdateMonitor = () => {
+    clearUpdateMonitor();
+    monitorStartedAtRef.current = Date.now();
+    sawUpdateLockRef.current = false;
+
+    monitorTimerRef.current = window.setInterval(async () => {
+      if (!mountedRef.current) return;
+
+      let lockPresent = false;
+      try {
+        lockPresent = await pathExists(UPDATE_LOCK_PATH);
+      } catch {
+        lockPresent = false;
+      }
+
+      if (lockPresent) {
+        sawUpdateLockRef.current = true;
+        return;
+      }
+
+      const elapsed = Date.now() - monitorStartedAtRef.current;
+
+      // If we never saw a lock shortly after clicking update, the update
+      // script likely failed to start.
+      if (!sawUpdateLockRef.current && elapsed < UPDATE_LOCK_APPEAR_GRACE_MS) {
+        return;
+      }
+
+      clearUpdateMonitor();
+      await resetUpdatingState();
+    }, UPDATE_MONITOR_INTERVAL_MS);
+  };
 
   useEffect(() => {
+    mountedRef.current = true;
     if (!isTauriRuntime()) return;
 
     const check = async () => {
       try {
         const status = await checkForUpdate();
-        setUpdateAvailable(status.update_available);
+        if (mountedRef.current) {
+          setUpdateAvailable(status.update_available);
+        }
       } catch {
         // Silently fail - don't show button if we can't check
       }
@@ -21,7 +87,11 @@ export function useAppUpdate() {
 
     check();
     const interval = setInterval(check, 30_000);
-    return () => clearInterval(interval);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(interval);
+      clearUpdateMonitor();
+    };
   }, []);
 
   const handleUpdate = async () => {
@@ -35,12 +105,31 @@ export function useAppUpdate() {
     });
     try {
       await runAppUpdate();
+      startUpdateMonitor();
     } catch (error) {
       console.error('Failed to start update:', error);
-      updateTriggeredRef.current = false;
-      setUpdating(false);
+      clearUpdateMonitor();
+      await resetUpdatingState();
     }
+
+    // Hard safety timeout: never leave "Updating" stuck forever.
+    window.setTimeout(() => {
+      if (!mountedRef.current || !updateTriggeredRef.current) return;
+      if (Date.now() - monitorStartedAtRef.current < UPDATE_STUCK_TIMEOUT_MS) return;
+      clearUpdateMonitor();
+      void resetUpdatingState();
+    }, UPDATE_STUCK_TIMEOUT_MS + 1000);
   };
+
+  useEffect(() => {
+    if (!updating) return;
+
+    // If app is still alive and no monitor is running (e.g. hook remount),
+    // resume monitoring so we can recover from stale updating UI state.
+    if (monitorTimerRef.current === null) {
+      startUpdateMonitor();
+    }
+  }, [updating]);
 
   return { updateAvailable, updating, handleUpdate };
 }

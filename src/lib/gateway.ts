@@ -214,6 +214,118 @@ const TOOL_ACTIVITY_STATES = new Set([
 const TYPING_ACTIVITY_STATES = new Set(['content', 'delta', 'streaming']);
 const TERMINAL_ACTIVITY_STATES = new Set(['final', 'error', 'aborted']);
 
+interface ProcessPollSnapshot {
+  terminal: boolean;
+  exitCode?: number;
+  error?: string;
+}
+
+function parseProcessPollSnapshot(result: unknown): ProcessPollSnapshot {
+  const terminalStatuses = new Set([
+    'completed',
+    'complete',
+    'finished',
+    'done',
+    'terminated',
+    'exited',
+    'failed',
+    'failure',
+    'error',
+    'aborted',
+    'cancelled',
+    'canceled',
+    'timeout',
+    'timed_out',
+    'timed-out',
+  ]);
+  const failureStatuses = new Set([
+    'failed',
+    'failure',
+    'error',
+    'aborted',
+    'cancelled',
+    'canceled',
+    'timeout',
+    'timed_out',
+    'timed-out',
+  ]);
+
+  const fromRecord = (
+    candidate: Record<string, unknown> | undefined,
+  ): ProcessPollSnapshot | null => {
+    if (!candidate) return null;
+
+    const directExitCode =
+      typeof candidate.exitCode === 'number' && Number.isFinite(candidate.exitCode)
+        ? candidate.exitCode
+        : typeof candidate.exit_code === 'number' && Number.isFinite(candidate.exit_code)
+          ? candidate.exit_code
+          : undefined;
+
+    const error =
+      typeof candidate.error === 'string' && candidate.error.trim().length > 0
+        ? candidate.error
+        : typeof candidate.errorMessage === 'string' && candidate.errorMessage.trim().length > 0
+          ? candidate.errorMessage
+          : undefined;
+
+    const state =
+      typeof candidate.state === 'string' ? candidate.state.toLowerCase() : undefined;
+    const status =
+      typeof candidate.status === 'string' ? candidate.status.toLowerCase() : undefined;
+
+    const terminalByBoolean =
+      candidate.completed === true || candidate.done === true || candidate.finished === true;
+    const terminalByStatus =
+      (state ? terminalStatuses.has(state) : false) ||
+      (status ? terminalStatuses.has(status) : false);
+
+    if (directExitCode !== undefined) {
+      return {
+        terminal: true,
+        exitCode: directExitCode,
+        ...(error ? { error } : {}),
+      };
+    }
+
+    if (terminalByBoolean || terminalByStatus) {
+      const failed =
+        Boolean(error) ||
+        (state ? failureStatuses.has(state) : false) ||
+        (status ? failureStatuses.has(status) : false);
+      return {
+        terminal: true,
+        exitCode: failed ? 1 : 0,
+        ...(error ? { error } : {}),
+      };
+    }
+
+    return null;
+  };
+
+  if (!result || typeof result !== 'object') {
+    return { terminal: false };
+  }
+
+  const record = result as Record<string, unknown>;
+  const direct = fromRecord(record);
+  if (direct) return direct;
+
+  const payload =
+    record.payload && typeof record.payload === 'object'
+      ? fromRecord(record.payload as Record<string, unknown>)
+      : null;
+  if (payload) return payload;
+
+  const processObj =
+    record.process && typeof record.process === 'object'
+      ? fromRecord(record.process as Record<string, unknown>)
+      : null;
+  if (processObj) return processObj;
+
+  return { terminal: false };
+}
+
 function isChatCompletionResponse(data: unknown): data is ChatCompletionResponse {
   if (typeof data !== 'object' || data === null) return false;
 
@@ -1814,13 +1926,13 @@ async function sendViaTauriWs(
             if (pollStableCount >= stabilityThreshold && combined.length > 0) {
               if (!sawFinal) {
                 try {
-                  const processState = await connection.request<{ exitCode?: number }>('process', {
+                  const processState = await connection.request<unknown>('process', {
                     action: 'poll',
                     sessionKey,
                   });
+                  const processSnapshot = parseProcessPollSnapshot(processState);
                   if (
-                    processState &&
-                    processState.exitCode === undefined &&
+                    !processSnapshot.terminal &&
                     Date.now() - sendRequestedAt < ACTIVE_RUN_NO_FINAL_TIMEOUT_MS
                   ) {
                     // No terminal process state yet: keep waiting so we don't
@@ -2233,6 +2345,18 @@ async function sendViaTauriWs(
         setAgentActivity('working', onActivityChange);
         touchTurnSignal(turnToken);
         try {
+          const processState = await connection.request<unknown>('process', {
+            action: 'poll',
+            sessionKey,
+          });
+          const processSnapshot = parseProcessPollSnapshot(processState);
+          if (processSnapshot.terminal) {
+            console.warn(
+              `[Gateway] Recovery backfill observed terminal process state without new assistant output (exitCode=${processSnapshot.exitCode ?? 0})`,
+            );
+            break;
+          }
+
           const recoveryHistory = (await connection.request('chat.history', {
             sessionKey,
             limit: 30,
@@ -2575,6 +2699,7 @@ export function subscribeConnectionState(
 export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
   likelyNeedsFinalSettlePass,
+  parseProcessPollSnapshot,
   isPendingTurnExpiredForHydration,
   getActiveTurnCount,
   clearTurnRegistryForTests: () => {
@@ -2609,19 +2734,20 @@ export async function pollProcessSessions(
 
   for (const sessionKey of sessionKeys) {
     try {
-      const result = await connection.request<{ exitCode?: number; error?: string }>('process', {
+      const result = await connection.request<unknown>('process', {
         action: 'poll',
         sessionKey,
       });
+      const snapshot = parseProcessPollSnapshot(result);
 
-      if (result?.exitCode !== undefined) {
+      if (snapshot.terminal) {
         const terminal = {
           sessionKey,
-          exitCode: result.exitCode,
-          error: typeof result.error === 'string' ? result.error : undefined,
+          exitCode: snapshot.exitCode ?? 0,
+          ...(snapshot.error ? { error: snapshot.error } : {}),
         };
         completed.push(terminal);
-        if (result.exitCode !== 0) {
+        if (terminal.exitCode !== 0) {
           failures.push(terminal);
         }
       }
