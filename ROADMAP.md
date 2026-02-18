@@ -24,16 +24,6 @@ items:
       - automation
     specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
     planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
-  - id: draggable-kanban-columns
-    title: Draggable Kanban Columns
-    status: in-progress
-    priority: 3
-    nextAction: Code shipped — awaiting verification
-    tags:
-      - ui
-      - kanban
-      - ux
-    specDoc: docs/specs/draggable-kanban-columns-spec.md
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: up-next
@@ -150,6 +140,16 @@ items:
       - ux
       - navigation
     specDoc: docs/specs/project-card-opens-kanban-spec.md
+  - id: draggable-kanban-columns
+    title: Draggable Kanban Columns
+    status: complete
+    priority: 3
+    nextAction: Code shipped — awaiting verification
+    tags:
+      - ui
+      - kanban
+      - ux
+    specDoc: docs/specs/draggable-kanban-columns-spec.md
 ---
 
 # Clawchestra — Roadmap
