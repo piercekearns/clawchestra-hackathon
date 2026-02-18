@@ -141,6 +141,7 @@ export function Board<T extends BoardItem>({
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+  const [activeColumnWidth, setActiveColumnWidth] = useState<number | null>(null);
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -195,6 +196,7 @@ export function Board<T extends BoardItem>({
     const id = String(event.active.id);
     if (isColumnId(id)) {
       setActiveColumnId(id.replace(/^col:/, ''));
+      setActiveColumnWidth(event.active.rect.current.initial?.width ?? null);
     } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
@@ -226,6 +228,7 @@ export function Board<T extends BoardItem>({
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
+    setActiveColumnWidth(null);
     setCardDragOverColumnId(null);
   };
 
@@ -237,6 +240,7 @@ export function Board<T extends BoardItem>({
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
+    setActiveColumnWidth(null);
     setCardDragOverColumnId(null);
 
     if (!over) return;
@@ -356,16 +360,36 @@ export function Board<T extends BoardItem>({
           </div>
         ) : activeColumn ? (
           <div
-            className="flex cursor-grabbing items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 shadow-lg ring-1 ring-neutral-300 dark:bg-neutral-800 dark:ring-neutral-600"
-            style={{ width: `${MIN_COLUMN_WIDTH}px` }}
+            className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
+            style={{ width: activeColumnWidth ? `${activeColumnWidth}px` : `${MIN_COLUMN_WIDTH}px` }}
           >
-            <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
-              {activeColumn.label}
-            </h2>
-            <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-              {activeColumnItemCount}
-            </span>
-            <GripVertical className="h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-neutral-500" />
+            {/* Header */}
+            <div className="mb-3 flex cursor-grabbing items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 dark:bg-neutral-800">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+                {activeColumn.label}
+              </h2>
+              <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                {activeColumnItemCount}
+              </span>
+              <GripVertical className="h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-neutral-500" />
+            </div>
+            {/* Card previews */}
+            <div className="flex flex-col gap-2 overflow-hidden">
+              {(grouped[activeColumn.id] ?? []).map((item) => (
+                <Card
+                  key={item.id}
+                  item={item}
+                  onClick={() => undefined}
+                  renderIndicators={renderItemIndicators}
+                  renderHoverActions={renderItemHoverActions}
+                />
+              ))}
+              {activeColumnItemCount === 0 && (
+                <div className="rounded-xl border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                  Drop project here
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
       </DragOverlay>
