@@ -142,6 +142,7 @@ export function Board<T extends BoardItem>({
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [activeColumnWidth, setActiveColumnWidth] = useState<number | null>(null);
+  const [activeColumnHeight, setActiveColumnHeight] = useState<number | null>(null);
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -197,6 +198,7 @@ export function Board<T extends BoardItem>({
     if (isColumnId(id)) {
       setActiveColumnId(id.replace(/^col:/, ''));
       setActiveColumnWidth(event.active.rect.current.initial?.width ?? null);
+      setActiveColumnHeight(event.active.rect.current.initial?.height ?? null);
     } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
@@ -229,6 +231,7 @@ export function Board<T extends BoardItem>({
     setActiveCardWidth(null);
     setActiveColumnId(null);
     setActiveColumnWidth(null);
+    setActiveColumnHeight(null);
     setCardDragOverColumnId(null);
   };
 
@@ -241,6 +244,7 @@ export function Board<T extends BoardItem>({
     setActiveCardWidth(null);
     setActiveColumnId(null);
     setActiveColumnWidth(null);
+    setActiveColumnHeight(null);
     setCardDragOverColumnId(null);
 
     if (!over) return;
@@ -360,8 +364,11 @@ export function Board<T extends BoardItem>({
           </div>
         ) : activeColumn ? (
           <div
-            className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
-            style={{ width: activeColumnWidth ? `${activeColumnWidth}px` : `${MIN_COLUMN_WIDTH}px` }}
+            className="flex flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
+            style={{
+              width: activeColumnWidth ? `${activeColumnWidth}px` : `${MIN_COLUMN_WIDTH}px`,
+              height: activeColumnHeight ? `${activeColumnHeight}px` : undefined,
+            }}
           >
             {/* Header */}
             <div className="mb-3 flex cursor-grabbing items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 dark:bg-neutral-800">
