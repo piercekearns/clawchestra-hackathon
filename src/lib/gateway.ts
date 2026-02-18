@@ -2136,8 +2136,14 @@ async function sendViaTauriWs(
                     return;
                   }
                 } catch (error) {
-                  // If process polling is unavailable, fall back to chat-history stability.
-                  console.warn('[Gateway] process.poll check failed during no-final resolve:', error);
+                  // Process polling failed (missing scope, network error, etc.).
+                  // Treat this the same as "process still running" — keep waiting
+                  // rather than falling through to resolve. Without a definitive
+                  // terminal signal, resolving here risks cutting off long tool-use
+                  // turns where no text is streaming but work is ongoing.
+                  console.warn('[Gateway] process.poll check failed during no-final resolve — keeping alive:', error);
+                  pollStableCount = 0;
+                  return;
                 }
               }
               resolvedWithoutFinal = !sawFinal;

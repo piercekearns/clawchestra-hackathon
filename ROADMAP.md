@@ -23,20 +23,32 @@ items:
       - bug
       - github
       - api
-  - id: sidebar-enhancements
-    title: Sidebar Enhancements
+  - id: git-sync
+    title: Git Sync
     status: up-next
     priority: 1
-    nextAction: Define which panel(s) to build first
+    nextAction: Spec written — ready for plan/build
     tags:
-      - ui
-      - navigation
-      - orchestration
-    icon: "\U0001F5C2️"
+      - git
+      - github
+      - sync
+      - workflow
+    icon: "\U0001F504"
+    specDoc: docs/specs/git-sync-spec.md
+  - id: deep-rename-clawchestra
+    title: Deep Rename to Clawchestra
+    status: up-next
+    priority: 2
+    nextAction: >-
+      Surface rename done — deep rename needed for Cargo, data paths, session
+      key, folder
+    tags:
+      - infra
+      - rename
   - id: recently-completed-lifecycle
     title: Recently Completed Lifecycle
     status: up-next
-    priority: 2
+    priority: 3
     nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
@@ -44,25 +56,36 @@ items:
       - agents
       - changelog
     specDoc: docs/specs/recently-completed-lifecycle-spec.md
-  - id: deep-rename-clawchestra
-    title: Deep Rename to Clawchestra
+  - id: sidebar-enhancements
+    title: Sidebar Enhancements
+    status: up-next
+    priority: 4
+    nextAction: Define which panel(s) to build first
+    tags:
+      - ui
+      - navigation
+      - orchestration
+    icon: "\U0001F5C2️"
+  - id: openclaw-integration
+    title: Configurable OpenClaw Integration
     status: pending
     priority: 1
-    nextAction: >-
-      Surface rename done — deep rename needed for Cargo, data paths, session
-      key, folder
+    nextAction: Post-V2 scope
     tags:
-      - infra
-      - rename
-  - id: app-ux-review
-    title: App UX Review & Improvements
+      - integration
+      - openclaw
+  - id: app-customisation
+    title: App Customisation (Themes & Fonts)
     status: pending
     priority: 2
-    nextAction: 'Hands-on review: what works, what doesn''t, what''s missing'
+    nextAction: >-
+      Spec needed — define font theme packages (Standard, Terminal, Geist) and
+      colour theme system. Geist fonts available locally including Pixel
+      variants.
     tags:
       - ui
       - ux
-      - roadmap
+      - theming
     icon: "\U0001F3A8"
   - id: roadmap-item-quick-add
     title: Roadmap Item Quick-Add
@@ -75,23 +98,10 @@ items:
       - roadmap
       - ux
       - workflow
-  - id: app-customisation
-    title: App Customisation (Themes & Fonts)
-    status: pending
-    priority: 4
-    nextAction: >-
-      Spec needed — define font theme packages (Standard, Terminal, Geist) and
-      colour theme system. Geist fonts available locally including Pixel
-      variants.
-    tags:
-      - ui
-      - ux
-      - theming
-    icon: "\U0001F3A8"
   - id: custom-card-actions
     title: Custom Card Actions (User-Defined Commands)
     status: pending
-    priority: 5
+    priority: 4
     nextAction: >-
       Spec needed — define UI for users to configure custom action icons on
       roadmap cards with templated chat commands (project name, item name, doc
@@ -102,26 +112,6 @@ items:
       - workflow
       - actions
     icon: ⚙️
-  - id: openclaw-integration
-    title: Configurable OpenClaw Integration
-    status: pending
-    priority: 6
-    nextAction: Post-V2 scope
-    tags:
-      - integration
-      - openclaw
-  - id: git-sync
-    title: Git Sync
-    status: pending
-    priority: 7
-    nextAction: Spec written — ready for plan/build
-    tags:
-      - git
-      - github
-      - sync
-      - workflow
-    icon: "\U0001F504"
-    specDoc: docs/specs/git-sync-spec.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: complete
@@ -174,6 +164,16 @@ items:
       - automation
     specDoc: docs/specs/deliverable-lifecycle-orchestration-spec.md
     planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
+  - id: app-ux-review
+    title: App UX Review & Improvements
+    status: complete
+    priority: 6
+    nextAction: 'Hands-on review: what works, what doesn''t, what''s missing'
+    tags:
+      - ui
+      - ux
+      - roadmap
+    icon: "\U0001F3A8"
 ---
 
 # Clawchestra — Roadmap
