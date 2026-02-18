@@ -51,8 +51,6 @@ function groupByStatus<T extends BoardItem>(
   return grouped;
 }
 
-const COLLAPSED_WIDTH = 44;
-
 export function Board<T extends BoardItem>({
   columns,
   items,
@@ -94,17 +92,9 @@ export function Board<T extends BoardItem>({
   const columnIds = useMemo(() => new Set(columns.map((column) => column.id)), [columns]);
   const collapsedSet = useMemo(() => new Set(collapsedColumns), [collapsedColumns]);
 
-  const gridTemplateColumns = useMemo(() => {
-    return columns
-      .map((col) => (collapsedSet.has(col.id) ? `${COLLAPSED_WIDTH}px` : `minmax(${MIN_COLUMN_WIDTH}px, 1fr)`))
-      .join(' ');
-  }, [columns, collapsedSet]);
-
-  const expandedCount = columns.length - collapsedSet.size;
-  const collapsedTotal = collapsedSet.size * (COLLAPSED_WIDTH + COLUMN_GAP);
   const minBoardWidth = useMemo(
-    () => expandedCount * MIN_COLUMN_WIDTH + Math.max(0, expandedCount - 1) * COLUMN_GAP + collapsedTotal,
-    [expandedCount, collapsedTotal],
+    () => columns.length * MIN_COLUMN_WIDTH + Math.max(0, columns.length - 1) * COLUMN_GAP,
+    [columns.length],
   );
 
   const findStatusForTarget = (targetId: string): string | null => {
@@ -186,7 +176,7 @@ export function Board<T extends BoardItem>({
         <div
           className="grid h-full min-h-[24rem] w-full gap-4"
           style={{
-            gridTemplateColumns,
+            gridTemplateColumns: `repeat(${columns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
             minWidth: `${minBoardWidth}px`,
           }}
         >
