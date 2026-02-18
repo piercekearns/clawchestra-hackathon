@@ -102,7 +102,7 @@ export function RoadmapItemDialog({
       {/* Dialog */}
       <div
         ref={dialogRef}
-        className="fixed inset-x-4 top-[10%] z-50 mx-auto max-h-[80vh] max-w-2xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+        className="fixed inset-x-4 top-[5%] z-50 mx-auto max-h-[90vh] max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
         role="dialog"
         aria-modal
         aria-label={`Roadmap item: ${item.title}`}

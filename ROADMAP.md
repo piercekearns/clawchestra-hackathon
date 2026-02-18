@@ -27,7 +27,7 @@ items:
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: in-progress
-    priority: 4
+    priority: 3
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -37,7 +37,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: Spec written — ready for plan/build
     tags:
       - ui
@@ -45,7 +45,7 @@ items:
   - id: recently-completed-lifecycle
     title: Recently Completed Lifecycle
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
@@ -56,7 +56,7 @@ items:
   - id: github-api-403-errors
     title: Investigate GitHub API 403 Errors
     status: up-next
-    priority: 4
+    priority: 3
     nextAction: >-
       Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
       likely rate limiting, may need auth token or caching
@@ -108,10 +108,24 @@ items:
       - ux
       - theming
     icon: "\U0001F3A8"
+  - id: custom-card-actions
+    title: Custom Card Actions (User-Defined Commands)
+    status: pending
+    priority: 5
+    nextAction: >-
+      Spec needed — define UI for users to configure custom action icons on
+      roadmap cards with templated chat commands (project name, item name, doc
+      paths auto-injected). Depends on collapsible-sidebar for settings surface.
+    tags:
+      - ui
+      - ux
+      - workflow
+      - actions
+    icon: "\u2699\uFE0F"
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending
-    priority: 5
+    priority: 6
     nextAction: Post-V2 scope
     tags:
       - integration
