@@ -77,7 +77,7 @@ function SortableColumn<T extends BoardItem>({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="h-full">
       {children({ listeners, attributes })}
     </div>
   );

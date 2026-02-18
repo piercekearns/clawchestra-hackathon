@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { Card } from './Card';
 
@@ -77,6 +77,7 @@ export function Column<T extends BoardItem>({
         <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
           {items.length}
         </span>
+        <GripVertical className="h-3.5 w-3.5 shrink-0 text-neutral-300 dark:text-neutral-600" />
       </header>
 
       {!collapsed && (
