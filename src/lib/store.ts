@@ -29,6 +29,8 @@ interface DashboardState {
   themePreference: ThemePreference;
   loading: boolean;
   selectedProjectId?: string;
+  /** Collapsed columns per board. Key: board id ("projects" | "roadmap:{projectId}"), Value: collapsed column status ids */
+  collapsedColumns: Record<string, string[]>;
 
   setProjects: (projects: ProjectViewModel[]) => void;
   loadProjects: () => Promise<void>;
@@ -53,6 +55,8 @@ interface DashboardState {
   loadMoreChatMessages: () => Promise<void>;
   clearChatHistory: () => Promise<void>;
   setSelectedProjectId: (id?: string) => void;
+  toggleColumnCollapse: (boardId: string, columnId: string) => void;
+  isColumnCollapsed: (boardId: string, columnId: string) => boolean;
   updateProjectAndReload: (project: ProjectViewModel, updates: ProjectUpdate) => Promise<void>;
   createProjectAndReload: (
     dirPath: string,
@@ -105,6 +109,7 @@ export const useDashboardStore = create<DashboardState>()(
       themePreference: 'system',
       loading: false,
       selectedProjectId: undefined,
+      collapsedColumns: {},
 
       setProjects: (projects) => set({ projects }),
 
@@ -288,6 +293,26 @@ export const useDashboardStore = create<DashboardState>()(
 
       setSelectedProjectId: (selectedProjectId) => set({ selectedProjectId }),
 
+      toggleColumnCollapse: (boardId, columnId) =>
+        set((state) => {
+          const current = state.collapsedColumns[boardId] ?? [];
+          const isCollapsed = current.includes(columnId);
+          const next = isCollapsed
+            ? current.filter((id) => id !== columnId)
+            : [...current, columnId];
+          return {
+            collapsedColumns: {
+              ...state.collapsedColumns,
+              [boardId]: next,
+            },
+          };
+        }),
+
+      isColumnCollapsed: (boardId, columnId) => {
+        const current = get().collapsedColumns[boardId] ?? [];
+        return current.includes(columnId);
+      },
+
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
         await get().loadProjects();
@@ -307,6 +332,7 @@ export const useDashboardStore = create<DashboardState>()(
       name: 'clawchestra-state',
       partialize: (state) => ({
         themePreference: state.themePreference,
+        collapsedColumns: state.collapsedColumns,
       }),
     },
   ),

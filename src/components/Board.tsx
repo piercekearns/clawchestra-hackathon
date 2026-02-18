@@ -10,14 +10,17 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
+import { useDashboardStore } from '../lib/store';
 import { Card } from './Card';
 import { Column } from './Column';
 
 interface BoardProps<T extends BoardItem> {
   columns: ColumnDefinition[];
   items: T[];
+  /** Board identifier for collapse persistence ("projects" | "roadmap:{projectId}") */
+  boardId?: string;
   onItemClick: (item: T) => void;
   onItemsChange: (items: T[]) => void;
   getItemWarning?: (item: T) => boolean;
@@ -47,9 +50,12 @@ function groupByStatus<T extends BoardItem>(
   return grouped;
 }
 
+const COLLAPSED_WIDTH = 44;
+
 export function Board<T extends BoardItem>({
   columns,
   items,
+  boardId = 'projects',
   onItemClick,
   onItemsChange,
   getItemWarning,
@@ -57,6 +63,13 @@ export function Board<T extends BoardItem>({
   renderItemActions,
   renderItemHoverActions,
 }: BoardProps<T>) {
+  const collapsedColumns = useDashboardStore((s) => s.collapsedColumns[boardId] ?? []);
+  const toggleColumnCollapse = useDashboardStore((s) => s.toggleColumnCollapse);
+
+  const handleToggleCollapse = useCallback(
+    (columnId: string) => toggleColumnCollapse(boardId, columnId),
+    [boardId, toggleColumnCollapse],
+  );
   const [localItems, setLocalItems] = useState(items);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
@@ -76,9 +89,19 @@ export function Board<T extends BoardItem>({
   const activeItem = activeId ? localItems.find((entry) => entry.id === activeId) ?? null : null;
 
   const columnIds = useMemo(() => new Set(columns.map((column) => column.id)), [columns]);
+  const collapsedSet = useMemo(() => new Set(collapsedColumns), [collapsedColumns]);
+
+  const gridTemplateColumns = useMemo(() => {
+    return columns
+      .map((col) => (collapsedSet.has(col.id) ? `${COLLAPSED_WIDTH}px` : `minmax(${MIN_COLUMN_WIDTH}px, 1fr)`))
+      .join(' ');
+  }, [columns, collapsedSet]);
+
+  const expandedCount = columns.length - collapsedSet.size;
+  const collapsedTotal = collapsedSet.size * (COLLAPSED_WIDTH + COLUMN_GAP);
   const minBoardWidth = useMemo(
-    () => columns.length * MIN_COLUMN_WIDTH + Math.max(0, columns.length - 1) * COLUMN_GAP,
-    [columns.length],
+    () => expandedCount * MIN_COLUMN_WIDTH + Math.max(0, expandedCount - 1) * COLUMN_GAP + collapsedTotal,
+    [expandedCount, collapsedTotal],
   );
 
   const findStatusForTarget = (targetId: string): string | null => {
@@ -160,7 +183,7 @@ export function Board<T extends BoardItem>({
         <div
           className="grid h-full min-h-[24rem] w-full gap-4"
           style={{
-            gridTemplateColumns: `repeat(${columns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
+            gridTemplateColumns,
             minWidth: `${minBoardWidth}px`,
           }}
         >
@@ -169,6 +192,8 @@ export function Board<T extends BoardItem>({
               key={column.id}
               column={column}
               items={grouped[column.id] ?? []}
+              collapsed={collapsedSet.has(column.id)}
+              onToggleCollapse={() => handleToggleCollapse(column.id)}
               onItemClick={onItemClick}
               getItemWarning={getItemWarning}
               renderItemIndicators={renderItemIndicators}

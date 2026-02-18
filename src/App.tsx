@@ -1129,6 +1129,7 @@ export default function App() {
                 <Board
                   columns={viewContext.columns}
                   items={roadmapItems}
+                  boardId={`roadmap:${viewContext.type === 'roadmap' ? viewContext.projectId : 'unknown'}`}
                   onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
                   renderItemHoverActions={(item) => (
                     <LifecycleActionBar
