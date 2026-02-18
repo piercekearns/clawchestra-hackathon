@@ -111,6 +111,10 @@ const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
 const FINAL_NO_CONTENT_TIMEOUT_MS = 45000;
+const FINAL_STABILITY_POLLS = 2;
+const FINAL_SETTLE_WINDOW_MS = 15000;
+const FINAL_SETTLE_POLL_MS = 2000;
+const FINAL_SETTLE_STABLE_POLLS = 2;
 const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 75000;
 const NO_FINAL_RESOLVE_MIN_QUIET_MS = 25000;
 const NO_FINAL_STABILITY_POLLS = 4;
@@ -313,7 +317,18 @@ function getHistoryMessageId(message: GatewayHistoryMessage): string | undefined
 }
 
 function getHistoryMessageTimestamp(message: GatewayHistoryMessage): number | undefined {
-  return typeof message.timestamp === 'number' ? message.timestamp : undefined;
+  if (typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)) {
+    return message.timestamp;
+  }
+  if (typeof message.timestamp === 'string') {
+    const trimmed = message.timestamp.trim();
+    if (!trimmed) return undefined;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return numeric;
+    const epoch = Date.parse(trimmed);
+    if (Number.isFinite(epoch)) return epoch;
+  }
+  return undefined;
 }
 
 function toChronologicalHistory(
@@ -447,14 +462,19 @@ function extractAssistantMessagesForTurn(
   for (let index = anchorIndex + 1; index < chronological.length; index += 1) {
     const message = chronological[index];
 
-    if (message.role === 'user' && isMessageNewForTurn(message, options)) {
+    if (message.role === 'user') {
       break;
     }
     if (message.role !== 'assistant') continue;
-    if (!isMessageNewForTurn(message, options)) continue;
 
     const id = getHistoryMessageId(message);
     const timestamp = getHistoryMessageTimestamp(message);
+    const shouldIncludeForTurn =
+      (id !== undefined && !options.baselineIds.has(id)) ||
+      (timestamp !== undefined && timestamp >= options.minTimestamp) ||
+      (id === undefined && timestamp === undefined);
+    if (!shouldIncludeForTurn) continue;
+
     const content = extractText(message.content).trim();
     if (!content) continue;
 
@@ -1093,6 +1113,7 @@ async function sendViaTauriWs(
   const sendRequestedAt = Date.now();
   let streamedText = '';
   let sawFinalEvent = false;
+  let sawFinalEventAt = 0;
   let resolvedWithoutFinal = false;
   const baselineMessageIds = new Set<string>();
 
@@ -1175,6 +1196,7 @@ async function sendViaTauriWs(
         if (!sawFinal) return;
         sawFinal = false;
         sawFinalEvent = false;
+        sawFinalEventAt = 0;
         sawFinalAt = 0;
         console.log(`[Gateway] Final signal cleared due to ${reason}`);
       };
@@ -1305,7 +1327,7 @@ async function sendViaTauriWs(
               );
 
             const stabilityThreshold = sawFinal
-              ? 1
+              ? FINAL_STABILITY_POLLS
               : canResolveWithoutFinal
                 ? NO_FINAL_STABILITY_POLLS
                 : Number.POSITIVE_INFINITY;
@@ -1527,6 +1549,7 @@ async function sendViaTauriWs(
           }
           sawFinal = true;
           sawFinalEvent = true;
+          sawFinalEventAt = Date.now();
           sawFinalAt = Date.now();
           clearActiveSendRun(runId);
         }
@@ -1622,15 +1645,22 @@ async function sendViaTauriWs(
       }
     }
 
-    if (resolvedWithoutFinal && !sawFinalEvent && assistantMessages.length > 0) {
-      const settleDeadline = Date.now() + 30_000;
+    const shouldRunSettlePass =
+      assistantMessages.length > 0 &&
+      (
+        (resolvedWithoutFinal && !sawFinalEvent) ||
+        (sawFinalEvent && sawFinalEventAt > 0 && Date.now() - sawFinalEventAt < FINAL_SETTLE_WINDOW_MS)
+      );
+
+    if (shouldRunSettlePass) {
+      const settleDeadline = Date.now() + FINAL_SETTLE_WINDOW_MS;
       let lastSignature = assistantMessages
         .map((message) => message._id ?? `${message.timestamp ?? 'na'}:${message.content.length}`)
         .join('|');
       let stablePolls = 0;
 
       while (Date.now() < settleDeadline) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, FINAL_SETTLE_POLL_MS));
 
         try {
           const settleHistory = (await connection.request('chat.history', {
@@ -1662,13 +1692,13 @@ async function sendViaTauriWs(
           }
 
           stablePolls += 1;
-          if (stablePolls >= 2) {
+          if (stablePolls >= FINAL_SETTLE_STABLE_POLLS) {
             break;
           }
         } catch {
           // Keep best known assistant messages.
           stablePolls += 1;
-          if (stablePolls >= 2) break;
+          if (stablePolls >= FINAL_SETTLE_STABLE_POLLS) break;
         }
       }
     }
