@@ -840,6 +840,10 @@ export async function recoverRecentSessionMessages(options?: {
     const role = normalizeHistoryRole(message.role);
     if (!role) continue;
 
+    if (role === 'user' && isSyntheticSystemExecUserMessage(message)) {
+      continue;
+    }
+
     const content = extractText(message.content).trim();
     if (!content) continue;
 
@@ -849,6 +853,29 @@ export async function recoverRecentSessionMessages(options?: {
     const dedupeKey = id ?? `${role}:${timestamp}:${content}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
+
+    const normalized = content.toLowerCase();
+    if (
+      role === 'system' &&
+      (normalized === 'compaction' ||
+        normalized === 'conversation compacted' ||
+        normalized === 'compacting conversation...')
+    ) {
+      recovered.push({
+        role,
+        content: '',
+        timestamp,
+        ...(id ? { _id: id } : {}),
+        systemMeta: {
+          kind: 'compaction',
+          title: 'Conversation compacted',
+          details: {
+            Note: 'Older messages were summarized to free context space',
+          },
+        },
+      });
+      continue;
+    }
 
     recovered.push({
       role,

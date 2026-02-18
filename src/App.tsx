@@ -83,7 +83,7 @@ const BACKGROUND_POLL_INTERVAL_MS = 30_000;
 const BACKGROUND_SESSION_STALE_MS = 3 * 60_000;
 const CONNECTION_LOSS_BUBBLE_DELAY_MS = 5000;
 const RECOVERY_NEAR_DUP_WINDOW_MS = 10 * 60_000;
-const RECOVERY_BUBBLE_DEDUP_MS = 15_000;
+const RECOVERY_BUBBLE_DEDUP_MS = 5 * 60_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
 
 function normalizeMessageContent(content: string): string {
@@ -581,7 +581,10 @@ export default function App() {
       if (recoveredCount > 0) {
         const bubbleSignature = `${recoveredCount}:${recoveredSignatures.join('|')}`;
         const lastBubble = lastRecoveryBubbleRef.current;
+        const shouldSuppressDuringActiveRun =
+          chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
         const shouldSuppressBubble =
+          shouldSuppressDuringActiveRun ||
           lastBubble &&
           lastBubble.signature === bubbleSignature &&
           now - lastBubble.at <= RECOVERY_BUBBLE_DEDUP_MS;
@@ -599,7 +602,13 @@ export default function App() {
       console.warn('[Chat] Failed to reconcile recent gateway history:', error);
       return 0;
     }
-  }, [addChatMessage, addSystemBubble]);
+  }, [
+    activeBackgroundSessions.size,
+    addChatMessage,
+    addSystemBubble,
+    chatSending,
+    gatewayActiveTurns,
+  ]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
