@@ -141,7 +141,6 @@ export function Board<T extends BoardItem>({
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
-  const [activeColumnWidth, setActiveColumnWidth] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
 
@@ -197,7 +196,6 @@ export function Board<T extends BoardItem>({
     const id = String(event.active.id);
     if (isColumnId(id)) {
       setActiveColumnId(id.replace(/^col:/, ''));
-      setActiveColumnWidth(event.active.rect.current.initial?.width ?? null);
     } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
@@ -229,7 +227,6 @@ export function Board<T extends BoardItem>({
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
-    setActiveColumnWidth(null);
     setCardDragOverColumnId(null);
   };
 
@@ -241,7 +238,6 @@ export function Board<T extends BoardItem>({
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
-    setActiveColumnWidth(null);
     setCardDragOverColumnId(null);
 
     if (!over) return;
@@ -364,7 +360,9 @@ export function Board<T extends BoardItem>({
           <div
             className="flex flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
             style={{
-              width: activeColumnWidth ? `${activeColumnWidth}px` : `${MIN_COLUMN_WIDTH}px`,
+              width: gridRef.current
+                ? `${(gridRef.current.clientWidth - (orderedColumns.length - 1) * COLUMN_GAP) / orderedColumns.length}px`
+                : `${MIN_COLUMN_WIDTH}px`,
               height: gridRef.current ? `${gridRef.current.clientHeight}px` : undefined,
             }}
           >
