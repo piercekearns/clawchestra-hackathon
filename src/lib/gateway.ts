@@ -111,9 +111,10 @@ const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
 const FINAL_NO_CONTENT_TIMEOUT_MS = 45000;
-const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 180000;
-const NO_FINAL_RESOLVE_MIN_QUIET_MS = 90000;
-const NO_FINAL_STABILITY_POLLS = 10;
+const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 75000;
+const NO_FINAL_RESOLVE_MIN_QUIET_MS = 25000;
+const NO_FINAL_STABILITY_POLLS = 4;
+const NO_FINAL_MAX_WAIT_MS = 120000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -1281,10 +1282,9 @@ async function sendViaTauriWs(
 
             // Content stability check. Two thresholds:
             // 1. With final event and no further activity: resolve quickly
-            // 2. Without final event: require 8 consecutive stable polls (~24s at 3s
-            //    intervals). This prevents premature resolution during tool use where
-            //    visible content is stable but the agent is still working in the
-            //    background (reading files, running commands, etc.).
+            // 2. Without final event: require a quiet window plus stable polls.
+            //    This avoids premature completion during active tool-use while
+            //    still letting long turns settle if a terminal event is missed.
             const sendAgeMs = Date.now() - sendRequestedAt;
             const quietForMs = Date.now() - lastEventTime;
             const wsState = connection.state;
@@ -1293,11 +1293,15 @@ async function sendViaTauriWs(
             const canResolveWithoutFinal =
               !sawFinal &&
               combined.length > 0 &&
-              quietForMs >= NO_FINAL_RESOLVE_MIN_QUIET_MS &&
+              (
+                quietForMs >= NO_FINAL_RESOLVE_MIN_QUIET_MS ||
+                sendAgeMs >= NO_FINAL_MAX_WAIT_MS
+              ) &&
               (
                 connectionUnstable ||
                 !sendAcked ||
-                sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS
+                sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS ||
+                sendAgeMs >= NO_FINAL_MAX_WAIT_MS
               );
 
             const stabilityThreshold = sawFinal
@@ -1354,16 +1358,6 @@ async function sendViaTauriWs(
         // Also: don't change the activity indicator during active streaming
         // (prevents Working/Typing flicker).
         if (eventName === 'agent') {
-          // ALWAYS update timing/stability for agent events — the gateway
-          // assigns its own runId to agent events which won't match our
-          // idempotency key. Without this, agent events during tool use
-          // get filtered out and the poll stability counter is never reset,
-          // causing premature send resolution.
-          lastEventTime = Date.now();
-          resetIdleTimeout();
-          pollStableCount = 0;
-          clearSawFinal('agent activity');
-
           const agentPayload = (typeof payload === 'object' && payload !== null
             ? payload
             : {}) as Record<string, unknown>;
@@ -1375,11 +1369,13 @@ async function sendViaTauriWs(
             return;
           }
 
-          // Only filter on runId for activity state changes — don't skip
-          // timing updates above.
-          if (agentRunId && agentRunId !== runId) {
-            return;
-          }
+          // Scope timing/stability updates to this session only. Some gateway
+          // broadcasts include agent events from other sessions; those should
+          // not keep this send alive.
+          lastEventTime = Date.now();
+          resetIdleTimeout();
+          pollStableCount = 0;
+          clearSawFinal('agent activity');
 
           if (agentRunId === runId) {
             sawOwnedProgressEvent = true;
