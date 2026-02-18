@@ -637,7 +637,7 @@ function extractAssistantMessagesFromHistory(
     assistantMessages.push({
       role: 'assistant',
       content,
-      timestamp: timestamp ?? Date.now(),
+      timestamp: timestamp ?? stableSyntheticTimestamp('assistant', content),
       ...(id ? { _id: id } : {}),
     });
   }
@@ -647,6 +647,16 @@ function extractAssistantMessagesFromHistory(
 
 function normalizeTextForMatch(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function stableSyntheticTimestamp(role: string, content: string): number {
+  let hash = 2166136261;
+  const input = `${role}:${content}`;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return 1_700_000_000_000 + (hash >>> 0);
 }
 
 function likelyNeedsFinalSettlePass(messages: ChatMessage[]): boolean {
@@ -779,7 +789,7 @@ function extractAssistantMessagesForTurn(
     assistantMessages.push({
       role: 'assistant',
       content,
-      timestamp: timestamp ?? Date.now(),
+      timestamp: timestamp ?? stableSyntheticTimestamp('assistant', content),
       ...(id ? { _id: id } : {}),
     });
   }
@@ -834,7 +844,8 @@ export async function recoverRecentSessionMessages(options?: {
     if (!content) continue;
 
     const id = getHistoryMessageId(message);
-    const timestamp = getHistoryMessageTimestamp(message) ?? Date.now();
+    const timestamp =
+      getHistoryMessageTimestamp(message) ?? stableSyntheticTimestamp(role, content);
     const dedupeKey = id ?? `${role}:${timestamp}:${content}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -998,15 +1009,55 @@ export async function wireSystemEventBus(): Promise<void> {
   if (!connection) return;
 
   systemEventUnsubscribe = connection.subscribe((eventName: string, payload: unknown) => {
-    if (eventName !== 'chat') return;
-
-    const chat = (typeof payload === 'object' && payload !== null
+    const eventRecord = (typeof payload === 'object' && payload !== null
       ? payload
       : {}) as Record<string, unknown>;
-    const state = typeof chat.state === 'string' ? chat.state : '';
-    const sessionKey = typeof chat.sessionKey === 'string' ? chat.sessionKey : undefined;
-    const runId = typeof chat.runId === 'string' ? chat.runId : undefined;
-    const announce = parseAnnounceMetadata(chat, true);
+
+    if (eventName === 'agent') {
+      const sessionKey =
+        typeof eventRecord.sessionKey === 'string' ? eventRecord.sessionKey : undefined;
+      const runId = typeof eventRecord.runId === 'string' ? eventRecord.runId : undefined;
+      const announce = parseAnnounceMetadata(eventRecord, true);
+      const messageText =
+        typeof eventRecord.message === 'string'
+          ? eventRecord.message
+          : extractText(eventRecord.message);
+      const status =
+        announce?.status ??
+        (typeof eventRecord.status === 'string' ? normalizeAnnounceStatus(eventRecord.status, messageText) : undefined) ??
+        'running';
+
+      if (shouldSuppressForActiveSend(runId) && Boolean(announce)) {
+        return;
+      }
+
+      emit({
+        kind: 'announce',
+        sessionKey: announce?.sessionKey ?? sessionKey,
+        runId: announce?.runId ?? runId,
+        label:
+          announce?.label ??
+          (typeof eventRecord.label === 'string' ? eventRecord.label : undefined),
+        status,
+        runtime:
+          announce?.runtime ??
+          (typeof eventRecord.runtime === 'string' ? eventRecord.runtime : undefined),
+        tokens:
+          announce?.tokens ??
+          (typeof eventRecord.tokens === 'string' ? eventRecord.tokens : undefined),
+        message: messageText || undefined,
+        raw: eventRecord,
+      });
+      return;
+    }
+
+    if (eventName !== 'chat') return;
+
+    const state = typeof eventRecord.state === 'string' ? eventRecord.state : '';
+    const sessionKey =
+      typeof eventRecord.sessionKey === 'string' ? eventRecord.sessionKey : undefined;
+    const runId = typeof eventRecord.runId === 'string' ? eventRecord.runId : undefined;
+    const announce = parseAnnounceMetadata(eventRecord, true);
 
     if (
       shouldSuppressForActiveSend(runId) &&
@@ -1024,14 +1075,19 @@ export async function wireSystemEventBus(): Promise<void> {
         kind: 'error',
         sessionKey,
         runId,
-        message: typeof chat.errorMessage === 'string' ? chat.errorMessage : 'Unknown error',
-        label: typeof chat.label === 'string' ? chat.label : undefined,
+        message:
+          typeof eventRecord.errorMessage === 'string'
+            ? eventRecord.errorMessage
+            : 'Unknown error',
+        label: typeof eventRecord.label === 'string' ? eventRecord.label : undefined,
       });
     }
 
     if (announce) {
       const messageText =
-        typeof chat.message === 'string' ? chat.message : extractText(chat.message);
+        typeof eventRecord.message === 'string'
+          ? eventRecord.message
+          : extractText(eventRecord.message);
       emit({
         kind: 'announce',
         sessionKey: announce.sessionKey ?? sessionKey,
@@ -1041,7 +1097,7 @@ export async function wireSystemEventBus(): Promise<void> {
         runtime: announce.runtime,
         tokens: announce.tokens,
         message: messageText || undefined,
-        raw: chat,
+        raw: eventRecord,
       });
     }
   });
@@ -2442,10 +2498,14 @@ export const __gatewayTestUtils = {
 export async function pollProcessSessions(
   sessionKeys: string[],
   transportOverride?: GatewayTransport,
-): Promise<Array<{ sessionKey: string; exitCode: number; error?: string }>> {
+): Promise<{
+  completed: Array<{ sessionKey: string; exitCode: number; error?: string }>;
+  failures: Array<{ sessionKey: string; exitCode: number; error?: string }>;
+}> {
+  const completed: Array<{ sessionKey: string; exitCode: number; error?: string }> = [];
   const failures: Array<{ sessionKey: string; exitCode: number; error?: string }> = [];
   const transport = await resolveTransport(transportOverride);
-  if (transport.mode !== 'tauri-ws') return failures;
+  if (transport.mode !== 'tauri-ws') return { completed, failures };
 
   const { getTauriOpenClawConnection } = await import('./tauri-websocket');
   const connection = await getTauriOpenClawConnection(
@@ -2461,17 +2521,21 @@ export async function pollProcessSessions(
         sessionKey,
       });
 
-      if (result?.exitCode !== undefined && result.exitCode !== 0) {
-        failures.push({
+      if (result?.exitCode !== undefined) {
+        const terminal = {
           sessionKey,
           exitCode: result.exitCode,
           error: typeof result.error === 'string' ? result.error : undefined,
-        });
+        };
+        completed.push(terminal);
+        if (result.exitCode !== 0) {
+          failures.push(terminal);
+        }
       }
     } catch {
       // Ignore poll transport failures.
     }
   }
 
-  return failures;
+  return { completed, failures };
 }

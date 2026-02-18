@@ -81,7 +81,13 @@ function applyTheme(preference: ThemePreference) {
 const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
 const CONNECTION_LOSS_BUBBLE_DELAY_MS = 5000;
+const RECOVERY_NEAR_DUP_WINDOW_MS = 10 * 60_000;
+const RECOVERY_BUBBLE_DEDUP_MS = 15_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
+
+function normalizeMessageContent(content: string): string {
+  return content.replace(/\s+/g, ' ').trim();
+}
 
 function getGitHubStatusMeta(
   status?: GitStatus,
@@ -185,6 +191,7 @@ export default function App() {
   const chatDrawerOpenRef = useRef(chatDrawerOpen);
   const chatQueueRef = useRef(chatQueue);
   const lastChatRecoveryAtRef = useRef(0);
+  const lastRecoveryBubbleRef = useRef<{ signature: string; at: number } | null>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
@@ -275,9 +282,11 @@ export default function App() {
     if (agentActivity === 'working') return 'Working...';
     // Fallback: if a send is in-flight, always show activity
     // (mirrors OpenClaw webchat: indicator persists from send to final)
-    if (chatSending || gatewayActiveTurns > 0) return 'Working...';
+    if (chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0) {
+      return 'Working...';
+    }
     return null;
-  }, [agentActivity, chatSending, gatewayActiveTurns]);
+  }, [activeBackgroundSessions.size, agentActivity, chatSending, gatewayActiveTurns]);
 
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
@@ -423,6 +432,16 @@ export default function App() {
           activeAnnounceRunsRef.current.delete(runId);
         }
 
+        const backgroundSessionKey = event.sessionKey;
+        if (isTerminal && backgroundSessionKey && backgroundSessionKey !== DEFAULT_SESSION_KEY) {
+          setActiveBackgroundSessions((prev) => {
+            if (!prev.has(backgroundSessionKey)) return prev;
+            const next = new Set(prev);
+            next.delete(backgroundSessionKey);
+            return next;
+          });
+        }
+
         if (!isTerminal) return;
 
         void addSystemBubble(
@@ -524,29 +543,51 @@ export default function App() {
           .map((message) => message._id)
           .filter((id): id is string => typeof id === 'string' && id.length > 0),
       );
-      const existingFallbackKeys = new Set(
-        current.map(
-          (message) =>
-            `${message.role}:${message.timestamp ?? 0}:${message.content}`,
-        ),
-      );
+      const timestampsBySignature = new Map<string, number[]>();
+      for (const message of current) {
+        const signature = `${message.role}:${normalizeMessageContent(message.content)}`;
+        const timestamp = message.timestamp ?? 0;
+        const bucket = timestampsBySignature.get(signature) ?? [];
+        bucket.push(timestamp);
+        timestampsBySignature.set(signature, bucket);
+      }
 
       let recoveredCount = 0;
+      const recoveredSignatures: string[] = [];
       for (const message of recovered) {
+        const timestamp = message.timestamp ?? Date.now();
         if (message._id && existingIds.has(message._id)) continue;
-        const fallbackKey = `${message.role}:${message.timestamp ?? 0}:${message.content}`;
-        if (existingFallbackKeys.has(fallbackKey)) continue;
 
-        await addChatMessage(message);
+        const contentSignature = `${message.role}:${normalizeMessageContent(message.content)}`;
+        const priorTimestamps = timestampsBySignature.get(contentSignature) ?? [];
+        const isNearDuplicate = priorTimestamps.some(
+          (existingTimestamp) =>
+            Math.abs(existingTimestamp - timestamp) <= RECOVERY_NEAR_DUP_WINDOW_MS,
+        );
+        if (isNearDuplicate) continue;
+
+        await addChatMessage({ ...message, timestamp });
         if (message._id) existingIds.add(message._id);
-        existingFallbackKeys.add(fallbackKey);
+        priorTimestamps.push(timestamp);
+        timestampsBySignature.set(contentSignature, priorTimestamps);
         recoveredCount += 1;
+        recoveredSignatures.push(message._id ?? `${contentSignature}:${timestamp}`);
       }
 
       if (recoveredCount > 0) {
-        await addSystemBubble('info', 'Recovered recent chat messages', {
-          Recovered: String(recoveredCount),
-        });
+        const bubbleSignature = `${recoveredCount}:${recoveredSignatures.join('|')}`;
+        const lastBubble = lastRecoveryBubbleRef.current;
+        const shouldSuppressBubble =
+          lastBubble &&
+          lastBubble.signature === bubbleSignature &&
+          now - lastBubble.at <= RECOVERY_BUBBLE_DEDUP_MS;
+
+        if (!shouldSuppressBubble) {
+          await addSystemBubble('info', 'Recovered recent chat messages', {
+            Recovered: String(recoveredCount),
+          });
+          lastRecoveryBubbleRef.current = { signature: bubbleSignature, at: now };
+        }
       }
 
       return recoveredCount;
@@ -565,7 +606,7 @@ export default function App() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     if (wsConnectionState !== 'connected') return;
-    if (gatewayActiveTurns <= 0) return;
+    if (gatewayActiveTurns <= 0 && activeBackgroundSessions.size === 0) return;
 
     const interval = window.setInterval(() => {
       void reconcileRecentHistory();
@@ -574,7 +615,7 @@ export default function App() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [gatewayActiveTurns, reconcileRecentHistory, wsConnectionState]);
+  }, [activeBackgroundSessions.size, gatewayActiveTurns, reconcileRecentHistory, wsConnectionState]);
 
   useEffect(() => {
     let disposed = false;
@@ -908,16 +949,20 @@ export default function App() {
       const sessionKeys = [...activeBackgroundSessions];
       if (sessionKeys.length === 0) return;
 
-      void pollProcessSessions(sessionKeys).then((failures) => {
+      void pollProcessSessions(sessionKeys).then(({ completed, failures }) => {
+        if (completed.length > 0) {
+          setActiveBackgroundSessions((prev) => {
+            const next = new Set(prev);
+            for (const terminal of completed) {
+              next.delete(terminal.sessionKey);
+            }
+            return next;
+          });
+        }
+
         if (failures.length === 0) return;
 
-        setActiveBackgroundSessions((prev) => {
-          const next = new Set(prev);
-          for (const failure of failures) {
-            next.delete(failure.sessionKey);
-          }
-          return next;
-        });
+        // Sessions with non-zero exitCode are already removed via `completed`.
 
         for (const failure of failures) {
           void addSystemBubble(
@@ -1270,7 +1315,9 @@ export default function App() {
         prefillRequest={chatPrefillRequest}
         drawerOpen={chatDrawerOpen}
         responseToastMessage={chatResponseToastMessage}
-        isAgentWorking={chatSending || gatewayActiveTurns > 0}
+        isAgentWorking={
+          chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0
+        }
         queue={chatQueue}
         hasMoreMessages={chatHasMore}
         loadingMoreMessages={chatLoadingMore}
