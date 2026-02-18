@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/core';
 import {
   SortableContext,
+  arrayMove,
   horizontalListSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
@@ -143,6 +144,8 @@ export function Board<T extends BoardItem>({
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
+  const [itemsBeforeDrag, setItemsBeforeDrag] = useState<T[] | null>(null);
+  const [dragSourceStatus, setDragSourceStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalItems(items);
@@ -199,48 +202,114 @@ export function Board<T extends BoardItem>({
     } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
+      const entry = localItems.find((e) => e.id === id);
+      setDragSourceStatus(entry?.status ?? null);
+      setItemsBeforeDrag([...localItems]);
     }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    // Track which column a card is hovering over (for glow effect)
     if (!activeCardId) {
       setCardDragOverColumnId(null);
       return;
     }
-    const { over } = event;
+    const { active, over } = event;
     if (!over) {
       setCardDragOverColumnId(null);
       return;
     }
+    const activeId = String(active.id);
     const overId = String(over.id);
-    // Resolve over target to a column ID
+
+    // Skip column drags
+    if (isColumnId(activeId)) return;
+
+    // Resolve the target column from the over element
     const targetCol = columnIdSet.has(overId)
       ? overId
       : localItems.find((entry) => entry.id === overId)?.status ?? null;
-    // Only glow if it's a different column from the card's source
-    const sourceCol = localItems.find((entry) => entry.id === activeCardId)?.status ?? null;
-    setCardDragOverColumnId(targetCol && targetCol !== sourceCol ? targetCol : null);
+    if (!targetCol) return;
+
+    // Glow: compare against original drag source column
+    setCardDragOverColumnId(targetCol !== dragSourceStatus ? targetCol : null);
+
+    // Find the active item's current column
+    const activeEntry = localItems.find((entry) => entry.id === activeId);
+    if (!activeEntry) return;
+    const sourceCol = activeEntry.status;
+
+    // Cross-column transfer: move the item between groups in state
+    // so the target column's SortableContext shows insertion position
+    if (sourceCol !== targetCol) {
+      setLocalItems((prev) => {
+        const entry = prev.find((e) => e.id === activeId);
+        if (!entry || entry.status !== sourceCol) return prev; // already moved
+
+        const grp = groupByStatus(prev, orderedColumns);
+        const srcGroup = grp[sourceCol] ?? [];
+        const tgtGroup = grp[targetCol] ?? [];
+
+        // Remove from source
+        const sIdx = srcGroup.findIndex((e) => e.id === activeId);
+        if (sIdx >= 0) srcGroup.splice(sIdx, 1);
+
+        // Insert in target at hovered position
+        const movedItem = { ...entry, status: targetCol } as T;
+        const overIsColumn = columnIdSet.has(overId);
+
+        if (overIsColumn || tgtGroup.length === 0) {
+          tgtGroup.push(movedItem);
+        } else {
+          const oIdx = tgtGroup.findIndex((e) => e.id === overId);
+          if (oIdx >= 0) {
+            tgtGroup.splice(oIdx, 0, movedItem);
+          } else {
+            tgtGroup.push(movedItem);
+          }
+        }
+
+        grp[sourceCol] = srcGroup;
+        grp[targetCol] = tgtGroup;
+
+        const rebuilt: typeof prev = [];
+        for (const col of orderedColumns) {
+          rebuilt.push(...(grp[col.id] ?? []));
+        }
+        return rebuilt;
+      });
+    }
   };
 
   const handleDragCancel = (_event: DragCancelEvent) => {
+    if (itemsBeforeDrag) setLocalItems(itemsBeforeDrag);
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
     setCardDragOverColumnId(null);
+    setItemsBeforeDrag(null);
+    setDragSourceStatus(null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     const activeId = String(active.id);
 
+    // Save snapshot before clearing state
+    const snapshot = itemsBeforeDrag;
+
     // Always reset drag state
     setActiveCardId(null);
     setActiveCardWidth(null);
     setActiveColumnId(null);
     setCardDragOverColumnId(null);
+    setItemsBeforeDrag(null);
+    setDragSourceStatus(null);
 
-    if (!over) return;
+    if (!over) {
+      // No valid target — restore pre-drag state
+      if (snapshot) setLocalItems(snapshot);
+      return;
+    }
     const overId = String(over.id);
 
     // --- Column reorder ---
@@ -263,44 +332,42 @@ export function Board<T extends BoardItem>({
     }
 
     // --- Card move / reorder ---
+    // Cross-column transfer already happened in onDragOver.
+    // Here we handle final within-column positioning.
     const activeEntry = localItems.find((entry) => entry.id === activeId);
-    if (!activeEntry) return;
-
-    const sourceStatus = activeEntry.status;
-    const targetStatus = findStatusForTarget(overId);
-    if (!targetStatus) return;
-
-    const groupedItems = groupByStatus(localItems, orderedColumns);
-    const sourceItems = [...(groupedItems[sourceStatus] ?? [])];
-    const targetItems =
-      sourceStatus === targetStatus ? sourceItems : [...(groupedItems[targetStatus] ?? [])];
-
-    const activeIndexInSource = sourceItems.findIndex((entry) => entry.id === activeEntry.id);
-    if (activeIndexInSource < 0) return;
-
-    sourceItems.splice(activeIndexInSource, 1);
-    const targetWithoutActive = targetItems.filter((entry) => entry.id !== activeEntry.id);
-    const overIsColumn = columnIdSet.has(overId);
-
-    let insertIndex = targetWithoutActive.length;
-    if (!overIsColumn) {
-      const overIndex = targetWithoutActive.findIndex((entry) => entry.id === overId);
-      if (overIndex >= 0) insertIndex = overIndex;
+    if (!activeEntry) {
+      if (snapshot) setLocalItems(snapshot);
+      return;
     }
 
-    const movedItem = { ...activeEntry, status: targetStatus } as T;
-    targetWithoutActive.splice(insertIndex, 0, movedItem);
-
-    groupedItems[sourceStatus] = sourceItems;
-    groupedItems[targetStatus] = targetWithoutActive;
-
-    const rebuilt: T[] = [];
-    for (const column of orderedColumns) {
-      rebuilt.push(...(groupedItems[column.id] ?? []));
+    // If over target is a column droppable, commit current state
+    if (columnIdSet.has(overId)) {
+      onItemsChange(localItems);
+      return;
     }
 
-    setLocalItems(rebuilt);
-    onItemsChange(rebuilt);
+    // If active and over are in the same column, do a within-column reorder
+    const overEntry = localItems.find((entry) => entry.id === overId);
+    if (overEntry && overEntry.status === activeEntry.status) {
+      const grp = groupByStatus(localItems, orderedColumns);
+      const colItems = grp[activeEntry.status] ?? [];
+      const activeIdx = colItems.findIndex((e) => e.id === activeId);
+      const overIdx = colItems.findIndex((e) => e.id === overId);
+
+      if (activeIdx >= 0 && overIdx >= 0 && activeIdx !== overIdx) {
+        grp[activeEntry.status] = arrayMove(colItems, activeIdx, overIdx);
+        const rebuilt: T[] = [];
+        for (const column of orderedColumns) {
+          rebuilt.push(...(grp[column.id] ?? []));
+        }
+        setLocalItems(rebuilt);
+        onItemsChange(rebuilt);
+        return;
+      }
+    }
+
+    // Default: commit current state (cross-column was handled in onDragOver)
+    onItemsChange(localItems);
   };
 
   return (

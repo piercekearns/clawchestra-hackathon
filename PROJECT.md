@@ -8,7 +8,7 @@ tags:
   - tauri
   - core
 icon: "\U0001F4CA"
-lastActivity: '2026-02-13'
+lastActivity: '2026-02-18'
 nextAction: Complete data retrofit for scan-based discovery
 ---
 
