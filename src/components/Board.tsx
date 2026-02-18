@@ -122,15 +122,12 @@ export function Board<T extends BoardItem>({
     setLocalItems(items);
   }, [items]);
 
-  const cardSensors = useSensors(
+  // Single sensor set — distance:6 for cards, column headers use the same
+  // (columns only activate from their drag-handle header, so the low
+  // threshold doesn't cause accidental column drags on card areas).
+  const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
-    }),
-  );
-
-  const columnSensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 10 },
     }),
   );
 
@@ -149,33 +146,77 @@ export function Board<T extends BoardItem>({
     [orderedColumns],
   );
 
-  // --- Card DnD handlers ---
+  /** All sortable IDs: column IDs + every card ID (needed for single DndContext) */
+  const allSortableIds = useMemo(() => {
+    const ids: string[] = [...sortableColumnIds];
+    for (const col of orderedColumns) {
+      for (const item of grouped[col.id] ?? []) {
+        ids.push(item.id);
+      }
+    }
+    return ids;
+  }, [sortableColumnIds, orderedColumns, grouped]);
+
+  const isColumnId = (id: string) => id.startsWith('col:');
+
+  // --- Card DnD helpers ---
   const findStatusForTarget = (targetId: string): string | null => {
     if (columnIdSet.has(targetId)) return targetId;
     return localItems.find((entry) => entry.id === targetId)?.status ?? null;
   };
 
-  const handleCardDragStart = (event: DragStartEvent) => {
-    setActiveCardId(String(event.active.id));
-    setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
+  // --- Unified DnD handlers ---
+  const handleDragStart = (event: DragStartEvent) => {
+    const id = String(event.active.id);
+    if (!isColumnId(id)) {
+      setActiveCardId(id);
+      setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
+    }
   };
 
-  const handleCardDragCancel = (_event: DragCancelEvent) => {
+  const handleDragCancel = (_event: DragCancelEvent) => {
     setActiveCardId(null);
     setActiveCardWidth(null);
   };
 
-  const handleCardDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    const activeId = String(active.id);
+
+    // Always reset card drag state
     setActiveCardId(null);
     setActiveCardWidth(null);
-    if (!over) return;
 
-    const activeEntry = localItems.find((entry) => entry.id === String(active.id));
+    if (!over) return;
+    const overId = String(over.id);
+
+    // --- Column reorder ---
+    if (isColumnId(activeId)) {
+      if (activeId === overId) return;
+      // Only reorder if dropping on another column
+      if (!isColumnId(overId)) return;
+
+      const activeColId = activeId.replace(/^col:/, '');
+      const overColId = overId.replace(/^col:/, '');
+
+      const oldIndex = orderedColumns.findIndex((c) => c.id === activeColId);
+      const newIndex = orderedColumns.findIndex((c) => c.id === overColId);
+      if (oldIndex < 0 || newIndex < 0) return;
+
+      const next = [...orderedColumns];
+      const [moved] = next.splice(oldIndex, 1);
+      next.splice(newIndex, 0, moved);
+
+      setColumnOrder(boardId, next.map((c) => c.id));
+      return;
+    }
+
+    // --- Card move / reorder ---
+    const activeEntry = localItems.find((entry) => entry.id === activeId);
     if (!activeEntry) return;
 
     const sourceStatus = activeEntry.status;
-    const targetStatus = findStatusForTarget(String(over.id));
+    const targetStatus = findStatusForTarget(overId);
     if (!targetStatus) return;
 
     const groupedItems = groupByStatus(localItems, orderedColumns);
@@ -188,11 +229,11 @@ export function Board<T extends BoardItem>({
 
     sourceItems.splice(activeIndexInSource, 1);
     const targetWithoutActive = targetItems.filter((entry) => entry.id !== activeEntry.id);
-    const overIsColumn = columnIdSet.has(String(over.id));
+    const overIsColumn = columnIdSet.has(overId);
 
     let insertIndex = targetWithoutActive.length;
     if (!overIsColumn) {
-      const overIndex = targetWithoutActive.findIndex((entry) => entry.id === String(over.id));
+      const overIndex = targetWithoutActive.findIndex((entry) => entry.id === overId);
       if (overIndex >= 0) insertIndex = overIndex;
     }
 
@@ -211,30 +252,13 @@ export function Board<T extends BoardItem>({
     onItemsChange(rebuilt);
   };
 
-  // --- Column DnD handler ---
-  const handleColumnDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const activeColId = String(active.id).replace(/^col:/, '');
-    const overColId = String(over.id).replace(/^col:/, '');
-
-    const oldIndex = orderedColumns.findIndex((c) => c.id === activeColId);
-    const newIndex = orderedColumns.findIndex((c) => c.id === overColId);
-    if (oldIndex < 0 || newIndex < 0) return;
-
-    const next = [...orderedColumns];
-    const [moved] = next.splice(oldIndex, 1);
-    next.splice(newIndex, 0, moved);
-
-    setColumnOrder(boardId, next.map((c) => c.id));
-  };
-
   return (
     <DndContext
-      sensors={columnSensors}
+      sensors={sensors}
       collisionDetection={closestCorners}
-      onDragEnd={handleColumnDragEnd}
+      onDragStart={handleDragStart}
+      onDragCancel={handleDragCancel}
+      onDragEnd={handleDragEnd}
     >
       <div className="kanban-scroll -mb-2 h-full min-h-[24rem] min-w-0 overflow-x-auto overflow-y-hidden pb-0">
         <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
@@ -249,26 +273,18 @@ export function Board<T extends BoardItem>({
             {orderedColumns.map((column) => (
               <SortableColumn key={column.id} column={column}>
                 {({ listeners, attributes }) => (
-                  <DndContext
-                    sensors={cardSensors}
-                    collisionDetection={closestCorners}
-                    onDragStart={handleCardDragStart}
-                    onDragCancel={handleCardDragCancel}
-                    onDragEnd={handleCardDragEnd}
-                  >
-                    <Column
-                      column={column}
-                      items={grouped[column.id] ?? []}
-                      collapsed={collapsedSet.has(column.id)}
-                      onToggleCollapse={() => handleToggleCollapse(column.id)}
-                      onItemClick={onItemClick}
-                      getItemWarning={getItemWarning}
-                      renderItemIndicators={renderItemIndicators}
-                      renderItemActions={renderItemActions}
-                      renderItemHoverActions={renderItemHoverActions}
-                      headerDragHandleProps={{ ...listeners, ...attributes }}
-                    />
-                  </DndContext>
+                  <Column
+                    column={column}
+                    items={grouped[column.id] ?? []}
+                    collapsed={collapsedSet.has(column.id)}
+                    onToggleCollapse={() => handleToggleCollapse(column.id)}
+                    onItemClick={onItemClick}
+                    getItemWarning={getItemWarning}
+                    renderItemIndicators={renderItemIndicators}
+                    renderItemActions={renderItemActions}
+                    renderItemHoverActions={renderItemHoverActions}
+                    headerDragHandleProps={{ ...listeners, ...attributes }}
+                  />
                 )}
               </SortableColumn>
             ))}
