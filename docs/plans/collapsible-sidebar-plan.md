@@ -3,6 +3,7 @@
 **Spec:** `docs/specs/collapsible-sidebar-spec.md`
 **Roadmap Item:** `roadmap/collapsible-sidebar.md`
 **Created:** 2026-02-18
+**Reviewed:** 2026-02-18 (Claude Code `/review` — corrections applied)
 
 ---
 
@@ -14,27 +15,31 @@ Build the sidebar shell: a collapsible left panel with Codex-style title bar tog
 
 ## Pre-Build: Resolve Open Questions
 
-Before writing code, answer these by inspecting the codebase:
-
 ### Q1: Title bar — Tauri decorations or custom?
 
 **Answer:** The current app has **no custom title bar**. Tauri renders native macOS decorations (traffic lights). The `Header` component is a normal content-area `<header>` element. There is no `data-tauri-drag-region` anywhere.
 
-**Implication:** We need to switch to Tauri's `decorations: false` mode and build a custom title bar with `data-tauri-drag-region`. The traffic lights need to be re-created or we use Tauri's `hiddenTitle` + transparent title bar approach. The cleanest path on macOS is:
+**Implication:** Use Tauri's overlay title bar mode to keep native traffic lights while rendering custom content in the title bar region:
 
 ```json
 {
-  "decorations": false,
+  "decorations": true,
   "titleBarStyle": "overlay",
   "hiddenTitle": true
 }
 ```
 
-This keeps native traffic lights but lets us render our own content in the title bar area. We add `data-tauri-drag-region` to the bar for window dragging.
+> ⚠️ **Critical:** `decorations` must be `true`, not `false`. In Tauri v2, `titleBarStyle: "overlay"` is only meaningful when decorations are enabled. Setting `decorations: false` removes ALL native chrome including traffic lights, making `titleBarStyle` a no-op. With `decorations: true` + `titleBarStyle: "overlay"`, macOS keeps the traffic lights but hides the title text and lets us render into the title bar area.
 
 ### Q2: Settings persistence path
 
-**Answer:** Settings are in `dashboard_settings` table via `getDashboardSettings()` / `updateDashboardSettings()` in `lib/tauri.ts`. Theme preference is in Zustand with `persist` middleware (localStorage). Sidebar open/closed state should go in the same Zustand persist store alongside `collapsedColumns` and `columnOrder`.
+**Answer:** Settings are in `dashboard_settings` table via `getDashboardSettings()` / `updateDashboardSettings()` in `lib/tauri.ts`. Theme preference is in Zustand with `persist` middleware (localStorage). Sidebar open/closed state goes in the same Zustand persist store alongside `collapsedColumns` and `columnOrder`.
+
+> Note: The spec says "Tauri settings DB" — this should be updated to say "Zustand persist (localStorage)" for consistency with how `collapsedColumns` and `columnOrder` are stored.
+
+### Q3: Does SearchModal use status filtering?
+
+**Answer:** No. `SearchModal` has no status filter usage — it only sorts by status priority when there's no query. The `statusFilter` state in `App.tsx` can be removed entirely along with the dropdown.
 
 ---
 
@@ -44,7 +49,7 @@ This keeps native traffic lights but lets us render our own content in the title
 
 **Files:** `src-tauri/tauri.conf.json`
 
-Add to the window config:
+Update the window config:
 
 ```json
 {
@@ -54,16 +59,34 @@ Add to the window config:
   "minWidth": 960,
   "minHeight": 600,
   "resizable": true,
-  "decorations": false,
+  "decorations": true,
   "titleBarStyle": "overlay",
   "hiddenTitle": true,
   "dragDropEnabled": false
 }
 ```
 
-**Key:** `decorations: false` removes the native title bar chrome but `titleBarStyle: "overlay"` keeps macOS traffic lights. We render our own title bar content and mark it as a drag region.
+**Key:** `decorations: true` + `titleBarStyle: "overlay"` keeps native macOS traffic lights while hiding the title text. We render our own title bar content and mark it as a drag region with `data-tauri-drag-region`.
 
-**Verify:** App launches with traffic lights visible but no native title text. Content extends to the top of the window.
+**Verify:** App launches with traffic lights visible but no native title text. Content extends to the top of the window behind the traffic lights.
+
+---
+
+### Step 1.5: Extract `useAppUpdate` Hook
+
+**New file:** `src/hooks/useAppUpdate.ts`
+
+Extract the Update check/install logic from `Header.tsx` (lines ~40-80) into a reusable hook. This logic includes state (`updateAvailable`, `updating`), an effect (polling every 30s), and a ref (`updateTriggeredRef`).
+
+```typescript
+export function useAppUpdate(): {
+  updateAvailable: boolean;
+  updating: boolean;
+  handleUpdate: () => Promise<void>;
+}
+```
+
+This hook is consumed by both the new `TitleBar` (Step 2) and simplifies the Header teardown (Step 5). Extracting it first avoids duplicating code or creating a hidden dependency between Steps 2 and 5.
 
 ---
 
@@ -84,7 +107,7 @@ A thin, full-width bar at the very top of the app. Uses `data-tauri-drag-region`
 2. **SidebarToggle** button — `PanelLeft` / `PanelLeftClose` icons from lucide-react
 3. **Logo** (existing `logo.png` / `logo-dark.png`, scaled to ~20px height)
 4. **"Clawchestra"** text (smaller than current — `text-sm font-semibold`)
-5. **Update badge** (moved from Header — same logic, same chartreuse pill)
+5. **Update badge** (via `useAppUpdate` hook — same chartreuse pill)
 6. **(spacer)**
 7. **Theme toggle** (moved from Header — same 3-button group, slightly smaller)
 
@@ -92,13 +115,17 @@ A thin, full-width bar at the very top of the app. Uses `data-tauri-drag-region`
 - Height: 38px (enough for toggle + theme buttons without feeling cramped)
 - Background: match page background (transparent/blur so it feels native)
 - `data-tauri-drag-region` on the container
-- Toggle button and theme buttons: `pointer-events-auto` (islands in the drag region)
-- Non-Tauri fallback: render as a normal fixed bar (no drag region needed)
+- Toggle button and theme buttons: `pointer-events-auto` (non-draggable islands in the drag region)
+- Non-Tauri fallback: render as a normal fixed bar (no drag region attr needed)
+
+**Accessibility:**
+- SidebarToggle: `aria-expanded={sidebarOpen}`, `aria-controls="sidebar"`, `aria-label="Toggle sidebar"`
+- Theme buttons: existing `aria-label` attributes carry over
 
 **Implementation notes:**
-- Move the Update check/install logic from `Header.tsx` into `TitleBar.tsx` (or extract into a shared hook `useAppUpdate()`)
-- Move the theme toggle JSX from `Header.tsx` into `TitleBar.tsx`
 - The `SidebarToggle` reads `sidebarOpen` from the store and calls `toggleSidebar()`
+- Update logic comes from the extracted `useAppUpdate()` hook (Step 1.5)
+- Theme toggle JSX moves from `Header.tsx` — same markup, potentially slightly smaller sizing
 
 ---
 
@@ -106,10 +133,9 @@ A thin, full-width bar at the very top of the app. Uses `data-tauri-drag-region`
 
 **File:** `src/lib/store.ts`
 
-Add to the persisted state (alongside `collapsedColumns`, `columnOrder`):
+Add to the `DashboardState` interface:
 
 ```typescript
-// In DashboardState interface:
 sidebarOpen: boolean;
 toggleSidebar: () => void;
 setSidebarOpen: (open: boolean) => void;
@@ -117,7 +143,20 @@ setSidebarOpen: (open: boolean) => void;
 
 Default: `sidebarOpen: false`
 
-Persisted via the existing Zustand `persist` middleware so it survives restarts.
+**Critical:** Add `sidebarOpen` to the `partialize` function (currently at `store.ts:345-349`) so it's actually persisted:
+
+```typescript
+partialize: (state) => ({
+  themePreference: state.themePreference,
+  collapsedColumns: state.collapsedColumns,
+  columnOrder: state.columnOrder,
+  sidebarOpen: state.sidebarOpen, // ← ADD THIS
+}),
+```
+
+Without this, `sidebarOpen` won't survive restarts despite the `persist` middleware being present. Zustand's `partialize` controls which fields are serialized — missing fields are silently dropped.
+
+> Note: Zustand handles missing keys gracefully on hydration (the default value applies), so adding a new field to an existing persisted store has no migration issues.
 
 ---
 
@@ -141,8 +180,11 @@ interface SidebarProps {
 - Border-right: `neutral-200` / `neutral-700`
 - Background: `neutral-50` / `neutral-900`
 
+**Accessibility:**
+- Container: `id="sidebar"`, `role="complementary"`, `aria-label="Sidebar"`
+
 **Content (Phase 1 — minimal):**
-- Empty main area (or a subtle "Sidebar content coming soon" placeholder — optional)
+- Empty main area (or a subtle placeholder — optional)
 - **Settings button pinned to the bottom** (Codex-style):
   ```
   ┌─────────────────────┐
@@ -163,11 +205,11 @@ The Settings button calls `onOpenSettings` which triggers the existing `Settings
 **File:** `src/components/Header.tsx`
 
 Major reduction. Remove:
-- Logo + "Clawchestra" title (moved to TitleBar)
-- Update badge (moved to TitleBar)
-- Theme toggle (moved to TitleBar)
-- Settings gear button (moved to Sidebar)
-- Status filter dropdown (removed — unused)
+- Logo + "Clawchestra" title (→ TitleBar)
+- Update badge (→ TitleBar, via `useAppUpdate` hook)
+- Theme toggle (→ TitleBar)
+- Settings gear button (→ Sidebar)
+- Status filter dropdown (removed entirely — confirmed SearchModal doesn't use it)
 - The entire top row of buttons (Refresh, Add Project, Settings, Theme)
 
 What remains — **a single row**:
@@ -177,15 +219,6 @@ What remains — **a single row**:
 │ [🔍 Search by title, id, tag...              ⌘K] [↻] [+ Add]│
 └──────────────────────────────────────────────────────────────┘
 ```
-
-**Implementation:**
-- Remove the first `<div>` (the row with logo, title, Update, Refresh, Add Project, Settings, Theme)
-- Keep the search `<Input>` and ⌘K hint
-- Add compact Refresh icon button and Add Project button to the right of the search bar
-- Remove the `<select>` status filter and its wrapper
-- Remove props: `themePreference`, `onChangeTheme`, `statusFilter`, `onStatusFilterChange`, `statusOptions`, `onOpenSettings`
-- Keep props: `errors`, `onRefresh`, `onAddProject`, `searchQuery`, `onSearchQueryChange`
-- The `ErrorBadge` can stay in the header or move to the title bar — keep it in the header for now (errors are contextual to the board)
 
 **Simplified prop interface:**
 ```typescript
@@ -198,21 +231,23 @@ interface HeaderProps {
 }
 ```
 
+**In `App.tsx`:** Remove `statusFilter` state (`useState<string>('all')`) and the `statusFilter` comparison in the `searchResults` memo. The filter always passes since we're removing the dropdown.
+
 ---
 
 ### Step 6: App Layout Restructure
 
-**File:** `src/App.tsx`
+**File:** `src/App.tsx`, `src/components/chat/ChatShell.tsx`
 
 Current layout (simplified):
 ```
-<div className="h-screen ...">
+<div className="h-screen ... px-4 pb-32 pt-4">  ← pb-32 compensates for fixed ChatShell
   <div className="flex h-full flex-col">
     <Header />
     <Breadcrumb />
     <main> <Board /> </main>
   </div>
-  <ChatShell />  <!-- fixed-position bottom bar -->
+  <ChatShell />  <!-- fixed inset-x-0 bottom-0 -->
 </div>
 ```
 
@@ -226,7 +261,7 @@ New layout:
       <Header />                        ← simplified single row
       <Breadcrumb />
       <main> <Board /> </main>
-      <ChatShell />                     ← bottom of content column (not fixed-position)
+      <ChatShell />                     ← bottom of content column (NOT fixed-position)
     </div>
   </div>
 </div>
@@ -239,11 +274,17 @@ New layout:
 4. `ChatShell` moves from a fixed-position overlay to the bottom of the content column (this is what makes it compress with the sidebar)
 5. The sidebar spans the full height of this middle section
 
-**ChatShell positioning:**
-Currently `ChatShell` uses fixed positioning. It needs to become a flex child at the bottom of the content column instead. This may require changes to `ChatShell.tsx` or its wrapper — the collapsed bar needs to sit at the bottom of the content column, and the expanded drawer needs to expand upward from there.
+#### ChatShell Repositioning (required changes)
 
-**Padding adjustments:**
-The current `px-4 pb-32 pt-4` on the root div accounts for the fixed ChatShell. With the new layout, the chat bar is in-flow, so the `pb-32` can be removed. The `pt-4` may need adjusting to account for the title bar height.
+This is the highest-risk part of the build. The current ChatShell uses:
+- **Line 394:** `fixed inset-x-0 bottom-0` on the outer wrapper (the collapsed bar + drawer)
+- **Line 412:** `fixed inset-0` on the backdrop overlay (when drawer is expanded)
+
+Required changes:
+1. **Remove `fixed inset-x-0 bottom-0`** from the outer wrapper. Make it a normal flex child with no fixed positioning. It sits at the bottom of the content column naturally via flexbox.
+2. **Keep `fixed inset-0`** on the backdrop overlay — this is a modal-style overlay and should remain fixed/fullscreen.
+3. **Remove `pb-32`** from `App.tsx:1109` — this padding only existed to compensate for the fixed ChatShell. With ChatShell in-flow, it's no longer needed.
+4. **Test the drawer expand/collapse animation** — currently the drawer slides up from the fixed bottom. In the new layout, it needs to expand upward within (or on top of) the content column. May need `position: absolute` + `bottom: 0` on the expanded drawer relative to the content column.
 
 ---
 
@@ -262,7 +303,12 @@ if ((event.metaKey || event.ctrlKey) && event.key === 'b') {
 }
 ```
 
-Also add Escape handling: if sidebar is open and no modal/dialog is active, close it.
+**Escape key handling:** Add sidebar close to the existing Escape priority chain. Insert it **after** modals/search/chatDrawer but **before** roadmapView exit (closing the sidebar is a lighter action than exiting a view):
+
+```typescript
+// Current chain: search > chatDrawer > selectedProject > addDialog > settingsDialog > roadmapView
+// New chain:     search > chatDrawer > selectedProject > addDialog > settingsDialog > SIDEBAR > roadmapView
+```
 
 ---
 
@@ -283,32 +329,32 @@ Auto-collapse: if the window is resized to `< 1024px` while the sidebar is open,
 
 ## File Summary
 
-### New Files (4)
+### New Files (5)
 
 | File | Purpose |
 |------|---------|
+| `src/hooks/useAppUpdate.ts` | Extract Update check/install logic from Header (shared by TitleBar) |
 | `src/components/TitleBar.tsx` | Custom title bar with drag region, toggle, title, Update, theme |
 | `src/components/sidebar/Sidebar.tsx` | Sidebar container with animation + Settings button |
 | `src/components/sidebar/SidebarToggle.tsx` | Toggle button component (◧/◨ icon states) |
-| `src/hooks/useAppUpdate.ts` | Extract Update check/install logic from Header (shared by TitleBar) |
 
 ### Modified Files (5)
 
 | File | Change |
 |------|--------|
-| `src/components/Header.tsx` | Strip to single row: search + Refresh + Add Project |
-| `src/App.tsx` | New layout structure (TitleBar → sidebar + content column), Cmd+B shortcut, remove status filter state |
-| `src/lib/store.ts` | Add `sidebarOpen`, `toggleSidebar`, `setSidebarOpen` to persisted state |
-| `src-tauri/tauri.conf.json` | `minWidth`, `minHeight`, `decorations: false`, `titleBarStyle: "overlay"`, `hiddenTitle: true` |
-| `src/components/chat/ChatShell.tsx` | May need positioning changes (fixed → flex child) depending on current implementation |
+| `src/components/Header.tsx` | Strip to single row: search + Refresh + Add Project. Remove update/theme/settings/status-filter. |
+| `src/App.tsx` | New layout structure (TitleBar → sidebar + content column), Cmd+B shortcut, remove `statusFilter` state, remove `pb-32` |
+| `src/lib/store.ts` | Add `sidebarOpen`, `toggleSidebar`, `setSidebarOpen` to persisted state + `partialize` |
+| `src-tauri/tauri.conf.json` | `minWidth`, `minHeight`, `decorations: true`, `titleBarStyle: "overlay"`, `hiddenTitle: true` |
+| `src/components/chat/ChatShell.tsx` | Remove fixed positioning on outer wrapper, keep fixed on backdrop overlay |
 
 ### Removed (from Header)
 
 - Logo + title (→ TitleBar)
-- Update badge (→ TitleBar)
+- Update badge (→ TitleBar via `useAppUpdate` hook)
 - Theme toggle (→ TitleBar)
 - Settings gear (→ Sidebar)
-- Status filter (→ removed entirely)
+- Status filter (→ removed entirely, SearchModal confirmed not dependent)
 - Top button row (→ Refresh + Add Project move next to search bar)
 
 ---
@@ -316,29 +362,28 @@ Auto-collapse: if the window is resized to `< 1024px` while the sidebar is open,
 ## Build Order Dependency Graph
 
 ```
-Step 1 (Tauri config)
-  └─→ Step 2 (TitleBar) ─────────────────────┐
-Step 3 (Store: sidebar state)                 │
+Step 1  (Tauri config)
+  └─→ Step 1.5 (useAppUpdate hook extraction)
+        └─→ Step 2 (TitleBar) ───────────────┐
+Step 3  (Store: sidebar state)                │
   └─→ Step 4 (Sidebar container)             │
         └─→ Step 6 (App layout) ←────────────┘
               └─→ Step 5 (Simplify Header)
-                    └─→ Step 7 (Cmd+B shortcut)
+                    └─→ Step 7 (Cmd+B + Escape)
                           └─→ Step 8 (Responsive)
 ```
 
-Steps 1-4 can be built somewhat independently, but Step 6 (App layout) is the integration point where everything comes together. Step 5 (Header simplification) should happen during or immediately after Step 6 since the layout change and header change are tightly coupled.
+Steps 1/1.5 and 3/4 can be built in parallel. Step 6 is the integration point. Step 5 should happen during or immediately after Step 6 since the layout change and header change are tightly coupled.
 
 ---
 
 ## Risk Areas
 
-1. **ChatShell repositioning** — Currently fixed-position. Moving it into the flex layout may break the drawer expand/collapse animation or z-index stacking. Need to audit `ChatShell.tsx` before Step 6.
+1. **ChatShell repositioning** — Highest risk. Currently fixed-position with specific z-index stacking. Moving to flex layout will require careful testing of: collapsed bar position, drawer expand animation, backdrop overlay, and z-index relative to modals. Detailed sub-plan in Step 6.
 
-2. **Tauri title bar on non-macOS** — `titleBarStyle: "overlay"` is macOS-specific. On Windows/Linux, `decorations: false` removes all chrome. Need a platform check and fallback (show a custom close/minimize/maximize or keep decorations on non-macOS). For now this is a macOS-first app so acceptable, but note for future.
+2. **Tauri title bar on non-macOS** — `titleBarStyle: "overlay"` is macOS-specific. On Windows/Linux, different approach needed (custom window controls). For now this is a macOS-first app, acceptable to defer. Note for future.
 
-3. **Traffic light inset** — The macOS traffic lights with `titleBarStyle: "overlay"` are positioned at a system-defined offset. Need to measure and add matching left padding (~70px) to the TitleBar content. This offset can vary with macOS version.
-
-4. **Existing search filter state** — `statusFilter` state and the `searchResults` memo in `App.tsx` filter by status. Removing the dropdown means always `statusFilter === 'all'`. Can simplify by removing the state variable entirely and the filter logic, but the `SearchModal` might also use status filtering — check before removing.
+3. **Traffic light inset** — The macOS traffic lights with `titleBarStyle: "overlay"` are positioned at a system-defined offset (~70px). Need to measure and add matching left padding. This offset can vary with macOS version.
 
 ---
 
@@ -349,19 +394,21 @@ Steps 1-4 can be built somewhat independently, but Step 6 (App layout) is the in
 - [ ] Title bar is draggable for window movement
 - [ ] Clicking toggle opens/closes sidebar with smooth animation
 - [ ] Cmd+B toggles sidebar
+- [ ] Escape closes sidebar (when no modal/search/drawer is open)
 - [ ] Sidebar has Settings button at bottom that opens existing Settings dialog
 - [ ] Board and chat bar compress when sidebar opens
 - [ ] Chat bar stays at the bottom, never becomes a side panel
+- [ ] Chat drawer still expands/collapses correctly
 - [ ] Header is a single row: search bar + Refresh + Add Project
 - [ ] Status filter is gone
 - [ ] Settings gear is gone from header
 - [ ] Theme toggle is gone from header (lives in title bar)
 - [ ] Window cannot be resized below 960×600
 - [ ] Sidebar state persists across app restarts
-- [ ] Escape closes sidebar when no modal is open
 - [ ] On narrow window (< 1024px), sidebar overlays instead of pushing content
 - [ ] All existing functionality still works (search, board drag, chat, modals)
+- [ ] Sidebar toggle has correct aria-expanded attribute
 
 ---
 
-*Plan is ready for build. No new dependencies required — everything uses existing packages (lucide-react icons, Zustand, Tauri APIs).*
+*Plan reviewed and corrected. Ready for build.*

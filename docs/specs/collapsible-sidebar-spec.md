@@ -244,7 +244,7 @@ interface SidebarState {
 
 | State | Storage | Notes |
 |-------|---------|-------|
-| Sidebar open/closed | Tauri settings DB | Survives restart |
+| Sidebar open/closed | Zustand persist (localStorage) | Consistent with `collapsedColumns` and `columnOrder` |
 
 ### Keyboard Shortcuts
 
