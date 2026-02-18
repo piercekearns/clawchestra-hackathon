@@ -1984,6 +1984,8 @@ async function sendViaTauriWs(
       let lastPollSignature = '';
       let pollStableCount = 0; // How many consecutive polls returned the same length
       let noFinalBlockedLogged = false;
+      let processPollUnavailable = false;
+      let processPollUnavailableLogged = false;
 
       // Aggressive poll fallback — events may not be delivered reliably
       // (WS drops, event subscription issues), so poll frequently.
@@ -2120,30 +2122,57 @@ async function sendViaTauriWs(
             }
             if (pollStableCount >= stabilityThreshold && combined.length > 0) {
               if (!sawFinal) {
-                try {
-                  const processState = await connection.request<unknown>('process', {
-                    action: 'poll',
-                    sessionKey,
-                  });
-                  const processSnapshot = parseProcessPollSnapshot(processState);
-                  if (
-                    !processSnapshot.terminal &&
-                    Date.now() - sendRequestedAt < ACTIVE_RUN_NO_FINAL_TIMEOUT_MS
-                  ) {
-                    // No terminal process state yet: keep waiting so we don't
-                    // cut off long sub-agent runs that pause output between phases.
+                if (processPollUnavailable) {
+                  if (sendAgeMs < NO_FINAL_FORCE_RESOLVE_MS) {
+                    // No process polling capability yet (missing scope). Keep
+                    // waiting until the force-resolve window to avoid truncation.
                     pollStableCount = 0;
                     return;
                   }
-                } catch (error) {
-                  // Process polling failed (missing scope, network error, etc.).
-                  // Treat this the same as "process still running" — keep waiting
-                  // rather than falling through to resolve. Without a definitive
-                  // terminal signal, resolving here risks cutting off long tool-use
-                  // turns where no text is streaming but work is ongoing.
-                  console.warn('[Gateway] process.poll check failed during no-final resolve — keeping alive:', error);
-                  pollStableCount = 0;
-                  return;
+                } else {
+                  try {
+                    const processState = await connection.request<unknown>('process', {
+                      action: 'poll',
+                      sessionKey,
+                    });
+                    const processSnapshot = parseProcessPollSnapshot(processState);
+                    if (
+                      !processSnapshot.terminal &&
+                      Date.now() - sendRequestedAt < ACTIVE_RUN_NO_FINAL_TIMEOUT_MS
+                    ) {
+                      // No terminal process state yet: keep waiting so we don't
+                      // cut off long sub-agent runs that pause output between phases.
+                      pollStableCount = 0;
+                      return;
+                    }
+                  } catch (error) {
+                    const normalizedError = normalizeErrorMessage(error).toLowerCase();
+                    if (
+                      normalizedError.includes('missing scope') ||
+                      normalizedError.includes('operator.admin')
+                    ) {
+                      processPollUnavailable = true;
+                      if (!processPollUnavailableLogged) {
+                        processPollUnavailableLogged = true;
+                        console.warn(
+                          '[Gateway] process.poll unavailable (missing scope) — using time-based no-final fallback',
+                        );
+                      }
+                    } else {
+                      console.warn(
+                        '[Gateway] process.poll check failed during no-final resolve — keeping alive:',
+                        error,
+                      );
+                    }
+
+                    if (sendAgeMs < NO_FINAL_FORCE_RESOLVE_MS) {
+                      pollStableCount = 0;
+                      return;
+                    }
+                    console.warn(
+                      '[Gateway] process.poll unavailable past force-resolve window — allowing no-final resolution',
+                    );
+                  }
                 }
               }
               resolvedWithoutFinal = !sawFinal;
