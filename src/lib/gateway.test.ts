@@ -305,6 +305,51 @@ describe('gateway client', () => {
     expect(extracted[0]?.content).toBe('assistant response');
   });
 
+  it('ignores synthetic exec-completed user entries as turn boundaries', () => {
+    const messages = [
+      { id: 'u-1', role: 'user', content: 'actual prompt', timestamp: 10 },
+      { id: 'a-1', role: 'assistant', content: 'step one', timestamp: 11 },
+      {
+        id: 'u-sys',
+        role: 'user',
+        content: 'System: [2026-02-18 02:21:14 GMT] Exec completed (young-ro, code 0) :: build output',
+        timestamp: 12,
+      },
+      { id: 'a-2', role: 'assistant', content: 'Build ready - Update to test.', timestamp: 13 },
+      { id: 'u-2', role: 'user', content: 'next real prompt', timestamp: 14 },
+      { id: 'a-3', role: 'assistant', content: 'next turn reply', timestamp: 15 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 0,
+      expectedUserText: 'actual prompt',
+    });
+
+    expect(extracted.map((message) => message._id)).toEqual(['a-1', 'a-2']);
+  });
+
+  it('does not anchor on synthetic exec-completed user entries', () => {
+    const messages = [
+      {
+        id: 'u-sys',
+        role: 'user',
+        content: 'System: [2026-02-18 02:21:14 GMT] Exec completed (nova-orb, code 0) :: test output',
+        timestamp: 10,
+      },
+      { id: 'u-1', role: 'user', content: 'real prompt', timestamp: 11 },
+      { id: 'a-1', role: 'assistant', content: 'real reply', timestamp: 12 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 0,
+      expectedUserText: 'missing transformed text',
+    });
+
+    expect(extracted.map((message) => message._id)).toEqual(['a-1']);
+  });
+
   it('marks in-progress assistant snippets as needing settle pass', () => {
     const needsSettle = __gatewayTestUtils.likelyNeedsFinalSettlePass([
       { role: 'assistant', content: 'Now update the Column component with collapsed/expanded variants:' },

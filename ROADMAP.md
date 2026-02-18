@@ -121,7 +121,7 @@ items:
       - ux
       - workflow
       - actions
-    icon: "\u2699\uFE0F"
+    icon: ⚙️
   - id: openclaw-integration
     title: Configurable OpenClaw Integration
     status: pending

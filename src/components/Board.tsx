@@ -192,12 +192,13 @@ export function Board<T extends BoardItem>({
 
     // --- Column reorder ---
     if (isColumnId(activeId)) {
-      if (activeId === overId) return;
-      // Only reorder if dropping on another column
-      if (!isColumnId(overId)) return;
-
+      // over.id may be "col:xxx" (sortable) or plain "xxx" (droppable)
       const activeColId = activeId.replace(/^col:/, '');
       const overColId = overId.replace(/^col:/, '');
+
+      if (activeColId === overColId) return;
+      // Must resolve to a known column
+      if (!columnIdSet.has(overColId)) return;
 
       const oldIndex = orderedColumns.findIndex((c) => c.id === activeColId);
       const newIndex = orderedColumns.findIndex((c) => c.id === overColId);

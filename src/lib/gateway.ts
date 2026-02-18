@@ -429,6 +429,12 @@ function isMessageNewForTurn(
   return timestamp !== undefined && timestamp >= options.minTimestamp;
 }
 
+function isSyntheticSystemExecUserMessage(message: GatewayHistoryMessage): boolean {
+  if (message.role !== 'user') return false;
+  const content = extractText(message.content).trim();
+  return /^System:\s*\[[^\]]+\]\s*Exec completed\b/i.test(content);
+}
+
 function findUserAnchorIndex(
   chronological: GatewayHistoryMessage[],
   options: {
@@ -445,6 +451,7 @@ function findUserAnchorIndex(
   for (let index = 0; index < chronological.length; index += 1) {
     const message = chronological[index];
     if (message.role !== 'user') continue;
+    if (isSyntheticSystemExecUserMessage(message)) continue;
     if (!isMessageNewForTurn(message, options)) continue;
 
     if (!normalizedExpected) return index;
@@ -461,6 +468,7 @@ function findUserAnchorIndex(
   for (let index = 0; index < chronological.length; index += 1) {
     const message = chronological[index];
     if (message.role !== 'user') continue;
+    if (isSyntheticSystemExecUserMessage(message)) continue;
     if (!isMessageNewForTurn(message, options)) continue;
     return index;
   }
@@ -489,6 +497,9 @@ function extractAssistantMessagesForTurn(
     const message = chronological[index];
 
     if (message.role === 'user') {
+      if (isSyntheticSystemExecUserMessage(message)) {
+        continue;
+      }
       break;
     }
     if (message.role !== 'assistant') continue;
