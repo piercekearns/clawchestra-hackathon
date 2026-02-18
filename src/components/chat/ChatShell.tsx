@@ -172,9 +172,14 @@ export function ChatShell({
   const resizingRef = useRef(false);
   const resizeStartYRef = useRef(0);
   const resizeStartHeightRef = useRef(0);
+  const drawerHeightRef = useRef(drawerHeightPx);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    drawerHeightRef.current = drawerHeightPx;
+  }, [drawerHeightPx]);
 
   useEffect(() => {
     const onResize = () => {
@@ -300,7 +305,7 @@ export function ChatShell({
       
       // Auto-close if dragged below threshold
       const thresholdPx = window.innerHeight * AUTO_CLOSE_THRESHOLD_PERCENT;
-      if (drawerHeightPx < thresholdPx) {
+      if (drawerHeightRef.current < thresholdPx) {
         onDrawerOpenChange(false);
       }
     };

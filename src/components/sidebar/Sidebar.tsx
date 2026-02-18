@@ -64,7 +64,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative flex shrink-0 flex-col overflow-hidden border-r border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative z-20 flex shrink-0 flex-col overflow-hidden border-r border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       {/* Main content area — empty for Phase 1 */}
@@ -84,7 +84,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </div>
       )}
 
-      {/* Drag handle (right edge) */}
+      {/* Drag handle (right edge) — wide hit area, narrow visual indicator */}
       {sidebarOpen && (
         <div
           role="separator"
@@ -94,8 +94,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           aria-valuemax={SIDEBAR_MAX_WIDTH}
           onMouseDown={handleDragStart}
           onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
-          className={`absolute right-0 top-0 h-full w-1.5 cursor-col-resize transition-colors hover:bg-neutral-300 dark:hover:bg-neutral-600 ${isResizing ? 'bg-revival-accent-400/50' : ''}`}
-        />
+          className="group absolute right-0 top-0 h-full w-3 cursor-col-resize"
+        >
+          <div className={`absolute right-0 top-0 h-full w-0.5 transition-colors group-hover:bg-neutral-300 dark:group-hover:bg-neutral-600 ${isResizing ? 'bg-revival-accent-400/50' : ''}`} />
+        </div>
       )}
     </div>
   );

@@ -20,7 +20,7 @@ export function Header({
   onSearchQueryChange,
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-20 mb-4 rounded-2xl border border-neutral-200 bg-neutral-0/95 p-4 backdrop-blur dark:border-neutral-700 dark:bg-neutral-950/95">
+    <header className="mb-4 rounded-2xl border border-neutral-200 bg-neutral-0/95 p-4 backdrop-blur dark:border-neutral-700 dark:bg-neutral-950/95">
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Input
