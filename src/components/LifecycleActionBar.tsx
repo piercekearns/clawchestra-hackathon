@@ -1,7 +1,6 @@
 import type { PointerEvent } from 'react';
-import { FileText, Hammer, ListChecks, Search } from 'lucide-react';
+import { FileText, Hammer, ListChecks, Rocket, Search } from 'lucide-react';
 import type { DeliverableLifecycleAction } from '../lib/deliverable-lifecycle';
-import { CrossedHammers } from './icons/CrossedHammers';
 
 interface LifecycleActionBarProps {
   specExists: boolean;
@@ -103,7 +102,7 @@ export function LifecycleActionBar({ specExists, planExists, onAction }: Lifecyc
         title="Build Workflow"
         aria-label="Build Workflow"
       >
-        <CrossedHammers className={ICON_SIZE} />
+        <Rocket className={ICON_SIZE} />
       </button>
     </div>
   );
