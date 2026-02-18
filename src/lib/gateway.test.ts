@@ -288,6 +288,25 @@ describe('gateway client', () => {
     expect(extracted.map((message) => message.content)).toEqual(['first answer', 'second answer']);
   });
 
+  it('prefers run-scoped history messages when runId is available', () => {
+    const messages = [
+      { id: 'u-1', role: 'user', content: 'prompt', timestamp: 10 },
+      { id: 'a-other', role: 'assistant', content: 'from other run', timestamp: 11, runId: 'run-other' },
+      { id: 'a-own', role: 'assistant', content: 'from own run', timestamp: 12, runId: 'run-own' },
+      { id: 'u-2', role: 'user', content: 'next prompt', timestamp: 13 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 0,
+      expectedUserText: 'prompt',
+      expectedRunId: 'run-own',
+    });
+
+    expect(extracted.map((message) => message._id)).toEqual(['a-own']);
+    expect(extracted[0]?.content).toBe('from own run');
+  });
+
   it('falls back to first new user turn when expected text is transformed', () => {
     const messages = [
       { id: 'u-1', role: 'user', content: 'wrapped context + prompt', timestamp: 10 },
@@ -426,5 +445,30 @@ describe('gateway client', () => {
     });
 
     expect(__gatewayTestUtils.getActiveTurnCount()).toBe(3);
+  });
+
+  it('expires stale active turns during hydration replay', () => {
+    const now = 1_000_000;
+
+    expect(
+      __gatewayTestUtils.isPendingTurnExpiredForHydration(
+        { status: 'running', lastSignalAt: now - (12 * 60_000 + 1) },
+        now,
+      ),
+    ).toBe(true);
+
+    expect(
+      __gatewayTestUtils.isPendingTurnExpiredForHydration(
+        { status: 'running', lastSignalAt: now - (12 * 60_000 - 1) },
+        now,
+      ),
+    ).toBe(false);
+
+    expect(
+      __gatewayTestUtils.isPendingTurnExpiredForHydration(
+        { status: 'completed', lastSignalAt: now - (12 * 60_000 + 60_000) },
+        now,
+      ),
+    ).toBe(false);
   });
 });

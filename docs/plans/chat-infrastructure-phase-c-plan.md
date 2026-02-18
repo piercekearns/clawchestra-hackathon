@@ -25,8 +25,8 @@ Make chat turn lifecycle deterministic so users always get:
 - [x] Step 2: Tighten send lifecycle ownership to avoid unrelated terminal resolution.
 - [x] Step 3: Extend active backfill window/cadence to avoid premature `NO_REPLY` while work continues.
 - [x] Step 4: Hydrate unresolved turns on startup and keep active recovery polling while turns remain unresolved.
-- [ ] Step 5: Complete message persistence correlation hardening audit and remove any remaining fragile pairing paths.
-- [ ] Step 6: Expand regression coverage for reconnect/no-final timeout classes and crash-recovery replay.
+- [x] Step 5: Complete message persistence correlation hardening audit and remove any remaining fragile pairing paths.
+- [x] Step 6: Expand regression coverage for reconnect/no-final timeout classes and crash-recovery replay.
 
 ## Non-Goals
 

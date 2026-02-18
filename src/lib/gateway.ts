@@ -464,6 +464,14 @@ function getBackfillPollIntervalMs(submittedAt: number): number {
   return Math.max(250, jittered);
 }
 
+function isPendingTurnExpiredForHydration(turn: {
+  status: TurnStatus;
+  lastSignalAt: number;
+}, now: number): boolean {
+  if (!isTurnActive(turn.status)) return false;
+  return now - turn.lastSignalAt > ACTIVE_RUN_NO_FINAL_TIMEOUT_MS;
+}
+
 export function getActiveTurnCount(): number {
   let count = 0;
   for (const turn of turnRegistry.values()) {
@@ -487,8 +495,21 @@ export async function hydratePendingTurns(sessionKey?: string): Promise<PendingT
     const persisted = await chatPendingTurnsLoad(sessionKey);
     turnRegistry.clear();
     turnLastPersistAt.clear();
+    const now = Date.now();
     for (const turn of persisted) {
       if (!isTurnActive(turn.status as TurnStatus)) continue;
+      if (
+        isPendingTurnExpiredForHydration(
+          {
+            status: turn.status as TurnStatus,
+            lastSignalAt: turn.lastSignalAt,
+          },
+          now,
+        )
+      ) {
+        removePersistedPendingTurn(turn.turnToken);
+        continue;
+      }
       turnRegistry.set(turn.turnToken, {
         turnToken: turn.turnToken,
         sessionKey: turn.sessionKey,
@@ -558,6 +579,12 @@ function getHistoryMessageTimestamp(message: GatewayHistoryMessage): number | un
     if (Number.isFinite(epoch)) return epoch;
   }
   return undefined;
+}
+
+function getHistoryMessageRunId(message: GatewayHistoryMessage): string | undefined {
+  return typeof message.runId === 'string' && message.runId.trim().length > 0
+    ? message.runId
+    : undefined;
 }
 
 function toChronologicalHistory(
@@ -665,6 +692,7 @@ function findUserAnchorIndex(
     baselineIds: Set<string>;
     minTimestamp: number;
     expectedUserText?: string;
+    expectedRunId?: string;
   },
 ): number {
   const normalizedExpected =
@@ -706,6 +734,7 @@ function extractAssistantMessagesForTurn(
     baselineIds: Set<string>;
     minTimestamp: number;
     expectedUserText?: string;
+    expectedRunId?: string;
   },
 ): ChatMessage[] {
   const chronological = toChronologicalHistory(rawMessages);
@@ -730,6 +759,10 @@ function extractAssistantMessagesForTurn(
 
     const id = getHistoryMessageId(message);
     const timestamp = getHistoryMessageTimestamp(message);
+    const messageRunId = getHistoryMessageRunId(message);
+    if (options.expectedRunId && messageRunId && messageRunId !== options.expectedRunId) {
+      continue;
+    }
     const shouldIncludeForTurn =
       (id !== undefined && !options.baselineIds.has(id)) ||
       (timestamp !== undefined && timestamp >= options.minTimestamp) ||
@@ -1581,6 +1614,7 @@ async function sendViaTauriWs(
             baselineIds: baselineMessageIds,
             minTimestamp: minNewMessageTimestamp,
             expectedUserText: messageText,
+            expectedRunId: runId,
           });
 
           if (assistantMessages.length > 0) {
@@ -1984,6 +2018,7 @@ async function sendViaTauriWs(
       baselineIds: baselineMessageIds,
       minTimestamp: minNewMessageTimestamp,
       expectedUserText: messageText,
+      expectedRunId: runId,
     });
 
     // History is the source of truth for final messages.
@@ -2060,6 +2095,7 @@ async function sendViaTauriWs(
             baselineIds: baselineMessageIds,
             minTimestamp: minNewMessageTimestamp,
             expectedUserText: messageText,
+            expectedRunId: runId,
           });
           if (recovered.length > 0) {
             assistantMessages = recovered;
@@ -2113,6 +2149,7 @@ async function sendViaTauriWs(
             baselineIds: baselineMessageIds,
             minTimestamp: minNewMessageTimestamp,
             expectedUserText: messageText,
+            expectedRunId: runId,
           });
           if (extracted.length === 0) {
             stablePolls += 1;
@@ -2389,6 +2426,7 @@ export function subscribeConnectionState(
 export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
   likelyNeedsFinalSettlePass,
+  isPendingTurnExpiredForHydration,
   getActiveTurnCount,
   clearTurnRegistryForTests: () => {
     turnRegistry.clear();
