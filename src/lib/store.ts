@@ -191,9 +191,12 @@ export const useDashboardStore = create<DashboardState>()(
       },
 
       addSystemBubble: async (kind, title, details, actions, runId, content) => {
+        // Don't duplicate title as content — only use title as fallback
+        // when there are no details (otherwise it shows the same text twice)
+        const resolvedContent = content ?? (details ? '' : title);
         return get().addChatMessage({
           role: 'system',
-          content: content ?? title,
+          content: resolvedContent,
           timestamp: Date.now(),
           systemMeta: { kind, title, details, actions, ...(runId ? { runId } : {}) },
         });
