@@ -116,20 +116,30 @@ export function buildLifecyclePrompt(
     }
 
     case 'deliver': {
+      const sources: string[] = [];
+      if (specPath) sources.push(`spec at ${specPath}`);
+      if (planPath) sources.push(`plan at ${planPath}`);
+      const sourceRef = sources.length > 0
+        ? ` Use ${sources.join(' and ')} as source of truth.`
+        : '';
+
       return [
         ...header,
-        'Requested action: Deliver directly',
-        'Implement this roadmap item directly in this repository now.',
-        'Follow AGENTS.md rules, run relevant tests, and update ROADMAP nextAction to "Code shipped — awaiting verification" when code is shipped.',
+        `Requested action: Deliver directly. Implement this roadmap item in this repository now.${sourceRef} Follow AGENTS.md rules, run relevant tests, and update ROADMAP nextAction to "Code shipped — awaiting verification" when code is shipped.`,
       ].join('\n');
     }
 
     case 'build': {
+      const sources: string[] = [];
+      if (specPath) sources.push(`spec at ${specPath}`);
+      if (planPath) sources.push(`plan at ${planPath}`);
+      const sourceRef = sources.length > 0
+        ? ` Use ${sources.join(' and ')} as source of truth.`
+        : '';
+
       return [
         ...header,
-        'Requested action: Run formal build workflow',
-        'Execute the formal multi-step workflow for this roadmap item using /work.',
-        'Use available spec/plan docs as source of truth and keep ROADMAP nextAction in sync while building.',
+        `Requested action: Run formal build workflow using /work.${sourceRef} Keep ROADMAP nextAction in sync while building.`,
       ].join('\n');
     }
 
