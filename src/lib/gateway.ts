@@ -798,11 +798,99 @@ function extractAssistantMessagesFromHistory(
     });
   }
 
-  return assistantMessages;
+  return collapseAssistantMessages(assistantMessages);
 }
 
 function normalizeTextForMatch(text: string): string {
   return normalizeChatContentForMatch(text);
+}
+
+const ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS = 10 * 60_000;
+
+function assistantMessagesOverlap(a: ChatMessage, b: ChatMessage): boolean {
+  const aNorm = normalizeTextForMatch(a.content);
+  const bNorm = normalizeTextForMatch(b.content);
+  if (!aNorm || !bNorm) return false;
+  return (
+    aNorm === bNorm ||
+    aNorm.startsWith(bNorm) ||
+    bNorm.startsWith(aNorm) ||
+    aNorm.includes(bNorm) ||
+    bNorm.includes(aNorm)
+  );
+}
+
+function choosePreferredAssistantMessage(a: ChatMessage, b: ChatMessage): ChatMessage {
+  const aNormLength = normalizeTextForMatch(a.content).length;
+  const bNormLength = normalizeTextForMatch(b.content).length;
+  const preferB =
+    bNormLength > aNormLength ||
+    (bNormLength === aNormLength && (b.timestamp ?? 0) >= (a.timestamp ?? 0));
+
+  if (preferB) {
+    return {
+      ...b,
+      ...(b._id ? {} : a._id ? { _id: a._id } : {}),
+    };
+  }
+
+  return {
+    ...a,
+    ...(a._id ? {} : b._id ? { _id: b._id } : {}),
+  };
+}
+
+function collapseAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
+  const collapsed: ChatMessage[] = [];
+
+  for (const message of messages) {
+    if (collapsed.length === 0) {
+      collapsed.push(message);
+      continue;
+    }
+
+    const last = collapsed[collapsed.length - 1];
+    const withinPairWindow =
+      Math.abs((message.timestamp ?? 0) - (last.timestamp ?? 0)) <= ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS;
+    if (last.role === 'assistant' && message.role === 'assistant' && withinPairWindow) {
+      if (assistantMessagesOverlap(last, message)) {
+        collapsed[collapsed.length - 1] = choosePreferredAssistantMessage(last, message);
+        continue;
+      }
+    }
+
+    if (message.role === 'assistant' && collapsed.length >= 2) {
+      let runStart = collapsed.length;
+      for (let i = collapsed.length - 1; i >= 0; i -= 1) {
+        if (collapsed[i].role !== 'assistant') break;
+        runStart = i;
+      }
+
+      if (runStart < collapsed.length - 1) {
+        const run = collapsed.slice(runStart);
+        const newestRunTs = run.reduce((latest, item) => Math.max(latest, item.timestamp ?? 0), 0);
+        if (Math.abs((message.timestamp ?? 0) - newestRunTs) <= ASSISTANT_HISTORY_COLLAPSE_WINDOW_MS) {
+          const runCombined: ChatMessage = {
+            role: 'assistant',
+            content: run.map((item) => item.content).join('\n\n'),
+            timestamp: newestRunTs,
+          };
+          if (assistantMessagesOverlap(runCombined, message)) {
+            while (collapsed.length > runStart) {
+              collapsed.pop();
+            }
+            const anchor = run[run.length - 1] ?? runCombined;
+            collapsed.push(choosePreferredAssistantMessage(anchor, message));
+            continue;
+          }
+        }
+      }
+    }
+
+    collapsed.push(message);
+  }
+
+  return collapsed;
 }
 
 function stableSyntheticTimestamp(role: string, content: string): number {
@@ -990,7 +1078,7 @@ function extractAssistantMessagesForTurn(
     });
   }
 
-  return assistantMessages;
+  return collapseAssistantMessages(assistantMessages);
 }
 
 function normalizeHistoryRole(role: unknown): ChatMessage['role'] | null {

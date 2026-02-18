@@ -423,9 +423,61 @@ export function ChatShell({
   const displayMessages = useMemo(() => {
     if (!streamingContent) return messages;
 
-    const next = [...messages];
     const streamingNormalized = normalizePreviewContent(streamingContent);
     if (!streamingNormalized) return messages;
+
+    // If the latest turn already has a trailing assistant run and the streaming
+    // preview overlaps with it, replace the whole run with one live preview entry.
+    // This prevents "fragmented assistant bubbles + combined streaming bubble"
+    // duplication during active runs.
+    let assistantRunStart = messages.length;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role !== 'assistant') break;
+      assistantRunStart = i;
+    }
+    if (assistantRunStart < messages.length) {
+      const run = messages.slice(assistantRunStart);
+      const newestRunTimestamp = run.reduce(
+        (latest, message) => Math.max(latest, message.timestamp ?? 0),
+        0,
+      );
+      const closeInTime = Math.abs(Date.now() - newestRunTimestamp) <= 10 * 60_000;
+      if (closeInTime && run.length >= 2) {
+        const anchor = run[run.length - 1];
+        return [
+          ...messages.slice(0, assistantRunStart),
+          {
+            ...anchor,
+            content: streamingContent,
+            timestamp: Date.now(),
+          },
+        ];
+      }
+      const runNormalized = normalizePreviewContent(run.map((message) => message.content).join('\n\n'));
+      const overlapsRun =
+        runNormalized.length > 0 &&
+        closeInTime &&
+        (
+          streamingNormalized === runNormalized ||
+          streamingNormalized.startsWith(runNormalized) ||
+          runNormalized.startsWith(streamingNormalized) ||
+          streamingNormalized.includes(runNormalized) ||
+          runNormalized.includes(streamingNormalized)
+        );
+      if (overlapsRun) {
+        const anchor = run[run.length - 1];
+        return [
+          ...messages.slice(0, assistantRunStart),
+          {
+            ...anchor,
+            content: streamingContent,
+            timestamp: Date.now(),
+          },
+        ];
+      }
+    }
+
+    const next = [...messages];
 
     for (let i = next.length - 1; i >= 0; i -= 1) {
       const candidate = next[i];
@@ -438,7 +490,9 @@ export function ChatShell({
       if (
         closeInTime &&
         (streamingNormalized.startsWith(existingNormalized) ||
-          existingNormalized.startsWith(streamingNormalized))
+          existingNormalized.startsWith(streamingNormalized) ||
+          streamingNormalized.includes(existingNormalized) ||
+          existingNormalized.includes(streamingNormalized))
       ) {
         next[i] = {
           ...candidate,

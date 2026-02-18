@@ -591,7 +591,15 @@ export default function App() {
 
       let recoveredCount = 0;
       const recoveredSignatures: string[] = [];
+      const shouldSuppressDuringActiveRun =
+        chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
       for (const message of recovered) {
+        if (shouldSuppressDuringActiveRun && message.role === 'assistant') {
+          // During active runs, assistant deltas are already surfaced via
+          // streaming. Deferring history backfill avoids duplicate fragment
+          // bubbles that can later overlap with combined streamed output.
+          continue;
+        }
         const timestamp = message.timestamp ?? Date.now();
         if (message._id && existingIds.has(message._id)) continue;
 
@@ -614,8 +622,6 @@ export default function App() {
       if (recoveredCount > 0) {
         const bubbleSignature = `${recoveredCount}:${recoveredSignatures.join('|')}`;
         const lastBubble = lastRecoveryBubbleRef.current;
-        const shouldSuppressDuringActiveRun =
-          chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
         const shouldSuppressBubble =
           shouldSuppressDuringActiveRun ||
           lastBubble &&

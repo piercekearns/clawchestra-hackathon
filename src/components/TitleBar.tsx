@@ -1,17 +1,9 @@
 import { Loader2, Moon, PanelLeft, PanelLeftClose, Sun, SunMoon } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import type { ThemePreference } from '../lib/schema';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
-
-/** Start window drag via Tauri API */
-function startWindowDrag() {
-  void getCurrentWindow().startDragging().catch(() => {
-    // Not in Tauri context or drag failed — ignore
-  });
-}
 
 export function TitleBar() {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
@@ -26,10 +18,9 @@ export function TitleBar() {
     <div
       data-tauri-drag-region
       className="flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
-      onMouseDown={startWindowDrag}
     >
-      {/* Left padding for macOS traffic lights (trafficLightPosition: x=16) */}
-      <div className="w-[70px] shrink-0" />
+      {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
+      <div className="w-[78px] shrink-0" />
 
       {/* Sidebar toggle */}
       <button

@@ -130,7 +130,9 @@ function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage
   return (
     existingNorm === incomingNorm ||
     incomingNorm.startsWith(existingNorm) ||
-    existingNorm.startsWith(incomingNorm)
+    existingNorm.startsWith(incomingNorm) ||
+    incomingNorm.includes(existingNorm) ||
+    existingNorm.includes(incomingNorm)
   );
 }
 
@@ -164,7 +166,9 @@ function collapseTrailingAssistantRun(
   const overlaps =
     incomingNorm === runNorm ||
     incomingNorm.startsWith(runNorm) ||
-    runNorm.startsWith(incomingNorm);
+    runNorm.startsWith(incomingNorm) ||
+    incomingNorm.includes(runNorm) ||
+    runNorm.includes(incomingNorm);
   if (!overlaps) return null;
 
   const newestRunTimestamp = run.reduce((max, message) => Math.max(max, message.timestamp ?? 0), 0);
