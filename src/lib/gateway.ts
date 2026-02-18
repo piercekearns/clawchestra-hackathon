@@ -9,6 +9,10 @@ import {
 } from './tauri';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
+import {
+  normalizeChatContentForMatch,
+  unwrapGatewayContextWrappedUserContent,
+} from './chat-normalization';
 
 export type SystemBubbleKind = 'completion' | 'failure' | 'compaction' | 'decision' | 'info';
 
@@ -666,17 +670,7 @@ function extractAssistantMessagesFromHistory(
 }
 
 function normalizeTextForMatch(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-function unwrapGatewayContextWrappedUserContent(content: string): string | null {
-  const normalized = content.replace(/\r\n/g, '\n');
-  const match = normalized.match(
-    /^(User workspace path:[^\n]*|User is viewing project:[^\n]*|User is viewing:[^\n]*)\n\n([\s\S]+)$/u,
-  );
-  if (!match) return null;
-  const unwrapped = match[2]?.trim();
-  return unwrapped && unwrapped.length > 0 ? unwrapped : null;
+  return normalizeChatContentForMatch(text);
 }
 
 function stableSyntheticTimestamp(role: string, content: string): number {
@@ -737,7 +731,10 @@ function findUserAnchorIndex(
 ): number {
   const normalizedExpected =
     typeof options.expectedUserText === 'string' && options.expectedUserText.trim().length > 0
-      ? normalizeTextForMatch(options.expectedUserText)
+      ? normalizeTextForMatch(
+          unwrapGatewayContextWrappedUserContent(options.expectedUserText) ??
+            options.expectedUserText,
+        )
       : '';
 
   for (let index = 0; index < chronological.length; index += 1) {
@@ -748,7 +745,10 @@ function findUserAnchorIndex(
 
     if (!normalizedExpected) return index;
 
-    const content = normalizeTextForMatch(extractText(message.content));
+    const rawContent = extractText(message.content);
+    const content = normalizeTextForMatch(
+      unwrapGatewayContextWrappedUserContent(rawContent) ?? rawContent,
+    );
     if (content === normalizedExpected) {
       return index;
     }
