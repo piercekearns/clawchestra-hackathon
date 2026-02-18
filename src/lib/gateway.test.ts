@@ -393,6 +393,40 @@ describe('gateway client', () => {
     expect(extracted.map((message) => message._id)).toEqual(['a-1']);
   });
 
+  it('detects accepted user turn when wrapped text is present in history', () => {
+    const messages = [
+      { id: 'u-old', role: 'user', content: 'old turn', timestamp: 1 },
+      {
+        id: 'u-new',
+        role: 'user',
+        content: 'User workspace path: /Users/piercekearns/clawdbot-sandbox\n\nrun /build now',
+        timestamp: 10,
+      },
+    ];
+
+    const matched = __gatewayTestUtils.hasMatchingUserTurnInHistory(messages, {
+      baselineIds: new Set(['u-old']),
+      minTimestamp: 5,
+      expectedUserText: 'User workspace path: /Users/piercekearns/clawdbot-sandbox run /build now',
+    });
+
+    expect(matched).toBe(true);
+  });
+
+  it('does not report accepted user turn when only unrelated new turns exist', () => {
+    const messages = [
+      { id: 'u-new', role: 'user', content: 'totally different prompt', timestamp: 10 },
+    ];
+
+    const matched = __gatewayTestUtils.hasMatchingUserTurnInHistory(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 5,
+      expectedUserText: 'expected prompt text',
+    });
+
+    expect(matched).toBe(false);
+  });
+
   it('marks in-progress assistant snippets as needing settle pass', () => {
     const needsSettle = __gatewayTestUtils.likelyNeedsFinalSettlePass([
       { role: 'assistant', content: 'Now update the Column component with collapsed/expanded variants:' },
@@ -444,6 +478,36 @@ describe('gateway client', () => {
       terminal: true,
       exitCode: 0,
     });
+  });
+
+  it('estimates chat.send frame payload size for guardrail checks', () => {
+    const size = __gatewayTestUtils.estimateChatSendFrameBytes({
+      sessionKey: 'agent:main:pipeline-dashboard',
+      message: 'hello',
+      deliver: false,
+      idempotencyKey: 'run-1',
+    });
+
+    expect(size).toBeGreaterThan(0);
+    expect(size).toBeLessThan(__gatewayTestUtils.OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES);
+  });
+
+  it('detects oversized chat.send frame payloads', () => {
+    const size = __gatewayTestUtils.estimateChatSendFrameBytes({
+      sessionKey: 'agent:main:pipeline-dashboard',
+      message: 'hello',
+      deliver: false,
+      idempotencyKey: 'run-1',
+      attachments: [
+        {
+          type: 'image',
+          mimeType: 'image/jpeg',
+          content: 'A'.repeat(700_000),
+        },
+      ],
+    });
+
+    expect(size).toBeGreaterThan(__gatewayTestUtils.OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES);
   });
 
   it('counts only active lifecycle turns', () => {

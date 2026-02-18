@@ -32,6 +32,7 @@ interface ChatBarProps {
   images: ChatAttachment[];
   gatewayConnected: boolean;
   queue: QueuedMessage[];
+  attachmentNotice?: string | null;
   onInputChange: (value: string) => void;
   onToggleDrawer: () => void;
   onSubmit: () => void;
@@ -56,6 +57,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     images,
     gatewayConnected,
     queue,
+    attachmentNotice,
     onInputChange,
     onToggleDrawer,
     onSubmit,
@@ -324,6 +326,9 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               </button>
             ))}
           </div>
+        ) : null}
+        {attachmentNotice ? (
+          <div className="mt-1 px-1 text-[11px] text-status-danger">{attachmentNotice}</div>
         ) : null}
       </div>
     </div>

@@ -118,6 +118,10 @@ const DEFAULT_HTTP_GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://loc
 const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
+const OPENCLAW_WS_SERVER_MAX_PAYLOAD_BYTES = 512 * 1024;
+const OPENCLAW_WS_PAYLOAD_HEADROOM_BYTES = 16 * 1024;
+const OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES =
+  OPENCLAW_WS_SERVER_MAX_PAYLOAD_BYTES - OPENCLAW_WS_PAYLOAD_HEADROOM_BYTES;
 const FINAL_NO_CONTENT_TIMEOUT_MS = 45000;
 const FINAL_NO_CONTENT_ACTIVITY_GRACE_MS = 15000;
 const FINAL_STABILITY_POLLS = 2;
@@ -132,6 +136,7 @@ const NO_FINAL_RECENT_ACTIVITY_GRACE_MS = 30000;
 const NO_FINAL_FORCE_RESOLVE_MS = 180000;
 const NO_EVENTS_AFTER_SEND_TIMEOUT_MS = 180000;
 const ACTIVE_RUN_NO_FINAL_TIMEOUT_MS = 12 * 60_000;
+const UNACKED_SEND_CONFIRM_TIMEOUT_MS = 20_000;
 const UNSCOPED_AGENT_PROGRESS_GRACE_MS = 15_000;
 const BACKFILL_POLL_FAST_MS = 1000;
 const BACKFILL_POLL_MEDIUM_MS = 2000;
@@ -324,6 +329,21 @@ function parseProcessPollSnapshot(result: unknown): ProcessPollSnapshot {
   if (processObj) return processObj;
 
   return { terminal: false };
+}
+
+function estimateChatSendFrameBytes(params: Record<string, unknown>): number {
+  // Match the WebSocket RPC envelope shape used in TauriOpenClawConnection.request().
+  const probeMessage = {
+    type: 'req',
+    id: 'req-999999-9999999999999',
+    method: 'chat.send',
+    params,
+  };
+  return new TextEncoder().encode(JSON.stringify(probeMessage)).length;
+}
+
+function formatKiB(bytes: number): string {
+  return `${Math.ceil(bytes / 1024)}KB`;
 }
 
 function isChatCompletionResponse(data: unknown): data is ChatCompletionResponse {
@@ -824,6 +844,40 @@ function isMessageNewForTurn(
   if (id) return !options.baselineIds.has(id);
   const timestamp = getHistoryMessageTimestamp(message);
   return timestamp !== undefined && timestamp >= options.minTimestamp;
+}
+
+function hasMatchingUserTurnInHistory(
+  chronological: GatewayHistoryMessage[],
+  options: {
+    baselineIds: Set<string>;
+    minTimestamp: number;
+    expectedUserText?: string;
+  },
+): boolean {
+  const normalizedExpected =
+    typeof options.expectedUserText === 'string' && options.expectedUserText.trim().length > 0
+      ? normalizeTextForMatch(
+          unwrapGatewayContextWrappedUserContent(options.expectedUserText) ??
+            options.expectedUserText,
+        )
+      : '';
+  if (!normalizedExpected) return false;
+
+  for (const message of chronological) {
+    if (message.role !== 'user') continue;
+    if (isSyntheticSystemExecUserMessage(message)) continue;
+    if (!isMessageNewForTurn(message, options)) continue;
+
+    const rawContent = extractText(message.content);
+    const normalizedContent = normalizeTextForMatch(
+      unwrapGatewayContextWrappedUserContent(rawContent) ?? rawContent,
+    );
+    if (normalizedContent === normalizedExpected) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isSyntheticSystemExecUserMessage(message: GatewayHistoryMessage): boolean {
@@ -1692,13 +1746,29 @@ async function sendViaTauriWs(
     // the polling phase regardless, because the response may still arrive.
     let sendAcked = false;
     try {
-      const sendResponse = (await connection.request('chat.send', {
+      const sendParams: Record<string, unknown> = {
         sessionKey,
         message: messageText,
         deliver: false,
         idempotencyKey: runId,
         attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
-      })) as Record<string, unknown> | undefined;
+      };
+      const estimatedFrameBytes = estimateChatSendFrameBytes(sendParams);
+      if (estimatedFrameBytes > OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES) {
+        const attachmentHint =
+          attachments.length > 0
+            ? ` Remove some images or send them in smaller batches (${attachments.length} attached).`
+            : '';
+        throw new Error(
+          `Message payload too large for gateway (${formatKiB(estimatedFrameBytes)} > ${formatKiB(
+            OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES,
+          )}).${attachmentHint}`,
+        );
+      }
+
+      const sendResponse = (await connection.request('chat.send', sendParams)) as
+        | Record<string, unknown>
+        | undefined;
       sendAcked = true;
       const ackRunId = typeof sendResponse?.runId === 'string' ? sendResponse.runId : undefined;
       if (ackRunId && ackRunId !== runId) {
@@ -1840,6 +1910,28 @@ async function sendViaTauriWs(
           const historyMessages = Array.isArray(pollHistory.messages)
             ? pollHistory.messages.filter(isHistoryMessage)
             : [];
+          const chronologicalHistory = toChronologicalHistory(historyMessages);
+          const hasAcceptedUserTurn = hasMatchingUserTurnInHistory(chronologicalHistory, {
+            baselineIds: baselineMessageIds,
+            minTimestamp: minNewMessageTimestamp,
+            expectedUserText: messageText,
+          });
+
+          if (
+            !sendAcked &&
+            !hasAcceptedUserTurn &&
+            !sawRunOwnedProgress &&
+            !sawRunOwnedContent &&
+            Date.now() - sendRequestedAt >= UNACKED_SEND_CONFIRM_TIMEOUT_MS
+          ) {
+            cleanup('unackedSendNoUserTurn');
+            reject(
+              new Error(
+                'Message was not accepted (connection closed before acknowledgment). Please send again.',
+              ),
+            );
+            return;
+          }
 
           const assistantMessages = extractAssistantMessagesForTurn(historyMessages, {
             baselineIds: baselineMessageIds,
@@ -2700,6 +2792,9 @@ export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
   likelyNeedsFinalSettlePass,
   parseProcessPollSnapshot,
+  hasMatchingUserTurnInHistory,
+  estimateChatSendFrameBytes,
+  OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES,
   isPendingTurnExpiredForHydration,
   getActiveTurnCount,
   clearTurnRegistryForTests: () => {

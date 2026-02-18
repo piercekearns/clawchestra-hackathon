@@ -18,6 +18,7 @@ const MAX_ATTACHMENTS = 4;
 const IMAGE_NAME_PATTERN = /\.(png|jpe?g|gif|webp|bmp|heic|heif|svg)$/i;
 const MAX_IMAGE_DIMENSION = 1920; // Resize large images to fit within this dimension
 const MAX_IMAGE_BYTES = 150_000; // Target max ~150KB base64 to stay under CLI limits
+const MAX_TOTAL_IMAGE_BYTES = 300_000; // Keep multi-image messages under gateway WS payload limits
 const MIN_DRAWER_HEIGHT_PERCENT = 0.15; // Below this, drawer auto-closes
 const MAX_DRAWER_HEIGHT_PERCENT = 0.95;
 const DEFAULT_DRAWER_HEIGHT_PERCENT = 0.75; // Default open height (was 0.6)
@@ -165,6 +166,7 @@ export function ChatShell({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [images, setImages] = useState<ChatAttachment[]>([]);
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
   const [drawerHeightPx, setDrawerHeightPx] = useState(getDefaultDrawerHeightPx());
@@ -213,26 +215,72 @@ export function ChatShell({
   const appendImages = async (files: File[]) => {
     const imageFiles = files.filter(isImageLikeFile);
     if (imageFiles.length === 0) return;
+    setAttachmentNotice(null);
 
     // Resize and compress images to stay under CLI payload limits
-    const mapped = await Promise.all(
-      imageFiles.map(async (file) => {
-        const { dataUrl, size } = await resizeImageIfNeeded(file);
-        return {
-          id: createAttachmentId(),
-          name: file.name.replace(/\.[^.]+$/, '.jpg'), // Rename to .jpg since we convert
-          mediaType: 'image/jpeg',
-          dataUrl,
-          size,
-        };
-      }),
-    );
+    let mapped: ChatAttachment[];
+    try {
+      mapped = await Promise.all(
+        imageFiles.map(async (file) => {
+          const { dataUrl, size } = await resizeImageIfNeeded(file);
+          return {
+            id: createAttachmentId(),
+            name: file.name.replace(/\.[^.]+$/, '.jpg'), // Rename to .jpg since we convert
+            mediaType: 'image/jpeg',
+            dataUrl,
+            size,
+          };
+        }),
+      );
+    } catch (error) {
+      setAttachmentNotice(error instanceof Error ? error.message : 'Failed to process attachment');
+      return;
+    }
 
+    let nextNotice: string | null = null;
     setImages((current) => {
       const existing = new Set(current.map((image) => `${image.name}:${image.size}`));
-      const unique = mapped.filter((image) => !existing.has(`${image.name}:${image.size}`));
-      return [...current, ...unique].slice(0, MAX_ATTACHMENTS);
+      const next = [...current];
+      let totalBytes = next.reduce((sum, image) => sum + image.size, 0);
+      let skippedForCount = 0;
+      let skippedForSize = 0;
+      let skippedDuplicates = 0;
+
+      for (const image of mapped) {
+        const key = `${image.name}:${image.size}`;
+        if (existing.has(key)) {
+          skippedDuplicates += 1;
+          continue;
+        }
+        existing.add(key);
+
+        if (next.length >= MAX_ATTACHMENTS) {
+          skippedForCount += 1;
+          continue;
+        }
+
+        if (totalBytes + image.size > MAX_TOTAL_IMAGE_BYTES) {
+          skippedForSize += 1;
+          continue;
+        }
+
+        next.push(image);
+        totalBytes += image.size;
+      }
+
+      if (skippedForSize > 0) {
+        nextNotice = `Attachment limit reached (${Math.round(
+          MAX_TOTAL_IMAGE_BYTES / 1024,
+        )}KB total). Remove images or send in smaller batches.`;
+      } else if (skippedForCount > 0) {
+        nextNotice = `You can attach up to ${MAX_ATTACHMENTS} images per message.`;
+      } else if (skippedDuplicates > 0) {
+        nextNotice = 'Skipped duplicate attachment.';
+      }
+
+      return next;
     });
+    setAttachmentNotice(nextNotice);
   };
 
   useEffect(() => {
@@ -413,6 +461,7 @@ export function ChatShell({
     // Clear input immediately
     setInput('');
     setImages([]);
+    setAttachmentNotice(null);
 
     const payload: ChatSendPayload = { text, images: currentImages };
 
@@ -524,6 +573,7 @@ export function ChatShell({
                   sending={showAsSending}
                   dragActive={dragActive}
                   images={images}
+                  attachmentNotice={attachmentNotice}
                   gatewayConnected={gatewayConnected}
                   queue={queue}
                   onInputChange={setInput}
@@ -533,6 +583,7 @@ export function ChatShell({
                   }}
                   onRemoveImage={(index) => {
                     setImages((current) => current.filter((_, i) => i !== index));
+                    setAttachmentNotice(null);
                   }}
                   onRemoveFromQueue={onRemoveFromQueue}
                   onPasteFiles={appendImages}
@@ -558,6 +609,7 @@ export function ChatShell({
             sending={showAsSending}
             dragActive={dragActive}
             images={images}
+            attachmentNotice={attachmentNotice}
             gatewayConnected={gatewayConnected}
             queue={queue}
             onInputChange={setInput}
@@ -567,6 +619,7 @@ export function ChatShell({
             }}
             onRemoveImage={(index) => {
               setImages((current) => current.filter((_, i) => i !== index));
+              setAttachmentNotice(null);
             }}
             onRemoveFromQueue={onRemoveFromQueue}
             onPasteFiles={appendImages}
