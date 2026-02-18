@@ -15,6 +15,14 @@ import {
   isTauriRuntime,
   type PersistedChatMessage,
 } from './tauri';
+import {
+  normalizeChatContentForMatch,
+  unwrapGatewayContextWrappedUserContent,
+} from './chat-normalization';
+
+export const SIDEBAR_MIN_WIDTH = 200;
+export const SIDEBAR_MAX_WIDTH = 480;
+export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 interface DashboardState {
   projects: ProjectViewModel[];
@@ -33,6 +41,10 @@ interface DashboardState {
   collapsedColumns: Record<string, string[]>;
   /** Custom column order per board. Key: board id, Value: ordered status ids */
   columnOrder: Record<string, string[]>;
+  sidebarOpen: boolean;
+  sidebarWidth: number;
+  setSidebarOpen: (open: boolean) => void;
+  setSidebarWidth: (width: number) => void;
 
   setProjects: (projects: ProjectViewModel[]) => void;
   loadProjects: () => Promise<void>;
@@ -77,18 +89,12 @@ function generateMessageId(): string {
 const CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS = 10 * 60_000;
 const CHAT_RECOVERY_BUBBLE_DEDUPE_WINDOW_MS = 30_000;
 
-function normalizeChatContent(content: string): string {
-  return content.replace(/\s+/g, ' ').trim();
-}
-
-function unwrapGatewayContextWrappedUserContent(content: string): string | null {
-  const normalized = content.replace(/\r\n/g, '\n');
-  const match = normalized.match(
-    /^(User workspace path:[^\n]*|User is viewing project:[^\n]*|User is viewing:[^\n]*)\n\n([\s\S]+)$/u,
-  );
-  if (!match) return null;
-  const unwrapped = match[2]?.trim();
-  return unwrapped && unwrapped.length > 0 ? unwrapped : null;
+function comparableMessageContent(message: ChatMessage): string {
+  if (message.role === 'user') {
+    const unwrapped = unwrapGatewayContextWrappedUserContent(message.content);
+    if (unwrapped) return normalizeChatContentForMatch(unwrapped);
+  }
+  return normalizeChatContentForMatch(message.content);
 }
 
 function sanitizeIncomingChatMessage(message: ChatMessage): ChatMessage {
@@ -117,8 +123,8 @@ function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage
   const incomingTs = incoming.timestamp ?? 0;
   if (Math.abs(incomingTs - existingTs) > CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS) return false;
 
-  const existingNorm = normalizeChatContent(existing.content);
-  const incomingNorm = normalizeChatContent(incoming.content);
+  const existingNorm = comparableMessageContent(existing);
+  const incomingNorm = comparableMessageContent(incoming);
   if (!existingNorm || !incomingNorm) return false;
 
   return (
@@ -129,11 +135,44 @@ function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage
 }
 
 function shouldPreferIncoming(existing: ChatMessage, incoming: ChatMessage): boolean {
-  const existingNorm = normalizeChatContent(existing.content);
-  const incomingNorm = normalizeChatContent(incoming.content);
+  const existingNorm = comparableMessageContent(existing);
+  const incomingNorm = comparableMessageContent(incoming);
   if (incomingNorm.length > existingNorm.length) return true;
   if (incomingNorm.length < existingNorm.length) return false;
   return (incoming.timestamp ?? 0) >= (existing.timestamp ?? 0);
+}
+
+function collapseTrailingAssistantRun(
+  collapsed: ChatMessage[],
+  incoming: ChatMessage,
+): ChatMessage | null {
+  if (incoming.role !== 'assistant' || collapsed.length < 2) return null;
+
+  let runStart = collapsed.length;
+  for (let i = collapsed.length - 1; i >= 0; i -= 1) {
+    if (collapsed[i].role !== 'assistant') break;
+    runStart = i;
+  }
+
+  if (runStart >= collapsed.length - 1) return null;
+
+  const run = collapsed.slice(runStart);
+  const incomingNorm = comparableMessageContent(incoming);
+  const runNorm = normalizeChatContentForMatch(run.map((message) => message.content).join('\n\n'));
+  if (!incomingNorm || !runNorm) return null;
+
+  const overlaps =
+    incomingNorm === runNorm ||
+    incomingNorm.startsWith(runNorm) ||
+    runNorm.startsWith(incomingNorm);
+  if (!overlaps) return null;
+
+  const newestRunTimestamp = run.reduce((max, message) => Math.max(max, message.timestamp ?? 0), 0);
+  if (Math.abs((incoming.timestamp ?? 0) - newestRunTimestamp) > CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS) {
+    return null;
+  }
+
+  return shouldPreferIncoming(run[run.length - 1], incoming) ? { ...incoming } : null;
 }
 
 function collapseChatDuplicates(messages: ChatMessage[]): ChatMessage[] {
@@ -201,6 +240,15 @@ function collapseChatDuplicates(messages: ChatMessage[]): ChatMessage[] {
       continue;
     }
 
+    const collapsedAssistantRun = collapseTrailingAssistantRun(collapsed, message);
+    if (collapsedAssistantRun) {
+      while (collapsed.length > 0 && collapsed[collapsed.length - 1]?.role === 'assistant') {
+        collapsed.pop();
+      }
+      collapsed.push(collapsedAssistantRun);
+      continue;
+    }
+
     collapsed.push(message);
   }
 
@@ -248,6 +296,8 @@ export const useDashboardStore = create<DashboardState>()(
       selectedProjectId: undefined,
       collapsedColumns: {},
       columnOrder: {},
+      sidebarOpen: false,
+      sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
 
       setProjects: (projects) => set({ projects }),
 
@@ -460,6 +510,10 @@ export const useDashboardStore = create<DashboardState>()(
           },
         })),
 
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      setSidebarWidth: (width) =>
+        set({ sidebarWidth: Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width)) }),
+
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
         await get().loadProjects();
@@ -481,6 +535,8 @@ export const useDashboardStore = create<DashboardState>()(
         themePreference: state.themePreference,
         collapsedColumns: state.collapsedColumns,
         columnOrder: state.columnOrder,
+        sidebarOpen: state.sidebarOpen,
+        sidebarWidth: state.sidebarWidth,
       }),
     },
   ),

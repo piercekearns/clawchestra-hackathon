@@ -101,16 +101,18 @@ async function resizeImageIfNeeded(file: File): Promise<{ dataUrl: string; size:
   });
 }
 
+const TITLE_BAR_HEIGHT = 38; // Custom title bar height (see TitleBar.tsx)
+
 function clampDrawerHeight(nextHeightPx: number): number {
-  const viewportHeight = window.innerHeight;
-  const minHeightPx = Math.max(MIN_DRAWER_HEIGHT_PX, viewportHeight * MIN_DRAWER_HEIGHT_PERCENT);
-  const maxHeightPx = viewportHeight * MAX_DRAWER_HEIGHT_PERCENT;
+  const containerHeight = window.innerHeight - TITLE_BAR_HEIGHT;
+  const minHeightPx = Math.max(MIN_DRAWER_HEIGHT_PX, containerHeight * MIN_DRAWER_HEIGHT_PERCENT);
+  const maxHeightPx = containerHeight * MAX_DRAWER_HEIGHT_PERCENT;
   return Math.max(minHeightPx, Math.min(nextHeightPx, maxHeightPx));
 }
 
 function getDefaultDrawerHeightPx(): number {
   if (typeof window === 'undefined') return 420;
-  return clampDrawerHeight(window.innerHeight * DEFAULT_DRAWER_HEIGHT_PERCENT);
+  return clampDrawerHeight((window.innerHeight - TITLE_BAR_HEIGHT) * DEFAULT_DRAWER_HEIGHT_PERCENT);
 }
 
 function normalizePreviewContent(content: string): string {
@@ -428,7 +430,7 @@ export function ChatShell({
   const showAsSending = sending || isAgentWorking;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:px-6">
+    <div className="pointer-events-none z-40 flex shrink-0 justify-center px-4 pb-4 md:px-6">
       <div className="pointer-events-auto w-full">
         {latestResponsePreview && !drawerOpen ? (
           <ResponseToast

@@ -8,6 +8,8 @@ import { LifecycleActionBar } from './components/LifecycleActionBar';
 import { ProjectModal } from './components/modal';
 import type { ProjectModalActions } from './components/modal';
 import { Header } from './components/Header';
+import { TitleBar } from './components/TitleBar';
+import { Sidebar } from './components/sidebar/Sidebar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
@@ -61,6 +63,7 @@ import {
 } from './lib/tauri';
 import { defaultView, projectRoadmapView } from './lib/views';
 import { watchProjects } from './lib/watcher';
+import { normalizeChatContentWithContextUnwrap } from './lib/chat-normalization';
 
 interface Toast {
   id: number;
@@ -88,7 +91,7 @@ const RECOVERY_BUBBLE_DEDUP_MS = 5 * 60_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
 
 function normalizeMessageContent(content: string): string {
-  return content.replace(/\s+/g, ' ').trim();
+  return normalizeChatContentWithContextUnwrap(content);
 }
 
 function getGitHubStatusMeta(
@@ -158,7 +161,6 @@ export default function App() {
   const setProjects = useDashboardStore((state) => state.setProjects);
   const addError = useDashboardStore((state) => state.addError);
   const setGatewayConnected = useDashboardStore((state) => state.setGatewayConnected);
-  const setThemePreference = useDashboardStore((state) => state.setThemePreference);
   const setViewContext = useDashboardStore((state) => state.setViewContext);
   const addChatMessage = useDashboardStore((state) => state.addChatMessage);
   const addSystemBubble = useDashboardStore((state) => state.addSystemBubble);
@@ -175,7 +177,6 @@ export default function App() {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
   const [roadmapDocument, setRoadmapDocument] = useState<RoadmapDocument | null>(null);
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItemWithDocs[]>([]);
@@ -253,12 +254,9 @@ export default function App() {
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return allProjects;
 
     return allProjects.filter((project) => {
-      const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
-      if (!matchesStatus) return false;
-      if (!normalizedQuery) return true;
-
       const searchable = [
         project.title,
         project.id,
@@ -271,7 +269,7 @@ export default function App() {
 
       return searchable.includes(normalizedQuery);
     });
-  }, [allProjects, searchQuery, statusFilter]);
+  }, [allProjects, searchQuery]);
 
   const chatConnectionState = useMemo<ChatConnectionState>(() => {
     if (wsConnectionState === 'reconnecting') return 'reconnecting';
@@ -720,6 +718,14 @@ export default function App() {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
 
+      // Cmd+B / Ctrl+B toggles sidebar
+      if ((event.metaKey || event.ctrlKey) && event.key === 'b') {
+        event.preventDefault();
+        const current = useDashboardStore.getState().sidebarOpen;
+        useDashboardStore.getState().setSidebarOpen(!current);
+        return;
+      }
+
       // Cmd+K / Ctrl+K opens search
       if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
         event.preventDefault();
@@ -755,6 +761,12 @@ export default function App() {
         if (settingsDialogOpen) {
           event.preventDefault();
           setSettingsDialogOpen(false);
+          return;
+        }
+
+        if (useDashboardStore.getState().sidebarOpen) {
+          event.preventDefault();
+          useDashboardStore.getState().setSidebarOpen(false);
           return;
         }
 
@@ -1223,23 +1235,17 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-page px-4 pb-32 pt-4 text-neutral-900 dark:text-neutral-100 md:px-6 md:pb-36">
-      <div className="flex h-full min-h-0 w-full flex-col">
+    <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
+      <TitleBar />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar onOpenSettings={() => setSettingsDialogOpen(true)} />
+        <div className="flex min-w-0 flex-1 flex-col px-4 pt-4 md:px-6">
         <Header
           errors={errors}
           onRefresh={async () => { await loadProjects(); void refreshRoadmapDocsRef.current(); }}
           onAddProject={() => setAddDialogOpen(true)}
-          onOpenSettings={() => setSettingsDialogOpen(true)}
-          themePreference={themePreference}
-          onChangeTheme={setThemePreference}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          statusOptions={viewContext.columns.map((column) => ({
-            id: column.id,
-            label: column.label,
-          }))}
         />
 
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -1260,7 +1266,7 @@ export default function App() {
           </div>
         </div>
 
-        {!isRoadmapView && (searchQuery.trim() || statusFilter !== 'all') && (
+        {!isRoadmapView && searchQuery.trim() && (
           <section className="mb-4 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70">
             <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
               <span>{searchResults.length} matching project(s)</span>
@@ -1269,10 +1275,9 @@ export default function App() {
                 className="underline"
                 onClick={() => {
                   setSearchQuery('');
-                  setStatusFilter('all');
                 }}
               >
-                Clear filters
+                Clear
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1376,7 +1381,6 @@ export default function App() {
             </div>
           </section>
         </main>
-      </div>
 
       <ChatShell
         messages={chatMessages}
@@ -1401,6 +1405,8 @@ export default function App() {
         onLoadMore={loadMoreChatMessages}
         onRetryConnection={retryGatewayConnection}
       />
+        </div>
+      </div>
 
       <ProjectModal
         open={Boolean(selectedProject)}

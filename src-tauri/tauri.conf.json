@@ -15,7 +15,12 @@
         "title": "Clawchestra",
         "width": 1440,
         "height": 900,
+        "minWidth": 960,
+        "minHeight": 600,
         "resizable": true,
+        "decorations": true,
+        "titleBarStyle": "overlay",
+        "hiddenTitle": true,
         "dragDropEnabled": false
       }
     ],
