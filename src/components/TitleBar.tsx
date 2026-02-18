@@ -17,10 +17,10 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[38px] shrink-0 items-center gap-2 bg-page px-2"
+      className="flex h-[46px] shrink-0 items-center bg-page px-4 md:px-6"
     >
-      {/* Left padding for macOS traffic lights */}
-      <div className="w-[70px] shrink-0" data-tauri-drag-region />
+      {/* Left padding for macOS traffic lights — standard inset ~78px */}
+      <div className="w-[78px] shrink-0" data-tauri-drag-region />
 
       {/* Sidebar toggle */}
       <button
@@ -34,45 +34,50 @@ export function TitleBar() {
         <ToggleIcon className="h-4 w-4" />
       </button>
 
-      {/* Logo */}
-      <img
-        src={logoDark}
-        alt=""
-        className="h-5 w-auto dark:hidden"
-        aria-hidden="true"
-      />
-      <img
-        src={logoChartreuse}
-        alt=""
-        className="hidden h-5 w-auto dark:block"
-        aria-hidden="true"
-      />
+      {/* Spacer — pushes logo+title to center */}
+      <div className="flex-1" data-tauri-drag-region />
 
-      {/* App title */}
-      <span className="pointer-events-none select-none text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-        Clawchestra
-      </span>
+      {/* Centered logo + title group */}
+      <div className="pointer-events-none flex select-none items-center gap-2" data-tauri-drag-region>
+        <img
+          src={logoDark}
+          alt=""
+          className="h-5 w-auto dark:hidden"
+          aria-hidden="true"
+          draggable="false"
+        />
+        <img
+          src={logoChartreuse}
+          alt=""
+          className="hidden h-5 w-auto dark:block"
+          aria-hidden="true"
+          draggable="false"
+        />
+        <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+          Clawchestra
+        </span>
 
-      {/* Update badge */}
-      {(updateAvailable || updating) && (
-        <button
-          type="button"
-          onClick={() => void handleUpdate()}
-          disabled={updating}
-          className="pointer-events-auto inline-flex items-center rounded-full bg-[#DFFF00] px-2 py-0.5 text-[11px] font-medium text-neutral-800 transition-colors hover:bg-[#e9ff4d] disabled:cursor-wait"
-        >
-          {updating ? (
-            <span className="inline-flex items-center gap-1">
-              Updating
-              <Loader2 className="h-3 w-3 animate-spin" />
-            </span>
-          ) : (
-            'Update'
-          )}
-        </button>
-      )}
+        {/* Update badge */}
+        {(updateAvailable || updating) && (
+          <button
+            type="button"
+            onClick={() => void handleUpdate()}
+            disabled={updating}
+            className="pointer-events-auto inline-flex items-center rounded-full bg-[#DFFF00] px-2 py-0.5 text-[11px] font-medium text-neutral-800 transition-colors hover:bg-[#e9ff4d] disabled:cursor-wait"
+          >
+            {updating ? (
+              <span className="inline-flex items-center gap-1">
+                Updating
+                <Loader2 className="h-3 w-3 animate-spin" />
+              </span>
+            ) : (
+              'Update'
+            )}
+          </button>
+        )}
+      </div>
 
-      {/* Spacer */}
+      {/* Spacer — pushes theme toggle to right */}
       <div className="flex-1" data-tauri-drag-region />
 
       {/* Theme toggle */}

@@ -101,7 +101,7 @@ async function resizeImageIfNeeded(file: File): Promise<{ dataUrl: string; size:
   });
 }
 
-const TITLE_BAR_HEIGHT = 38; // Custom title bar height (see TitleBar.tsx)
+const TITLE_BAR_HEIGHT = 46; // Custom title bar height (see TitleBar.tsx)
 
 function clampDrawerHeight(nextHeightPx: number): number {
   const containerHeight = window.innerHeight - TITLE_BAR_HEIGHT;
@@ -435,7 +435,7 @@ export function ChatShell({
   const showAsSending = sending || isAgentWorking;
 
   return (
-    <div className="pointer-events-none z-40 flex shrink-0 justify-center px-4 pb-4 md:px-6">
+    <div className="pointer-events-none z-40 flex shrink-0 justify-center">
       <div className="pointer-events-auto w-full">
         {latestResponsePreview && !drawerOpen ? (
           <ResponseToast

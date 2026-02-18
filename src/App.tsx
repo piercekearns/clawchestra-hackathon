@@ -1239,7 +1239,7 @@ export default function App() {
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar onOpenSettings={() => setSettingsDialogOpen(true)} />
-        <div className="flex min-w-0 flex-1 flex-col px-4 pt-4 md:px-6">
+        <div className="flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
         <Header
           errors={errors}
           onRefresh={async () => { await loadProjects(); void refreshRoadmapDocsRef.current(); }}
@@ -1306,7 +1306,7 @@ export default function App() {
           </section>
         )}
 
-        <main className="min-h-0 flex-1">
+        <main className="mb-4 min-h-0 flex-1">
           <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
             <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto pr-1">
               {isRoadmapView ? (
