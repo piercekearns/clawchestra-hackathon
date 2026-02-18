@@ -171,7 +171,7 @@ The title bar area must remain draggable for window movement. The toggle button 
 - **Shortcut:** `Cmd+B`
 - **Default state:** Collapsed (width 0, sidebar content not rendered)
 - **Animation:** CSS `transform: translateX` + `width` transition, 200ms ease-out
-- **Persistence:** Sidebar open/closed state saved to Tauri settings (survives restart)
+- **Persistence:** Sidebar open/closed state and width saved to Zustand persist store (localStorage, survives restart)
 
 ### Dimensions
 
