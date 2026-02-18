@@ -5,17 +5,23 @@ status: pending
 tags: [ui, navigation]
 icon: "📐"
 specDoc: docs/specs/collapsible-sidebar-spec.md
+planDoc: docs/plans/collapsible-sidebar-plan.md
+nextAction: "Plan written — ready for build"
+lastActivity: "2026-02-18"
 ---
 
 # Collapsible Sidebar
 
-Toggleable sidebar panel — collapsed by default, slides in/out. Provides a home for secondary UI that shouldn't clutter the main board view.
+Toggleable sidebar panel — collapsed by default, slides in/out. Provides a home for secondary UI that shouldn't clutter the main board view. Phase 1 builds the shell only (container + toggle + header streamline). Content decisions come later.
 
-## Core Features
+## Core Features (Phase 1)
 
-- Hamburger icon toggle
-- Collapsed by default, slides in/out smoothly
-- Contains: Settings, navigation, quick actions
+- Codex-style sidebar toggle in custom title bar (not a hamburger)
+- Collapsed by default, slides in/out smoothly (200ms)
+- Settings button pinned to sidebar bottom (opens existing dialog)
+- Header streamlined: single search row, theme toggle promoted to title bar, status filter removed
+- Minimum window dimensions enforced (960×600)
+- Cmd+B keyboard shortcut
 
 ## Expansion Ideas (from Phase C de-scope)
 
