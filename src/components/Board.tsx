@@ -77,7 +77,7 @@ function SortableColumn<T extends BoardItem>({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="h-full">
+    <div ref={setNodeRef} style={style} className="h-full min-h-0">
       {children({ listeners, attributes })}
     </div>
   );
@@ -242,6 +242,7 @@ export function Board<T extends BoardItem>({
             className="grid h-full min-h-[24rem] w-full gap-4"
             style={{
               gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
+              gridTemplateRows: 'minmax(0, 1fr)',
               minWidth: `${minBoardWidth}px`,
             }}
           >

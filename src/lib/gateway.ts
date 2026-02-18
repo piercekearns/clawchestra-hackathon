@@ -111,6 +111,7 @@ const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
 const OPENCLAW_CHAT_TIMEOUT_MS = 300000; // 5 minutes for long operations (sub-agents, complex tool use)
 const FINAL_NO_CONTENT_TIMEOUT_MS = 45000;
+const FINAL_NO_CONTENT_ACTIVITY_GRACE_MS = 15000;
 const FINAL_STABILITY_POLLS = 2;
 const FINAL_SETTLE_WINDOW_MS = 15000;
 const FINAL_SETTLE_POLL_MS = 2000;
@@ -120,6 +121,9 @@ const NO_FINAL_RESOLVE_MIN_QUIET_MS = 25000;
 const NO_FINAL_STABILITY_POLLS = 4;
 const NO_FINAL_MAX_WAIT_MS = 120000;
 const NO_FINAL_FORCE_RESOLVE_MS = 180000;
+const NO_RESPONSE_RECOVERY_BASE_MS = 30000;
+const NO_RESPONSE_RECOVERY_PROGRESS_MS = 120000;
+const UNSCOPED_TERMINAL_MIN_SEND_AGE_MS = 8000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -1138,6 +1142,9 @@ async function sendViaTauriWs(
   let sawFinalEventAt = 0;
   let resolvedWithoutFinal = false;
   let requiresFinalSettlePass = false;
+  let sawRunOwnedProgress = false;
+  let sawRunOwnedContent = false;
+  let lastObservedRunActivityAt = sendRequestedAt;
   const baselineMessageIds = new Set<string>();
 
   try {
@@ -1192,15 +1199,19 @@ async function sendViaTauriWs(
       let sawFinalAt = 0;
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
       let unsubscribeState: (() => void) | null = null;
-      let sawOwnedProgressEvent = false;
-      let sawOwnedContentEvent = false;
 
       const ownsTerminalEvent = (eventRunId?: string): boolean => {
         if (eventRunId === runId) return true;
         if (eventRunId) return false;
         // Fallback path for gateways that omit runId on terminal events.
         // Only trust unscoped terminal events after run-owned progress/content.
-        return sawOwnedProgressEvent || sawOwnedContentEvent;
+        // Guard with a minimum send age to avoid attaching stale early terminal
+        // events from neighboring runs.
+        const sendAgeMs = Date.now() - sendRequestedAt;
+        return (
+          sawRunOwnedContent ||
+          (sawRunOwnedProgress && sendAgeMs >= UNSCOPED_TERMINAL_MIN_SEND_AGE_MS)
+        );
       };
 
       const resetIdleTimeout = () => {
@@ -1399,6 +1410,11 @@ async function sendViaTauriWs(
               return;
             }
             const finalWithoutContentMs = Date.now() - sawFinalAt;
+            const runActivityAgeMs = Date.now() - lastObservedRunActivityAt;
+            if (runActivityAgeMs < FINAL_NO_CONTENT_ACTIVITY_GRACE_MS) {
+              clearSawFinal('recent activity after final-without-content');
+              return;
+            }
             if (finalWithoutContentMs >= FINAL_NO_CONTENT_TIMEOUT_MS) {
               cleanup('finalWithoutContentTimeout');
               reject(new Error('No assistant response received from OpenClaw (run may have terminated).'));
@@ -1447,13 +1463,15 @@ async function sendViaTauriWs(
           // Scope timing/stability updates to this session only. Some gateway
           // broadcasts include agent events from other sessions; those should
           // not keep this send alive.
-          lastEventTime = Date.now();
+          const now = Date.now();
+          lastEventTime = now;
+          lastObservedRunActivityAt = now;
           resetIdleTimeout();
           pollStableCount = 0;
           clearSawFinal('agent activity');
 
           if (agentRunId === runId) {
-            sawOwnedProgressEvent = true;
+            sawRunOwnedProgress = true;
           }
 
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
@@ -1481,9 +1499,11 @@ async function sendViaTauriWs(
           return;
         }
         if (state && state !== 'final' && eventRunId === runId) {
-          sawOwnedProgressEvent = true;
+          sawRunOwnedProgress = true;
         }
-        lastEventTime = Date.now();
+        const now = Date.now();
+        lastEventTime = now;
+        lastObservedRunActivityAt = now;
         resetIdleTimeout();
         if (state && state !== 'final') {
           clearSawFinal(`chat state=${state}`);
@@ -1523,7 +1543,7 @@ async function sendViaTauriWs(
           lastDeltaTime = Date.now();
           const deltaText = extractText(chat.message);
           if (deltaText) {
-            sawOwnedContentEvent = true;
+            sawRunOwnedContent = true;
             if (sawToolSinceLastContent && deltaText.length < streamedText.length) {
               // New content block after tool calls — append with separator.
               contentBlockOffset = streamedText.length + 2; // +2 for '\n\n'
@@ -1671,9 +1691,13 @@ async function sendViaTauriWs(
     // Recovery path: if completion resolved but we still have no content,
     // keep polling history briefly before returning an empty response.
     if (assistantMessages.length === 0 && !streamedTrimmed) {
-      const recoveryDeadline = Date.now() + 30_000;
+      const recoveryWindowMs =
+        NO_RESPONSE_RECOVERY_BASE_MS +
+        (sawRunOwnedProgress && !sawRunOwnedContent ? NO_RESPONSE_RECOVERY_PROGRESS_MS : 0);
+      const recoveryDeadline = Date.now() + recoveryWindowMs;
       while (Date.now() < recoveryDeadline) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
+        setAgentActivity('working', onActivityChange);
         try {
           const recoveryHistory = (await connection.request('chat.history', {
             sessionKey,
