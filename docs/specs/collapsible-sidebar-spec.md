@@ -29,13 +29,13 @@
 
 The main board is the dashboard's core. Everything else — settings, agent activity, session management, configuration — is secondary UI that shouldn't fight for space with the kanban board.
 
-The sidebar provides a **persistent but collapsible** home for this secondary UI. It's collapsed by default and slides in from the left when toggled. The chat bar stays at the **bottom** of the app at all times — it does **not** become a right-hand panel when the sidebar opens.
+The sidebar provides a **persistent but collapsible** home for this secondary UI. It's collapsed by default and slides in from the left when toggled. When the sidebar opens, the **entire app compresses from the left** — board, chat bar, everything. The chat bar stays at the bottom but gets narrower; it does **not** become a right-hand side panel.
 
 ### Design Principles
 
 1. **Board-first** — The sidebar never steals focus from the kanban. It's a utility panel.
 2. **Collapsed by default** — Users who don't need it never see it. Zero cognitive cost.
-3. **Chat stays at the bottom** — The chat bar is always a bottom bar, never a side panel. Opening the sidebar does not affect its position.
+3. **Everything compresses, nothing relocates** — When the sidebar opens, the whole content area (board + chat bar) narrows from the left. The chat bar stays at the bottom — it never becomes a side drawer.
 4. **Build the container first** — Phase 1 is the sidebar shell + toggle. Content decisions come later.
 
 ---
@@ -45,54 +45,54 @@ The sidebar provides a **persistent but collapsible** home for this secondary UI
 ### Layout: Sidebar Open
 
 ```
-┌─────┬──────────────────────────────────────────────────────┐
-│●●●  │ ◧  Clawchestra  [Update]              [⌘K] [⚙] ... │  ← Title bar (deepened)
-├─────┴──────────────────────────────────────────────────────┤
-│          │                                                 │
-│ SIDEBAR  │              KANBAN BOARD                       │
-│ (left)   │                                                 │
-│          │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐   │
-│          │  │IN FLGHT│ │UP NEXT │ │SIMMER  │ │SHIPPED │   │
-│          │  │        │ │        │ │        │ │        │   │
-│ ┌──────┐ │  │ ┌────┐ │ │ ┌────┐ │ │ ┌────┐ │ │        │   │
-│ │      │ │  │ │Card│ │ │ │Card│ │ │ │Card│ │ │        │   │
-│ │(TBD) │ │  │ └────┘ │ │ └────┘ │ │ └────┘ │ │        │   │
-│ │      │ │  │ ┌────┐ │ │        │ │        │ │        │   │
-│ └──────┘ │  │ │Card│ │ │        │ │        │ │        │   │
-│          │  │ └────┘ │ │        │ │        │ │        │   │
-│ ⚙ Settn │  └────────┘ └────────┘ └────────┘ └────────┘   │
-│          │                                                 │
-├──────────┴─────────────────────────────────────────────────┤
-│  [Chat input bar — always at the bottom, full width]       │
-└────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ ●●● ◧  Clawchestra  [Update]                  [⌘K] [⚙] ... │  ← Title bar (full width, deepened)
+├──────────┬───────────────────────────────────────────────────┤
+│          │                                                   │
+│ SIDEBAR  │              KANBAN BOARD                         │
+│ (left)   │                                                   │
+│          │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐     │
+│          │  │IN FLGHT│ │UP NEXT │ │SIMMER  │ │SHIPPED │     │
+│          │  │        │ │        │ │        │ │        │     │
+│ ┌──────┐ │  │ ┌────┐ │ │ ┌────┐ │ │ ┌────┐ │ │        │     │
+│ │      │ │  │ │Card│ │ │ │Card│ │ │ │Card│ │ │        │     │
+│ │(TBD) │ │  │ └────┘ │ │ └────┘ │ │ └────┘ │ │        │     │
+│ │      │ │  │ ┌────┐ │ │        │ │        │ │        │     │
+│ └──────┘ │  │ │Card│ │ │        │ │        │ │        │     │
+│          │  │ └────┘ │ │        │ │        │ │        │     │
+│ ⚙ Settn │  └────────┘ └────────┘ └────────┘ └────────┘     │
+│          │                                                   │
+│          ├───────────────────────────────────────────────────┤
+│          │  [Chat bar — bottom, shares width with board]     │
+└──────────┴───────────────────────────────────────────────────┘
 ```
 
 ### Layout: Sidebar Closed
 
 ```
-┌─────┬──────────────────────────────────────────────────────┐
-│●●●  │ ◨  Clawchestra  [Update]              [⌘K] [⚙] ... │  ← Title bar
-├─────┴──────────────────────────────────────────────────────┤
-│                                                            │
-│                     KANBAN BOARD                           │
-│                                                            │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐              │
-│  │IN FLGHT│ │UP NEXT │ │SIMMER  │ │SHIPPED │              │
-│  │        │ │        │ │        │ │        │              │
-│  │ ┌────┐ │ │ ┌────┐ │ │ ┌────┐ │ │        │              │
-│  │ │Card│ │ │ │Card│ │ │ │Card│ │ │        │              │
-│  │ └────┘ │ │ └────┘ │ │ └────┘ │ │        │              │
-│  │ ┌────┐ │ │        │ │        │ │        │              │
-│  │ │Card│ │ │        │ │        │ │        │              │
-│  │ └────┘ │ │        │ │        │ │        │              │
-│  └────────┘ └────────┘ └────────┘ └────────┘              │
-│                                                            │
-├────────────────────────────────────────────────────────────┤
-│  [Chat input bar — always at the bottom, full width]       │
-└────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ ●●● ◨  Clawchestra  [Update]                  [⌘K] [⚙] ... │  ← Title bar
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│                       KANBAN BOARD                           │
+│                                                              │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                │
+│  │IN FLGHT│ │UP NEXT │ │SIMMER  │ │SHIPPED │                │
+│  │        │ │        │ │        │ │        │                │
+│  │ ┌────┐ │ │ ┌────┐ │ │ ┌────┐ │ │        │                │
+│  │ │Card│ │ │ │Card│ │ │ │Card│ │ │        │                │
+│  │ └────┘ │ │ └────┘ │ │ └────┘ │ │        │                │
+│  │ ┌────┐ │ │        │ │        │ │        │                │
+│  │ │Card│ │ │        │ │        │ │        │                │
+│  │ └────┘ │ │        │ │        │ │        │                │
+│  └────────┘ └────────┘ └────────┘ └────────┘                │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  [Chat bar — bottom, full width]                             │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Key constraint:** The chat bar spans the full width at the bottom in both states. It is never repositioned to the right side. Opening the sidebar compresses the board horizontally, not the chat bar.
+**Key constraint:** The sidebar compresses the **entire content area** to its right — board and chat bar alike. Everything shifts/narrows from the left. The chat bar stays at the bottom but shares width with the board (not the full window width when sidebar is open). The critical thing is that the chat bar never **relocates** — it doesn't become a right-side drawer or panel. It stays at the bottom, just narrower.
 
 ---
 
@@ -127,8 +127,9 @@ The title bar may need to be **slightly deeper** to comfortably accommodate the 
 
 Changes:
 - **Title bar height:** Increase if needed to fit the toggle icon comfortably (aim for ~36-40px draggable region)
+- **Sidebar toggle:** Added immediately right of traffic lights
 - **"Clawchestra" title:** Moves right to sit after the toggle button
-- **"Update" badge:** Stays next to the Clawchestra title (same relative position, just shifted right with it)
+- **"Update" badge moved into title bar:** Currently in the header content area, the Update badge relocates into the title bar next to the "Clawchestra" title (Codex puts its Update badge in the title bar too — see screenshots). This is what necessitates the title shifting right.
 - **Right-side controls** (⌘K search, settings gear, theme toggle, etc.): Stay on the right, no change
 
 ### Title Bar Drag Region
@@ -167,10 +168,10 @@ The title bar area must remain draggable for window movement. The toggle button 
 
 ### Coexistence with Chat Bar
 
-- The chat bar is **always at the bottom**. It never moves.
-- Opening the sidebar compresses the **board** horizontally, not the chat bar.
-- The chat bar spans the full app width regardless of sidebar state.
-- The layout is a CSS grid: sidebar + board in the middle row, chat bar spanning full width in the bottom row.
+- The chat bar is **always at the bottom**. It never relocates to become a side panel.
+- Opening the sidebar compresses the **entire content area** to the right — board and chat bar both get narrower.
+- The sidebar spans the full height (below the title bar). The board + chat bar together fill the remaining width to its right.
+- CSS layout: the sidebar is a full-height column on the left; the right column contains the board (flex-grow) above the chat bar (fixed height).
 
 ---
 
@@ -279,7 +280,7 @@ App.tsx
 - Two icon states: open (◧) and close (◨)
 - `Cmd+B` keyboard shortcut
 - Title bar deepened to accommodate toggle alongside traffic lights
-- "Clawchestra" title shifted right, "Update" badge stays next to it
+- "Clawchestra" title + "Update" badge moved into the title bar (shifted right of toggle)
 - Sidebar persists open/closed state across restarts
 - Chat bar remains at the bottom at all times
 - Minimum window dimensions enforced via Tauri
@@ -342,6 +343,19 @@ Uses existing `sessions_list` and `sessions_history` RPC.
 ### Navigation / Project Tree
 
 Sidebar could serve as a project navigator (tree view of projects/deliverables) as an alternative to the kanban view.
+
+### Configurable Panel Orientation
+
+Give the user control over where panels live:
+- **Sidebar orientation:** left (default) or right
+- **Chat bar orientation:** bottom (default), left sidebar, or right sidebar
+
+VS Code and Codex are useful references here — both support panel relocation (VS Code lets you move the panel between bottom/right/left, and the sidebar between left/right). Implications to consider:
+- When sidebar and chat are on the same side, they'd need to stack or tab
+- Minimum window dimensions may need to adapt based on orientation
+- Keyboard shortcuts stay the same regardless of orientation
+
+This would be a separate **"Sidebar Enhancements"** roadmap item — not part of the sidebar MVP or any current phase.
 
 ---
 
