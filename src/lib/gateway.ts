@@ -393,6 +393,27 @@ function normalizeTextForMatch(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function likelyNeedsFinalSettlePass(messages: ChatMessage[]): boolean {
+  if (messages.length === 0) return false;
+  const last = messages[messages.length - 1]?.content?.trim() ?? '';
+  if (!last) return true;
+
+  // Unclosed code blocks often indicate truncated output.
+  const codeFenceCount = (last.match(/```/g) ?? []).length;
+  if (codeFenceCount % 2 === 1) return true;
+
+  if (last.endsWith(':') || last.endsWith(',') || last.endsWith(';') || last.endsWith('...')) {
+    return true;
+  }
+
+  // For longer replies, lack of terminal punctuation is suspicious.
+  if (last.length > 220 && !/[.!?]$/.test(last)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isMessageNewForTurn(
   message: GatewayHistoryMessage,
   options: { baselineIds: Set<string>; minTimestamp: number },
@@ -1115,6 +1136,7 @@ async function sendViaTauriWs(
   let sawFinalEvent = false;
   let sawFinalEventAt = 0;
   let resolvedWithoutFinal = false;
+  let requiresFinalSettlePass = false;
   const baselineMessageIds = new Set<string>();
 
   try {
@@ -1265,7 +1287,7 @@ async function sendViaTauriWs(
         // events), let them drive — only poll as backup. The streamedText check
         // was previously required, but agent events during pure tool work (no
         // content yet) are equally valid indicators of an active send.
-        if (sendAcked) {
+        if (sendAcked && !sawFinal) {
           const timeSinceLastEvent = Date.now() - lastEventTime;
           if (timeSinceLastEvent < 5000) {
             return;
@@ -1331,8 +1353,22 @@ async function sendViaTauriWs(
               : canResolveWithoutFinal
                 ? NO_FINAL_STABILITY_POLLS
                 : Number.POSITIVE_INFINITY;
+            if (sawFinal && combined.length > 0) {
+              const needsFinalSettle = likelyNeedsFinalSettlePass(assistantMessages);
+              if (!needsFinalSettle) {
+                resolvedWithoutFinal = false;
+                requiresFinalSettlePass = false;
+                cleanup('finalFastPath');
+                resolve();
+                return;
+              }
+              requiresFinalSettlePass = true;
+            }
             if (pollStableCount >= stabilityThreshold && combined.length > 0) {
               resolvedWithoutFinal = !sawFinal;
+              if (sawFinal) {
+                requiresFinalSettlePass = likelyNeedsFinalSettlePass(assistantMessages);
+              }
               console.log(
                 `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}/${stabilityThreshold}, sawFinal=${sawFinal}`,
               );
@@ -1649,7 +1685,12 @@ async function sendViaTauriWs(
       assistantMessages.length > 0 &&
       (
         (resolvedWithoutFinal && !sawFinalEvent) ||
-        (sawFinalEvent && sawFinalEventAt > 0 && Date.now() - sawFinalEventAt < FINAL_SETTLE_WINDOW_MS)
+        (
+          requiresFinalSettlePass &&
+          sawFinalEvent &&
+          sawFinalEventAt > 0 &&
+          Date.now() - sawFinalEventAt < FINAL_SETTLE_WINDOW_MS
+        )
       );
 
     if (shouldRunSettlePass) {
