@@ -1,21 +1,16 @@
 import { Loader2, Moon, PanelLeft, PanelLeftClose, Sun, SunMoon } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import type { ThemePreference } from '../lib/schema';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
 
-/** Start window drag via Tauri API (fallback: no-op in browser) */
+/** Start window drag via Tauri API */
 function startWindowDrag() {
-  try {
-    // @ts-expect-error — __TAURI__ is injected by Tauri runtime
-    const w = window.__TAURI__?.window;
-    if (w) {
-      void w.getCurrentWindow().startDragging();
-    }
-  } catch {
-    // Not in Tauri context — ignore
-  }
+  void getCurrentWindow().startDragging().catch(() => {
+    // Not in Tauri context or drag failed — ignore
+  });
 }
 
 export function TitleBar() {
