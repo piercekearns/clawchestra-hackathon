@@ -6,6 +6,7 @@ import {
   closestCorners,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragCancelEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -41,6 +42,26 @@ interface BoardProps<T extends BoardItem> {
 const MIN_COLUMN_WIDTH = 300;
 const COLUMN_GAP = 16;
 const EMPTY_ARRAY: string[] = [];
+
+/**
+ * Scoped collision detection: when dragging a column (col:* ID), only
+ * consider other col:* sortable targets so SortableContext can animate
+ * swaps. When dragging a card, exclude col:* targets to avoid confusion.
+ */
+const scopedCollision: CollisionDetection = (args) => {
+  const activeId = String(args.active.id);
+  if (activeId.startsWith('col:')) {
+    const columnOnly = args.droppableContainers.filter(
+      (c) => String(c.id).startsWith('col:'),
+    );
+    return closestCorners({ ...args, droppableContainers: columnOnly });
+  }
+  // Card drag — match cards + plain column droppables (not col:* sortables)
+  const cardTargets = args.droppableContainers.filter(
+    (c) => !String(c.id).startsWith('col:'),
+  );
+  return closestCorners({ ...args, droppableContainers: cardTargets });
+};
 
 function groupByStatus<T extends BoardItem>(
   items: T[],
@@ -284,7 +305,7 @@ export function Board<T extends BoardItem>({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={scopedCollision}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragCancel={handleDragCancel}
