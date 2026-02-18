@@ -304,4 +304,20 @@ describe('gateway client', () => {
     expect(extracted.map((message) => message._id)).toEqual(['a-1']);
     expect(extracted[0]?.content).toBe('assistant response');
   });
+
+  it('marks in-progress assistant snippets as needing settle pass', () => {
+    const needsSettle = __gatewayTestUtils.likelyNeedsFinalSettlePass([
+      { role: 'assistant', content: 'Now update the Column component with collapsed/expanded variants:' },
+    ]);
+
+    expect(needsSettle).toBe(true);
+  });
+
+  it('does not mark complete assistant sentences as needing settle pass', () => {
+    const needsSettle = __gatewayTestUtils.likelyNeedsFinalSettlePass([
+      { role: 'assistant', content: 'Build ready. Update to test.' },
+    ]);
+
+    expect(needsSettle).toBe(false);
+  });
 });

@@ -119,6 +119,7 @@ const NO_FINAL_RESOLVE_MIN_SEND_AGE_MS = 75000;
 const NO_FINAL_RESOLVE_MIN_QUIET_MS = 25000;
 const NO_FINAL_STABILITY_POLLS = 4;
 const NO_FINAL_MAX_WAIT_MS = 120000;
+const NO_FINAL_FORCE_RESOLVE_MS = 180000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -1274,6 +1275,7 @@ async function sendViaTauriWs(
       // matching window.
       let lastPollSignature = '';
       let pollStableCount = 0; // How many consecutive polls returned the same length
+      let noFinalBlockedLogged = false;
 
       // Aggressive poll fallback — events may not be delivered reliably
       // (WS drops, event subscription issues), so poll frequently.
@@ -1347,10 +1349,25 @@ async function sendViaTauriWs(
                 sendAgeMs >= NO_FINAL_RESOLVE_MIN_SEND_AGE_MS ||
                 sendAgeMs >= NO_FINAL_MAX_WAIT_MS
               );
+            const noFinalLooksIncomplete = likelyNeedsFinalSettlePass(assistantMessages);
+            const allowNoFinalResolve =
+              canResolveWithoutFinal &&
+              (!noFinalLooksIncomplete || sendAgeMs >= NO_FINAL_FORCE_RESOLVE_MS);
+            if (
+              canResolveWithoutFinal &&
+              noFinalLooksIncomplete &&
+              sendAgeMs < NO_FINAL_FORCE_RESOLVE_MS &&
+              !noFinalBlockedLogged
+            ) {
+              noFinalBlockedLogged = true;
+              console.log(
+                `[Gateway] No-final resolution blocked: content still looks incomplete (sendAge=${sendAgeMs}ms)`,
+              );
+            }
 
             const stabilityThreshold = sawFinal
               ? FINAL_STABILITY_POLLS
-              : canResolveWithoutFinal
+              : allowNoFinalResolve
                 ? NO_FINAL_STABILITY_POLLS
                 : Number.POSITIVE_INFINITY;
             if (sawFinal && combined.length > 0) {
@@ -1959,6 +1976,7 @@ export function subscribeConnectionState(
 
 export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
+  likelyNeedsFinalSettlePass,
 };
 
 export async function pollProcessSessions(
