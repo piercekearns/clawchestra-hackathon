@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
@@ -32,6 +32,10 @@ export function Column<T extends BoardItem>({
   renderItemHoverActions,
 }: ColumnProps<T>) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { onKeyDown: dragHandleOnKeyDown, ...dragHandleProps } = (headerDragHandleProps ?? {}) as {
+    onKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
+    [key: string]: unknown;
+  };
 
   return (
     <section
@@ -52,8 +56,9 @@ export function Column<T extends BoardItem>({
             e.preventDefault();
             onToggleCollapse?.();
           }
+          dragHandleOnKeyDown?.(e);
         }}
-        {...headerDragHandleProps}
+        {...dragHandleProps}
       >
         <button
           type="button"

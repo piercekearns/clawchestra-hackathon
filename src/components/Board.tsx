@@ -16,6 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { resolveColumnOrder } from '../lib/columns';
@@ -117,6 +118,7 @@ export function Board<T extends BoardItem>({
   const [localItems, setLocalItems] = useState(items);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
+  const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalItems(items);
@@ -146,18 +148,11 @@ export function Board<T extends BoardItem>({
     [orderedColumns],
   );
 
-  /** All sortable IDs: column IDs + every card ID (needed for single DndContext) */
-  const allSortableIds = useMemo(() => {
-    const ids: string[] = [...sortableColumnIds];
-    for (const col of orderedColumns) {
-      for (const item of grouped[col.id] ?? []) {
-        ids.push(item.id);
-      }
-    }
-    return ids;
-  }, [sortableColumnIds, orderedColumns, grouped]);
-
   const isColumnId = (id: string) => id.startsWith('col:');
+  const toColumnStatusId = (id: string): string | null => {
+    const normalized = isColumnId(id) ? id.slice(4) : id;
+    return columnIdSet.has(normalized) ? normalized : null;
+  };
 
   // --- Card DnD helpers ---
   const findStatusForTarget = (targetId: string): string | null => {
@@ -165,10 +160,19 @@ export function Board<T extends BoardItem>({
     return localItems.find((entry) => entry.id === targetId)?.status ?? null;
   };
 
+  const activeColumn = activeColumnId
+    ? orderedColumns.find((c) => c.id === activeColumnId) ?? null
+    : null;
+  const activeColumnItemCount = activeColumn
+    ? (grouped[activeColumn.id] ?? []).length
+    : 0;
+
   // --- Unified DnD handlers ---
   const handleDragStart = (event: DragStartEvent) => {
     const id = String(event.active.id);
-    if (!isColumnId(id)) {
+    if (isColumnId(id)) {
+      setActiveColumnId(id.replace(/^col:/, ''));
+    } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
     }
@@ -177,15 +181,17 @@ export function Board<T extends BoardItem>({
   const handleDragCancel = (_event: DragCancelEvent) => {
     setActiveCardId(null);
     setActiveCardWidth(null);
+    setActiveColumnId(null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     const activeId = String(active.id);
 
-    // Always reset card drag state
+    // Always reset drag state
     setActiveCardId(null);
     setActiveCardWidth(null);
+    setActiveColumnId(null);
 
     if (!over) return;
     const overId = String(over.id);
@@ -193,12 +199,9 @@ export function Board<T extends BoardItem>({
     // --- Column reorder ---
     if (isColumnId(activeId)) {
       // over.id may be "col:xxx" (sortable) or plain "xxx" (droppable)
-      const activeColId = activeId.replace(/^col:/, '');
-      const overColId = overId.replace(/^col:/, '');
-
-      if (activeColId === overColId) return;
-      // Must resolve to a known column
-      if (!columnIdSet.has(overColId)) return;
+      const activeColId = toColumnStatusId(activeId);
+      const overColId = toColumnStatusId(overId);
+      if (!activeColId || !overColId || activeColId === overColId) return;
 
       const oldIndex = orderedColumns.findIndex((c) => c.id === activeColId);
       const newIndex = orderedColumns.findIndex((c) => c.id === overColId);
@@ -302,6 +305,19 @@ export function Board<T extends BoardItem>({
               renderIndicators={renderItemIndicators}
               renderHoverActions={renderItemHoverActions}
             />
+          </div>
+        ) : activeColumn ? (
+          <div
+            className="flex cursor-grabbing items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 shadow-lg ring-1 ring-neutral-300 dark:bg-neutral-800 dark:ring-neutral-600"
+            style={{ width: `${MIN_COLUMN_WIDTH}px` }}
+          >
+            <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+              {activeColumn.label}
+            </h2>
+            <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+              {activeColumnItemCount}
+            </span>
+            <GripVertical className="h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-neutral-500" />
           </div>
         ) : null}
       </DragOverlay>

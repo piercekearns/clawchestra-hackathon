@@ -91,19 +91,24 @@ export class TauriOpenClawConnection {
       if (this.disposed) return;
       if (!this.ws || this._state !== 'connected') return;
 
-      // Send a protocol-level ping as a JSON text message.
-      // The Tauri WS plugin's { type: 'Ping' } format may not work
-      // reliably — use a lightweight RPC request instead, which the
-      // gateway will respond to (keeping the connection alive).
+      // Keepalive via a lightweight, already-authorized RPC.
+      // Using `ping` requires additional scopes in many gateway configs.
       const pingId = `ping-${Date.now()}`;
       this.ws
-        .send(JSON.stringify({ type: 'req', id: pingId, method: 'ping', params: {} }))
+        .send(
+          JSON.stringify({
+            type: 'req',
+            id: pingId,
+            method: 'chat.history',
+            params: { sessionKey: this.sessionKey, limit: 1 },
+          }),
+        )
         .then(() => {
           // Outbound ping success is a valid liveness signal. Rely on
           // ping send failures/Close frames for reconnect, rather than
           // forcing reconnects purely on inbound silence during long turns.
           this.markSocketActivity();
-          console.log('[TauriWS] Keepalive ping sent');
+          console.log('[TauriWS] Keepalive history probe sent');
         })
         .catch((err) => {
           console.warn('[TauriWS] Keepalive ping failed, forcing reconnect:', err);

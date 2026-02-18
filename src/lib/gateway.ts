@@ -124,6 +124,7 @@ const NO_FINAL_FORCE_RESOLVE_MS = 180000;
 const NO_RESPONSE_RECOVERY_BASE_MS = 30000;
 const NO_RESPONSE_RECOVERY_PROGRESS_MS = 120000;
 const UNSCOPED_TERMINAL_MIN_SEND_AGE_MS = 8000;
+const GATEWAY_DEBUG_LOG = import.meta.env.DEV || import.meta.env.VITE_GATEWAY_DEBUG === '1';
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
 
@@ -1466,10 +1467,10 @@ async function sendViaTauriWs(
           const agentSessionKey =
             typeof agentPayload.sessionKey === 'string' ? agentPayload.sessionKey : undefined;
           const agentRunId = typeof agentPayload.runId === 'string' ? agentPayload.runId : undefined;
-
-          if (agentSessionKey && agentSessionKey !== sessionKey) {
-            return;
-          }
+          const belongsToRun =
+            (agentSessionKey !== undefined && agentSessionKey === sessionKey) ||
+            (agentRunId !== undefined && agentRunId === runId);
+          if (!belongsToRun) return;
 
           // Scope timing/stability updates to this session only. Some gateway
           // broadcasts include agent events from other sessions; those should
@@ -1665,14 +1666,12 @@ async function sendViaTauriWs(
     // deltas stopped arriving (WS hiccup, timing issues).
     // Only fall back to streaming if history extraction found nothing.
     const historyTotalLength = assistantMessages.reduce((sum, m) => sum + m.content.length, 0);
-    console.log(`[Gateway] Post-send: history found ${assistantMessages.length} messages (${historyTotalLength} chars), streamed ${streamedText.trim().length} chars`);
-    console.log(`[Gateway] Streamed text (${streamedText.trim().length} chars) preview: "${streamedText.trim().slice(0, 100)}..."`);
-    console.log(`[Gateway] Streamed text TAIL: "...${streamedText.trim().slice(-100)}"`);
-    if (assistantMessages.length > 0) {
-      for (let i = 0; i < assistantMessages.length; i++) {
-        console.log(`[Gateway] History msg[${i}]: ${assistantMessages[i].content.length} chars`);
-        console.log(`[Gateway]   HEAD: "${assistantMessages[i].content.slice(0, 100)}..."`);
-        console.log(`[Gateway]   TAIL: "...${assistantMessages[i].content.slice(-100)}"`);
+    console.log(
+      `[Gateway] Post-send: history found ${assistantMessages.length} messages (${historyTotalLength} chars), streamed ${streamedText.trim().length} chars`,
+    );
+    if (GATEWAY_DEBUG_LOG && assistantMessages.length > 0) {
+      for (let i = 0; i < assistantMessages.length; i += 1) {
+        console.log(`[Gateway][debug] History msg[${i}] len=${assistantMessages[i].content.length}`);
       }
     }
 

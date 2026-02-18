@@ -179,6 +179,7 @@ export default function App() {
   const activeAnnounceRunsRef = useRef<Map<string, number>>(new Map());
   const seenTerminalAnnounceRunsRef = useRef<Map<string, number>>(new Map());
   const chatDrawerOpenRef = useRef(chatDrawerOpen);
+  const chatQueueRef = useRef(chatQueue);
   const lastChatRecoveryAtRef = useRef(0);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
@@ -261,6 +262,10 @@ export default function App() {
   useEffect(() => {
     chatDrawerOpenRef.current = chatDrawerOpen;
   }, [chatDrawerOpen]);
+
+  useEffect(() => {
+    chatQueueRef.current = chatQueue;
+  }, [chatQueue]);
 
   useEffect(() => {
     applyTheme(themePreference);
@@ -821,17 +826,19 @@ export default function App() {
 
   // Process the next queued message (called after a send completes)
   const processNextQueuedMessage = async () => {
-    setChatQueue((current) => {
-      if (current.length === 0) return current;
-      
-      const [next, ...rest] = current;
-      // Use setTimeout to avoid state update during render
-      setTimeout(() => {
-        void sendChatMessage({ text: next.text, images: next.attachments });
-      }, 100);
-      
-      return rest;
-    });
+    const next = chatQueueRef.current[0];
+    if (!next) return;
+
+    setChatQueue((current) => current.slice(1));
+
+    // Let UI settle after dequeue before issuing next send.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const ok = await sendChatMessage({ text: next.text, images: next.attachments });
+
+    if (!ok) {
+      // Reinsert at the front so failed messages aren't dropped.
+      setChatQueue((current) => [next, ...current]);
+    }
   };
 
   useEffect(() => {
@@ -921,9 +928,7 @@ export default function App() {
       setGatewayConnected(true);
       
       // Add ALL assistant messages (fixes dropped message bug)
-      console.log(`[Chat] === SEND COMPLETE === ${result.messages.length} messages, lastContent: ${result.lastContent?.length ?? 0} chars`);
       for (const msg of result.messages) {
-        console.log(`[Chat] Adding ${msg.role} message: ${msg.content.length} chars, preview: "${msg.content.slice(0, 100)}..."`);
         addChatMessage(msg);
         if (msg.role === 'assistant') {
           for (const sessionKey of extractBackgroundSessionKeys(msg.content)) {
@@ -936,6 +941,7 @@ export default function App() {
         setChatResponseToastMessage(result.lastContent);
       }
       await loadProjects();
+      void processNextQueuedMessage();
       return true;
     } catch (error) {
       console.error('[Chat] === SEND FAILED ===', error);
@@ -963,9 +969,6 @@ export default function App() {
     } finally {
       setChatSending(false);
       setChatStreamingContent(null);
-      
-      // Process next queued message if any
-      void processNextQueuedMessage();
     }
   };
 
