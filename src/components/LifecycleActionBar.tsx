@@ -21,20 +21,21 @@ function actionButtonClass(filled: boolean): string {
   return [
     'inline-flex h-6 w-6 items-center justify-center rounded transition-all',
     // No border or background by default — bare icon
+    // Higher contrast: neutral-600/500 instead of 400/500
     filled
       ? 'text-revival-accent-500 dark:text-revival-accent-400'
-      : 'text-neutral-400 dark:text-neutral-500',
+      : 'text-neutral-500 dark:text-neutral-400',
     // Hover: subtle container with shadow (Proton style)
     'hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm',
     'dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100',
   ].join(' ');
 }
 
-const ICON_SIZE = 'h-3.5 w-3.5';
+const ICON_SIZE = 'h-[15px] w-[15px]';
 
 export function LifecycleActionBar({ specExists, planExists, onAction }: LifecycleActionBarProps) {
   return (
-    <div className="flex h-full w-full items-center justify-center gap-1">
+    <div className="flex h-full w-full items-center justify-start gap-1">
       <button
         type="button"
         className={actionButtonClass(specExists)}

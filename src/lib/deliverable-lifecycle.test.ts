@@ -15,7 +15,7 @@ describe('deliverable lifecycle helpers', () => {
       item: { id: 'item-1', title: 'Item One', docs: {} },
     });
 
-    expect(prompt).toContain('Requested action: Create new spec');
+    expect(prompt).toContain('Requested action: Create a new spec for this roadmap item under docs/specs/.');
     expect(prompt).toContain('Spec doc: (missing)');
   });
 

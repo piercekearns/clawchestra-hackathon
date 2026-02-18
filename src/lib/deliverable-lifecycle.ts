@@ -79,17 +79,13 @@ export function buildLifecyclePrompt(
       if (artifactState.spec === 'present') {
         return [
           ...header,
-          `Requested action: Update existing spec at ${specPath}`,
-          'Update this roadmap item spec with current constraints and implementation details.',
-          'Keep the spec concise and aligned with AGENTS.md document formatting rules.',
+          `Requested action: Update existing spec at ${specPath}. Keep the spec concise and aligned with AGENTS.md document formatting rules.`,
         ].join('\n');
       }
 
       return [
         ...header,
-        'Requested action: Create new spec',
-        'Create a new spec for this roadmap item under docs/specs/.',
-        'Set ROADMAP nextAction to "Spec written — ready for plan/build" when done.',
+        'Requested action: Create a new spec for this roadmap item under docs/specs/. Set ROADMAP nextAction to "Spec written — ready for plan/build" when done.',
       ].join('\n');
     }
 
@@ -97,22 +93,17 @@ export function buildLifecyclePrompt(
       if (artifactState.plan === 'present') {
         return [
           ...header,
-          `Requested action: Update existing plan at ${planPath}`,
-          'Update this implementation plan based on the latest scope and constraints.',
-          'Keep phases concrete, testable, and implementation-ready.',
+          `Requested action: Update existing plan at ${planPath}. Keep phases concrete, testable, and implementation-ready.`,
         ].join('\n');
       }
 
       const specReference = specPath
-        ? `Use existing spec at ${specPath} as the source of truth.`
-        : 'No spec exists yet; include explicit assumptions and scope boundaries.';
+        ? ` Use existing spec at ${specPath} as the source of truth.`
+        : ' No spec exists yet; include explicit assumptions and scope boundaries.';
 
       return [
         ...header,
-        'Requested action: Create new plan',
-        'Create a new implementation plan under docs/plans/.',
-        specReference,
-        'Set ROADMAP nextAction to "Plan written — ready for build" when done.',
+        `Requested action: Create a new implementation plan under docs/plans/.${specReference} Set ROADMAP nextAction to "Plan written — ready for build" when done.`,
       ].join('\n');
     }
 
