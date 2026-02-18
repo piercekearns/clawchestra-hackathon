@@ -26,9 +26,9 @@ items:
     planDoc: docs/plans/deliverable-lifecycle-orchestration-plan.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
-    status: up-next
-    priority: 1
-    nextAction: Spec written — ready for plan/build
+    status: in-progress
+    priority: 3
+    nextAction: Code shipped — awaiting verification
     tags:
       - ui
       - kanban
