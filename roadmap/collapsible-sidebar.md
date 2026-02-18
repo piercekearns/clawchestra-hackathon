@@ -1,12 +1,12 @@
 ---
 title: Collapsible Sidebar
 id: collapsible-sidebar
-status: pending
+status: in-progress
 tags: [ui, navigation]
 icon: "📐"
 specDoc: docs/specs/collapsible-sidebar-spec.md
 planDoc: docs/plans/collapsible-sidebar-plan.md
-nextAction: "Plan written — ready for build"
+nextAction: "Built — needs manual testing"
 lastActivity: "2026-02-18"
 ---
 
