@@ -11,7 +11,6 @@ import { migrateCompletedItem } from '../lib/changelog';
 import { parseChangelog } from '../lib/changelog';
 import { readFile } from '../lib/tauri';
 import type { ProjectModalActions } from '../components/modal/types';
-import { autoCommitIfLocalOnly } from '../lib/auto-commit';
 
 type ModalView =
   | { kind: 'list' }
@@ -184,14 +183,6 @@ export function useProjectModal(
 
         void migrateCompletedItem(roadmapFilePath, project.changelogFilePath, itemId)
           .then(async () => {
-            // Auto-commit for local-only repos
-            if (project.hasRepo && !project.gitStatus?.remote) {
-              void autoCommitIfLocalOnly(
-                project.dirPath,
-                project.gitStatus,
-                ['ROADMAP.md', 'CHANGELOG.md'],
-              );
-            }
             // Refresh changelog entries
             try {
               const changelog = await parseChangelog(project.changelogFilePath!);

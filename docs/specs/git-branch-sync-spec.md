@@ -137,18 +137,9 @@ A git management skill/guide synthesized from:
 - Full git GUI (this is targeted sync, not a replacement for VS Code's git panel)
 - Changing the Phase 2 auto-commit boundary policy (local-only Kanban structure changes only)
 
-## Auto-Commit Interaction
-
-Phase 1 introduced auto-commit for local-only repos. Branch sync only applies to repos with remotes (you need somewhere to push to for multi-branch to matter). So auto-commit and branch sync are complementary, not conflicting:
-
-- **Local-only repos:** Auto-commit handles everything silently. No branch sync needed.
-- **Remote repos:** Sync dialog handles commit + push. Branch sync adds multi-branch cherry-pick on top.
-
-One edge case: if a local-only repo later gets a remote added, any auto-committed history is already clean and pushable. No migration needed.
-
 ## Dependencies
 
-- git-sync (phase 1) ✅ — base commit/push infrastructure + auto-commit for local repos
+- git-sync (phase 1) ✅ — base commit/push infrastructure
 - git-sync-scope (phase 2) — all-file detection and categorization
 - OpenClaw agent integration — already built into Clawchestra chat
 
