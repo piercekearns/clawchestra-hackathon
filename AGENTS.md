@@ -54,6 +54,9 @@ pnpm build                      # Frontend only (fast)
 npx tauri build --no-bundle     # Full release build (ALWAYS --no-bundle)
 ```
 
+### Title Length Guideline
+Aim for ~40 characters or fewer for roadmap item and project titles — this fits on one line at minimum card width. Two lines is acceptable. Avoid long titles that wrap to 3+ lines.
+
 ### Roadmap Item YAML Shape
 
 ```yaml
