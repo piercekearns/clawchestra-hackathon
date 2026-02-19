@@ -87,11 +87,29 @@ Implementation for this website must use the `frontend-design` skill guidance:
 - Use meaningful motion (load sequence, staged reveals, or interactive preview)
 - Ensure responsive behavior on both desktop and mobile
 
-Design inspiration references (`openclaw.ai`, `clawi.ai`) should inform confidence and clarity, but the final execution must be distinctly Clawchestra.
+Design inspiration references (`openclaw.ai`, `clawi.ai`, `blacksmith.sh`) should inform confidence and clarity, but the final execution must be distinctly Clawchestra.
 
-## 6. Reference Site Reconnaissance (Required Before Build Plan)
+## 6. Visual Direction Concept (Preferred)
 
-Before implementation planning, run a targeted technical reconnaissance of `openclaw.ai` and `clawi.ai` to reduce guesswork and avoid low-quality "quick AI site" outcomes.
+Preferred concept direction for the first build:
+- High-contrast, poster-like aesthetic with coarse dither/grain texture
+- Hero anchored by a large lobster motif adapted for Clawchestra (conducting baton in one/both claws)
+- Revival yellow (`#DFFF00`) as dominant brand accent with black as core contrast pair
+- Composition should feel bold and intentional, not polished-corporate
+
+Two acceptable palette modes:
+1. Dark mode primary: near-black background, `#DFFF00` lobster/accents
+2. Inverse mode primary: `#DFFF00` background, near-black lobster/typography
+
+Usage guidance:
+- Lobster artwork can be a large background plane behind hero content, but text contrast must remain AAA/AA readable.
+- Add subtle motion only (parallax drift, grain flicker, reveal masks); avoid heavy animation that obscures copy.
+- Maintain a clear CTA hierarchy above visual treatment: Install first, GitHub second.
+- Keep art export flexible (SVG/PNG/WebP variants + transparent cutout) so sections can reuse motif without repainting layout.
+
+## 7. Reference Site Reconnaissance (Required Before Build Plan)
+
+Before implementation planning, run a targeted technical reconnaissance of `openclaw.ai`, `clawi.ai`, and `blacksmith.sh` to reduce guesswork and avoid low-quality "quick AI site" outcomes.
 
 ### Research goals
 - Identify likely framework/runtime used (for example: React/Next.js/Astro/Svelte)
@@ -108,7 +126,7 @@ Create a short internal research brief before build planning that includes:
 - recommendations for the Clawchestra stack choice, optimized for speed and long-term maintainability
 - explicit note on whether to use familiar tooling (`shadcn`, `Tailwind`) or alternatives, with rationale
 
-## 7. Installation Experience Requirements
+## 8. Installation Experience Requirements
 
 Quick Start must support multiple pathways:
 - Source build from GitHub (clone + prerequisites + run/build)
@@ -121,7 +139,7 @@ Every method should show:
 - expected result
 - fallback/help link if command fails
 
-## 8. Dependencies and Unresolved Preconditions
+## 9. Dependencies and Unresolved Preconditions
 
 ### Confirmed
 - Domain ownership: user confirmed `clawchestra.ai` is owned.
@@ -133,23 +151,25 @@ Every method should show:
 4. Whether package-manager distribution artifacts exist (currently unknown)
 5. Whether signed installers/notarization are required at launch
 6. Marketing media assets availability (demo video/GIF/screenshots)
-7. Reference-site reconnaissance not yet completed (`openclaw.ai` and `clawi.ai`)
+7. Reference-site reconnaissance not yet completed (`openclaw.ai`, `clawi.ai`, `blacksmith.sh`)
+8. Hero artwork production workflow not yet finalized (AI-edited lobster asset pipeline + export formats)
 
 These must be resolved before a production launch plan is finalized.
 
-## 9. Acceptance Criteria
+## 10. Acceptance Criteria
 
 This item is ready for build verification when:
 - Reference-site reconnaissance brief is completed and reviewed
 - Final implementation stack decision is documented with rationale
 - Website contains all required sections in this spec
+- Visual direction implements approved lobster/baton concept (or documented alternative approved by user)
 - Quick Start provides at least two valid installation methods
 - OS-specific install guidance exists for macOS, Linux, and Windows
 - GitHub link and OpenClaw attribution are visible
 - Product demo media is present and functional
 - Mobile and desktop layouts are both usable and polished
 
-## 10. Out of Scope (Initial Launch)
+## 11. Out of Scope (Initial Launch)
 
 - Full documentation portal migration
 - Authenticated user dashboard/accounts

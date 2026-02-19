@@ -94,9 +94,9 @@ items:
     status: pending
     priority: 3
     nextAction: >-
-      Spec written — run openclaw.ai/clawi.ai design-stack reconnaissance, then
-      resolve distribution/GitHub/DNS prerequisites and write implementation
-      plan with frontend-design execution.
+      Spec updated with bold visual direction (dither lobster + baton concept);
+      run openclaw.ai/clawi.ai/blacksmith.sh stack reconnaissance, then resolve
+      distribution/GitHub/DNS prerequisites and write implementation plan.
     tags:
       - website
       - marketing
