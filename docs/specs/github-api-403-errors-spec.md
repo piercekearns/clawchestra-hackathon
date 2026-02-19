@@ -53,10 +53,10 @@ The only command that touches the network is `git fetch`, which uses git's own p
 ```
 loadProjects()
   → For each project with hasGit:
-    → Tauri invoke: get_enriched_git_status(dirPath)
+    → Tauri invoke: get_git_status(dirPath)       [existing command, enriched]
       → Rust runs local git commands
-      → Returns EnrichedGitStatus struct
-    → Frontend populates ProjectViewModel.gitStatus (enriched)
+      → Returns GitStatus struct (with new fields)
+    → Frontend derives commitActivity from gitStatus
     → No GitHub API call
 ```
 
@@ -79,41 +79,39 @@ Rationale: `git fetch` is the only command that hits the network (~1-2s per repo
 
 ### `git fetch` Strategy
 
-- **Non-blocking**: Runs in background, UI doesn't wait for it
-- **Per-repo**: Each repo fetches independently (one slow repo doesn't block others)
+- **Synchronous Tauri command**: Same pattern as all other git commands in `lib.rs` (no `spawn_blocking`, no `async`)
+- **Per-repo**: Each repo fetches independently via `Promise.allSettled` on the JS side
 - **Failure-tolerant**: Network errors are logged but don't affect local data display
-- **Configurable interval**: Default 5 minutes, adjustable in settings. Set to 0 to disable background fetch.
+- **No `--prune`**: This is a status dashboard, not a branch manager. Pruning is opinionated — defer to Git Sync if needed.
+- **No background interval initially**: Startup + manual refresh is sufficient. Background polling can be added later if needed.
 
 ## Schema Changes
 
-### Rust: `EnrichedGitStatus`
+### Rust: Extended `GitStatus` (same struct, no separate type)
 
 ```rust
-struct EnrichedGitStatus {
-    // Existing fields
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]  // Required for multi-word fields → JS
+struct GitStatus {
+    // Existing fields (unchanged)
     state: String,           // clean | uncommitted | unpushed | behind | unknown
     branch: Option<String>,
     details: Option<String>,
     remote: Option<String>,
     
     // New fields
-    last_commit_date: Option<String>,    // ISO 8601
-    last_commit_message: Option<String>, // Subject line only
-    last_commit_author: Option<String>,
-    commits_this_week: u32,
-    latest_tag: Option<String>,
-    stash_count: u32,
-    ahead_count: u32,                    // Explicit (currently derived from state)
-    behind_count: u32,                   // Explicit
-    branches: Vec<BranchInfo>,           // Active branches with dates
-}
-
-struct BranchInfo {
-    name: String,
-    is_remote: bool,
-    last_commit_date: Option<String>,
+    last_commit_date: Option<String>,    // ISO 8601 via git log -1 --format=%aI
+    last_commit_message: Option<String>, // Subject line via git log -1 --format=%s
+    last_commit_author: Option<String>,  // Author name via git log -1 --format=%an
+    commits_this_week: Option<u32>,      // git rev-list --count --since="7 days ago" HEAD
+    latest_tag: Option<String>,          // git describe --tags --abbrev=0
+    stash_count: u32,                    // 0 when empty (not Option)
+    ahead_count: Option<u32>,            // Explicit (currently derived from state)
+    behind_count: Option<u32>,           // Explicit (currently derived from state)
 }
 ```
+
+**Note:** `serde(rename_all = "camelCase")` is a no-op for existing single-word fields but required for new multi-word fields to serialize correctly to JavaScript.
 
 ### TypeScript: Extended `GitStatus`
 
@@ -148,12 +146,15 @@ interface GitStatus {
 
 ## Migration
 
-1. **Add Rust command**: `get_enriched_git_status` returning the full struct
-2. **Add Rust command**: `git_fetch_repo` for on-demand fetch
-3. **Update `projects.ts`**: Call enriched status instead of `fetchCommitActivity`
-4. **Remove GitHub API from load path**: Delete `fetchCommitActivity` call in `loadAllProjects`
-5. **Keep `github.ts` module**: Will be used for future authenticated API features (PRs, CI)
-6. **Update frontend**: Read from enriched `gitStatus` instead of `commitActivity`
+1. **Extend existing `get_git_status`**: Add new fields to the same Rust struct and command
+2. **Add `git_fetch` command**: Separate Tauri command for network fetch (synchronous, same pattern as other git commands)
+3. **Update TS types**: Extend `GitStatus` interface, add `gitFetch` invoke binding
+4. **Replace GitHub API in load path**: Derive `commitActivity` from `gitStatus`, remove `fetchCommitActivity` loop
+5. **Add `git fetch` to startup + refresh**: Fire-and-forget fetch, then reload projects
+6. **Delete `github.ts`**: Entire module is dead code after migration (`extractGitHubSlug` is in `projects.ts`)
+7. **Update tests**: Verify derivation logic, edge cases, no regressions
+
+See `docs/plans/github-api-403-errors-plan.md` for detailed step-by-step implementation.
 
 ## Future: GitHub REST API (Authenticated)
 
