@@ -17,9 +17,9 @@ items:
     status: in-progress
     priority: 2
     specDoc: docs/specs/github-api-403-errors-spec.md
+    planDoc: docs/plans/github-api-403-errors-plan.md
     nextAction: >-
-      Implement Rust enriched git status command + git fetch, replace
-      GitHub API calls in project load path with local git queries
+      Plan written — run /plan_review, then build
     tags:
       - bug
       - github
