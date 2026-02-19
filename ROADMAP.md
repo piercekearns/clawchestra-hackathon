@@ -15,7 +15,7 @@ items:
     title: Git Sync
     status: up-next
     priority: 1
-    nextAction: Spec written — ready for plan/build
+    nextAction: Plan written — ready for plan_review/build
     tags:
       - git
       - github
@@ -23,6 +23,7 @@ items:
       - workflow
     icon: "\U0001F504"
     specDoc: docs/specs/git-sync-spec.md
+    planDoc: docs/plans/git-sync-plan.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
