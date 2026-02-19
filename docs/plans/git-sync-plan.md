@@ -11,22 +11,38 @@ This plan adds visibility into uncommitted dashboard-managed file changes and a 
 **Spec:** `docs/specs/git-sync-spec.md`
 **Roadmap Item:** `git-sync`
 **Created:** 2026-02-19
+**Reviewed:** 2026-02-19 (3-agent /plan_review — DHH, Kieran, Code Simplicity)
+
+---
+
+## Review Corrections Applied
+
+The following changes were made based on the 3-agent plan review:
+
+1. **Use existing `git_commit`/`git_push` commands** — don't create duplicates. Modify existing `git_commit` to return commit hash.
+2. **No `dirtyProjectCount` in Zustand** — compute via selector, not stored state. Phase 3 deleted.
+3. **SyncButton inlined in Header.tsx** — no separate file for ~10 lines of JSX.
+4. **Phases collapsed** from 8 → 4: Backend → Types+Store → UI → Tests.
+5. **ProjectCard.tsx reference fixed** — orange dot goes in App.tsx `renderItemIndicators`.
+6. **Dirty detection uses `git status --porcelain`** — filter existing output instead of extra `git diff` commands. Catches untracked files too.
+7. **`getBranchIndicator` kept but inlined** in SyncDialog (no separate git-sync.ts helpers file). Enough branching logic to stay a function, not enough to warrant its own module.
+8. **Sequential batch execution rationale documented** — each project is its own git repo; can't batch commits across repos.
+9. **Metadata vs Documents grouping kept** — useful UX distinction, worth building now.
+10. **"Ask agent to help" kept** — core functionality for Phase 1.
+11. **Per-project + batch buttons kept** — modularity required (user may want to sync one project, not all).
 
 ---
 
 ## Phases
 
-1. **Rust backend** — extend `get_git_status` + new commit/push commands
-2. **TypeScript types + bindings** — extend `GitStatus` interface + Tauri invoke wrappers
-3. **Store + project loading** — wire dirty count into Zustand
-4. **Card indicators** — orange dot on dirty project cards
-5. **Header button** — Sync button with badge count
-6. **Sync Dialog** — modal with project list, branch indicators, commit/push controls
-7. **Tests** — unit tests for backend + frontend logic
+1. **Backend** — extend `get_git_status` dirty detection + modify existing commit/push commands
+2. **Types + Store** — extend GitStatus interface, add Tauri bindings, computed dirty count
+3. **UI** — card indicators, header button, Sync Dialog with branch awareness + commit/push
+4. **Tests + Docs** — unit tests, verification, roadmap/AGENTS.md updates
 
 ---
 
-## Phase 1: Rust Backend
+## Phase 1: Backend
 
 ### 1.1 Extend `get_git_status` with dirty file detection
 
@@ -38,86 +54,76 @@ Add two fields to the `GitStatus` struct:
 // Add after behindCount field (~line 35)
 /// True when dashboard-managed files have uncommitted changes
 pub dashboard_dirty: bool,
-/// List of dashboard-managed files with uncommitted changes  
+/// Dashboard-managed files with uncommitted changes
 pub dirty_files: Vec<String>,
 ```
 
 **In `get_git_status` function (~line 1125):**
 
-After the existing git status logic, add dashboard dirty detection:
+The function already runs `git status` — extend it to filter for dashboard-managed files. Use the existing `git status --porcelain` output (or add it) rather than running separate `git diff` commands. This catches both modified AND untracked dashboard files.
 
 ```rust
 // Dashboard-managed file patterns
-const DASHBOARD_FILES: &[&str] = &[
-    "PROJECT.md",
-    "ROADMAP.md", 
-    "CHANGELOG.md",
-];
-const DASHBOARD_DIRS: &[&str] = &[
-    "roadmap/",
-    "docs/specs/",
-    "docs/plans/",
-];
+const DASHBOARD_FILES: &[&str] = &["PROJECT.md", "ROADMAP.md", "CHANGELOG.md"];
+const DASHBOARD_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
 
-// Check unstaged + staged changes against dashboard files
-// git diff --name-only (unstaged)
-// git diff --name-only --cached (staged)
-// Filter results against DASHBOARD_FILES (exact match) and DASHBOARD_DIRS (prefix match)
+// Filter porcelain output: each line is " M path" or "?? path" etc.
+// Match against DASHBOARD_FILES (exact) and DASHBOARD_DIR_PREFIXES (prefix, recursive)
+// e.g. "roadmap/git-sync.md" matches prefix "roadmap/"
+// e.g. "docs/specs/deep/nested.md" matches prefix "docs/specs/"
 ```
 
 - [ ] Add `dashboard_dirty: bool` to GitStatus struct
 - [ ] Add `dirty_files: Vec<String>` to GitStatus struct
-- [ ] Implement dashboard file filtering in `get_git_status`
+- [ ] Filter `git status --porcelain` output against dashboard file patterns
 - [ ] `dashboard_dirty = !dirty_files.is_empty()`
+- [ ] Prefix matching is recursive (covers nested subdirectories)
 
-### 1.2 Add `git_commit_project` command
-
-**File:** `src-tauri/src/lib.rs`
-
-New Tauri command to commit specific files in a project:
-
-```rust
-#[tauri::command]
-fn git_commit_project(
-    project_path: String,
-    files: Vec<String>,
-    message: String,
-) -> Result<String, String> {
-    // 1. Validate project_path exists and is a git repo
-    // 2. For each file in files: git add <file> (only if file exists)
-    // 3. git commit -m <message>
-    // 4. Return commit hash on success
-}
-```
-
-- [ ] Implement `git_commit_project` command
-- [ ] Register in `.invoke_handler()` (~line 2215)
-- [ ] Only stage files from the provided list (never `git add -A`)
-
-### 1.3 Add `git_push_project` command
+### 1.2 Modify existing `git_commit` to return commit hash
 
 **File:** `src-tauri/src/lib.rs`
 
+The existing `git_commit` command currently returns `Result<(), String>`. Change to return `Result<String, String>` where the String is the short commit hash:
+
 ```rust
-#[tauri::command]
-fn git_push_project(project_path: String) -> Result<(), String> {
-    // 1. git push origin <current-branch>
-    // 2. Fast-forward only — if push fails, return the error message
-    // No --force, no branch creation
-}
+// After successful commit, get the hash:
+// git rev-parse --short HEAD
 ```
 
-- [ ] Implement `git_push_project` command
-- [ ] Register in `.invoke_handler()`
+Also ensure it accepts a `files: Vec<String>` parameter for targeted staging (only dashboard-managed files, never `git add -A`):
+
+```rust
+// For each file in files: git add <file> (only if file exists and has changes)
+// git commit -m <message>
+// Return short hash
+```
+
+- [ ] Modify `git_commit` return type to `Result<String, String>`
+- [ ] Ensure `files` parameter for targeted staging exists
+- [ ] Return short commit hash after successful commit
+
+### 1.3 Verify existing `git_push` command
+
+**File:** `src-tauri/src/lib.rs`
+
+Check that the existing `git_push` command does:
+- Push to current branch's upstream
+- Fast-forward only (no `--force`)
+- Return meaningful error on failure
+
+If it doesn't exist or doesn't meet these requirements, create it.
+
+- [ ] Verify `git_push` exists and pushes to current branch upstream
+- [ ] Ensure it returns clear error messages on failure
 
 ### Test gate
 
 - [ ] `cargo check` passes
-- [ ] Existing tests still pass
+- [ ] Existing Rust tests still pass
 
 ---
 
-## Phase 2: TypeScript Types + Tauri Bindings
+## Phase 2: Types + Store
 
 ### 2.1 Extend GitStatus interface
 
@@ -127,16 +133,18 @@ fn git_push_project(project_path: String) -> Result<(), String> {
 // Add after behindCount field
 /** True when dashboard-managed files have uncommitted changes */
 dashboardDirty?: boolean;
-/** List of dashboard-managed files with uncommitted changes */
+/** Dashboard-managed files with uncommitted changes */
 dirtyFiles?: string[];
 ```
 
 - [ ] Add `dashboardDirty` to GitStatus interface
 - [ ] Add `dirtyFiles` to GitStatus interface
 
-### 2.2 Add Tauri invoke wrappers
+### 2.2 Update Tauri invoke wrappers
 
 **File:** `src/lib/tauri.ts`
+
+Update the existing `commitProject` wrapper (if it exists) to accept a `files` parameter and return the commit hash string. If wrappers don't exist, create them:
 
 ```typescript
 export async function commitProject(
@@ -144,79 +152,47 @@ export async function commitProject(
   files: string[],
   message: string,
 ): Promise<string> {
-  return invoke<string>('git_commit_project', { projectPath, files, message });
+  return invoke<string>('git_commit', { projectPath, files, message });
 }
 
 export async function pushProject(projectPath: string): Promise<void> {
-  return invoke<void>('git_push_project', { projectPath });
+  return invoke<void>('git_push', { projectPath });
 }
 ```
 
-- [ ] Add `commitProject` wrapper
-- [ ] Add `pushProject` wrapper
+- [ ] Ensure `commitProject` wrapper accepts files + returns hash
+- [ ] Ensure `pushProject` wrapper exists
+
+### 2.3 Computed dirty count (no Zustand field)
+
+The dirty count is derived state — compute it inline wherever needed:
+
+```typescript
+// In any component that needs the count:
+const dirtyProjectCount = useMemo(
+  () => projects.filter((p) => p.gitStatus?.dashboardDirty).length,
+  [projects],
+);
+```
+
+No store field needed. No setter. No sync obligation.
+
+- [ ] Use `useMemo` selector for dirty count (no store field)
 
 ### Test gate
 
 - [ ] `npx tsc --noEmit` passes
-
----
-
-## Phase 3: Store + Project Loading
-
-### 3.1 Add dirty count to Zustand store
-
-**File:** `src/lib/store.ts`
-
-```typescript
-// Add to DashboardState interface
-dirtyProjectCount: number;
-setDirtyProjectCount: (count: number) => void;
-```
-
-Initial value: `0`. Not persisted (derived from filesystem on every scan).
-
-- [ ] Add `dirtyProjectCount` to store state
-- [ ] Add `setDirtyProjectCount` action
-
-### 3.2 Compute dirty count during project loading
-
-**File:** `src/lib/projects.ts`
-
-In `loadAllProjects()`, after all projects are loaded, compute and return the dirty count:
-
-```typescript
-// After project loading loop
-const dirtyCount = projects.filter(
-  (p) => p.gitStatus?.dashboardDirty
-).length;
-```
-
-**File:** `src/lib/store.ts` or `src/App.tsx`
-
-Where `loadProjects()` is called, update the dirty count:
-
-```typescript
-// After loadAllProjects resolves
-setDirtyProjectCount(dirtyCount);
-```
-
-- [ ] Compute dirty count from loaded projects
-- [ ] Update store after each `loadProjects()` call
-
-### Test gate
-
 - [ ] `bun test` passes
-- [ ] `npx tsc --noEmit` passes
 
 ---
 
-## Phase 4: Card Indicators
+## Phase 3: UI
 
-### 4.1 Orange dot on project cards
+### 3.1 Orange dot on project cards
 
-**File:** `src/components/ProjectCard.tsx` (or wherever project cards render git indicators)
+**File:** `src/App.tsx` — in `renderItemIndicators` (~line 1489, or wherever card indicators are rendered)
 
-When a project has `gitStatus?.dashboardDirty === true`, show an orange dot indicator:
+When a project has `gitStatus?.dashboardDirty === true`, show an orange dot:
 
 ```tsx
 {project.gitStatus?.dashboardDirty && (
@@ -226,42 +202,24 @@ When a project has `gitStatus?.dashboardDirty === true`, show an orange dot indi
 )}
 ```
 
-Place this in the card's metadata/indicator area, near existing git status indicators.
-
-- [ ] Add orange dot indicator to project cards
+- [ ] Add orange dot indicator in App.tsx card rendering
 - [ ] Add tooltip explaining the indicator
-- [ ] Only shows when `dashboardDirty` is true (not for general repo dirtiness)
+- [ ] Only shows for `dashboardDirty` (not general repo dirtiness)
 
-### Test gate
+### 3.2 Sync button in Header (inlined)
 
-- [ ] `npx tsc --noEmit` passes
-- [ ] Visual check: cards with dirty dashboard files show orange dot
+**File:** `src/components/Header.tsx`
 
----
-
-## Phase 5: Header Sync Button
-
-### 5.1 Create SyncButton component
-
-**File:** `src/components/SyncButton.tsx` (new)
+Add sync button between Refresh and Add Project. Inline — no separate component file:
 
 ```tsx
-interface SyncButtonProps {
-  dirtyCount: number;
-  onClick: () => void;
-}
-
-export function SyncButton({ dirtyCount, onClick }: SyncButtonProps) {
-  if (dirtyCount === 0) return null; // Hidden when clean
-  
-  return (
-    <button onClick={onClick} className="...">
-      <GitCommitHorizontal className="h-4 w-4" />
-      <span>Sync</span>
-      <span className="badge">{dirtyCount}</span>
-    </button>
-  );
-}
+{dirtyProjectCount > 0 && (
+  <button onClick={() => setSyncDialogOpen(true)} className="...">
+    <GitCommitHorizontal className="h-4 w-4" />
+    <span>Sync</span>
+    <span className="badge">{dirtyProjectCount}</span>
+  </button>
+)}
 ```
 
 - Lucide icon: `GitCommitHorizontal` or `Upload`
@@ -269,70 +227,31 @@ export function SyncButton({ dirtyCount, onClick }: SyncButtonProps) {
 - Hidden when count is 0
 - Style consistent with existing Refresh and Add Project buttons
 
-### 5.2 Wire into Header
+- [ ] Add sync button inline in Header.tsx
+- [ ] Pass `dirtyProjectCount` from parent via computed `useMemo`
+- [ ] Add `syncDialogOpen` state to manage dialog visibility
 
-**File:** `src/components/Header.tsx`
-
-Add SyncButton between Refresh and Add Project:
-
-```tsx
-<SyncButton dirtyCount={dirtyProjectCount} onClick={() => setSyncDialogOpen(true)} />
-```
-
-- [ ] Create `SyncButton` component
-- [ ] Add to Header layout
-- [ ] Add `syncDialogOpen` state (boolean) to manage dialog visibility
-
-### Test gate
-
-- [ ] `npx tsc --noEmit` passes
-- [ ] Visual check: button appears with correct count, hidden when 0
-
----
-
-## Phase 6: Sync Dialog
-
-This is the largest phase. Build incrementally.
-
-### 6.1 Create SyncDialog component shell
+### 3.3 Sync Dialog
 
 **File:** `src/components/SyncDialog.tsx` (new)
 
-Use the existing Dialog pattern from shadcn/ui (consistent with SettingsDialog, project modals):
+Use existing shadcn/ui Dialog pattern (consistent with SettingsDialog):
 
 ```tsx
 interface SyncDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projects: ProjectViewModel[];
+  projects: ProjectViewModel[]; // only dirty projects
 }
 ```
 
-- [ ] Create dialog shell with title "Sync Changes"
-- [ ] Wire open/close state
+#### Project list
 
-### 6.2 Build dirty project list
+For each dirty project, render a row with:
+- **Checkbox** (all checked by default) — managed via `Set<string>` state (selected project IDs)
+- **Project name + icon**
+- **Branch indicator** — computed by `getBranchIndicator()` function local to this file:
 
-Inside the dialog, list all projects with `dashboardDirty`:
-
-```tsx
-interface SyncProjectRow {
-  project: ProjectViewModel;
-  selected: boolean;          // checkbox state (default: true)
-  pushEnabled: boolean;       // push toggle (smart defaults)
-  action: 'commit-push' | 'commit-only';
-}
-```
-
-For each dirty project row:
-- Checkbox (all checked by default)
-- Project name + icon
-- Branch indicator: `main ✓` / `main ↑2` / `dev ↓3 ⚠` / `main (no remote)`
-- Per-project action button: [Commit & Push] or [Commit only]
-- Expandable change list: dirty files grouped as Metadata vs Documents
-- Warning for behind/diverged branches with "Ask agent to help" link
-
-Branch indicator logic (derive from existing GitStatus fields):
 ```typescript
 function getBranchIndicator(git: GitStatus): { label: string; safe: boolean } {
   if (!git.remote) return { label: `${git.branch} (no remote)`, safe: false };
@@ -345,32 +264,56 @@ function getBranchIndicator(git: GitStatus): { label: string; safe: boolean } {
 }
 ```
 
-Smart push defaults:
-- `safe: true` → push enabled by default
-- `safe: false` → push disabled by default (commit only)
+- **Per-project action button**: [Commit & Push] or [Commit only]
+- **Push toggle** — managed via `Set<string>` state (project IDs with push enabled). Smart defaults: push enabled when `safe: true`, disabled when `safe: false`.
+- **Change list** — dirty files grouped into two visual categories:
+  - **Metadata** (low risk): `PROJECT.md`, `ROADMAP.md`, `CHANGELOG.md`
+  - **Documents** (review-worthy): `docs/specs/*.md`, `docs/plans/*.md`, `roadmap/*.md`
+- **Warning badge** for behind/diverged branches
+- **"Ask agent to help" link** for risky branches — opens chat drawer with pre-filled context:
 
-- [ ] Build project row component with checkbox, branch indicator, action button
-- [ ] Group dirty files into Metadata vs Documents categories
-- [ ] Implement smart push defaults based on branch state
-- [ ] Add warning badges for risky branches
+```typescript
+const helpMessage = `${project.title} is on branch \`${git.branch}\`${
+  git.behindCount ? `, which is ${git.behindCount} commits behind remote` : ''
+}. The following dashboard files have uncommitted changes: ${
+  git.dirtyFiles?.join(', ')
+}. Can you help me sync these?`;
+```
 
-### 6.3 Commit message input
+Uses existing chat pre-fill mechanism (same as lifecycle button prompts via `ChatShell`).
+
+- [ ] Create SyncDialog.tsx with shadcn/ui Dialog
+- [ ] Project list with checkboxes (all selected by default)
+- [ ] Branch indicators via `getBranchIndicator()`
+- [ ] Per-project action buttons ([Commit & Push] / [Commit only])
+- [ ] Smart push defaults based on branch safety
+- [ ] Dirty files grouped as Metadata vs Documents
+- [ ] Warning badges for behind/diverged branches
+- [ ] "Ask agent to help" link → pre-fills chat with context
+
+#### Commit message
 
 Editable text field with auto-generated default:
 
 ```typescript
-const dirtyNames = dirtyProjects.map(p => p.title);
+const dirtyNames = dirtyProjects.filter(p => selectedIds.has(p.id)).map(p => p.title);
 const defaultMessage = `chore: sync project metadata (${dirtyNames.join(', ')})`;
 ```
 
-- [ ] Add commit message input with auto-generated default
-- [ ] Message shared across all batch-synced projects
+- [ ] Commit message input with auto-generated default
+- [ ] Message shared across batch-synced projects
 
-### 6.4 Sync execution
-
-**"Sync All Selected" button** and per-project action buttons:
+#### Sync execution
 
 ```typescript
+interface SyncResult {
+  projectId: string;
+  success: boolean;
+  hash?: string;    // commit hash on success
+  error?: string;   // error message on failure
+  pushed?: boolean; // whether push was attempted and succeeded
+}
+
 async function syncProject(
   project: ProjectViewModel,
   message: string,
@@ -378,81 +321,71 @@ async function syncProject(
 ): Promise<SyncResult> {
   try {
     const hash = await commitProject(project.dirPath, project.gitStatus!.dirtyFiles!, message);
+    let pushed = false;
     if (push && project.gitStatus?.remote) {
       await pushProject(project.dirPath);
+      pushed = true;
     }
-    return { projectId: project.id, success: true, hash };
+    return { projectId: project.id, success: true, hash, pushed };
   } catch (error) {
     return { projectId: project.id, success: false, error: String(error) };
   }
 }
 ```
 
-For batch: iterate selected projects sequentially (each in its own repo).
+**Per-project sync:** Click a project's action button → sync that project immediately.
 
-After sync:
-- Update row status: ✅ success / ❌ failed with error message
+**Batch sync ("Sync All Selected"):** Iterate selected projects **sequentially**. Each project is its own git repository — commits can't span repos, and sequential execution prevents resource contention from parallel git operations on the same machine.
+
+After each sync:
+- Update row status: ✅ committed (+ pushed) / ❌ failed with error
 - Failed commits show error + "Ask agent to help" link
-- On close/success: trigger project refresh to update indicators
+- On dialog close: trigger `loadProjects()` refresh to update indicators
 
-- [ ] Implement per-project sync function
-- [ ] Implement batch "Sync All Selected"
-- [ ] Show per-row success/failure status after sync
-- [ ] "Ask agent to help" link: opens chat drawer with pre-filled context message
-- [ ] Trigger `loadProjects()` refresh after dialog closes
-
-### 6.5 "Ask agent to help" chat integration
-
-When clicked, pre-fills the chat composer (same mechanism as lifecycle button prompts):
-
-```typescript
-const helpMessage = `${project.title} is on branch \`${git.branch}\`, which is ${git.behindCount} commits behind \`origin/${git.branch}\`. The following dashboard files have uncommitted changes: ${git.dirtyFiles?.join(', ')}. Can you help me sync these?`;
-```
-
-Uses existing `prefillChatMessage` mechanism from `deliverable-lifecycle.ts` / `ChatShell`.
-
-- [ ] Wire "Ask agent to help" to chat pre-fill
-- [ ] Include branch state and dirty file list in the pre-filled message
+- [ ] Implement per-project sync function with `SyncResult` type
+- [ ] Implement batch "Sync All Selected" (sequential, rationale documented)
+- [ ] Show per-row success/failure status
+- [ ] "Ask agent to help" on failure → chat pre-fill
+- [ ] Trigger `loadProjects()` refresh on dialog close
 
 ### Test gate
 
 - [ ] `npx tsc --noEmit` passes
 - [ ] `bun test` passes
-- [ ] Visual check: dialog opens, shows dirty projects, commit/push works
+- [ ] Visual check: indicators, dialog, commit, push all work
 
 ---
 
-## Phase 7: Tests
+## Phase 4: Tests + Docs
 
-### 7.1 Rust tests
+### 4.1 TypeScript tests
 
-**File:** `src-tauri/src/lib.rs` (in `hardening_tests` module)
+**File:** `src/lib/git-sync.test.ts` (new) — or co-located in SyncDialog if tests are component-level
 
-- Test `dashboard_dirty` detection: create a temp git repo, modify PROJECT.md, verify `dashboard_dirty: true`
-- Test that non-dashboard files (e.g., `src/main.rs`) don't trigger `dashboard_dirty`
-- Test `git_commit_project`: commit specific files, verify only those files are committed
-- Test `git_push_project`: verify error message when no remote configured
-
-### 7.2 TypeScript tests
-
-**File:** `src/lib/git-sync.test.ts` (new)
-
-- Test `getBranchIndicator` logic (all 5 branch states)
-- Test smart push defaults (safe vs unsafe)
-- Test default commit message generation
+- Test `getBranchIndicator` logic (all 6 branch states: in-sync, ahead, behind, diverged, no remote, non-default branch)
+- Test smart push defaults (safe → enabled, unsafe → disabled)
+- Test default commit message generation (with 1 project, with 3 projects)
 - Test dirty file categorization (Metadata vs Documents)
+- Test `SyncResult` handling (success, failure, push attempted)
 
-- [ ] Add Rust tests for dirty detection + commit/push commands
-- [ ] Add TypeScript tests for branch indicator + sync logic
-- [ ] All tests pass: `bun test` + `cargo test`
+### 4.2 Rust tests (if new logic added)
 
----
+If `get_git_status` dirty detection required significant new logic, add tests:
+- Temp git repo with modified PROJECT.md → `dashboard_dirty: true`
+- Temp git repo with modified `src/main.rs` only → `dashboard_dirty: false`
+- Temp git repo with new untracked `roadmap/new-item.md` → `dashboard_dirty: true`
 
-## Phase 8: Roadmap + Docs Update
+### 4.3 Docs update
 
-- [ ] Update `ROADMAP.md` item `nextAction` to reflect build state
-- [ ] Update `docs/AGENTS.md` if new UI operations need documenting
-- [ ] Run compliance sync: `scripts/sync-agent-compliance.sh`
+- [ ] Update `docs/AGENTS.md` — add Sync operations to Operations Reference table
+- [ ] Run `scripts/sync-agent-compliance.sh` if AGENTS.md compliance block changed
+- [ ] Update ROADMAP.md `nextAction` to reflect build state
+
+- [ ] TypeScript tests written and passing
+- [ ] Rust tests written and passing (if applicable)
+- [ ] `bun test` passes (all existing + new)
+- [ ] `cargo test` passes
+- [ ] Docs updated
 
 ---
 
@@ -460,20 +393,16 @@ Uses existing `prefillChatMessage` mechanism from `deliverable-lifecycle.ts` / `
 
 | File | Action | Phase |
 |------|--------|-------|
-| `src-tauri/src/lib.rs` | Modify — GitStatus struct + 2 new commands | 1 |
+| `src-tauri/src/lib.rs` | Modify — GitStatus struct + dirty detection + modify git_commit return type | 1 |
 | `src/lib/schema.ts` | Modify — add 2 fields to GitStatus | 2 |
-| `src/lib/tauri.ts` | Modify — add 2 invoke wrappers | 2 |
-| `src/lib/store.ts` | Modify — add dirtyProjectCount | 3 |
-| `src/lib/projects.ts` | Modify — compute dirty count | 3 |
-| `src/components/ProjectCard.tsx` | Modify — add orange dot | 4 |
-| `src/components/SyncButton.tsx` | **New** | 5 |
-| `src/components/Header.tsx` | Modify — add SyncButton | 5 |
-| `src/components/SyncDialog.tsx` | **New** — largest new file | 6 |
-| `src/lib/git-sync.ts` | **New** — sync logic helpers | 6 |
-| `src/lib/git-sync.test.ts` | **New** — tests | 7 |
-| `src/App.tsx` | Modify — wire dialog state | 5-6 |
+| `src/lib/tauri.ts` | Modify — update/add invoke wrappers | 2 |
+| `src/App.tsx` | Modify — orange dot in renderItemIndicators + dialog state + dirty count memo | 3 |
+| `src/components/Header.tsx` | Modify — inline sync button | 3 |
+| `src/components/SyncDialog.tsx` | **New** — dialog with project list, branch indicators, commit/push | 3 |
+| `src/lib/git-sync.test.ts` | **New** — tests for branch indicator, push defaults, file categorization | 4 |
+| `docs/AGENTS.md` | Modify — add sync operations | 4 |
 
-**Estimated new code:** ~600-800 lines across 4 new files + ~150 lines of modifications to existing files.
+**Estimated new code:** ~500-700 lines across 2 new files + ~100 lines of modifications.
 
 ---
 
@@ -484,13 +413,17 @@ Uses existing `prefillChatMessage` mechanism from `deliverable-lifecycle.ts` / `
 - [ ] `npx tsc --noEmit` passes
 - [ ] `pnpm build` succeeds
 - [ ] Sync button hidden when all projects clean
-- [ ] Sync button shows correct dirty count
+- [ ] Sync button shows correct dirty count after dashboard edit (drag card, etc.)
 - [ ] Orange dots appear on dirty project cards
 - [ ] Sync Dialog shows dirty projects with correct branch indicators
-- [ ] Commit works (creates commit with only dashboard files)
+- [ ] Dirty files grouped into Metadata vs Documents categories
+- [ ] Commit works (creates commit with only dashboard-managed files)
 - [ ] Push works (fast-forward to upstream)
 - [ ] Push disabled by default for behind/diverged branches
-- [ ] "Ask agent to help" opens chat with context
+- [ ] Per-project action button works independently
+- [ ] Batch "Sync All Selected" works sequentially
+- [ ] "Ask agent to help" opens chat with project-specific context
 - [ ] After sync, indicators refresh (dots disappear, count updates)
 - [ ] Projects without git: no indicators shown
 - [ ] Projects with git but no remote: commit available, push disabled
+- [ ] Warning badge shown for behind/diverged branches

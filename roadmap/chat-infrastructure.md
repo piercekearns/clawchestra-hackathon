@@ -172,6 +172,32 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+## Successful Session Reference
+
+### SUCCESS-001: /plan_review sub-agent run — chat stayed connected
+**Observed:** 2026-02-19 ~03:43–03:53
+**Significance:** Provides a working baseline for comparison with BUG-001/006/007 failures.
+
+**What happened:**
+- Claude Code `/plan_review docs/plans/git-sync-plan.md` launched via tmux at ~03:43
+- 3 sub-agents spawned and completed: DHH (80.2k tokens, 16 tool uses), Kieran (99.2k tokens, 20 tool uses), Code Simplicity (47.7k tokens, 17 tool uses)
+- Parent synthesized results and output full review (~14.9k output tokens)
+- Total wall time: ~10 minutes
+- **Clawchestra chat stayed Connected the entire time** — Working... animation behaved correctly, messages delivered, no drops
+
+**Triggering message:** User sent structured /plan_review request at 03:43
+**Final received message:** Full plan review synthesis with consensus issues, strong recommendations, minor issues, and praise sections — all rendered correctly in chat drawer
+
+**Key differences from failed runs (BUG-007):**
+- `/plan_review` (review existing doc) vs `/plan` (generate new doc) — review output is shorter than a full plan
+- No app Update during the run
+- Only one Claude Code process running (orphans killed beforehand)
+- 26% context used (vs 38% on the hung /plan runs)
+
+**Why this matters:** Future agents investigating chat reliability bugs should compare this successful run's gateway logs against failed runs to identify what differs in the event stream, polling, and activity state transitions.
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:
