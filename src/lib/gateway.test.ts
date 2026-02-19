@@ -500,6 +500,36 @@ describe('gateway client', () => {
     });
   });
 
+  it('classifies process poll scope failures as unavailable_scope', () => {
+    const capability = __gatewayTestUtils.classifyProcessPollCapability(
+      new Error('missing scope: operator.admin'),
+      1,
+      3,
+    );
+
+    expect(capability).toBe('unavailable_scope');
+  });
+
+  it('classifies below-threshold failures as unavailable_transient', () => {
+    const capability = __gatewayTestUtils.classifyProcessPollCapability(
+      new Error('temporary gateway failure'),
+      1,
+      3,
+    );
+
+    expect(capability).toBe('unavailable_transient');
+  });
+
+  it('classifies threshold failures as unavailable_degraded', () => {
+    const capability = __gatewayTestUtils.classifyProcessPollCapability(
+      new Error('process poll timeout'),
+      3,
+      3,
+    );
+
+    expect(capability).toBe('unavailable_degraded');
+  });
+
   it('estimates chat.send frame payload size for guardrail checks', () => {
     const size = __gatewayTestUtils.estimateChatSendFrameBytes({
       sessionKey: 'agent:main:pipeline-dashboard',

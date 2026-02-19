@@ -13,6 +13,7 @@ import {
   normalizeChatContentForMatch,
   unwrapGatewayContextWrappedUserContent,
 } from './chat-normalization';
+import { TurnLifecycleEngine } from './chat-turn-engine';
 
 export type SystemBubbleKind = 'completion' | 'failure' | 'compaction' | 'decision' | 'info';
 
@@ -225,6 +226,13 @@ interface ProcessPollSnapshot {
   error?: string;
 }
 
+type ProcessPollCapability =
+  | 'unknown'
+  | 'available'
+  | 'unavailable_scope'
+  | 'unavailable_transient'
+  | 'unavailable_degraded';
+
 function parseProcessPollSnapshot(result: unknown): ProcessPollSnapshot {
   const terminalStatuses = new Set([
     'completed',
@@ -389,6 +397,21 @@ function normalizeErrorMessage(error: unknown): string {
   }
 
   return 'Unknown gateway error';
+}
+
+function classifyProcessPollCapability(
+  error: unknown,
+  failureCount: number,
+  failureThreshold: number,
+): ProcessPollCapability {
+  const normalizedError = normalizeErrorMessage(error).toLowerCase();
+  const isScopeError =
+    normalizedError.includes('missing scope') ||
+    normalizedError.includes('operator.admin');
+
+  if (isScopeError) return 'unavailable_scope';
+  if (failureCount >= failureThreshold) return 'unavailable_degraded';
+  return 'unavailable_transient';
 }
 
 function mapOpenClawConnectionError(error: unknown): Error {
@@ -571,12 +594,21 @@ function finalizeTurn(
   const current = turnRegistry.get(turnToken);
   if (!current) return;
 
-  turnRegistry.set(turnToken, {
+  const finalized: PendingTurn = {
     ...current,
     ...updates,
     status,
     completedAt: Date.now(),
     lastSignalAt: Date.now(),
+  };
+  turnRegistry.set(turnToken, finalized);
+  console.log('[Gateway][terminal]', {
+    sendId: turnToken,
+    sessionKey: finalized.sessionKey,
+    runId: finalized.runId ?? null,
+    status: finalized.status,
+    reason: finalized.completionReason ?? `terminal_${status}`,
+    hasAssistantOutput: finalized.hasAssistantOutput,
   });
   removePersistedPendingTurn(turnToken);
   emitTurnRegistry();
@@ -1803,8 +1835,30 @@ async function sendViaTauriWs(
 
   const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   const turnToken = getRequestId();
+  const sendId = turnToken;
+  const sendTag = `[Gateway][send:${sendId}]`;
+  const logSend = (...args: unknown[]) => console.log(sendTag, ...args);
+  const warnSend = (...args: unknown[]) => console.warn(sendTag, ...args);
   let runId = turnToken;
   const sendRequestedAt = Date.now();
+  const lifecycle = new TurnLifecycleEngine('queued', sendRequestedAt);
+  const transitionLifecycle = (
+    event:
+      | 'send_started'
+      | 'send_acknowledged'
+      | 'stream_delta'
+      | 'awaiting_output'
+      | 'settling_start'
+      | 'complete'
+      | 'fail'
+      | 'timeout',
+    at?: number,
+  ) => {
+    const transition = lifecycle.transition(event, at);
+    if (transition.changed) {
+      logSend(`[lifecycle] ${transition.from} -> ${transition.to} via ${event}`);
+    }
+  };
   let streamedText = '';
   let sawFinalEvent = false;
   let sawFinalEventAt = 0;
@@ -1840,11 +1894,12 @@ async function sendViaTauriWs(
       if (id) baselineMessageIds.add(id);
     }
   } catch (error) {
-    console.warn('[Gateway] Failed to load baseline history before send:', error);
+    warnSend('Failed to load baseline history before send:', error);
   }
 
   try {
     markActiveSendRun(runId);
+    transitionLifecycle('send_started');
     upsertTurn(turnToken, {
       sessionKey,
       runId,
@@ -1852,7 +1907,7 @@ async function sendViaTauriWs(
       completionReason: 'chat_send_started',
     });
     setAgentActivity('working', onActivityChange);
-    console.log('[Gateway] === SEND START === sessionKey:', sessionKey, 'runId:', runId, 'connected:', connection.connected);
+    logSend('SEND START', { sessionKey, runId, connected: connection.connected });
 
     // Try to send the message. If the WS drops before the ack returns,
     // the request will reject — but the gateway may have already received
@@ -1895,9 +1950,10 @@ async function sendViaTauriWs(
         status: 'running',
         completionReason: 'chat_send_acknowledged',
       });
-      console.log('[Gateway] chat.send acknowledged');
+      transitionLifecycle('send_acknowledged');
+      logSend('chat.send acknowledged');
     } catch (sendErr) {
-      console.warn('[Gateway] chat.send failed — will poll for response:', sendErr);
+      warnSend('[reason=failed_unacked_send] chat.send failed — will poll for response:', sendErr);
       upsertTurn(turnToken, {
         sessionKey,
         runId,
@@ -1925,6 +1981,7 @@ async function sendViaTauriWs(
         touchTurnSignal(turnToken);
         if (idleTimeout) clearTimeout(idleTimeout);
         idleTimeout = setTimeout(() => {
+          transitionLifecycle('awaiting_output');
           upsertTurn(turnToken, {
             sessionKey,
             runId,
@@ -1940,13 +1997,15 @@ async function sendViaTauriWs(
         sawFinalEvent = false;
         sawFinalEventAt = 0;
         sawFinalAt = 0;
-        console.log(`[Gateway] Final signal cleared due to ${reason}`);
+        logSend(`Final signal cleared due to ${reason}`);
       };
 
       const cleanup = (reason: string) => {
         if (completed) return;
         completed = true;
-        console.log(`[Gateway] CLEANUP reason=${reason}, streamedLen=${streamedText.length}, handlers=${connection.handlerCount?.() ?? '?'}`);
+        logSend(
+          `[reason=${reason}] CLEANUP streamedLen=${streamedText.length}, handlers=${connection.handlerCount?.() ?? '?'}`,
+        );
         clearTimeout(safetyTimeout);
         clearInterval(pollInterval);
         if (idleTimeout) {
@@ -1961,7 +2020,7 @@ async function sendViaTauriWs(
       };
 
       const safetyTimeout = setTimeout(() => {
-        console.warn('[Gateway] RESOLVE via safetyTimeout (30min)');
+        warnSend('[reason=resolved_via_force_window] RESOLVE via safetyTimeout (30min)');
         cleanup('safetyTimeout');
         resolve();
       }, 30 * 60 * 1000);
@@ -1975,12 +2034,14 @@ async function sendViaTauriWs(
       unsubscribeState = connection.onStateChange((wsState) => {
         if (completed) return;
         if (wsState === 'disconnected' || wsState === 'reconnecting') {
-          console.warn('[Gateway] WS connection lost during active send, state:', wsState);
+          warnSend('WS connection lost during active send, state:', wsState);
           // Keep activity visible so user knows we're aware
           setAgentActivity('working', onActivityChange);
         } else if (wsState === 'connected' && resubscribeCount < 3) {
           // Connection restored — re-subscribe to pick up remaining events
-          console.log('[Gateway] WS reconnected during send, re-subscribing (attempt', resubscribeCount + 1, ')');
+          logSend('WS reconnected during send, re-subscribing', {
+            attempt: resubscribeCount + 1,
+          });
           resubscribeCount++;
           unsubscribe();
           unsubscribe = connection.subscribe(eventHandler);
@@ -1995,8 +2056,7 @@ async function sendViaTauriWs(
       let lastPollSignature = '';
       let pollStableCount = 0; // How many consecutive polls returned the same length
       let noFinalBlockedLogged = false;
-      let processPollUnavailable = false;
-      let processPollUnavailableLogged = false;
+      let processPollCapability: ProcessPollCapability = 'unknown';
       let processPollFailCount = 0;
       const PROCESS_POLL_MAX_FAILURES = 3;
 
@@ -2042,6 +2102,7 @@ async function sendViaTauriWs(
             !sawRunOwnedContent &&
             Date.now() - sendRequestedAt >= UNACKED_SEND_CONFIRM_TIMEOUT_MS
           ) {
+            transitionLifecycle('fail');
             cleanup('unackedSendNoUserTurn');
             reject(
               new Error(
@@ -2112,8 +2173,8 @@ async function sendViaTauriWs(
               !noFinalBlockedLogged
             ) {
               noFinalBlockedLogged = true;
-              console.log(
-                `[Gateway] No-final resolution blocked: content still looks incomplete (sendAge=${sendAgeMs}ms)`,
+              logSend(
+                `[reason=no_final_wait] No-final resolution blocked: content still looks incomplete (sendAge=${sendAgeMs}ms)`,
               );
             }
 
@@ -2125,6 +2186,8 @@ async function sendViaTauriWs(
             if (sawFinal && combined.length > 0) {
               const needsFinalSettle = likelyNeedsFinalSettlePass(assistantMessages);
               if (!needsFinalSettle) {
+                transitionLifecycle('settling_start');
+                transitionLifecycle('complete');
                 resolvedWithoutFinal = false;
                 requiresFinalSettlePass = false;
                 cleanup('finalFastPath');
@@ -2135,7 +2198,10 @@ async function sendViaTauriWs(
             }
             if (pollStableCount >= stabilityThreshold && combined.length > 0) {
               if (!sawFinal) {
-                if (processPollUnavailable) {
+                if (
+                  processPollCapability === 'unavailable_scope' ||
+                  processPollCapability === 'unavailable_degraded'
+                ) {
                   if (sendAgeMs < NO_FINAL_FORCE_RESOLVE_MS) {
                     // No process polling capability yet (missing scope). Keep
                     // waiting until the force-resolve window to avoid truncation.
@@ -2148,6 +2214,11 @@ async function sendViaTauriWs(
                       action: 'poll',
                       sessionKey,
                     });
+                    if (processPollCapability !== 'available') {
+                      processPollCapability = 'available';
+                      logSend('[reason=process_poll_available] process.poll capability available');
+                    }
+                    processPollFailCount = 0;
                     const processSnapshot = parseProcessPollSnapshot(processState);
                     if (
                       !processSnapshot.terminal &&
@@ -2160,22 +2231,20 @@ async function sendViaTauriWs(
                     }
                   } catch (error) {
                     processPollFailCount += 1;
-                    const normalizedError = normalizeErrorMessage(error).toLowerCase();
-                    const isScopeError =
-                      normalizedError.includes('missing scope') ||
-                      normalizedError.includes('operator.admin');
-
-                    if (isScopeError || processPollFailCount >= PROCESS_POLL_MAX_FAILURES) {
-                      processPollUnavailable = true;
-                      if (!processPollUnavailableLogged) {
-                        processPollUnavailableLogged = true;
-                        console.warn(
-                          `[Gateway] process.poll unavailable (${isScopeError ? 'missing scope' : `${processPollFailCount} consecutive failures`}) — using time-based no-final fallback`,
-                        );
-                      }
+                    const nextCapability = classifyProcessPollCapability(
+                      error,
+                      processPollFailCount,
+                      PROCESS_POLL_MAX_FAILURES,
+                    );
+                    if (processPollCapability !== nextCapability) {
+                      processPollCapability = nextCapability;
+                      warnSend(
+                        `[reason=process_poll_${nextCapability}] process.poll unavailable — using time-based no-final fallback`,
+                        error,
+                      );
                     } else {
-                      console.warn(
-                        '[Gateway] process.poll check failed during no-final resolve — keeping alive:',
+                      warnSend(
+                        `[reason=process_poll_${nextCapability}] process.poll check failed during no-final resolve — keeping alive:`,
                         error,
                       );
                     }
@@ -2184,8 +2253,8 @@ async function sendViaTauriWs(
                       pollStableCount = 0;
                       return;
                     }
-                    console.warn(
-                      '[Gateway] process.poll unavailable past force-resolve window — allowing no-final resolution',
+                    warnSend(
+                      '[reason=resolved_via_force_window] process.poll unavailable past force-resolve window — allowing no-final resolution',
                     );
                   }
                 }
@@ -2194,14 +2263,18 @@ async function sendViaTauriWs(
               if (sawFinal) {
                 requiresFinalSettlePass = likelyNeedsFinalSettlePass(assistantMessages);
               }
-              console.log(
-                `[Gateway] Poll resolved: ${combined.length} chars, stable=${pollStableCount}/${stabilityThreshold}, sawFinal=${sawFinal}`,
+              transitionLifecycle('settling_start');
+              transitionLifecycle('complete');
+              logSend(
+                `[reason=resolved_via_poll_stability] Poll resolved: ${combined.length} chars, stable=${pollStableCount}/${stabilityThreshold}, sawFinal=${sawFinal}`,
               );
               cleanup('pollStability');
               resolve();
             }
           } else if (sawFinal && sawFinalAt > 0) {
             if (streamedText.trim().length > 0 && Date.now() - sawFinalAt >= 1500) {
+              transitionLifecycle('settling_start');
+              transitionLifecycle('complete');
               cleanup('finalWithStreamedContent');
               resolve();
               return;
@@ -2213,12 +2286,13 @@ async function sendViaTauriWs(
               return;
             }
             if (finalWithoutContentMs >= FINAL_NO_CONTENT_TIMEOUT_MS) {
+              transitionLifecycle('fail');
               cleanup('finalWithoutContentTimeout');
               reject(new Error('No assistant response received from OpenClaw (run may have terminated).'));
             }
           }
         } catch (error) {
-          console.warn('[Gateway] Poll failed:', error);
+          warnSend('Poll failed:', error);
         }
       }, pollIntervalMs);
 
@@ -2396,6 +2470,7 @@ async function sendViaTauriWs(
           lastDeltaTime = Date.now();
           const deltaText = extractText(chat.message);
           if (deltaText) {
+            transitionLifecycle('stream_delta');
             sawRunOwnedContent = true;
             upsertTurn(turnToken, {
               sessionKey,
@@ -2433,6 +2508,7 @@ async function sendViaTauriWs(
             console.log('[Gateway] Ignoring unscoped error event during active send');
             return;
           }
+          transitionLifecycle('fail');
           console.log('[Gateway] REJECT via error event:', chat.errorMessage);
           finalizeTurn(turnToken, 'failed', {
             sessionKey,
@@ -2450,6 +2526,7 @@ async function sendViaTauriWs(
             console.log('[Gateway] Ignoring unscoped aborted event during active send');
             return;
           }
+          transitionLifecycle('fail');
           console.log('[Gateway] REJECT via aborted event');
           finalizeTurn(turnToken, 'failed', {
             sessionKey,
@@ -2494,6 +2571,7 @@ async function sendViaTauriWs(
           sawFinalEvent = true;
           sawFinalEventAt = Date.now();
           sawFinalAt = Date.now();
+          transitionLifecycle('awaiting_output');
           upsertTurn(turnToken, {
             sessionKey,
             runId,
@@ -2646,6 +2724,7 @@ async function sendViaTauriWs(
       );
 
     if (shouldRunSettlePass) {
+      transitionLifecycle('settling_start');
       const settleDeadline = Date.now() + FINAL_SETTLE_WINDOW_MS;
       let lastSignature = assistantMessages
         .map((message) => message._id ?? `${message.timestamp ?? 'na'}:${message.content.length}`)
@@ -2701,6 +2780,7 @@ async function sendViaTauriWs(
     if (assistantMessages.length === 0 && !finalStreamedText) {
       const timedOutWithProgress =
         sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent;
+      transitionLifecycle('timeout');
       finalizeTurn(turnToken, 'timed_out', {
         sessionKey,
         runId,
@@ -2711,6 +2791,7 @@ async function sendViaTauriWs(
       throw new Error('No response received — agent may be busy or the session is unavailable. Try again in a moment.');
     }
 
+    transitionLifecycle('complete');
     finalizeTurn(turnToken, 'completed', {
       sessionKey,
       runId,
@@ -2737,6 +2818,11 @@ async function sendViaTauriWs(
           : lower.includes('timeout')
             ? 'timeout_request'
             : 'send_failed';
+      if (reason.startsWith('timeout')) {
+        transitionLifecycle('timeout');
+      } else {
+        transitionLifecycle('fail');
+      }
       finalizeTurn(turnToken, 'failed', {
         sessionKey,
         runId,
@@ -2945,6 +3031,7 @@ export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
   likelyNeedsFinalSettlePass,
   parseProcessPollSnapshot,
+  classifyProcessPollCapability,
   hasMatchingUserTurnInHistory,
   estimateChatSendFrameBytes,
   OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES,

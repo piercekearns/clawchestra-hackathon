@@ -261,3 +261,25 @@ Start with:
 3. Phase 4 hard terminal clear path for activity state
 
 This is the fastest path to visible trust improvements while preparing safer structural changes.
+
+## Build Progress
+
+### Cycle 1 (2026-02-19)
+
+- [x] Phase 0: Added `sendId`-correlated tauri-ws send logs for key lifecycle transitions.
+- [x] Phase 0: Added structured terminal reason emission for every finalized turn (`[Gateway][terminal]` payload).
+- [x] Phase 0: Added scenario matrix document at `docs/plans/chat-reliability-scenario-matrix.md`.
+- [x] Phase 1: Added explicit `process.poll` capability classification (`available`, `unavailable_scope`, `unavailable_transient`, `unavailable_degraded`).
+- [x] Phase 1: Added reason-coded `process.poll` fallback logging in no-final resolution path.
+- [x] Phase 4: Added hard stale-activity clear safeguard in app shell (`<= 10s` terminal clear window when no active work remains).
+- [x] Phase 0: Add compact diagnostics how-to section in developer docs (`docs/AGENTS.md`/ops runbook) for reason-code triage.
+
+### Cycle 2 (2026-02-19)
+
+- [x] Phase 2: Added dedicated turn lifecycle engine module (`src/lib/chat-turn-engine.ts`) and transition tests.
+- [x] Phase 2: Wired lifecycle transitions into `sendViaTauriWs` for send/stream/finalize/fail/timeout paths with send-scoped logs.
+- [x] Phase 3: Added shared message identity helpers (`src/lib/chat-message-identity.ts`) for canonical normalization and signatures.
+- [x] Phase 3: Consolidated store dedupe and user-context unwrapping through shared identity helpers.
+- [x] Phase 3: Tightened recovery reconciliation in app shell to suppress assistant backfill while active runs are in flight.
+- [x] Phase 5: Clarified Settings UX copy that workspace/context controls affect prompt context, not transport routing.
+- [x] Phase 6: Executed automated verification gates (`typecheck`, targeted reliability tests, production build) and captured passing results.

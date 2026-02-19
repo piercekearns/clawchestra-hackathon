@@ -267,3 +267,41 @@ When a deliverable is complete:
    - Brief summary of what was built
    - Date
 3. Optionally move file to `roadmap/done/` folder
+
+---
+
+## Chat Reliability Diagnostics (Quick Triage)
+
+Use this when chat appears stuck, duplicated, or missing output.
+
+### Always capture
+
+1. `sendId` (from `[Gateway][send:<id>]` logs)
+2. `runId`
+3. `sessionKey`
+4. terminal reason payload from `[Gateway][terminal]`
+5. any `process.poll` capability reason logs
+
+### Terminal reason interpretation
+
+1. `resolved_via_final`: normal final-event completion.
+2. `resolved_via_poll_stability`: history/poll-based completion path.
+3. `resolved_via_force_window`: forced completion after bounded no-final window.
+4. `failed_unacked_send`: send ack missing and acceptance could not be proven.
+5. `failed_timeout_no_output`: run stayed active or ambiguous without assistant output.
+
+### `process.poll` capability interpretation
+
+1. `process_poll_available`: poll calls healthy for this run.
+2. `process_poll_unavailable_scope`: missing permission/scope (expected on some runtimes).
+3. `process_poll_unavailable_transient`: temporary poll failure below degradation threshold.
+4. `process_poll_unavailable_degraded`: repeated poll failures; fallback path active.
+
+### Symptom-to-check mapping
+
+1. **Stale working indicator**:
+   Check whether there are active turns/sessions; if none, verify hard terminal clear ran.
+2. **Dropped trailing output**:
+   Compare terminal reason and no-final logs for same `sendId`; verify if force window or premature settle occurred.
+3. **Duplicate bubbles**:
+   Check if recovery reconciler ran during active streaming and whether a recovery bubble was emitted multiple times.

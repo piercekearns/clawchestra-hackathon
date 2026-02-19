@@ -17,8 +17,13 @@ import {
 } from './tauri';
 import {
   normalizeChatContentForMatch,
-  unwrapGatewayContextWrappedUserContent,
 } from './chat-normalization';
+import {
+  isLikelyDuplicateMessage,
+  messageIdentitySignature,
+  normalizeMessageIdentityContent,
+  unwrapUserContentForDisplay,
+} from './chat-message-identity';
 
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 480;
@@ -90,16 +95,12 @@ const CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS = 10 * 60_000;
 const CHAT_RECOVERY_BUBBLE_DEDUPE_WINDOW_MS = 30_000;
 
 function comparableMessageContent(message: ChatMessage): string {
-  if (message.role === 'user') {
-    const unwrapped = unwrapGatewayContextWrappedUserContent(message.content);
-    if (unwrapped) return normalizeChatContentForMatch(unwrapped);
-  }
-  return normalizeChatContentForMatch(message.content);
+  return normalizeMessageIdentityContent(message);
 }
 
 function sanitizeIncomingChatMessage(message: ChatMessage): ChatMessage {
   if (message.role !== 'user') return message;
-  const unwrapped = unwrapGatewayContextWrappedUserContent(message.content);
+  const unwrapped = unwrapUserContentForDisplay(message);
   if (!unwrapped) return message;
   return {
     ...message,
@@ -116,28 +117,8 @@ function isRecoverySystemBubble(message: ChatMessage): boolean {
 }
 
 function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage): boolean {
-  if (existing.role !== incoming.role) return false;
   if (existing.role !== 'assistant' && existing.role !== 'user') return false;
-
-  const existingTs = existing.timestamp ?? 0;
-  const incomingTs = incoming.timestamp ?? 0;
-  if (Math.abs(incomingTs - existingTs) > CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS) return false;
-
-  const existingNorm = comparableMessageContent(existing);
-  const incomingNorm = comparableMessageContent(incoming);
-  if (!existingNorm || !incomingNorm) return false;
-
-  if (existing.role === 'user') {
-    // User turns should only dedupe on exact normalized equality.
-    // Prefix/substring matching can collapse distinct user prompts.
-    return existingNorm === incomingNorm;
-  }
-
-  return (
-    existingNorm === incomingNorm ||
-    incomingNorm.startsWith(existingNorm) ||
-    existingNorm.startsWith(incomingNorm)
-  );
+  return isLikelyDuplicateMessage(existing, incoming, CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS);
 }
 
 function shouldPreferIncoming(existing: ChatMessage, incoming: ChatMessage): boolean {
@@ -348,13 +329,18 @@ export const useDashboardStore = create<DashboardState>()(
         const id = normalizedMessage._id ?? generateMessageId();
         const timestamp = normalizedMessage.timestamp ?? Date.now();
         const existingMessages = get().chatMessages;
+        const incomingSignature = messageIdentitySignature({
+          ...normalizedMessage,
+          timestamp,
+        });
         const duplicateById = existingMessages.some((existing) => existing._id === id);
-        const duplicateByContentAndTime = existingMessages.some(
-          (existing) =>
-            existing.role === normalizedMessage.role &&
-            existing.timestamp === timestamp &&
-            existing.content === normalizedMessage.content,
-        );
+        const duplicateByContentAndTime = existingMessages.some((existing) => {
+          const existingSignature = messageIdentitySignature(existing);
+          return (
+            existingSignature === incomingSignature &&
+            Math.abs((existing.timestamp ?? 0) - timestamp) <= CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS
+          );
+        });
 
         if (duplicateById || duplicateByContentAndTime) {
           return;

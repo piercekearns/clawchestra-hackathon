@@ -184,7 +184,7 @@ export class TauriOpenClawConnection {
         mode: 'webchat',
       },
       role: 'operator',
-      scopes: ['operator.write', 'chat.send', 'chat.history'],
+      scopes: ['operator.write', 'operator.admin', 'chat.send', 'chat.history'],
       auth: this.token ? { token: this.token } : undefined,
       userAgent: 'Pipeline-Dashboard/1.0',
       locale: 'en-US',

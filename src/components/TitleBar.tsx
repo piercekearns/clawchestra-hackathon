@@ -1,4 +1,5 @@
 import { Loader2, Monitor, Moon, PanelLeft, PanelLeftClose, Sun } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import type { ThemePreference } from '../lib/schema';
@@ -13,11 +14,14 @@ export function TitleBar() {
   const { updateAvailable, updating, handleUpdate } = useAppUpdate();
 
   const ToggleIcon = sidebarOpen ? PanelLeftClose : PanelLeft;
+  const startWindowDrag = () => {
+    void getCurrentWindow().startDragging().catch(() => {});
+  };
 
   return (
     <div
-      data-tauri-drag-region
       className="relative z-50 flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
+      onMouseDown={startWindowDrag}
     >
       {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
       <div className="w-[78px] shrink-0" />
@@ -36,10 +40,10 @@ export function TitleBar() {
       </button>
 
       {/* Spacer — pushes logo+title to center */}
-      <div className="flex-1" data-tauri-drag-region />
+      <div className="flex-1" />
 
       {/* Centered logo + title group */}
-      <div className="pointer-events-none flex select-none items-center gap-2" data-tauri-drag-region>
+      <div className="pointer-events-none flex select-none items-center gap-2">
         <img
           src={logoDark}
           alt=""
@@ -80,7 +84,7 @@ export function TitleBar() {
       </div>
 
       {/* Spacer — pushes theme toggle to right */}
-      <div className="flex-1" data-tauri-drag-region />
+      <div className="flex-1" />
 
       {/* Theme toggle */}
       <div
