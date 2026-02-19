@@ -14,7 +14,7 @@ items:
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: github-api-403-errors
     title: "Local Git Intelligence (was: GitHub API 403 Errors)"
-    status: done
+    status: complete
     priority: 2
     specDoc: docs/specs/github-api-403-errors-spec.md
     planDoc: docs/plans/github-api-403-errors-plan.md
