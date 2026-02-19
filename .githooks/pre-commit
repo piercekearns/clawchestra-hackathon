@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Pre-commit hook: sync agent compliance if AGENTS.md changed
+#
+# Install: git config core.hooksPath .githooks
+
+if git diff --cached --name-only | grep -q '^AGENTS.md$'; then
+  echo "AGENTS.md changed — syncing compliance block..."
+  ./scripts/sync-agent-compliance.sh
+
+  # Stage the updated targets
+  git add CLAUDE.md .cursorrules 2>/dev/null || true
+
+  echo "Compliance targets staged."
+fi
