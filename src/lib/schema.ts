@@ -13,9 +13,9 @@
 import { differenceInDays, parseISO } from 'date-fns';
 
 export type ProjectStatus =
-  | 'in-flight'
+  | 'in-progress'
   | 'up-next'
-  | 'simmering'
+  | 'pending'
   | 'dormant'
   | 'archived';
 
@@ -145,9 +145,9 @@ export interface ChangelogDocument {
 }
 
 export const PROJECT_COLUMNS: ColumnDefinition[] = [
-  { id: 'in-flight', label: 'In Flight' },
+  { id: 'in-progress', label: 'In Progress' },
   { id: 'up-next', label: 'Up Next' },
-  { id: 'simmering', label: 'Simmering' },
+  { id: 'pending', label: 'Pending' },
   { id: 'dormant', label: 'Dormant' },
 ];
 
@@ -160,9 +160,9 @@ export const ROADMAP_COLUMNS: ColumnDefinition[] = [
 ];
 
 export const VALID_STATUSES = [
-  'in-flight',
+  'in-progress',
   'up-next',
-  'simmering',
+  'pending',
   'dormant',
   'archived',
 ] as const satisfies readonly ProjectStatus[];
@@ -209,8 +209,8 @@ export function validateProject(data: unknown): ValidationResult {
     errors.push('status is required');
   }
 
-  if (record.status === 'in-flight' && typeof record.priority !== 'number') {
-    errors.push('priority is required for in-flight projects');
+  if (record.status === 'in-progress' && typeof record.priority !== 'number') {
+    errors.push('priority is required for in-progress projects');
   }
 
   if (record.type === 'sub-project' && typeof record.parent !== 'string') {

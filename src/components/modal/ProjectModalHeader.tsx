@@ -6,28 +6,28 @@ import { StatusBadge } from './StatusBadge';
 type BadgeVariant = NonNullable<BadgeProps['variant']>;
 
 const PROJECT_STATUSES: readonly ProjectStatus[] = [
-  'in-flight',
+  'in-progress',
   'up-next',
-  'simmering',
+  'pending',
   'dormant',
   'archived',
 ] as const;
 
 const PROJECT_STATUS_LABELS: Partial<Record<ProjectStatus, string>> = {
-  'in-flight': 'In Flight',
+  'in-progress': 'In Progress',
   'up-next': 'Up Next',
-  simmering: 'Simmering',
+  pending: 'Pending',
   dormant: 'Dormant',
   archived: 'Archived',
 };
 
 function projectStatusVariant(status: ProjectStatus): BadgeVariant {
   switch (status) {
-    case 'in-flight':
+    case 'in-progress':
       return 'accent';
     case 'up-next':
       return 'success';
-    case 'simmering':
+    case 'pending':
       return 'warning';
     case 'dormant':
     case 'archived':

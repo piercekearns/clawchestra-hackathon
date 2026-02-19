@@ -141,7 +141,7 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
         needsReview: needsReview(frontmatter.lastReviewed),
         hasRepo,
         title: frontmatter.title,
-        status: frontmatter.status ?? 'simmering',
+        status: frontmatter.status ?? 'pending',
         priority: frontmatter.priority,
         icon: frontmatter.icon,
         nextAction: frontmatter.nextAction,

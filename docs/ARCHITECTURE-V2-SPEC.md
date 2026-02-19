@@ -157,7 +157,7 @@ Settings migration rule:
 
 ### 2.4 Settings UI
 
-Add a Settings panel (roadmap item P1 in simmering):
+Add a Settings panel (roadmap item P1 in pending):
 - Editable paths with folder picker buttons
 - Add/remove workspace roots
 - Test connection to OpenClaw
@@ -225,9 +225,9 @@ catalogRoot/
 {
   "version": 1,
   "columns": {
-    "in-flight": { "columnSnapshotVersion": 1 },
+    "in-progress": { "columnSnapshotVersion": 1 },
     "up-next": { "columnSnapshotVersion": 1 },
-    "simmering": { "columnSnapshotVersion": 1 },
+    "pending": { "columnSnapshotVersion": 1 },
     "dormant": { "columnSnapshotVersion": 1 },
     "shipped": { "columnSnapshotVersion": 1 }
   }
@@ -272,10 +272,10 @@ dependsOn: [chat-persistence]             # Optional relationship list
 children: [architecture-v2]               # Optional relationship list
 
 # For catalog-only projects (ideas/not-linked), localPath is omitted and status is required in catalog
-# status: simmering
+# status: pending
 
 # Cached status (updated on scan)
-cachedStatus: in-flight
+cachedStatus: in-progress
 cachedNextAction: "Implement chat drawer"
 cachedGitStatus: clean
 cachedBranch: main
@@ -349,7 +349,7 @@ Required rules:
 3. For `trackingMode=linked`, board rendering uses `cachedStatus`/`cachedNextAction` with freshness based on `cacheUpdatedAt` + `cacheTtlMinutes`.
 4. If linked cache is stale, show stale indicator and trigger background refresh; do not block board render.
 5. If linked cache is missing at render time, lazily read `PROJECT.md` for transient board placement and mark entry `cachePending`.
-6. If lazy read fails, place entry in `HealthState=orphaned` (no special board column) and block mutating actions until refresh succeeds; if no prior/cached board status exists, use deterministic fallback `BoardStatus=simmering`.
+6. If lazy read fails, place entry in `HealthState=orphaned` (no special board column) and block mutating actions until refresh succeeds; if no prior/cached board status exists, use deterministic fallback `BoardStatus=pending`.
 7. Project detail view always reads repo source-of-truth (`PROJECT.md`/`ROADMAP.md`) when reachable.
 8. For `trackingMode=linked`, catalog `status` is ignored if present.
 9. Missing/unreachable `localPath` shows an orphan warning and blocks write actions until re-linked.
@@ -412,7 +412,7 @@ Coordinator guarantees:
 7. Runs linked dirty-target-file preflight for linked file-writing mutations (`PROJECT.md`, `ROADMAP.md`, `AGENTS.md` when in scope) and blocks writes unless explicit override is present.
 8. Enforces trusted-path policy before any linked target write by calling `assertTrustedPath(localPath, operation)`.
 9. Captures expected file hash/mtime for linked target files and rechecks before authoritative file write.
-10. Runtime reads of mutable catalog/index state are serialized through the mutation queue and must observe committed state only (no mixed in-flight snapshots).
+10. Runtime reads of mutable catalog/index state are serialized through the mutation queue and must observe committed state only (no mixed in-progress snapshots).
 
 Catalog entry write (CAS):
 1. Validate caller lock token from `CatalogMutationCoordinator`.
@@ -505,9 +505,9 @@ Rules:
 ### 3.7.1 Status Enums
 
 BoardStatus (column placement):
-1. `in-flight`
+1. `in-progress`
 2. `up-next`
-3. `simmering`
+3. `pending`
 4. `dormant`
 5. `shipped`
 
@@ -518,7 +518,7 @@ HealthState (non-column operational state):
 4. `ambiguous`
 
 Rules:
-1. `orphaned` is represented as prior `BoardStatus` + `HealthState=orphaned` (not a board column); if prior `BoardStatus` is unavailable, fallback to `BoardStatus=simmering`.
+1. `orphaned` is represented as prior `BoardStatus` + `HealthState=orphaned` (not a board column); if prior `BoardStatus` is unavailable, fallback to `BoardStatus=pending`.
 2. `BoardStatus` is the canonical status type name in TS/Rust interfaces; avoid `ProjectStatus` in new contracts.
 
 ### 3.8 Durable Transactions and Recovery
@@ -578,7 +578,7 @@ Atomicity note:
 │  ☑ Create PROJECT.md (required), ROADMAP.md, AGENTS.md │
 │  ☑ Open in VS Code after creation                  │
 │                                                     │
-│  Status: [In Flight ▼]   Priority: [Auto (end) ▼] │
+│  Status: [In Progress ▼]   Priority: [Auto (end) ▼] │
 │                                                     │
 │              [Cancel]  [Create Project]             │
 └─────────────────────────────────────────────────────┘
@@ -721,7 +721,7 @@ Reference test vectors:
 │  ❌ Missing ROADMAP.md                              │
 │     → Will create empty skeleton                   │
 │  ⚠️  No status defined                              │
-│     → Will default to "simmering"                  │
+│     → Will default to "pending"                  │
 │                                                     │
 │  Title: [My Old Project__________________]         │
 │  (inferred from folder name, editable)             │
@@ -755,7 +755,7 @@ interface CompatibilityReport {
   // Inferred data
   inferredTitle: string;        // From folder name or README
   inferredId: string;           // Canonical slug from title/folder name
-  inferredStatus: BoardStatus; // Default: 'simmering'
+  inferredStatus: BoardStatus; // Default: 'pending'
   detectedStatus?: BoardStatus; // Parsed from PROJECT.md when valid
   inferredRepo?: string;         // From git remote
 
@@ -796,7 +796,7 @@ interface CompatibilityAction {
 | `AGENTS.md` | Missing | Create from template |
 | Git repo | Not initialized | Offer to `git init` |
 | Status | Valid in `PROJECT.md` | Preserve detected status by default |
-| Status | Missing in valid `PROJECT.md` frontmatter | Default to "simmering" |
+| Status | Missing in valid `PROJECT.md` frontmatter | Default to "pending" |
 | Title | Not defined | Infer from folder name |
 | Catalog id | Not defined | Infer slug using canonical id algorithm |
 | Catalog `id` already exists | Conflict | Block add; require explicit rename/new id |
@@ -937,9 +937,9 @@ ID derivation rule:
    - Projects don't move, just the tracking
    - Apply deterministic migration conflict policy:
      - Duplicate `id`: generate deterministic `idRemap`; rewrite catalog-entry frontmatter allowlist only (`id`, `parent`, `dependsOn`, `children`); any non-allowlist reference becomes blocking conflict until manually resolved
-     - Missing status: set `status: simmering` for `catalog-only`; for linked, leave status in repo source
-     - Invalid frontmatter in linked repo: mark entry `migrationWarning: invalid-frontmatter`, skip status import, and set placement fallback `cachedStatus: simmering` for migration ordering (migration-only leniency; Add Existing remains blocking for invalid frontmatter)
-     - Missing priority: assign `max+1` per target column (for linked with skipped status import, use fallback column `simmering`), then normalize contiguous ordering
+     - Missing status: set `status: pending` for `catalog-only`; for linked, leave status in repo source
+     - Invalid frontmatter in linked repo: mark entry `migrationWarning: invalid-frontmatter`, skip status import, and set placement fallback `cachedStatus: pending` for migration ordering (migration-only leniency; Add Existing remains blocking for invalid frontmatter)
+     - Missing priority: assign `max+1` per target column (for linked with skipped status import, use fallback column `pending`), then normalize contiguous ordering
      - Unresolvable path or parse failure: move entry to migration quarantine report and block migration completion until resolved/explicitly accepted
 
 4. **Update hardcoded paths**

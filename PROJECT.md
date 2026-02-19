@@ -1,6 +1,6 @@
 ---
 title: Clawchestra
-status: in-flight
+status: in-progress
 priority: 1
 type: project
 tags:

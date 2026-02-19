@@ -17,9 +17,9 @@ YAML frontmatter parsed by `gray-matter`. Required fields marked with *.
 ```yaml
 ---
 title: "Project Name"        # * string, required
-status: in-flight             # * one of: in-flight, up-next, simmering, dormant, archived
+status: in-progress             # * one of: in-progress, up-next, pending, dormant, archived
 type: project                 # * one of: project, sub-project, idea
-priority: 1                   # number, REQUIRED if status is in-flight
+priority: 1                   # number, REQUIRED if status is in-progress
 tags: [tag1, tag2]            # string array, optional
 icon: "\U0001F4CA"           # emoji string, optional
 lastActivity: '2026-02-13'   # ISO date string, optional (stale if >14 days ago)
@@ -38,7 +38,7 @@ Markdown body with project description.
 
 ### Validation Rules
 - `title`, `type`, and `status` are required — missing any = project rejected
-- `status: in-flight` requires `priority` (number) — missing = project rejected
+- `status: in-progress` requires `priority` (number) — missing = project rejected
 - `type: sub-project` requires `parent` — missing = project rejected
 - Invalid status/type values = project rejected
 
@@ -101,7 +101,7 @@ entries:
 ## Common Mistakes to Avoid
 
 1. **Don't use emoji checkboxes in YAML** — `status: pending` not `status: ⏳ TODO`
-2. **Don't forget priority for in-flight projects** — the project won't load
+2. **Don't forget priority for in-progress projects** — the project won't load
 3. **Don't add custom fields to roadmap items** — they get stripped on save
 4. **Don't use `complete`/`completed`/`done` as a project status** — use `archived` for finished projects
 5. **Don't put completed items in the ROADMAP items array** — move them to CHANGELOG

@@ -159,7 +159,7 @@ export async function checkExistingProjectCompatibility(args: {
     }
   }
 
-  const inferredStatus: ProjectStatus = detectedStatus ?? 'simmering';
+  const inferredStatus: ProjectStatus = detectedStatus ?? 'pending';
   const inferredId = canonicalSlugify(inferredTitle || folderName);
 
   const idConflict = args.existingProjects.some((entry) => entry.id === inferredId);

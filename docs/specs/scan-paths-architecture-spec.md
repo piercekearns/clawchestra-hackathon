@@ -97,7 +97,7 @@ That's it. Three fields to appear on the board.
 ```yaml
 ---
 title: "Pipeline Dashboard"
-status: in-flight
+status: in-progress
 type: project
 
 # Display

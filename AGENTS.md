@@ -19,7 +19,7 @@ Instructions for agents interacting with Clawchestra (formerly Pipeline Dashboar
 **Roadmap item statuses:** `pending` | `up-next` | `in-progress` | `complete`
 - No other values. Not `done`, not `finished`, not `shipped`, not `blocked`.
 
-**Project statuses:** `in-flight` | `up-next` | `simmering` | `dormant` | `shipped` | `archived`
+**Project statuses:** `in-progress` | `up-next` | `pending` | `dormant` | `archived`
 
 **When setting `status: complete`:** Always also set `completedAt: YYYY-MM-DD` (ISO date).
 
@@ -144,7 +144,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Delete project** | Delete the `.md` file |
 | **Move to column** | Change `status:` to target column value |
 
-**Status values (ONLY these — app rejects others):** `in-flight` | `up-next` | `simmering` | `dormant` | `shipped` | `archived`
+**Status values (ONLY these — app rejects others):** `in-progress` | `up-next` | `pending` | `dormant` | `archived`
 
 ### Roadmap Items
 

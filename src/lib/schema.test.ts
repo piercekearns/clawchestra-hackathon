@@ -75,16 +75,16 @@ describe('schema', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('requires priority for in-flight projects', () => {
+  it('requires priority for in-progress projects', () => {
     const result = validateProject({
       title: 'In Flight No Priority',
-      status: 'in-flight',
+      status: 'in-progress',
       type: 'project',
     });
 
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.errors).toContain('priority is required for in-flight projects');
+      expect(result.errors).toContain('priority is required for in-progress projects');
     }
   });
 

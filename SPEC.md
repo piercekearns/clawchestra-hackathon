@@ -149,7 +149,7 @@ The dashboard is not a standalone tracker — it reads live status from each pro
 
 5. **Generic board components** — Board, Column, and Card components work with a `BoardItem` interface, not `ProjectViewModel` directly. This means Phase 6 (hierarchical drill-down into ROADMAP.md) is a data source addition, not a component rewrite.
 
-6. **Column definitions are data** — Columns are defined by the current view context, not hardcoded. Top-level board uses project statuses (`in-flight`, `up-next`, etc.). A project's roadmap board (Phase 6) uses `complete`, `in-progress`, `pending`. The Board component doesn't care — it receives columns + items.
+6. **Column definitions are data** — Columns are defined by the current view context, not hardcoded. Top-level board uses project statuses (`in-progress`, `up-next`, etc.). A project's roadmap board (Phase 6) uses `complete`, `in-progress`, `pending`. The Board component doesn't care — it receives columns + items.
 
 7. **Development workflow** — `npm run tauri dev` runs Vite dev server + Tauri window with hot reload. Iteration speed is identical to browser-only development.
 
@@ -192,9 +192,9 @@ export interface ColumnDefinition {
 
 // Top-level project board columns
 export const PROJECT_COLUMNS: ColumnDefinition[] = [
-  { id: 'in-flight', label: 'In Flight' },
+  { id: 'in-progress', label: 'In Progress' },
   { id: 'up-next', label: 'Up Next' },
-  { id: 'simmering', label: 'Simmering' },
+  { id: 'pending', label: 'Pending' },
   { id: 'dormant', label: 'Dormant' },
   { id: 'shipped', label: 'Shipped' },
 ];
@@ -215,10 +215,10 @@ Every project markdown file follows this schema:
 ---
 # REQUIRED
 title: "Project Name"
-status: "in-flight" | "up-next" | "simmering" | "dormant" | "shipped"
+status: "in-progress" | "up-next" | "pending" | "dormant" | "shipped"
 type: "project" | "sub-project" | "idea"
 
-# REQUIRED for in-flight
+# REQUIRED for in-progress
 priority: 1  # integer, lower = higher priority
 
 # OPTIONAL - External Repo
@@ -256,7 +256,7 @@ When a dashboard entry has `localPath`, the repo's status file provides live sta
 # ~/memestr/PROJECT.md
 ---
 title: Memestr
-status: in-flight
+status: in-progress
 nextAction: Ship DM mode
 blockedBy: null
 lastActivity: 2026-02-11
@@ -299,9 +299,9 @@ Each item in `items` conforms to `BoardItem` — it has `title`, `status`, and o
 // lib/schema.ts
 
 export type ProjectStatus =
-  | "in-flight"
+  | "in-progress"
   | "up-next"
-  | "simmering"
+  | "pending"
   | "dormant"
   | "shipped";
 
@@ -320,7 +320,7 @@ export interface ProjectFrontmatter {
   type: ProjectType;
 
   // Conditionally required
-  priority?: number;  // required if status === "in-flight"
+  priority?: number;  // required if status === "in-progress"
 
   // Optional - External Repo
   localPath?: string;    // filesystem path to repo
@@ -400,7 +400,7 @@ The validator narrows `unknown` data from `gray-matter` into typed `ProjectFront
 import { differenceInDays, parseISO } from 'date-fns';
 
 export const VALID_STATUSES = [
-  "in-flight", "up-next", "simmering", "dormant", "shipped"
+  "in-progress", "up-next", "pending", "dormant", "shipped"
 ] as const satisfies readonly ProjectStatus[];
 
 export const VALID_TYPES = [
@@ -436,8 +436,8 @@ export function validateProject(data: unknown): ValidationResult {
   }
 
   // Status-specific
-  if (record.status === 'in-flight' && typeof record.priority !== 'number') {
-    errors.push('priority is required for in-flight projects');
+  if (record.status === 'in-progress' && typeof record.priority !== 'number') {
+    errors.push('priority is required for in-progress projects');
   }
 
   // Type-specific
@@ -828,7 +828,7 @@ Opens as modal or slide-over panel:
 │  nostr/memestr.md → ~/memestr/PROJECT.md                │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  Status: [In Flight ▼]    Priority: [2 ▼]               │
+│  Status: [In Progress ▼]    Priority: [2 ▼]               │
 │  Type: [Project ▼]        Tags: [nostr] [bot] [+]       │
 │                                                          │
 │  ─────────────────────────────────────────────────────  │
@@ -1854,7 +1854,7 @@ Existing project files already have frontmatter added (commit `8507ba4`). Schema
 
 - In-flight: ClawOS, Memestr, Revival
 - Up-next: Pipeline Dashboard, Restricted Section, BotFather, Dating
-- Simmering: Personal site, ideas, sub-projects
+- Pending: Personal site, ideas, sub-projects
 
 Reference docs (PIPELINE.md, SPEC.md, etc.) were left without frontmatter — the dashboard filters these out by only including files that pass validation.
 

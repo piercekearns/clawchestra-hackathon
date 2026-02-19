@@ -24,7 +24,7 @@ interface AddProjectDialogProps {
 
 type WizardMode = 'create-new' | 'add-existing';
 
-const STATUS_OPTIONS: ProjectStatus[] = ['in-flight', 'up-next', 'simmering', 'dormant', 'archived'];
+const STATUS_OPTIONS: ProjectStatus[] = ['in-progress', 'up-next', 'pending', 'dormant', 'archived'];
 
 export function AddProjectDialog({
   open,
@@ -55,7 +55,7 @@ export function AddProjectDialog({
   const [compatibilityLoading, setCompatibilityLoading] = useState(false);
   const [existingTitle, setExistingTitle] = useState('');
   const [existingId, setExistingId] = useState('');
-  const [existingStatus, setExistingStatus] = useState<ProjectStatus>('simmering');
+  const [existingStatus, setExistingStatus] = useState<ProjectStatus>('pending');
   const [addMissingProjectMd, setAddMissingProjectMd] = useState(true);
   const [addMissingFrontmatter, setAddMissingFrontmatter] = useState(true);
   const [addMissingRoadmap, setAddMissingRoadmap] = useState(true);

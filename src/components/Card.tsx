@@ -31,6 +31,8 @@ export function Card<T extends BoardItem>({
     opacity: isDragging ? 0.6 : 1,
   };
 
+  const hasBody = Boolean(item.nextAction || item.blockedBy || renderActions || renderHoverActions);
+
   return (
     <article
       ref={setNodeRef}
@@ -38,10 +40,10 @@ export function Card<T extends BoardItem>({
       {...attributes}
       {...listeners}
       onClick={() => onClick(item)}
-      className="group cursor-grab rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-neutral-900 shadow-sm outline-none transition hover:border-revival-accent-400 hover:bg-neutral-100 focus:outline-none focus-visible:outline-none active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
+      className={`group cursor-grab rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 shadow-sm outline-none transition hover:border-revival-accent-400 hover:bg-neutral-100 focus:outline-none focus-visible:outline-none active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700 ${hasBody ? 'p-3' : 'px-3 py-2'}`}
     >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-tight">
+      <div className={`flex items-start justify-between gap-2 ${hasBody ? 'mb-2' : 'mb-0'}`}>
+        <h3 className="text-sm font-semibold leading-tight">
           <span>{item.title}</span>
           {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
         </h3>
@@ -56,38 +58,40 @@ export function Card<T extends BoardItem>({
         </div>
       </div>
 
-      <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-300">
-        {renderHoverActions ? (
-          <div className="relative min-h-[1.75rem]">
-            <div className="transition-opacity duration-150 group-hover:opacity-0">
-              {item.nextAction ? (
-                <p className="line-clamp-2">
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">Next:</span>{' '}
-                  {item.nextAction}
-                </p>
-              ) : (
-                <p className="line-clamp-1 opacity-0" aria-hidden>
-                  Next
-                </p>
-              )}
+      {hasBody ? (
+        <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-300">
+          {renderHoverActions ? (
+            <div className="relative min-h-[1.5rem]">
+              <div className="transition-opacity duration-150 group-hover:opacity-0">
+                {item.nextAction ? (
+                  <p className="line-clamp-2">
+                    <span className="font-medium text-neutral-800 dark:text-neutral-200">Next:</span>{' '}
+                    {item.nextAction}
+                  </p>
+                ) : (
+                  <p className="h-[1.5rem] opacity-0" aria-hidden>
+                    &nbsp;
+                  </p>
+                )}
+              </div>
+              <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-start opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+                {renderHoverActions(item)}
+              </div>
             </div>
-            <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-start opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
-              {renderHoverActions(item)}
-            </div>
-          </div>
-        ) : item.nextAction ? (
-          <p className="line-clamp-2">
-            <span className="font-medium text-neutral-800 dark:text-neutral-200">Next:</span>{' '}
-            {item.nextAction}
-          </p>
-        ) : null}
+          ) : item.nextAction ? (
+            <p className="line-clamp-2">
+              <span className="font-medium text-neutral-800 dark:text-neutral-200">Next:</span>{' '}
+              {item.nextAction}
+            </p>
+          ) : null}
 
-        {item.blockedBy ? (
-          <p className="line-clamp-1 text-status-blocked">
-            <span className="font-medium">Blocked:</span> {item.blockedBy}
-          </p>
-        ) : null}
-      </div>
+          {item.blockedBy ? (
+            <p className="line-clamp-1 text-status-blocked">
+              <span className="font-medium">Blocked:</span> {item.blockedBy}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {renderActions ? (
         <div className="mt-2 flex flex-wrap gap-1.5">{renderActions(item)}</div>

@@ -239,7 +239,7 @@ Rust backend reads `~/.openclaw/openclaw.json` for `gateway.port` and `gateway.a
   ```yaml
   ---
   title: "{directory-name}"
-  status: simmering
+  status: pending
   priority: 1
   type: project
   lastActivity: "{today}"

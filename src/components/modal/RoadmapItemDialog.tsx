@@ -43,7 +43,7 @@ export function RoadmapItemDialog({
       try {
         const dummyFrontmatter: ProjectFrontmatter = projectFrontmatter ?? {
           title: projectTitle,
-          status: 'in-flight',
+          status: 'in-progress',
           priority: 1,
           type: 'project',
           lastActivity: '',
