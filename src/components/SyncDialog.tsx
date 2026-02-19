@@ -276,7 +276,7 @@ export function SyncDialog({
                         type="checkbox"
                         checked={selectedIds.has(project.id)}
                         onChange={() => toggleSelected(project.id)}
-                        className="h-4 w-4 shrink-0 rounded border-neutral-300 accent-revival-accent-400"
+                        className="h-4 w-4 shrink-0 rounded border-neutral-300 accent-emerald-600"
                         disabled={isSyncing || batchSyncing}
                       />
                     )}
@@ -336,7 +336,7 @@ export function SyncDialog({
                           type="checkbox"
                           checked={pushEnabled.has(project.id)}
                           onChange={() => togglePush(project.id)}
-                          className="h-3 w-3 rounded border-neutral-300 accent-revival-accent-400"
+                          className="h-3 w-3 rounded border-neutral-300 accent-emerald-600"
                           disabled={isSyncing || batchSyncing}
                         />
                         Push after commit
