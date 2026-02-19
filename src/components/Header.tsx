@@ -1,4 +1,4 @@
-import { GitCommitHorizontal, RefreshCcw } from 'lucide-react';
+import { RefreshCcw } from 'lucide-react';
 import { Input } from './ui/input';
 import { ErrorBadge } from './ErrorBadge';
 import type { DashboardError } from '../lib/errors';
@@ -59,8 +59,7 @@ export function Header({
             onClick={onOpenSync}
             className="inline-flex items-center gap-1"
           >
-            <GitCommitHorizontal className="h-4 w-4" />
-            Sync
+            Git Sync
             <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-400 px-1 text-[11px] font-bold text-neutral-900">
               {dirtyProjectCount}
             </span>
