@@ -101,6 +101,8 @@ This keeps your real-world bug reports directly comparable to the existing track
 
 **Likely area:** `reconcileRecentHistory` surfacing gateway history fragments that should be collapsed into a single turn. `collapseChatDuplicates` not merging same-turn content blocks. The recovery system has no concept of turn boundaries — it treats every content block from the gateway as a potential standalone message, so narration fragments preceding tool calls get promoted to full message bubbles.
 
+**Update (21:51):** Reproduced again during a long tool-heavy turn (~21:45–21:51). A single streaming message (agent reading files, running tests, writing bugs) was being received as one large chat bubble. Mid-stream, the typing animation stopped, the single bubble split into 7+ separate fragment bubbles (visible in screenshot: "Now update the tests to match:", "All passing. Let me run the full test suite...", "141 tests passing. Now let me check TypeScript compilation:", etc.). The final summary message ("Here's the summary: Done — three things handled...") was delivered to the gateway but never appeared in the chat drawer. Status badge still showed "Connected" throughout. Identical triple-symptom: fragment split + animation drop + message loss. No app update or compaction involved this time — pure streaming pipeline failure during a normal long turn.
+
 ---
 
 ### BUG-004: Post-compaction message drop
