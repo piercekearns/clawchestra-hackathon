@@ -15,11 +15,12 @@ describe('deliverable lifecycle helpers', () => {
       item: { id: 'item-1', title: 'Item One', docs: {} },
     });
 
-    expect(prompt).toContain('Requested action: Create a new spec for this roadmap item under docs/specs/.');
+    expect(prompt).toContain('Create a new spec for this roadmap item at docs/specs/item-1-spec.md');
     expect(prompt).toContain('Spec doc: (missing)');
+    expect(prompt).toContain('no Claude Code needed for specs');
   });
 
-  it('builds update plan prompt with normalized relative path', () => {
+  it('builds update plan prompt with tmux steps and normalized path', () => {
     const prompt = buildLifecyclePrompt('plan', {
       project: { id: 'project-1', title: 'Project One', dirPath: '/workspace/project-one' },
       item: {
@@ -30,7 +31,22 @@ describe('deliverable lifecycle helpers', () => {
     });
 
     expect(prompt).toContain('Plan doc: docs/plans/item-1-plan.md');
-    expect(prompt).toContain('Requested action: Update existing plan at docs/plans/item-1-plan.md');
+    expect(prompt).toContain('Update the existing implementation plan using Claude Code via tmux');
+    expect(prompt).toContain('coding-agent skill');
+    expect(prompt).toContain('tmux new-session');
+    expect(prompt).toContain('/plan docs/plans/item-1-plan.md');
+  });
+
+  it('builds create plan prompt with tmux steps when plan is missing', () => {
+    const prompt = buildLifecyclePrompt('plan', {
+      project: { id: 'project-1', title: 'Project One' },
+      item: { id: 'feature-x', title: 'Feature X', docs: { spec: 'docs/specs/feature-x-spec.md' } },
+    });
+
+    expect(prompt).toContain('Create a new implementation plan using Claude Code via tmux');
+    expect(prompt).toContain('tmux new-session -d -s feature-x-plan');
+    expect(prompt).toContain('/plan docs/plans/feature-x-plan.md');
+    expect(prompt).toContain('spec at docs/specs/feature-x-spec.md');
   });
 
   it('builds review prompt referencing plan_review skill', () => {
@@ -46,5 +62,24 @@ describe('deliverable lifecycle helpers', () => {
     expect(prompt).toContain('Run /plan_review in Claude Code');
     expect(prompt).toContain('NOT /review');
     expect(prompt).toContain('Surface the recommended plan changes');
+  });
+
+  it('builds build prompt with explicit tmux steps', () => {
+    const prompt = buildLifecyclePrompt('build', {
+      project: { id: 'project-1', title: 'Project One' },
+      item: {
+        id: 'git-sync',
+        title: 'Git Sync',
+        docs: { spec: 'docs/specs/git-sync-spec.md', plan: 'docs/plans/git-sync-plan.md' },
+      },
+    });
+
+    expect(prompt).toContain('Build this roadmap item using Claude Code via tmux');
+    expect(prompt).toContain('coding-agent skill');
+    expect(prompt).toContain('tmux new-session -d -s git-sync-build');
+    expect(prompt).toContain('claude --dangerously-skip-permissions');
+    expect(prompt).toContain('/build docs/plans/git-sync-plan.md');
+    expect(prompt).toContain('Surface non-critical recommendations');
+    expect(prompt).toContain('Kill tmux session when complete');
   });
 });

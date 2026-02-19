@@ -79,13 +79,13 @@ export function buildLifecyclePrompt(
       if (artifactState.spec === 'present') {
         return [
           ...header,
-          `Requested action: Update existing spec at ${specPath}. Keep the spec concise and aligned with AGENTS.md document formatting rules.`,
+          `Requested action: Update existing spec at ${specPath}. Keep the spec concise and aligned with AGENTS.md document formatting rules. You can write this directly (no Claude Code needed for specs).`,
         ].join('\n');
       }
 
       return [
         ...header,
-        'Requested action: Create a new spec for this roadmap item under docs/specs/. Set ROADMAP nextAction to "Spec written — ready for plan/build" when done.',
+        `Requested action: Create a new spec for this roadmap item at docs/specs/${context.item.id}-spec.md. Keep it concise and aligned with AGENTS.md document formatting rules. You can write this directly (no Claude Code needed for specs). Set ROADMAP nextAction to "Spec written — ready for plan/build" when done.`,
       ].join('\n');
     }
 
@@ -93,17 +93,36 @@ export function buildLifecyclePrompt(
       if (artifactState.plan === 'present') {
         return [
           ...header,
-          `Requested action: Update existing plan at ${planPath}. Keep phases concrete, testable, and implementation-ready.`,
+          'Requested action: Update the existing implementation plan using Claude Code via tmux.',
+          '',
+          'Steps:',
+          '1. Read the coding-agent skill (skills/coding-agent/SKILL.md) for tmux patterns',
+          `2. Create a tmux session: tmux new-session -d -s ${context.item.id}-plan -c <project-dir>`,
+          "3. Launch Claude Code: tmux send-keys -t <session> 'claude --dangerously-skip-permissions' Enter",
+          `4. Wait 6-8s for TUI init, then send: /plan ${planPath}`,
+          '5. Monitor via capture-pane; surface FULL output for any decisions',
+          '6. Keep phases concrete, testable, and implementation-ready',
+          '7. Kill tmux session when complete',
         ].join('\n');
       }
 
       const specReference = specPath
-        ? ` Use existing spec at ${specPath} as the source of truth.`
-        : ' No spec exists yet; include explicit assumptions and scope boundaries.';
+        ? `Use existing spec at ${specPath} as the source of truth.`
+        : 'No spec exists yet; include explicit assumptions and scope boundaries.';
 
       return [
         ...header,
-        `Requested action: Create a new implementation plan under docs/plans/.${specReference} Set ROADMAP nextAction to "Plan written — ready for build" when done.`,
+        'Requested action: Create a new implementation plan using Claude Code via tmux.',
+        '',
+        'Steps:',
+        '1. Read the coding-agent skill (skills/coding-agent/SKILL.md) for tmux patterns',
+        `2. Create a tmux session: tmux new-session -d -s ${context.item.id}-plan -c <project-dir>`,
+        "3. Launch Claude Code: tmux send-keys -t <session> 'claude --dangerously-skip-permissions' Enter",
+        `4. Wait 6-8s for TUI init, then send: /plan docs/plans/${context.item.id}-plan.md`,
+        '5. Monitor via capture-pane; surface FULL output for any decisions',
+        `6. ${specReference}`,
+        '7. Set ROADMAP nextAction to "Plan written — ready for build" when done',
+        '8. Kill tmux session when complete',
       ].join('\n');
     }
 
@@ -136,13 +155,24 @@ export function buildLifecyclePrompt(
       if (specPath) sources.push(`spec at ${specPath}`);
       if (planPath) sources.push(`plan at ${planPath}`);
       const sourceRef = sources.length > 0
-        ? ` Use ${sources.join(' and ')} as source of truth.`
+        ? `Source of truth: ${sources.join(' and ')}.`
         : '';
 
       return [
         ...header,
-        `Requested action: Run formal /build command / the /build skill to deliver this roadmap item.${sourceRef} Keep ROADMAP nextAction in sync while building. Surface to the user any non-critical recommendations surfaced throughout the build phase for them to decide next steps against.`,
-      ].join('\n');
+        'Requested action: Build this roadmap item using Claude Code via tmux.',
+        '',
+        'Steps:',
+        '1. Read the coding-agent skill (skills/coding-agent/SKILL.md) for tmux patterns',
+        `2. Create a tmux session: tmux new-session -d -s ${context.item.id}-build -c <project-dir>`,
+        "3. Launch Claude Code: tmux send-keys -t <session> 'claude --dangerously-skip-permissions' Enter",
+        `4. Wait 6-8s for TUI init, then send: /build ${planPath ?? '<path-to-plan>'}`,
+        '5. Monitor via capture-pane; surface FULL output for any decisions/errors/recommendations',
+        '6. Keep ROADMAP nextAction in sync throughout the build',
+        '7. Surface non-critical recommendations for user to decide next steps',
+        '8. Kill tmux session when complete',
+        sourceRef,
+      ].filter(Boolean).join('\n');
     }
 
     default: {

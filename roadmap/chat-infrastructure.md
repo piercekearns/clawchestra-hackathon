@@ -227,6 +227,89 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+### BUG-008: Post-compaction memory flush narration leaks to user
+**Reported:** 2026-02-19 ~21:37
+**Severity:** Medium
+**Status:** Open
+
+**Symptoms:**
+- After compaction, the first message the user sees is NOT the direct reply to their message
+- Instead, internal narration from the memory flush turn appears first: messages like "File exists with the morning build notes. I need to append the afternoon/evening session content." and "NO_REPLY"
+- These are visible in the OpenClaw Gateway Dashboard as separate message bubbles
+- The actual reply (responding to the user's post-compaction message) arrives later but initially gets buried under the narration noise
+- User is confused: they sent a question but get tool-call narration about file operations instead of an answer
+
+**Root cause analysis:**
+- Before auto-compaction, OpenClaw runs a "silent memory flush" turn (documented in OpenClaw compaction docs)
+- This memory flush is a regular agent turn with tool calls (reading/writing memory files)
+- The narration of those tool calls ("File exists...", "Good, I have full context") gets streamed as chat events
+- The final `NO_REPLY` token suppresses the turn's final output, but intermediate block-streamed narration has already been delivered to the chat
+- The Clawchestra chat drawer (and gateway dashboard) render these intermediate narration fragments as user-visible messages
+
+**Reproduction:**
+1. Have a long session that triggers auto-compaction
+2. Send a message after compaction completes
+3. Observe: memory flush narration fragments appear before the actual reply
+
+**Possible approaches:**
+- **App-side:** Suppress or collapse messages that contain only tool narration + NO_REPLY within the same turn (turn-boundary awareness needed — relates to BUG-003's turn grouping)
+- **OpenClaw-side:** The memory flush turn could emit with a "silent" or "internal" flag so downstream clients know to suppress narration
+- **Hybrid:** Tag memory flush turns distinctly in the event stream; app filters them from display
+
+**Scenario links:** recovery-cursoring, compaction-mid-run
+
+---
+
+### BUG-009: Typing animation persists during compaction — no distinct UX state
+**Reported:** 2026-02-19 ~21:37
+**Severity:** Medium
+**Status:** Open — research complete, fix ready for implementation
+
+**Symptoms:**
+- After the agent sends its last pre-compaction message, the `typing…` animation persists for a long time
+- This continues throughout the entire compaction process (visible as a blue bubble + spinner in the OpenClaw Gateway Dashboard)
+- User sees `typing…` or `Working...` and expects another message, when actually the system is just compacting context
+- Only after compaction finishes and the post-compaction turn completes does the animation stop
+- Misleading: user waits for a response that isn't coming (it's infrastructure work, not a reply)
+
+**Research findings (2026-02-19 ~21:45):**
+
+1. **OpenClaw emits distinct `stream: "compaction"` events** with `{ phase: "start" }` and `{ phase: "end", willRetry }` — these are separate from `assistant` or `tool` streams (source: `pi-embedded-subscribe.handlers.compaction.ts` in dist)
+
+2. **The OpenClaw Gateway Dashboard already handles this** — it has:
+   - `compactionStatus` reactive state (`{active, startedAt, completedAt}`)
+   - `compaction-indicator--active` and `compaction-indicator--complete` CSS classes
+   - A "Compaction" divider in the message list for compaction entries
+   - The `yg()` function processes `stream: "compaction"` events and updates state
+
+3. **Clawchestra already handles compaction events partially** — the chat drawer:
+   - Listens for `compacting` / `compacted` / `compaction_complete` chat states (gateway.ts lines ~1540-1555)
+   - Emits `kind: 'compaction'` system events → shows "Compacting conversation..." or "Conversation compacted" system bubbles
+   - Feature-flagged via `CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states` (currently `true`)
+   - BUT: the `agentActivity` state does NOT change during compaction — it stays as `typing` or `working` from the pre-compaction turn
+
+4. **The gap:** The `chatActivityLabel` in App.tsx drives the "Working..." / "Typing..." indicator, but has no `compacting` state. During compaction:
+   - `agentActivity` remains `working` (set during the pre-compaction turn, never cleared until post-compaction turn finishes)
+   - `isChatBusy` remains `true` (because `gatewayActiveTurns > 0` during compaction)
+   - Result: `chatActivityLabel` shows "Working..." even though compaction has started
+
+**Proposed fix:**
+- Add `'compacting'` to the `agentActivity` union type: `'idle' | 'typing' | 'working' | 'compacting'`
+- In `App.tsx` compaction event handler, set `setAgentActivity('compacting')` when `compactionState === 'compacting'`
+- In `chatActivityLabel` useMemo, add: `if (agentActivity === 'compacting') return 'Compacting...';`
+- On compaction complete, let the normal post-compaction turn lifecycle reset activity to `working` → `idle`
+- Optionally: show a different animation/icon for compacting (e.g., the Layers icon already mapped in SystemBubble.tsx) vs the dots animation for typing/working
+
+**Files to change:**
+- `src/lib/store.ts` — add `'compacting'` to agentActivity type
+- `src/App.tsx` — set activity to `'compacting'` in compaction event handler; add to chatActivityLabel
+- `src/components/chat/ChatBar.tsx` — optionally different animation for compacting
+- `src/components/chat/MessageList.tsx` — optionally different reading indicator for compacting
+
+**Scenario links:** compaction-mid-run
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:
