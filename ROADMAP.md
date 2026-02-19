@@ -83,20 +83,6 @@ items:
       - roadmap
       - ux
       - workflow
-  - id: custom-card-actions
-    title: Custom Card Actions (User-Defined Commands)
-    status: pending
-    priority: 3
-    nextAction: >-
-      Spec needed — depends on First Friend Readiness (sidebar settings panel +
-      tool detection). Adaptive prompts ship with FFR; this adds full UI for
-      icon/label/prompt customisation per button.
-    tags:
-      - ui
-      - ux
-      - workflow
-      - actions
-    icon: ⚙️
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: complete

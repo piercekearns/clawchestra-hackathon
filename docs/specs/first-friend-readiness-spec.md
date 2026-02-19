@@ -309,32 +309,26 @@ Results displayed as a checklist:
 - Show what was found, grouped by source
 - Let user decide which to keep/disable (future — not MVP)
 
-**Lifecycle button adaptation (MVP — part of this spec):**
+**Configurable lifecycle buttons (part of this spec — subsumes Custom Card Actions):**
 
-The 5 lifecycle buttons (Spec, Plan, Review, Deliver, Build) currently generate prompts that reference Claude Code-specific commands (`/plan_review`, `/build`). Without those tools, the Review and Build buttons produce broken prompts.
+The 5 lifecycle buttons (Spec, Plan, Review, Deliver, Build) currently generate prompts that reference Claude Code-specific commands (`/plan_review`, `/build`). Without those tools, the Review and Build buttons produce broken prompts. The friend must be able to configure their own buttons before using the app.
 
-For the first friend milestone, the buttons remain as 5 fixed buttons but with **adaptive prompts based on tool detection**:
+**Design (per Pierce, 2026-02-19):**
+- **0 to N buttons** — user adds buttons one-by-one. If none configured, no action bar shows on hover.
+- **Max ~5-6 buttons** — constrained by card width.
+- **Left-aligned** — button 1 always in slot 1, button 2 in slot 2, etc. Predictable positioning.
+- **Per-button configuration:**
+  - Icon (from lucide library picker)
+  - Label (short name, e.g., "Build", "Review")
+  - Prompt template with variables: `{project.title}`, `{item.title}`, `{item.specDoc}`, `{item.planDoc}`, etc.
+  - Optional: slash command prefix
+- **Configuration surface:** Sidebar settings panel (Phase 5 of this spec)
+- **Tool detection informs suggestions:** "We found Claude Code — would you like to add a Build button with `/build`?" But the user decides.
+- **If no buttons configured:** Action bar hidden. Cards behave as plain kanban cards.
 
-- If Claude Code detected → current prompts (reference `/plan_review`, `/build`)
-- If Claude Code NOT detected → generic prompts that work with any AI assistant:
-  - Review: "Review this plan for completeness, feasibility, and potential issues: {planDoc}"
-  - Build: "Implement this roadmap item following the spec and plan: {specDoc}, {planDoc}"
-  - (Spec, Plan, Deliver are already generic enough — no tool-specific references)
+**Replaces `deliverable-lifecycle.ts`:** The hardcoded prompt generation is removed entirely. Button definitions come from user settings. The existing 5 buttons become a "suggested preset" offered during onboarding Step 3 (tool detection) or in sidebar settings.
 
-This is a code change in `deliverable-lifecycle.ts`: check a `detectedTools` config value and branch the prompt generation. No UI needed — it's automatic.
-
-**Full button customisation (follow-up — Custom Card Actions roadmap item):**
-
-After the friend is onboarded and using the app, the next evolution is full configurability:
-- User-defined buttons: icon (lucide picker), label, prompt template
-- Prompt template variables: `{project.title}`, `{item.title}`, `{item.specDoc}`, `{item.planDoc}`, etc.
-- Per-button "slash command prefix" option (e.g., prepend `/build` before the prompt)
-- Add/remove/reorder buttons
-- Configuration surface: sidebar settings panel (built as part of this spec's Phase 5)
-
-The Custom Card Actions roadmap item depends on the sidebar settings panel being built (Phase 5 of this spec). Once FFR ships, Custom Card Actions becomes the natural next step — the surface exists, the tool detection exists, it's just adding the configuration UI.
-
-**Why split:** Adaptive prompts (automatic, no UI) unblock the friend handoff. Full configurability (UI-heavy) is a separate deliverable that builds on the FFR foundation. Shipping them together would delay the handoff unnecessarily.
+This subsumes the Custom Card Actions roadmap item — there's no interim adaptive step. The friend gets the configurable system from day one.
 
 ### What could go wrong
 - `which` doesn't exist on Windows → use `where` instead, or check `PATH` directly
@@ -435,7 +429,7 @@ The friend is on Linux or Windows. The following macOS-specific code needs platf
 | **Configurable OpenClaw Integration** (was pending) | **Removed from roadmap** — fully subsumed by Stage 2 of this spec. |
 | **Sidebar Enhancements** (was up-next) | **Removed from roadmap** — settings panel becomes sidebar content as part of this work. |
 | **Recently Completed Lifecycle** (was up-next) | **Removed from roadmap** — collapsed into this spec as future polish. Can be re-added later. |
-| **Custom Card Actions** (pending, P3) | **Kept separate** — full button customisation is future work. This spec handles adaptive prompts as interim. |
+| **Custom Card Actions** (was pending) | **Removed from roadmap** — fully subsumed by this spec (Stage 4 + Phase 5). |
 | **App Customisation** (pending, P1) | **Deprioritised** — not blocking shareability |
 | **Roadmap Item Quick-Add** (pending, P2) | **Deprioritised** — friend has AI, can add items via chat |
 
@@ -476,21 +470,24 @@ Work is sequenced by the funnel: each stage unlocks the next.
 
 **Unlocks:** Friend has a guided first-run experience.
 
-### Phase 4: Project Scaffolding + Adaptive Prompts
+### Phase 4: Project Scaffolding
 - Detect git repos without PROJECT.md in scan paths
 - Offer to scaffold PROJECT.md + ROADMAP.md
-- Lifecycle prompts adapt based on detected tools (Claude Code present → current prompts, absent → generic)
-- Tool detection results cached and shown in settings
+- Tool detection results cached
 
-**Unlocks:** Friend's existing repos appear in the app. Lifecycle buttons work regardless of toolchain.
+**Unlocks:** Friend's existing repos appear in the app.
 
-### Phase 5: Settings Sidebar Panel
+### Phase 5: Settings Sidebar Panel + Configurable Lifecycle Buttons
 - Sidebar gets a Settings panel (first real sidebar content)
-- Organised by category: Connection, Projects, Tools
+- Organised by category: Connection, Projects, Tools, Actions
+- "Actions" section: add/remove lifecycle buttons (0-N, left-aligned, icon + label + prompt template)
+- Suggested presets based on detected tools ("Add standard lifecycle actions?")
+- Remove hardcoded `deliverable-lifecycle.ts` prompt generation — buttons come from settings
+- If no buttons configured, no action bar on roadmap card hover
 - Replaces or supplements the existing Settings dialog
 - "Re-run setup wizard" button
 
-**Unlocks:** Ongoing configuration accessible from the sidebar.
+**Unlocks:** Ongoing configuration accessible from the sidebar. Lifecycle buttons work with any toolchain.
 
 ---
 
