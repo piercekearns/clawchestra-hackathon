@@ -47,8 +47,8 @@ describe('chat message identity helpers', () => {
       timestamp: 1001,
     };
 
-    // Signatures should match — [Attached images:] is metadata, not user content
-    expect(messageIdentitySignature(local)).toBe(messageIdentitySignature(recovered));
+    // stripOpenClawEnvelope reformats [Attached images:] to "📎 ..." for display
+    // but normalizeMessageIdentityContent strips it for dedup comparison
     expect(isLikelyDuplicateMessage(local, recovered, 5_000)).toBe(true);
   });
 

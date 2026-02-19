@@ -20,7 +20,12 @@ export function normalizeMessageIdentityContent(message: IdentityMessage): strin
   const unwrapped = unwrapUserContentForDisplay(message);
   // Always strip envelope metadata for identity comparison so locally-sent
   // clean messages match their gateway-recovered wrapped counterparts.
-  const stripped = message.role === 'user' ? stripOpenClawEnvelope(unwrapped) : unwrapped;
+  let stripped = message.role === 'user' ? stripOpenClawEnvelope(unwrapped) : unwrapped;
+  // Remove attachment indicators (📎 ...) and raw [Attached images:] tags for dedup
+  stripped = stripped
+    .replace(/\n*📎\s*[^\n]+$/u, '')
+    .replace(/\s*\[Attached images?:\s*[^\]]+\]\s*$/u, '')
+    .trim();
   return normalizeChatContentForMatch(stripped);
 }
 

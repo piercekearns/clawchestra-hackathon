@@ -40,8 +40,11 @@ export function stripOpenClawEnvelope(content: string): string {
   // Strip trailing [message_id: ...] tags
   text = text.replace(/\s*\[message_id:\s*[^\]]+\]\s*$/u, '').trim();
 
-  // Strip leading [Attached images: ...] if at the very start (already displayed as images)
-  text = text.replace(/\s*\[Attached images?:\s*[^\]]+\]\s*$/u, '').trim();
+  // Reformat [Attached images: ...] as a readable line instead of stripping
+  text = text.replace(
+    /\s*\[Attached images?:\s*([^\]]+)\]\s*$/u,
+    (_match, files: string) => `\n\n📎 ${files}`,
+  ).trim();
 
   return text;
 }

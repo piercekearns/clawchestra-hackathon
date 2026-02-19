@@ -123,9 +123,9 @@ describe('stripOpenClawEnvelope', () => {
     expect(stripOpenClawEnvelope(raw)).toBe('Hello there');
   });
 
-  it('strips trailing attached images tag', () => {
+  it('reformats trailing attached images tag as readable line', () => {
     const raw = 'Check this out\n[Attached images: screenshot.jpg]';
-    expect(stripOpenClawEnvelope(raw)).toBe('Check this out');
+    expect(stripOpenClawEnvelope(raw)).toBe('Check this out\n\n📎 screenshot.jpg');
   });
 
   it('returns plain messages unchanged', () => {
