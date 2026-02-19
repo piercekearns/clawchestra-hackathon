@@ -1345,7 +1345,7 @@ fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<
 
 #[tauri::command]
 fn git_push(repo_path: String) -> Result<(), String> {
-    run_git(&repo_path, &["push", "--ff-only"])
+    run_git(&repo_path, &["push"])
         .map(|_| ())
         .map_err(|error| format!("git push failed: {}", error))
 }
