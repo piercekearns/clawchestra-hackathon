@@ -105,6 +105,22 @@ Auto-generated message adapts to what's selected:
 - Code only: `chore: sync code changes (ProjectName) — src/App.tsx, +2 more`
 - Mixed: `chore: sync project changes (ProjectName) — 3 files across metadata, docs, code`
 
+## Auto-Commit Behavior (built in phase 1)
+
+Phase 1 introduced auto-commit for local-only projects (no remote). This affects the scope expansion:
+
+| Category | Local-only repos | Repos with remote |
+|---|---|---|
+| **Metadata** | Auto-committed silently ✅ | Shown in Sync dialog for commit + push |
+| **Documents** | Auto-committed silently ✅ | Shown in Sync dialog for commit + push |
+| **Code** | Never auto-committed | Shown in Sync dialog for commit + push (with risk warning) |
+
+**Principle:** If the app wrote it, auto-commit for local repos. If a human or AI agent wrote it (code), always surface explicitly for review.
+
+**Impact on this phase:** The Sync dialog effectively becomes a "push to GitHub" tool for Metadata and Documents on remote repos. For Code changes, the Sync dialog is the primary interaction point regardless of remote status — code should never be auto-committed.
+
+**Consideration for Documents edge case:** `docs/specs/*.md` and `docs/plans/*.md` are categorized as Documents but are typically written by the AI agent via chat, not the app UI. These should NOT be auto-committed — they behave more like Code in terms of authorship. The auto-commit should only cover files the app UI directly writes to (`PROJECT.md`, `ROADMAP.md`, `CHANGELOG.md`, and items within `roadmap/`).
+
 ## Out of Scope
 
 - Branch management (git-branch-sync)
@@ -120,3 +136,5 @@ Auto-generated message adapts to what's selected:
 - [ ] Commit message updates dynamically to reflect selection and categories
 - [ ] Sync button appears for any dirty files, not just dashboard-managed ones
 - [ ] External changes (VS Code, Codex) are visible and committable through Sync
+- [ ] Auto-commit extended: Documents written by app UI are auto-committed for local-only repos
+- [ ] Auto-commit excluded: `docs/specs/`, `docs/plans/` (AI-authored) and all Code files
