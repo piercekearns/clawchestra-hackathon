@@ -1002,10 +1002,12 @@ export default function App() {
     try {
       await writeRoadmap(nextDocument);
       setRoadmapDocument(nextDocument);
-      // Auto-commit ROADMAP.md for local-only repos
-      const proj = allProjects.find((p) => p.id === selectedProjectId);
-      if (proj?.hasRepo && !proj.gitStatus?.remote) {
-        void autoCommitIfLocalOnly(proj.dirPath, proj.gitStatus, ['ROADMAP.md']);
+      // Auto-commit roadmap status/priority edits for local-only repos.
+      // Use the active roadmap project context instead of selectedProjectId,
+      // which is intentionally cleared in roadmap view.
+      const roadmapProject = activeRoadmapProject;
+      if (roadmapProject?.hasGit && !roadmapProject.gitStatus?.remote) {
+        await autoCommitIfLocalOnly(roadmapProject.dirPath, roadmapProject.gitStatus, ['ROADMAP.md']);
       }
       pushToast('success', 'Roadmap saved');
     } catch (error) {
@@ -1049,10 +1051,14 @@ export default function App() {
 
     try {
       const previousById = new Map(previousItems.map((item) => [item.id, item]));
+      const changedProjectIds = new Set<string>();
 
       const statusUpdates: Promise<void>[] = [];
       for (const item of nextItems) {
         const before = previousById.get(item.id);
+        if (before && (before.status !== item.status || before.priority !== item.priority)) {
+          changedProjectIds.add(item.id);
+        }
         if (before && before.status !== item.status) {
           const updates: ProjectUpdate = { status: item.status as ProjectStatus };
           // Auto-assign priority when moving to in-progress (required by schema)
@@ -1080,6 +1086,22 @@ export default function App() {
       });
 
       await Promise.all(reorderJobs);
+
+      // Auto-commit project status/priority (Kanban) movements for local-only repos.
+      // These are intent-obvious structural metadata updates and should not
+      // generate persistent Sync noise.
+      const localOnlyChanged = nextItems.filter(
+        (item) =>
+          changedProjectIds.has(item.id) &&
+          item.hasGit &&
+          !item.gitStatus?.remote,
+      );
+      await Promise.all(
+        localOnlyChanged.map((item) =>
+          autoCommitIfLocalOnly(item.dirPath, item.gitStatus, ['PROJECT.md']),
+        ),
+      );
+
       await loadProjects();
     } catch (error) {
       setProjects(previousItems);

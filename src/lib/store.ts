@@ -509,8 +509,8 @@ export const useDashboardStore = create<DashboardState>()(
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
         // Auto-commit for local-only repos (no remote)
-        if (project.hasRepo && !project.gitStatus?.remote) {
-          void autoCommitIfLocalOnly(
+        if (project.hasGit && !project.gitStatus?.remote) {
+          await autoCommitIfLocalOnly(
             project.dirPath,
             project.gitStatus,
             ['PROJECT.md'],

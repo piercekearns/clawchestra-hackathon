@@ -50,6 +50,25 @@ The git status icons already reflect this:
 
 ## Proposed Changes
 
+### Auto-Commit Policy Boundaries (Local-only vs Remote)
+
+To reduce Git Sync noise without hiding meaningful changes, enforce this policy:
+
+1. **Local-only repos (no remote): auto-commit only structural Kanban changes**
+   - Project board: move project between columns; reorder priority within a column
+   - Roadmap board: move roadmap item between columns; reorder priority within a column
+   - Files affected: `PROJECT.md`, `ROADMAP.md`
+
+2. **Local-only repos: keep manual Sync for deeper edits**
+   - AI/content edits (title/body/spec/plan text), create/delete/rename operations
+   - Any changes outside pure status/priority movements
+   - Any non-dashboard files
+
+3. **Repos with remotes (GitHub-linked): no auto-commit**
+   - Always require explicit Git Sync action (commit/push) to avoid implicit branch/remote side effects
+
+This keeps low-risk intent-obvious board interactions quiet for local repos while preserving explicit control for risky or shareable changes.
+
 ### Backend (Rust)
 
 1. **Return all dirty files with categories:**

@@ -5,9 +5,9 @@ items:
     status: in-progress
     priority: 1
     nextAction: >-
-      Spec written — expand dirty file detection to all files with
-      Metadata/Documents/Code categorization. Depends on git-sync phase 1
-      completion.
+      Spec updated — implement all-file dirty detection +
+      Metadata/Documents/Code categorization, with local-only Kanban
+      auto-commit boundaries clarified.
     tags:
       - git
       - sync
@@ -32,9 +32,9 @@ items:
     status: up-next
     priority: 1
     nextAction: >-
-      Spec written — multi-branch cherry-pick + AI conflict resolution + git
-      management skill. Requires research phase (ClawHub, gh CLI, Atlassian
-      guides). Depends on git-sync-scope completion.
+      Spec updated — multi-branch cherry-pick + AI conflict resolution + git
+      management skill, including explicit no-remote `(local)` branch behavior.
+      Depends on git-sync-scope completion.
     tags:
       - git
       - sync

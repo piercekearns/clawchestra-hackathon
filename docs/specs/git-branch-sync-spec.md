@@ -31,6 +31,7 @@ This feature brings multi-branch commit, pull, and AI-assisted conflict resoluti
 2. **Branch status indicators:** Each branch shows its relationship to remote: `✓ in sync`, `↑2 ahead`, `↓3 behind`, `⚠ diverged`
 3. **Independent push toggles per branch**
 4. **Pull option:** When current branch is behind remote, offer "Pull first?" before sync
+5. **No-remote branch behavior:** show `(local)` and allow commit/cherry-pick flow, but hide/disable push+pull actions
 
 ### Phase 3B: Multi-Branch Execution
 
@@ -45,6 +46,11 @@ The sequence when syncing to additional branches:
    - Switch back to the original branch
    - Restore stashed work
 3. Push to selected branches if push enabled
+
+**Local-only branches (no upstream):**
+- Allow commit + cross-branch cherry-pick operations locally
+- Do not offer pull/push controls
+- Keep branch sync useful even without GitHub linkage
 
 **What these git operations mean in plain English:**
 - **Stash** = "save my uncommitted work in a drawer so I can switch branches cleanly"
@@ -129,6 +135,7 @@ A git management skill/guide synthesized from:
 - PR creation from the Sync dialog
 - Remote branch management (delete, protect)
 - Full git GUI (this is targeted sync, not a replacement for VS Code's git panel)
+- Changing the Phase 2 auto-commit boundary policy (local-only Kanban structure changes only)
 
 ## Dependencies
 

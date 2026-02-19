@@ -176,6 +176,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Open settings** | User clicks Settings button in header |
 | **Update paths** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings` |
 | **Trigger update** | Commit code changes; user clicks Update button |
+| **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`PROJECT.md` / `ROADMAP.md`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
 | **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
 | **Search/filter** | Not available via agent — UI only |
 
