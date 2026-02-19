@@ -3,9 +3,9 @@ items:
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 1
+    priority: 3
     specDoc: docs/specs/first-friend-readiness-spec.md
-    nextAction: Spec written — review and plan
+    nextAction: Spec written — deliver Git Sync and Deep Rename first
     tags:
       - onboarding
       - cross-platform
@@ -40,7 +40,7 @@ items:
   - id: git-sync
     title: Git Sync
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: Spec written — ready for plan/build
     tags:
       - git
@@ -52,46 +52,17 @@ items:
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: >-
       Surface rename done — deep rename needed for Cargo, data paths, session
       key, folder
     tags:
       - infra
       - rename
-  - id: recently-completed-lifecycle
-    title: Recently Completed Lifecycle
-    status: up-next
-    priority: 4
-    nextAction: Spec written — ready for plan/build
-    tags:
-      - roadmap
-      - workflow
-      - agents
-      - changelog
-    specDoc: docs/specs/recently-completed-lifecycle-spec.md
-  - id: sidebar-enhancements
-    title: Sidebar Enhancements
-    status: up-next
-    priority: 5
-    nextAction: Define which panel(s) to build first
-    tags:
-      - ui
-      - navigation
-      - orchestration
-    icon: "\U0001F5C2️"
-  - id: openclaw-integration
-    title: Configurable OpenClaw Integration
-    status: pending
-    priority: 1
-    nextAction: Post-V2 scope
-    tags:
-      - integration
-      - openclaw
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
-    priority: 2
+    priority: 1
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
       colour theme system. Geist fonts available locally including Pixel
@@ -104,7 +75,7 @@ items:
   - id: roadmap-item-quick-add
     title: Roadmap Item Quick-Add
     status: pending
-    priority: 3
+    priority: 2
     nextAction: >-
       Spec needed — define UI for manually adding roadmap items with
       schema-compliant defaults
@@ -115,7 +86,7 @@ items:
   - id: custom-card-actions
     title: Custom Card Actions (User-Defined Commands)
     status: pending
-    priority: 4
+    priority: 3
     nextAction: >-
       Spec needed — define UI for users to configure custom action icons on
       roadmap cards with templated chat commands (project name, item name, doc

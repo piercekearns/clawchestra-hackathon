@@ -69,7 +69,7 @@ No distribution mechanism. The app is a local git repo with `bun tauri dev` for 
 - Binaries attached to GitHub releases
 - Friend downloads from Releases page
 
-**Recommendation:** Start with Option A (source build + good README). Add CI later. The friend is technical enough to build from source.
+**Decision:** Option A (source build + good README). The friend is a developer — private GitHub repo with collaborator invite + accurate platform-specific build instructions is sufficient. CI-built binaries deferred to wider distribution.
 
 ### What could go wrong
 - Missing prerequisites (Rust, Node, platform-specific libs like `libwebkit2gtk` on Linux)
@@ -94,17 +94,19 @@ App creates a default settings file on first launch with Pierce-specific default
 - Settings file exists → normal launch (skip wizard)
 - "Re-run setup" option accessible from settings (sidebar) for later changes
 
-**Onboarding wizard:**
-- Modal or full-screen flow, step-by-step
-- Progress indicator (Step 1 of 3, etc.)
-- Back/Next navigation
-- Can be exited early but warns "some features won't work until setup is complete"
+**Onboarding as full-screen takeover:**
+- On first launch, the entire app window IS the onboarding — no board, no sidebar, no chrome behind it
+- Full-screen stepper with progress indicator (Step 1 of 3, etc.)
+- Themed consistently with the app (dark/light, brand colours, logo)
+- Back/Next navigation between steps
+- Cannot be skipped — setup is mandatory (OpenClaw connection + scan paths minimum)
 - Settings file created at the end of onboarding with the user's choices
+- Final step: "You're all set" → button click → CSS transition (opacity fade + slight scale) reveals the board with projects loaded
+- "Re-run setup" accessible from settings for later changes
 
-**Empty state (if wizard skipped or partially completed):**
-- Board shows a friendly empty state, not just blank space
-- "Get started" card or banner linking back to setup
-- Chat bar shows "Not connected — configure OpenClaw in settings" if gateway not configured
+**Empty state (if no projects found after onboarding):**
+- Board shows a friendly empty state with guidance: "No projects found. Add a folder in Settings or create a new project."
+- Chat bar shows connection status (connected/disconnected)
 
 ### What could go wrong
 - User exits wizard immediately — app should still launch, just with degraded state
@@ -418,14 +420,14 @@ The friend is on Linux or Windows. The following macOS-specific code needs platf
 
 | Existing Item | Disposition |
 |---|---|
-| **Configurable OpenClaw Integration** (pending, P1) | **Subsumed** — Stage 2 of this spec covers it fully |
-| **Custom Card Actions** (pending, P4) | **Kept separate** — full button customisation is future work. This spec handles adaptive prompts as interim. |
-| **Git Sync** (up-next, P1) | **Independent, stays high priority** — useful to Pierce now, friend needs it for GitHub repos |
-| **Deep Rename** (up-next, P2) | **Dependency** — should happen before or during this work (session key, package name) |
-| **Sidebar Enhancements** (up-next, P4) | **Partially subsumed** — settings panel becomes sidebar content as part of this work. Other sidebar panels remain separate. |
-| **App Customisation** (pending, P2) | **Deprioritised** — not blocking shareability |
-| **Roadmap Item Quick-Add** (pending, P3) | **Deprioritised** — friend has AI, can add items via chat |
-| **Recently Completed Lifecycle** (up-next, P3) | **Deprioritised** — polish, not blocking |
+| **Git Sync** (up-next, P1) | **Prerequisite** — deliver first. Useful to Pierce now, friend needs it for GitHub repos. |
+| **Deep Rename** (up-next, P2) | **Prerequisite** — deliver second. Clean names before friend sees the app. |
+| **Configurable OpenClaw Integration** (was pending) | **Removed from roadmap** — fully subsumed by Stage 2 of this spec. |
+| **Sidebar Enhancements** (was up-next) | **Removed from roadmap** — settings panel becomes sidebar content as part of this work. |
+| **Recently Completed Lifecycle** (was up-next) | **Removed from roadmap** — collapsed into this spec as future polish. Can be re-added later. |
+| **Custom Card Actions** (pending, P3) | **Kept separate** — full button customisation is future work. This spec handles adaptive prompts as interim. |
+| **App Customisation** (pending, P1) | **Deprioritised** — not blocking shareability |
+| **Roadmap Item Quick-Add** (pending, P2) | **Deprioritised** — friend has AI, can add items via chat |
 
 ---
 
