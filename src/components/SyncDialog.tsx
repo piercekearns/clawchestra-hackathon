@@ -11,6 +11,42 @@ import { Button } from './ui/button';
 import { Tooltip } from './Tooltip';
 import type { GitStatus, ProjectViewModel } from '../lib/schema';
 import { gitCommit, gitPush } from '../lib/tauri';
+import { cn } from '../lib/utils';
+
+/* ── Brand checkbox: chartreuse bg + dark tick ─────────────────────── */
+function BrandCheckbox({
+  checked,
+  onChange,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center rounded border transition-colors',
+        checked
+          ? 'border-revival-accent-400 bg-revival-accent-400'
+          : 'border-neutral-400 bg-transparent dark:border-neutral-500',
+        disabled && 'opacity-50 cursor-not-allowed',
+        className,
+      )}
+    >
+      {checked && (
+        <Check className="text-neutral-900" style={{ width: '75%', height: '75%' }} strokeWidth={3} />
+      )}
+    </button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -272,11 +308,10 @@ export function SyncDialog({
                   {/* Top row: checkbox, name, branch, action */}
                   <div className="flex items-center gap-2">
                     {!result && (
-                      <input
-                        type="checkbox"
+                      <BrandCheckbox
                         checked={selectedIds.has(project.id)}
                         onChange={() => toggleSelected(project.id)}
-                        className="h-4 w-4 shrink-0 rounded border-neutral-300 accent-emerald-600"
+                        className="h-4 w-4"
                         disabled={isSyncing || batchSyncing}
                       />
                     )}
@@ -332,11 +367,10 @@ export function SyncDialog({
                   {!result && git.remote && (
                     <div className="ml-6 mt-1">
                       <label className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
-                        <input
-                          type="checkbox"
+                        <BrandCheckbox
                           checked={pushEnabled.has(project.id)}
                           onChange={() => togglePush(project.id)}
-                          className="h-3 w-3 rounded border-neutral-300 accent-emerald-600"
+                          className="h-3.5 w-3.5"
                           disabled={isSyncing || batchSyncing}
                         />
                         Push after commit
