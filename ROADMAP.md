@@ -13,9 +13,9 @@ items:
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: git-sync
     title: Git Sync
-    status: in-progress
+    status: complete
     priority: 1
-    nextAction: "Built — awaiting verification"
+    nextAction: "Shipped — reviewed by 8 agents, all P1s fixed"
     tags:
       - git
       - github
