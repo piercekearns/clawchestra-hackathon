@@ -109,13 +109,49 @@ These paths determine where settings.json and chat.db live on disk. Changing the
 
 ## Data Directory Migration
 
-This is the only non-trivial part. Pierce has existing data at:
-- **macOS:** `~/Library/Application Support/Pipeline Dashboard/` (settings.json, logs/)
-- **Chat DB:** `~/Library/Application Support/pipeline-dashboard/chat.db` (via `dirs::data_dir()`)
+This is the most complex part. Pierce has **seven** data locations that reference the old name:
 
-After rename, new paths would be:
-- **macOS:** `~/Library/Application Support/Clawchestra/` (settings)
-- **Chat DB:** `~/Library/Application Support/clawchestra/chat.db`
+### Known data directories (macOS)
+
+| Path | Contents | Migration |
+|------|----------|-----------|
+| `~/Library/Application Support/Pipeline Dashboard/` | settings.json, logs/ | Rename to `Clawchestra/` |
+| `~/Library/Application Support/pipeline-dashboard/` | chat.db (SQLite) | Rename to `clawchestra/` |
+| `~/Library/WebKit/pipeline-dashboard/` | WebView storage (localStorage) | See below |
+| `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` | WebView storage (identifier-keyed) | See below |
+| `~/Library/Preferences/com.clawdbot.pipeline-dashboard.plist` | macOS preferences | See below |
+| `~/Library/Caches/pipeline-dashboard/` | App cache | Can delete (non-critical) |
+| `~/Library/Caches/com.clawdbot.pipeline-dashboard/` | Identifier-keyed cache | Can delete (non-critical) |
+
+### Critical: WebView Storage (localStorage)
+
+Zustand's `persist` middleware stores state in **localStorage** inside the Tauri WebView. The localStorage key is `clawchestra-state` (already renamed). However, the WebView's storage location on disk is determined by the **Tauri identifier** (`com.clawdbot.pipeline-dashboard`).
+
+**If we change the identifier to `com.clawdbot.clawchestra`**, the WebView creates a new storage directory. The old localStorage data (theme preference, collapsed columns, column order, sidebar state) is orphaned in the old WebKit directory.
+
+**Options:**
+
+1. **Don't change the identifier** — WebView storage survives, but the app identifier stays as the old name forever. Clean for now, messy long-term.
+2. **Change the identifier + migrate WebKit directories** — Rename `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` → `~/Library/WebKit/com.clawdbot.clawchestra/`. Risky — WebKit may validate directory names against internal state.
+3. **Change the identifier + accept localStorage loss** — User loses theme/sidebar/column preferences. They're trivial to reconfigure (a few clicks). This is the safest option.
+
+**Recommendation: Option 3.** The persisted state is 5 fields (theme, collapsedColumns, columnOrder, sidebarOpen, sidebarWidth) — all trivially recoverable by the user. Attempting to migrate WebKit directories risks corrupting WebView state. Cache directories can be safely deleted (non-critical).
+
+### Critical: Board ID Stability
+
+Project IDs are derived from the **folder name** via `canonicalSlugify()`:
+```typescript
+const folderName = dirPath.split('/').pop() ?? dirPath;
+const id = canonicalSlugify(folderName); // "pipeline-dashboard" → "pipeline-dashboard"
+```
+
+If the repo folder is renamed from `~/repos/pipeline-dashboard/` to `~/repos/clawchestra/`, the project ID changes from `pipeline-dashboard` to `clawchestra`. This affects:
+
+- **`selectedProjectId`** in Zustand — project won't auto-select after rename (minor, resets on next click)
+- **`collapsedColumns[boardId]`** — board-specific column state uses `roadmap:{projectId}` as key. Old state orphaned. (Mitigated by Option 3 above — localStorage is reset anyway)
+- **`columnOrder[boardId]`** — same as above
+
+Since we're accepting localStorage loss (Option 3), the board ID change is a non-issue — all board state resets to defaults.
 
 ### Migration Strategy
 
@@ -141,6 +177,21 @@ fn migrate_data_directory() -> Result<(), String> {
             .map_err(|e| format!("Chat DB migration failed: {e}"))?;
     }
     
+    // Clean up old cache directories (non-critical)
+    let cache_dir = dirs::cache_dir().unwrap();
+    let _ = fs::remove_dir_all(cache_dir.join("pipeline-dashboard"));
+    let _ = fs::remove_dir_all(cache_dir.join("com.clawdbot.pipeline-dashboard"));
+    
+    // Clean up old preferences plist (macOS only)
+    #[cfg(target_os = "macos")]
+    {
+        let prefs = dirs::home_dir().unwrap().join("Library/Preferences/com.clawdbot.pipeline-dashboard.plist");
+        let _ = fs::remove_file(prefs);
+    }
+    
+    // Old WebKit directories left in place — don't touch WebKit internals
+    // They'll be ignored and eventually cleaned up by macOS
+    
     Ok(())
 }
 ```
@@ -150,6 +201,9 @@ fn migrate_data_directory() -> Result<(), String> {
 - Use `fs::rename` (atomic on same filesystem) — not copy+delete
 - If migration fails, log error but don't crash — settings will be recreated from defaults
 - Migration runs once, then old paths are gone. No dual-path lookup.
+- **Do NOT migrate WebKit directories** — let macOS handle stale WebKit data
+- **Do NOT migrate plist** — Tauri creates a new one automatically
+- Cache directories: delete old ones (best-effort, non-fatal)
 - Clean up old `update.sh` references to `OLD_APP_NAME` / `OLD_INSTALL_PATH` — the transition from "Pipeline Dashboard" to "Clawchestra" in `/Applications/` is already handled there and can be removed post-migration.
 
 ### `env::var("HOME")` vs `dirs` crate
@@ -216,6 +270,21 @@ The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos
 
 ---
 
+## Risks and Edge Cases
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| Tauri identifier change moves WebView storage | High (by design) | Low | Accept localStorage loss — 5 trivial preferences |
+| `fs::rename` fails cross-filesystem | Low (same disk) | Medium | Fall back to copy+delete; log warning |
+| OpenClaw rejects new session key | Very Low | Medium | OpenClaw creates sessions lazily — new key just works |
+| Build cache (`target/`) stale after crate rename | Certain | None | Cargo rebuilds automatically; may be slow first time |
+| Folder rename changes project ID → board state orphaned | High if folder renamed | Low | localStorage reset anyway; project re-discovers fine |
+| `parent: pipeline-dashboard` in roadmap detail files not updated | Medium | Low | These files are agent/human reference only, not consumed by app. Update anyway for consistency. |
+| macOS Gatekeeper flags renamed app | Low | Medium | Already unsigned; user already accepted risk |
+| Friend clones repo and gets migration code for a directory they don't have | Certain | None | Migration is idempotent — no-op when old paths don't exist |
+
+---
+
 ## Build Scope
 
 **Estimated file changes:** ~15 files (excluding `target/` rebuild and `package-lock.json` regeneration)
@@ -245,14 +314,29 @@ The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos
 
 After the rename, verify:
 
+### Build
 - [ ] `cargo check` passes
 - [ ] `bun test` passes (85+ tests)
 - [ ] `npx tsc --noEmit` passes
 - [ ] `pnpm build` succeeds
 - [ ] `npx tauri build --no-bundle` succeeds
+
+### Data Migration
 - [ ] App launches and finds existing settings (migration worked)
-- [ ] Chat history preserved (chat.db migrated)
-- [ ] Chat connects to OpenClaw (new session key works)
-- [ ] `grep -r "pipeline.dashboard\|pipeline_dashboard\|Pipeline Dashboard" src/ src-tauri/src/` returns only historical comments or migration code
+- [ ] Chat history preserved (chat.db migrated to `~/Library/Application Support/clawchestra/`)
+- [ ] Settings migrated to `~/Library/Application Support/Clawchestra/`
+- [ ] Old settings dir `~/Library/Application Support/Pipeline Dashboard/` no longer exists
+- [ ] Old chat DB dir `~/Library/Application Support/pipeline-dashboard/` no longer exists
+- [ ] Old cache dirs cleaned up (best-effort)
+- [ ] Theme/sidebar preferences reset to defaults (expected — localStorage lost with identifier change)
+
+### Functionality
+- [ ] Chat connects to OpenClaw (new session key `agent:main:clawchestra` works)
+- [ ] Projects load correctly on the board
+- [ ] Roadmap view works for Clawchestra project
 - [ ] Update button works (new env vars, new lock file path)
-- [ ] No old data directory left at `~/Library/Application Support/Pipeline Dashboard/`
+- [ ] Second launch: migration is a no-op (idempotent)
+
+### Code Hygiene
+- [ ] `grep -r "pipeline.dashboard\|pipeline_dashboard\|Pipeline Dashboard" src/ src-tauri/src/` returns only: historical comments, migration code, or `killall` fallback
+- [ ] `grep -r "PIPELINE_DASHBOARD" src/ src-tauri/ update.sh` returns nothing
