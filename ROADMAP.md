@@ -27,12 +27,11 @@ items:
     title: Deep Rename to Clawchestra
     status: up-next
     priority: 2
-    nextAction: >-
-      Surface rename done — deep rename needed for Cargo, data paths, session
-      key, folder
+    nextAction: Spec written — ready for plan/build
     tags:
       - infra
       - rename
+    specDoc: docs/specs/deep-rename-clawchestra-spec.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
