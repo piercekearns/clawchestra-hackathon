@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -30,6 +30,12 @@ interface SyncResult {
   hash?: string;
   error?: string;
   pushed?: boolean;
+}
+
+type DirtyProject = ProjectViewModel & { gitStatus: GitStatus };
+
+function hasDirtyGitStatus(p: ProjectViewModel): p is DirtyProject {
+  return p.gitStatus != null && (p.gitStatus.dashboardDirty === true);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,8 +70,13 @@ export function groupDirtyFiles(files: string[]): { metadata: string[]; document
   return { metadata, documents };
 }
 
-function buildHelpMessage(project: ProjectViewModel): string {
-  const git = project.gitStatus!;
+export function buildCommitMessage(names: string[]): string {
+  const nameList = names.length > 3 ? `${names.slice(0, 3).join(', ')}, ...` : names.join(', ');
+  return `chore: sync project metadata (${nameList})`;
+}
+
+function buildHelpMessage(project: DirtyProject): string {
+  const git = project.gitStatus;
   const behindPart = git.behindCount
     ? `, which is ${git.behindCount} commits behind remote`
     : '';
@@ -83,6 +94,12 @@ export function SyncDialog({
   onRequestChatPrefill,
   onSyncComplete,
 }: SyncDialogProps) {
+  // Type-narrow to projects with confirmed gitStatus
+  const dirtyProjects = useMemo(
+    () => projects.filter(hasDirtyGitStatus),
+    [projects],
+  );
+
   // Selected project IDs (all checked by default)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // Push enabled per project
@@ -91,50 +108,35 @@ export function SyncDialog({
   const [results, setResults] = useState<Map<string, SyncResult>>(new Map());
   // Currently syncing project ID (for spinner)
   const [syncingId, setSyncingId] = useState<string | null>(null);
-  // Batch syncing
+  // Batch syncing (state for UI rendering)
   const [batchSyncing, setBatchSyncing] = useState(false);
+  // Ref-based mutex to prevent concurrent sync operations (double-click, individual+batch race)
+  const syncLockRef = useRef(false);
   // Commit message
   const [commitMessage, setCommitMessage] = useState('');
 
-  // Initialize state when dialog opens
+  // Smart push defaults: derived from projects, stable across watcher reloads
+  const defaultPushIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of dirtyProjects) {
+      const { safe } = getBranchIndicator(p.gitStatus);
+      if (safe) ids.add(p.id);
+    }
+    return ids;
+  }, [dirtyProjects]);
+
+  // Reset state only when dialog opens (not on project reloads)
   useEffect(() => {
     if (!open) return;
 
-    const ids = new Set(projects.map((p) => p.id));
-    setSelectedIds(ids);
-
-    // Smart push defaults: enabled when safe
-    const pushIds = new Set<string>();
-    for (const p of projects) {
-      const git = p.gitStatus;
-      if (git) {
-        const { safe } = getBranchIndicator(git);
-        if (safe) pushIds.add(p.id);
-      }
-    }
-    setPushEnabled(pushIds);
+    setSelectedIds(new Set(dirtyProjects.map((p) => p.id)));
+    setPushEnabled(defaultPushIds);
     setResults(new Map());
     setSyncingId(null);
     setBatchSyncing(false);
-
-    // Default commit message
-    const names = projects.map((p) => p.title);
-    const nameList = names.length > 3 ? `${names.slice(0, 3).join(', ')}, ...` : names.join(', ');
-    setCommitMessage(`chore: sync project metadata (${nameList})`);
-  }, [open, projects]);
-
-  // Escape key closes dialog
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onOpenChange(false);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onOpenChange]);
+    syncLockRef.current = false;
+    setCommitMessage(buildCommitMessage(dirtyProjects.map((p) => p.title)));
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -155,15 +157,15 @@ export function SyncDialog({
   }, []);
 
   const selectedCount = useMemo(
-    () => projects.filter((p) => selectedIds.has(p.id) && !results.has(p.id)).length,
-    [projects, selectedIds, results],
+    () => dirtyProjects.filter((p) => selectedIds.has(p.id) && !results.has(p.id)).length,
+    [dirtyProjects, selectedIds, results],
   );
 
   // Sync a single project
   const syncProject = useCallback(
-    async (project: ProjectViewModel): Promise<SyncResult> => {
+    async (project: DirtyProject): Promise<SyncResult> => {
       const git = project.gitStatus;
-      if (!git?.dirtyFiles?.length) {
+      if (!git.dirtyFiles?.length) {
         return { projectId: project.id, success: true, hash: 'no-op' };
       }
 
@@ -184,29 +186,41 @@ export function SyncDialog({
 
   // Sync one project (per-project button)
   const handleSyncOne = useCallback(
-    async (project: ProjectViewModel) => {
-      setSyncingId(project.id);
-      const result = await syncProject(project);
-      setResults((prev) => new Map(prev).set(project.id, result));
-      setSyncingId(null);
+    async (project: DirtyProject) => {
+      if (syncLockRef.current) return;
+      syncLockRef.current = true;
+      try {
+        setSyncingId(project.id);
+        const result = await syncProject(project);
+        setResults((prev) => new Map(prev).set(project.id, result));
+        setSyncingId(null);
+      } finally {
+        syncLockRef.current = false;
+      }
     },
     [syncProject],
   );
 
   // Batch sync all selected
   const handleSyncAll = useCallback(async () => {
+    if (syncLockRef.current) return;
+    syncLockRef.current = true;
     setBatchSyncing(true);
-    const toSync = projects.filter(
-      (p) => selectedIds.has(p.id) && !results.has(p.id),
-    );
-    for (const project of toSync) {
-      setSyncingId(project.id);
-      const result = await syncProject(project);
-      setResults((prev) => new Map(prev).set(project.id, result));
+    try {
+      const toSync = dirtyProjects.filter(
+        (p) => selectedIds.has(p.id) && !results.has(p.id),
+      );
+      for (const project of toSync) {
+        setSyncingId(project.id);
+        const result = await syncProject(project);
+        setResults((prev) => new Map(prev).set(project.id, result));
+      }
+      setSyncingId(null);
+      setBatchSyncing(false);
+    } finally {
+      syncLockRef.current = false;
     }
-    setSyncingId(null);
-    setBatchSyncing(false);
-  }, [projects, selectedIds, results, syncProject]);
+  }, [dirtyProjects, selectedIds, results, syncProject]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -226,7 +240,7 @@ export function SyncDialog({
           <div>
             <h2 className="text-lg font-semibold">Sync Changes</h2>
             <p className="text-sm text-neutral-500">
-              {projects.length} project{projects.length !== 1 ? 's' : ''} with uncommitted changes
+              {dirtyProjects.length} project{dirtyProjects.length !== 1 ? 's' : ''} with uncommitted changes
             </p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={handleClose} className="h-8 w-8">
@@ -237,8 +251,8 @@ export function SyncDialog({
         {/* Project list */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           <div className="space-y-3">
-            {projects.map((project) => {
-              const git = project.gitStatus!;
+            {dirtyProjects.map((project) => {
+              const git = project.gitStatus;
               const branch = getBranchIndicator(git);
               const result = results.get(project.id);
               const isSyncing = syncingId === project.id;
@@ -402,7 +416,8 @@ export function SyncDialog({
             type="text"
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
-            className="mb-3 w-full rounded-md border border-neutral-300 bg-neutral-0 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-revival-accent-400 focus:outline-none focus:ring-1 focus:ring-revival-accent-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+            disabled={batchSyncing}
+            className="mb-3 w-full rounded-md border border-neutral-300 bg-neutral-0 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-revival-accent-400 focus:outline-none focus:ring-1 focus:ring-revival-accent-400 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
             placeholder="chore: sync project metadata"
           />
 

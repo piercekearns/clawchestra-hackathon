@@ -1148,27 +1148,10 @@ fn is_dashboard_file(path: &str) -> bool {
 }
 
 fn filter_dashboard_dirty_files(status_porcelain: &str) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut files = Vec::new();
-
-    for line in status_porcelain.lines() {
-        if line.len() < 4 {
-            continue;
-        }
-        let trimmed = line[3..].trim();
-        // Handle renames: "old -> new"
-        let path = trimmed
-            .split(" -> ")
-            .last()
-            .unwrap_or(trimmed)
-            .trim()
-            .to_string();
-        if !path.is_empty() && is_dashboard_file(&path) && seen.insert(path.clone()) {
-            files.push(path);
-        }
-    }
-
-    files
+    parse_dirty_paths(status_porcelain)
+        .into_iter()
+        .filter(|p| is_dashboard_file(p))
+        .collect()
 }
 
 #[tauri::command]
@@ -1285,11 +1268,30 @@ fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<
         return Err("No files supplied for commit".to_string());
     }
 
-    let add_output = Command::new("git")
+    // Validate repo_path is a directory containing a git repo
+    let repo = std::path::Path::new(&repo_path);
+    if !repo.is_dir() {
+        return Err("repo_path is not a directory".to_string());
+    }
+    if !repo.join(".git").exists() {
+        return Err("repo_path is not a git repository".to_string());
+    }
+
+    // Validate all files are dashboard-managed
+    for file in &files {
+        if !is_dashboard_file(file) {
+            return Err(format!("Refusing to commit non-dashboard file: {}", file));
+        }
+    }
+
+    let mut add_cmd = Command::new("git");
+    add_cmd
         .arg("-C")
         .arg(&repo_path)
         .arg("add")
-        .args(files.iter())
+        .arg("--")
+        .args(files.iter());
+    let add_output = add_cmd
         .output()
         .map_err(|error| error.to_string())?;
 
@@ -1322,7 +1324,7 @@ fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<
 
 #[tauri::command]
 fn git_push(repo_path: String) -> Result<(), String> {
-    run_git(&repo_path, &["push"])
+    run_git(&repo_path, &["push", "--ff-only"])
         .map(|_| ())
         .map_err(|error| format!("git push failed: {}", error))
 }

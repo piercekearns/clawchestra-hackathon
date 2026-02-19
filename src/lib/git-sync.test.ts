@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   getBranchIndicator,
+  buildCommitMessage,
   categorizeFile,
   groupDirtyFiles,
 } from '../components/SyncDialog';
@@ -130,24 +131,18 @@ describe('smart push defaults', () => {
 // ---------------------------------------------------------------------------
 
 describe('default commit message', () => {
-  function buildDefaultMessage(names: string[]): string {
-    const nameList =
-      names.length > 3 ? `${names.slice(0, 3).join(', ')}, ...` : names.join(', ');
-    return `chore: sync project metadata (${nameList})`;
-  }
-
   it('generates message for single project', () => {
-    expect(buildDefaultMessage(['ClawOS'])).toBe('chore: sync project metadata (ClawOS)');
+    expect(buildCommitMessage(['ClawOS'])).toBe('chore: sync project metadata (ClawOS)');
   });
 
   it('generates message for three projects', () => {
-    expect(buildDefaultMessage(['ClawOS', 'Memestr', 'Dashboard'])).toBe(
+    expect(buildCommitMessage(['ClawOS', 'Memestr', 'Dashboard'])).toBe(
       'chore: sync project metadata (ClawOS, Memestr, Dashboard)',
     );
   });
 
   it('truncates with ellipsis for more than three projects', () => {
-    const msg = buildDefaultMessage(['A', 'B', 'C', 'D']);
+    const msg = buildCommitMessage(['A', 'B', 'C', 'D']);
     expect(msg).toBe('chore: sync project metadata (A, B, C, ...)');
   });
 });

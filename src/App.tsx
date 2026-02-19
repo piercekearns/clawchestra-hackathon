@@ -935,6 +935,7 @@ export default function App() {
     isRoadmapView,
     searchOpen,
     settingsDialogOpen,
+    syncDialogOpen,
     selectedProjectId,
     setSelectedProjectId,
     setViewContext,
