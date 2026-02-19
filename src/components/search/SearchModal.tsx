@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
+import { ModalDragZone } from '../ui/ModalDragZone';
 import Fuse from 'fuse.js';
 import type { ProjectViewModel, RoadmapItem } from '../../lib/schema';
 import { SearchResultItem } from './SearchResultItem';
@@ -164,7 +165,8 @@ export function SearchModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 top-[46px] z-40 flex items-start justify-center pt-[15vh]">
+    <div className="fixed inset-0 z-40 flex items-start justify-center pt-[15vh]">
+      <ModalDragZone />
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"

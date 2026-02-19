@@ -12,6 +12,7 @@ import { Tooltip } from './Tooltip';
 import type { GitStatus, ProjectViewModel } from '../lib/schema';
 import { gitCommit, gitPush } from '../lib/tauri';
 import { cn } from '../lib/utils';
+import { ModalDragZone } from './ui/ModalDragZone';
 
 /* ── Brand checkbox: chartreuse bg + dark tick ─────────────────────── */
 function BrandCheckbox({
@@ -314,7 +315,8 @@ export function SyncDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 top-[46px] z-40 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+      <ModalDragZone />
       <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-700">

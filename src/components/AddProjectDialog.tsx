@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FolderOpen, RefreshCcw } from 'lucide-react';
+import { ModalDragZone } from './ui/ModalDragZone';
 import type { DashboardSettings } from '../lib/settings';
 import type { ProjectStatus, ProjectViewModel } from '../lib/schema';
 import {
@@ -136,7 +137,8 @@ export function AddProjectDialog({
   };
 
   return (
-    <div className="fixed inset-0 top-[46px] z-40 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+      <ModalDragZone />
       <div className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-neutral-0 p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Project Wizard</h2>

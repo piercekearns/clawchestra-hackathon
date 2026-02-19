@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { ModalDragZone } from '../ui/ModalDragZone';
 import type { ProjectFrontmatter, RoadmapItem, RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/roadmap';
 import { readFile } from '../../lib/tauri';
@@ -95,14 +96,15 @@ export function RoadmapItemDialog({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 top-[46px] z-40 bg-black/40 backdrop-blur-sm"
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
+      <ModalDragZone />
 
       {/* Dialog */}
       <div
         ref={dialogRef}
-        className="fixed inset-x-4 top-[calc(46px+5%)] z-50 mx-auto max-h-[85vh] max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+        className="fixed inset-x-4 top-[5%] z-50 mx-auto max-h-[90vh] max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
         role="dialog"
         aria-modal
         aria-label={`Roadmap item: ${item.title}`}

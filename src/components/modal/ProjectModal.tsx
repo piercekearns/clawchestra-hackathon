@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { ModalDragZone } from '../ui/ModalDragZone';
 import remarkGfm from 'remark-gfm';
 import type { ProjectViewModel } from '../../lib/schema';
 import { useProjectModal } from '../../hooks/useProjectModal';
@@ -63,9 +64,10 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
 
   return (
     <div
-      className="fixed inset-0 top-[46px] z-40 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4"
       onClick={onClose}
     >
+      <ModalDragZone />
       <div
         role="dialog"
         aria-modal="true"
