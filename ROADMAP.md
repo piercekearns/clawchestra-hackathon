@@ -1,21 +1,10 @@
 ---
 items:
-  - id: chat-infrastructure
-    title: "Chat Reliability: Persistent Bugs"
-    status: in-progress
-    priority: 1
-    nextAction: Triage and fix bugs logged below — audit delivery shipped, testing in progress
-    tags:
-      - chat
-      - bugs
-      - reliability
-    icon: "\U0001F41B"
-    specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: git-sync
     title: Git Sync
-    status: complete
+    status: in-progress
     priority: 1
-    nextAction: "Shipped — reviewed by 8 agents, all P1s fixed"
+    nextAction: 'Built + reviewed — awaiting manual testing'
     tags:
       - git
       - github
@@ -24,10 +13,23 @@ items:
     icon: "\U0001F504"
     specDoc: docs/specs/git-sync-spec.md
     planDoc: docs/plans/git-sync-plan.md
+  - id: chat-infrastructure
+    title: 'Chat Reliability: Persistent Bugs'
+    status: in-progress
+    priority: 2
+    nextAction: >-
+      Triage and fix bugs logged below — audit delivery shipped, testing in
+      progress
+    tags:
+      - chat
+      - bugs
+      - reliability
+    icon: "\U0001F41B"
+    specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: Spec written — ready for plan/build
     tags:
       - infra
@@ -36,7 +38,7 @@ items:
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: Spec written — deliver Git Sync and Deep Rename first
     tags:
       - onboarding
