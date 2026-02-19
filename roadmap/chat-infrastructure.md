@@ -6,21 +6,27 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 
 ## Bug Log
 
-### BUG-001: Assistant messages not appearing until app restart
+### BUG-001: Assistant messages not appearing after app update
 **Reported:** 2026-02-19 ~02:01
 **Severity:** High
 **Status:** Open
 
 **Symptoms:**
 - Assistant response visible in OpenClaw Gateway Dashboard but not in Clawchestra chat UI
-- Message appeared after closing and restarting the app
-- Unclear if it was triggered by the next user message or by the restart itself
+- Messages either never appear or only appear after app restart
+
+**Reproduction pattern (confirmed 2x):**
+1. User clicks Update button → app reloads with new code
+2. Chat drawer reopened → messages from before the update are partially or fully missing
+3. Recovery system fires ("Recovered N recent chat messages") but only retrieves fragments, not complete messages
+4. Second occurrence (02:52): Full assistant response (17-file commit summary, bug docs, icon explanation) visible in Gateway Dashboard but entirely absent from Clawchestra. Recovery pulled 9 messages but skipped the substantive ones.
 
 **Context:**
-- Multiple rapid commits + app update had just occurred
-- The response that was missing was a text-only reply (no tool calls, no streaming fragments)
+- Both occurrences happened immediately after app update via Update button
+- First time: text-only reply missing
+- Second time: large multi-section response with tool calls, code blocks, and markdown tables — none of it appeared
 
-**Likely area:** `reconcileRecentHistory` recovery or `result.messages` from `sendViaTauriWs` not persisting. The `shouldSuppressDuringActiveRun` guard may be filtering valid final responses.
+**Likely area:** Messages aren't being persisted to SQLite before the app reload triggered by Update. The recovery system (`reconcileRecentHistory`) then tries to backfill from gateway history but its dedup/collapse logic drops or truncates the messages during rehydration.
 
 ---
 
@@ -33,13 +39,18 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 - When scrolling up in chat, large gaps in user message history
 - Last visible user message was from 1:36, but user had sent multiple messages between 1:36 and 2:01
 - Assistant messages from that period may also be missing or only partially visible
+- Second occurrence (02:52): User's long voice-transcribed message (requesting column name fixes) completely absent from chat history after app update
+
+**Reproduction pattern:** Same as BUG-001 — triggered by app update. User messages sent before the update disappear from the chat alongside assistant messages. Recovery system does not restore them.
 
 **Context:**
 - Heavy session with many back-and-forth messages
 - Multiple compactions occurred (7+ compactions noted in session status)
-- App was updated mid-session (code changes pulled in via Update button)
+- App updated mid-session via Update button (both occurrences)
 
-**Likely area:** Chat message persistence (SQLite/store). Messages may be lost during app updates if the store isn't flushed. Or `collapseChatDuplicates` / `collapseTrailingAssistantRun` in `store.ts` may be over-aggressively deduping.
+**Likely area:** Chat message persistence (SQLite/store). Messages aren't flushed to persistent storage before the app reload triggered by Update. The recovery system fetches from gateway history but gateway may not store user messages (only assistant turns), so user messages are permanently lost. `collapseChatDuplicates` / `collapseTrailingAssistantRun` in `store.ts` may also be over-aggressively deduping what does get recovered.
+
+**Key insight:** The Update button triggers an app reload without first persisting in-memory chat state. This is the common root cause for both BUG-001 and BUG-002.
 
 ---
 
