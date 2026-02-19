@@ -141,6 +141,37 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+### BUG-007: Claude Code /plan hangs at "Beaming" / "Propagating" — never writes output
+**Reported:** 2026-02-19 ~03:27
+**Severity:** Medium (workflow blocker, not app bug)
+**Status:** Open — workaround: write plans manually
+
+**Symptoms:**
+- Claude Code `/plan` command explored codebase thoroughly (3 Explore sub-agents, 26+ tool uses, read 10+ files)
+- Reached "I now have a thorough understanding. Let me write the implementation plan."
+- Then stuck on "Beaming..." / "Propagating..." for 5+ minutes with no token output progress (stayed at ↓1.4k/13.8k tokens)
+- Plan file never written to disk
+- Killed and retried — second attempt same result (different execution path, no sub-agents, but stuck at same "Beaming" write phase)
+- Two orphan Claude Code processes from earlier sessions (PIDs 33942, 39045) were consuming resources — killed, but didn't unstick the hang
+
+**Context:**
+- 16GB MacBook Pro — multiple Claude Code processes competing for resources
+- First attempt used `/plan` mode (sub-agents), second attempt used direct prompt in bypass mode
+- Both reached 38% context, both stalled at the output writing phase
+- The exploration and reading phases worked fine — only the large document write fails
+
+**Impact on Clawchestra chat:**
+- Last message received in Clawchestra chat drawer was: *"'I now have a thorough understanding. Let me write the implementation plan.' — it's about to write the file. 38% context."*
+- After that, the Working... animation died and no further messages appeared in the chat
+- User only learned about the /plan failure and subsequent retry/kill via OpenClaw Gateway Dashboard
+- This is a combination of BUG-006 (stuck animation) and BUG-001 (messages not appearing) — the assistant continued working and sending messages, but none were delivered to the Clawchestra UI
+
+**Likely cause:** Claude Code's output generation for very large documents (implementation plans are typically 500+ lines) may be hitting API timeouts or memory limits on constrained hardware. The sub-agent propagation mechanism appears particularly fragile.
+
+**Workaround:** Write plans directly rather than via Claude Code `/plan` on 16GB machines.
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:
