@@ -1,5 +1,17 @@
 ---
 items:
+  - id: first-friend-readiness
+    title: First Friend Readiness
+    status: up-next
+    priority: 1
+    specDoc: docs/specs/first-friend-readiness-spec.md
+    nextAction: Spec written — review and plan
+    tags:
+      - onboarding
+      - cross-platform
+      - openclaw
+      - ux
+    icon: "\U0001F91D"
   - id: chat-infrastructure
     title: Chat Infrastructure Overhaul
     status: in-progress
@@ -28,7 +40,7 @@ items:
   - id: git-sync
     title: Git Sync
     status: up-next
-    priority: 1
+    priority: 2
     nextAction: Spec written — ready for plan/build
     tags:
       - git
@@ -40,7 +52,7 @@ items:
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
-    priority: 2
+    priority: 3
     nextAction: >-
       Surface rename done — deep rename needed for Cargo, data paths, session
       key, folder
@@ -50,7 +62,7 @@ items:
   - id: recently-completed-lifecycle
     title: Recently Completed Lifecycle
     status: up-next
-    priority: 3
+    priority: 4
     nextAction: Spec written — ready for plan/build
     tags:
       - roadmap
@@ -61,7 +73,7 @@ items:
   - id: sidebar-enhancements
     title: Sidebar Enhancements
     status: up-next
-    priority: 4
+    priority: 5
     nextAction: Define which panel(s) to build first
     tags:
       - ui
