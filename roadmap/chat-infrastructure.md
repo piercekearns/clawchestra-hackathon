@@ -115,6 +115,30 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+### BUG-006: Stuck "Working..." animation after response completes
+**Reported:** 2026-02-19 ~03:09
+**Severity:** High
+**Status:** Open (regression)
+
+**Symptoms:**
+- "Working..." text animation and "..." chat bubble continue playing after assistant has finished responding
+- OpenClaw Gateway Dashboard shows no active work (no pulsing animation, response complete)
+- Clawchestra chat never clears the activity state
+- User cannot send follow-up messages (they queue instead of sending, because the app thinks a turn is still active)
+- Workaround: restart the app
+
+**Context:**
+- Previously fixed in commit `98a1189` (process.poll error handling, WS error extraction, hydration stale window)
+- Regression: same symptom has returned, possibly different trigger
+- Observed after a normal text-only response (no tool calls, no streaming complexity)
+- The response was fully received and displayed in the chat drawer — only the activity state failed to clear
+
+**Likely area:** The turn lifecycle isn't reaching its terminal state. `gatewayActiveTurns` in the store may not be clearing, or the `final` / `completed` event from the gateway is being missed/suppressed. The `shouldSuppressForActiveSend` guard or the poll cycle may be dropping the terminal event.
+
+**Impact:** High — blocks the user from sending any further messages without restarting. Effectively kills the chat session.
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:
