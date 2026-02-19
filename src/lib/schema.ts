@@ -83,6 +83,10 @@ export interface GitStatus {
   stashCount: number;
   aheadCount?: number;
   behindCount?: number;
+  /** True when dashboard-managed files have uncommitted changes */
+  dashboardDirty?: boolean;
+  /** Dashboard-managed files with uncommitted changes */
+  dirtyFiles?: string[];
 }
 
 export interface ProjectViewModel extends BoardItem {

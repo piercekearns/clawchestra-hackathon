@@ -29,6 +29,10 @@ struct GitStatus {
     stash_count: u32,
     ahead_count: Option<u32>,
     behind_count: Option<u32>,
+    /// True when dashboard-managed files have uncommitted changes
+    dashboard_dirty: bool,
+    /// Dashboard-managed files with uncommitted changes
+    dirty_files: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1131,6 +1135,42 @@ fn probe_repo(repo_path: String) -> Result<RepoProbe, String> {
     })
 }
 
+/// Dashboard-managed file names (exact match)
+const DASHBOARD_FILES: &[&str] = &["PROJECT.md", "ROADMAP.md", "CHANGELOG.md"];
+/// Dashboard-managed directory prefixes (recursive match)
+const DASHBOARD_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
+
+fn is_dashboard_file(path: &str) -> bool {
+    DASHBOARD_FILES.contains(&path)
+        || DASHBOARD_DIR_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
+}
+
+fn filter_dashboard_dirty_files(status_porcelain: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut files = Vec::new();
+
+    for line in status_porcelain.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let trimmed = line[3..].trim();
+        // Handle renames: "old -> new"
+        let path = trimmed
+            .split(" -> ")
+            .last()
+            .unwrap_or(trimmed)
+            .trim()
+            .to_string();
+        if !path.is_empty() && is_dashboard_file(&path) && seen.insert(path.clone()) {
+            files.push(path);
+        }
+    }
+
+    files
+}
+
 #[tauri::command]
 fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
     let branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
@@ -1162,55 +1202,59 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
         .map(|s| if s.is_empty() { 0 } else { s.lines().count() as u32 })
         .unwrap_or(0);
 
-    // Determine state, ahead/behind counts
-    let (state, details, ahead_count, behind_count) = if !status_porcelain.is_empty() {
+    // Always compute ahead/behind when upstream exists (needed for Sync Dialog branch awareness)
+    let has_upstream = run_git(
+        &repo_path,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    )
+    .is_ok();
+
+    let (ahead_count, behind_count) = if has_upstream {
+        let behind = run_git(&repo_path, &["rev-list", "--count", "HEAD..@{u}"])
+            .unwrap_or_else(|_| "0".to_string())
+            .parse::<u32>()
+            .unwrap_or(0);
+        let ahead = run_git(&repo_path, &["rev-list", "--count", "@{u}..HEAD"])
+            .unwrap_or_else(|_| "0".to_string())
+            .parse::<u32>()
+            .unwrap_or(0);
+        (Some(ahead), Some(behind))
+    } else {
+        (None, None)
+    };
+
+    // Determine state
+    let (state, details) = if !status_porcelain.is_empty() {
         (
             "uncommitted".to_string(),
             Some("Repository has uncommitted changes".to_string()),
-            None,
-            None,
+        )
+    } else if !has_upstream {
+        (
+            "clean".to_string(),
+            Some("No upstream configured".to_string()),
         )
     } else {
-        let has_upstream = run_git(
-            &repo_path,
-            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-        )
-        .is_ok();
-
-        if !has_upstream {
+        let behind = behind_count.unwrap_or(0);
+        let ahead = ahead_count.unwrap_or(0);
+        if behind > 0 {
             (
-                "clean".to_string(),
-                Some("No upstream configured".to_string()),
-                None,
-                None,
+                "behind".to_string(),
+                Some(format!("Behind upstream by {} commit(s)", behind)),
+            )
+        } else if ahead > 0 {
+            (
+                "unpushed".to_string(),
+                Some(format!("Ahead of upstream by {} commit(s)", ahead)),
             )
         } else {
-            let behind = run_git(&repo_path, &["rev-list", "--count", "HEAD..@{u}"])
-                .unwrap_or_else(|_| "0".to_string())
-                .parse::<u32>()
-                .unwrap_or(0);
-            let ahead = run_git(&repo_path, &["rev-list", "--count", "@{u}..HEAD"])
-                .unwrap_or_else(|_| "0".to_string())
-                .parse::<u32>()
-                .unwrap_or(0);
-
-            let (state, details) = if behind > 0 {
-                (
-                    "behind".to_string(),
-                    Some(format!("Behind upstream by {} commit(s)", behind)),
-                )
-            } else if ahead > 0 {
-                (
-                    "unpushed".to_string(),
-                    Some(format!("Ahead of upstream by {} commit(s)", ahead)),
-                )
-            } else {
-                ("clean".to_string(), Some("Working tree clean".to_string()))
-            };
-
-            (state, details, Some(ahead), Some(behind))
+            ("clean".to_string(), Some("Working tree clean".to_string()))
         }
     };
+
+    // Dashboard-specific dirty detection
+    let dirty_files = filter_dashboard_dirty_files(&status_porcelain);
+    let dashboard_dirty = !dirty_files.is_empty();
 
     Ok(GitStatus {
         state,
@@ -1225,6 +1269,8 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
         stash_count,
         ahead_count,
         behind_count,
+        dashboard_dirty,
+        dirty_files,
     })
 }
 
@@ -1234,7 +1280,7 @@ fn git_fetch(repo_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<(), String> {
+fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<String, String> {
     if files.is_empty() {
         return Err("No files supplied for commit".to_string());
     }
@@ -1256,10 +1302,17 @@ fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<
 
     let commit_output = run_git(&repo_path, &["commit", "-m", &message]);
     match commit_output {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            // Return the short commit hash
+            let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"])
+                .unwrap_or_else(|_| "unknown".to_string());
+            Ok(hash)
+        }
         Err(error) => {
             if error.contains("nothing to commit") {
-                Ok(())
+                let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"])
+                    .unwrap_or_else(|_| "unchanged".to_string());
+                Ok(hash)
             } else {
                 Err(format!("git commit failed: {}", error))
             }
@@ -2321,5 +2374,47 @@ mod hardening_tests {
         .expect("stale lock should be removed and replaced");
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn is_dashboard_file_detects_exact_names() {
+        assert!(is_dashboard_file("PROJECT.md"));
+        assert!(is_dashboard_file("ROADMAP.md"));
+        assert!(is_dashboard_file("CHANGELOG.md"));
+        assert!(!is_dashboard_file("README.md"));
+        assert!(!is_dashboard_file("src/main.rs"));
+    }
+
+    #[test]
+    fn is_dashboard_file_detects_dir_prefixes() {
+        assert!(is_dashboard_file("roadmap/git-sync.md"));
+        assert!(is_dashboard_file("docs/specs/git-sync-spec.md"));
+        assert!(is_dashboard_file("docs/plans/git-sync-plan.md"));
+        // Recursive: nested subdirectories
+        assert!(is_dashboard_file("docs/specs/deep/nested.md"));
+        // Non-dashboard directories
+        assert!(!is_dashboard_file("src/components/Header.tsx"));
+        assert!(!is_dashboard_file("docs/README.md"));
+    }
+
+    #[test]
+    fn filter_dashboard_dirty_files_from_porcelain() {
+        let porcelain = " M PROJECT.md\n M src/main.rs\n?? roadmap/new-item.md\n M ROADMAP.md";
+        let files = filter_dashboard_dirty_files(porcelain);
+        assert_eq!(files, vec!["PROJECT.md", "roadmap/new-item.md", "ROADMAP.md"]);
+    }
+
+    #[test]
+    fn filter_dashboard_dirty_files_none_dirty() {
+        let porcelain = " M src/App.tsx\n M package.json";
+        let files = filter_dashboard_dirty_files(porcelain);
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn filter_dashboard_dirty_files_handles_renames() {
+        let porcelain = "R  old-roadmap.md -> roadmap/renamed.md";
+        let files = filter_dashboard_dirty_files(porcelain);
+        assert_eq!(files, vec!["roadmap/renamed.md"]);
     }
 }

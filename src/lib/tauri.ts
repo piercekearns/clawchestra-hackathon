@@ -70,7 +70,7 @@ type TauriCommands = {
   git_fetch: { args: { repoPath: string }; return: string };
   git_commit: {
     args: { repoPath: string; message: string; files: string[] };
-    return: void;
+    return: string;
   };
   git_push: { args: { repoPath: string }; return: void };
   git_init_repo: {
@@ -228,7 +228,7 @@ export async function gitFetch(repoPath: string): Promise<string> {
   return typedInvoke('git_fetch', { repoPath });
 }
 
-export async function gitCommit(repoPath: string, message: string, files: string[]): Promise<void> {
+export async function gitCommit(repoPath: string, message: string, files: string[]): Promise<string> {
   return typedInvoke('git_commit', { repoPath, message, files });
 }
 

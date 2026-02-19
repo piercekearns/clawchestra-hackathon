@@ -184,6 +184,42 @@ Shows when `lastActivity` is >14 days ago. Means the project hasn't been touched
 ### 🔗 Linked repo
 Shows when project has `localPath` pointing to a local repository.
 
+### 🟠 Uncommitted dashboard changes (orange dot)
+Shows when dashboard-managed files (`PROJECT.md`, `ROADMAP.md`, `CHANGELOG.md`, `roadmap/`, `docs/specs/`, `docs/plans/`) have uncommitted changes in the project's git repository. Only tracks files the dashboard writes to — not general repo dirtiness.
+
+---
+
+## Git Sync
+
+The Sync Dialog lets users commit and push dashboard-managed file changes across projects.
+
+### Opening the Sync Dialog
+- Click the **Sync** button in the header (visible when dirty project count > 0)
+- The badge shows the number of projects with uncommitted dashboard changes
+
+### What the Sync Dialog does
+- Lists all projects with `dashboardDirty: true`
+- Shows branch status (in-sync, ahead, behind, diverged, no remote)
+- Commits only dashboard-managed files (targeted `git add`, never `git add -A`)
+- Optionally pushes to current branch's upstream (fast-forward only)
+- Smart push defaults: enabled for safe branches, disabled for behind/diverged
+
+### What the Sync Dialog does NOT do
+- Auto-commit or auto-push
+- Commit user code or non-dashboard files
+- Create, switch, or merge branches
+- Resolve merge conflicts
+
+### "Ask agent to help"
+When a branch is behind, diverged, or push fails, the dialog offers an "Ask agent to help" link that opens the chat drawer with pre-filled context about the project's git state and dirty files.
+
+### Tauri commands
+| Command | Purpose |
+|---------|---------|
+| `get_git_status` | Returns `dashboardDirty` and `dirtyFiles` fields |
+| `git_commit` | Commits specified files, returns short commit hash |
+| `git_push` | Pushes to current branch upstream (fast-forward only) |
+
 ---
 
 ## File Location

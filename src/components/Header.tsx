@@ -1,4 +1,4 @@
-import { RefreshCcw } from 'lucide-react';
+import { GitCommitHorizontal, RefreshCcw } from 'lucide-react';
 import { Input } from './ui/input';
 import { ErrorBadge } from './ErrorBadge';
 import type { DashboardError } from '../lib/errors';
@@ -10,6 +10,8 @@ interface HeaderProps {
   onAddProject: () => void;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  dirtyProjectCount: number;
+  onOpenSync: () => void;
 }
 
 export function Header({
@@ -18,6 +20,8 @@ export function Header({
   onAddProject,
   searchQuery,
   onSearchQueryChange,
+  dirtyProjectCount,
+  onOpenSync,
 }: HeaderProps) {
   return (
     <header className="mb-4 rounded-2xl border border-neutral-200 bg-neutral-0/95 p-4 backdrop-blur dark:border-neutral-700 dark:bg-neutral-950/95">
@@ -46,6 +50,22 @@ export function Header({
           <RefreshCcw className="h-4 w-4" />
           Refresh
         </Button>
+
+        {dirtyProjectCount > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onOpenSync}
+            className="inline-flex items-center gap-1"
+          >
+            <GitCommitHorizontal className="h-4 w-4" />
+            Sync
+            <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-400 px-1 text-[11px] font-bold text-neutral-900">
+              {dirtyProjectCount}
+            </span>
+          </Button>
+        )}
 
         <Button type="button" size="sm" onClick={onAddProject}>
           Add Project

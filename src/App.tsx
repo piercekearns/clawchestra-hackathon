@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock4 } from 'lucide-react';
 import { GitHubStatusBadge } from './components/GitHubStatusBadge';
+import { Tooltip } from './components/Tooltip';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
@@ -11,6 +12,7 @@ import { Header } from './components/Header';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { SettingsDialog } from './components/SettingsDialog';
+import { SyncDialog } from './components/SyncDialog';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
 import type { SearchableRoadmapItem } from './components/search';
@@ -174,6 +176,7 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
@@ -246,6 +249,12 @@ export default function App() {
   const topLevelProjects = useMemo(
     () => projects.filter((p) => !p.frontmatter.parent),
     [projects],
+  );
+
+  // Dirty project count for Sync button (computed, not stored)
+  const dirtyProjects = useMemo(
+    () => allProjects.filter((p) => p.gitStatus?.dashboardDirty),
+    [allProjects],
   );
 
   const selectedProject = useMemo(
@@ -867,6 +876,12 @@ export default function App() {
           return;
         }
 
+        if (syncDialogOpen) {
+          event.preventDefault();
+          setSyncDialogOpen(false);
+          return;
+        }
+
         if (useDashboardStore.getState().sidebarOpen) {
           event.preventDefault();
           useDashboardStore.getState().setSidebarOpen(false);
@@ -1380,6 +1395,8 @@ export default function App() {
           onAddProject={() => setAddDialogOpen(true)}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
+          dirtyProjectCount={dirtyProjects.length}
+          onOpenSync={() => setSyncDialogOpen(true)}
         />
 
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -1491,6 +1508,19 @@ export default function App() {
                     return (
                       <>
                         {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
+                        {project.gitStatus?.dashboardDirty && (
+                          <Tooltip text="Uncommitted dashboard changes">
+                            <span
+                              className="inline-flex"
+                              tabIndex={0}
+                              aria-label="Uncommitted dashboard changes"
+                              onClick={(e) => e.stopPropagation()}
+                              onPointerDown={(e) => e.stopPropagation()}
+                            >
+                              <span className="inline-block h-2 w-2 rounded-full bg-orange-400" />
+                            </span>
+                          </Tooltip>
+                        )}
                         {project.hasRepo ? (
                           <GitHubStatusBadge
                             className={gitHubStatusMeta.className}
@@ -1498,7 +1528,6 @@ export default function App() {
                             label={gitHubStatusMeta.label}
                           />
                         ) : null}
-                        {/* commitActivity badge removed — not useful on cards */}
                       </>
                     );
                   }}
@@ -1598,6 +1627,21 @@ export default function App() {
             throw error;
           }
         }}
+      />
+
+      <SyncDialog
+        open={syncDialogOpen}
+        onOpenChange={setSyncDialogOpen}
+        projects={dirtyProjects}
+        onRequestChatPrefill={(text) => {
+          setSyncDialogOpen(false);
+          setChatDrawerOpen(true);
+          setChatPrefillRequest({
+            id: `prefill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+          });
+        }}
+        onSyncComplete={() => void loadProjects()}
       />
 
       <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
