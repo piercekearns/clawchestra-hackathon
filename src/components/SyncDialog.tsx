@@ -106,9 +106,26 @@ export function groupDirtyFiles(files: string[]): { metadata: string[]; document
   return { metadata, documents };
 }
 
-export function buildCommitMessage(names: string[]): string {
-  const nameList = names.length > 3 ? `${names.slice(0, 3).join(', ')}, ...` : names.join(', ');
-  return `chore: sync project metadata (${nameList})`;
+export function buildCommitMessage(
+  projects: { name: string; files: string[] }[],
+): string {
+  if (projects.length === 0) return 'chore: sync project metadata';
+
+  const nameList =
+    projects.length > 3
+      ? `${projects.slice(0, 3).map((p) => p.name).join(', ')}, ...`
+      : projects.map((p) => p.name).join(', ');
+
+  // Collect unique files across all projects
+  const allFiles = [...new Set(projects.flatMap((p) => p.files))];
+  const filePart =
+    allFiles.length > 0 && allFiles.length <= 4
+      ? ` — ${allFiles.join(', ')}`
+      : allFiles.length > 4
+        ? ` — ${allFiles.slice(0, 3).join(', ')}, +${allFiles.length - 3} more`
+        : '';
+
+  return `chore: sync project metadata (${nameList})${filePart}`;
 }
 
 function buildHelpMessage(project: DirtyProject): string {
@@ -171,8 +188,36 @@ export function SyncDialog({
     setSyncingId(null);
     setBatchSyncing(false);
     syncLockRef.current = false;
-    setCommitMessage(buildCommitMessage(dirtyProjects.map((p) => p.title)));
+    setCommitMessage(
+      buildCommitMessage(
+        dirtyProjects.map((p) => ({
+          name: p.title,
+          files: p.gitStatus.dirtyFiles ?? [],
+        })),
+      ),
+    );
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep default commit message in sync with selection changes
+  // (only if user hasn't manually edited it)
+  const userEditedCommitRef = useRef(false);
+  useEffect(() => {
+    if (!open || userEditedCommitRef.current) return;
+    const selected = dirtyProjects.filter((p) => selectedIds.has(p.id));
+    setCommitMessage(
+      buildCommitMessage(
+        selected.map((p) => ({
+          name: p.title,
+          files: p.gitStatus.dirtyFiles ?? [],
+        })),
+      ),
+    );
+  }, [selectedIds, open, dirtyProjects]);
+
+  // Reset manual edit flag when dialog opens
+  useEffect(() => {
+    if (open) userEditedCommitRef.current = false;
+  }, [open]);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -365,21 +410,24 @@ export function SyncDialog({
 
                   {/* Push toggle for non-completed items */}
                   {!result && git.remote && (
-                    <div className="ml-6 mt-1">
-                      <label className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
-                        <BrandCheckbox
-                          checked={pushEnabled.has(project.id)}
-                          onChange={() => togglePush(project.id)}
-                          className="h-3.5 w-3.5"
-                          disabled={isSyncing || batchSyncing}
-                        />
+                    <div className="ml-6 mt-1 inline-flex items-center gap-1.5 text-xs text-neutral-500">
+                      <BrandCheckbox
+                        checked={pushEnabled.has(project.id)}
+                        onChange={() => togglePush(project.id)}
+                        className="h-3.5 w-3.5"
+                        disabled={isSyncing || batchSyncing}
+                      />
+                      <span
+                        className="cursor-pointer select-none"
+                        onClick={() => { if (!isSyncing && !batchSyncing) togglePush(project.id); }}
+                      >
                         Push after commit
-                        {!branch.safe && (
-                          <Tooltip text="Branch is behind or diverged — push may fail">
-                            <AlertTriangle className="h-3 w-3 text-amber-500" />
-                          </Tooltip>
-                        )}
-                      </label>
+                      </span>
+                      {!branch.safe && (
+                        <Tooltip text="Branch is behind or diverged — push may fail">
+                          <AlertTriangle className="h-3 w-3 text-amber-500" />
+                        </Tooltip>
+                      )}
                     </div>
                   )}
 
@@ -449,7 +497,7 @@ export function SyncDialog({
           <input
             type="text"
             value={commitMessage}
-            onChange={(e) => setCommitMessage(e.target.value)}
+            onChange={(e) => { userEditedCommitRef.current = true; setCommitMessage(e.target.value); }}
             disabled={batchSyncing}
             className="mb-3 w-full rounded-md border border-neutral-300 bg-neutral-0 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-revival-accent-400 focus:outline-none focus:ring-1 focus:ring-revival-accent-400 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
             placeholder="chore: sync project metadata"

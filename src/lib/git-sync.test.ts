@@ -131,19 +131,40 @@ describe('smart push defaults', () => {
 // ---------------------------------------------------------------------------
 
 describe('default commit message', () => {
-  it('generates message for single project', () => {
-    expect(buildCommitMessage(['ClawOS'])).toBe('chore: sync project metadata (ClawOS)');
+  it('generates message for single project with files', () => {
+    expect(
+      buildCommitMessage([{ name: 'ClawOS', files: ['PROJECT.md'] }]),
+    ).toBe('chore: sync project metadata (ClawOS) — PROJECT.md');
   });
 
-  it('generates message for three projects', () => {
-    expect(buildCommitMessage(['ClawOS', 'Memestr', 'Dashboard'])).toBe(
-      'chore: sync project metadata (ClawOS, Memestr, Dashboard)',
-    );
+  it('generates message for multiple projects', () => {
+    expect(
+      buildCommitMessage([
+        { name: 'ClawOS', files: ['PROJECT.md'] },
+        { name: 'Memestr', files: ['ROADMAP.md'] },
+        { name: 'Dashboard', files: ['PROJECT.md'] },
+      ]),
+    ).toBe('chore: sync project metadata (ClawOS, Memestr, Dashboard) — PROJECT.md, ROADMAP.md');
   });
 
-  it('truncates with ellipsis for more than three projects', () => {
-    const msg = buildCommitMessage(['A', 'B', 'C', 'D']);
-    expect(msg).toBe('chore: sync project metadata (A, B, C, ...)');
+  it('truncates project names with ellipsis for more than three', () => {
+    const msg = buildCommitMessage([
+      { name: 'A', files: ['PROJECT.md'] },
+      { name: 'B', files: ['ROADMAP.md'] },
+      { name: 'C', files: [] },
+      { name: 'D', files: ['PROJECT.md'] },
+    ]);
+    expect(msg).toBe('chore: sync project metadata (A, B, C, ...) — PROJECT.md, ROADMAP.md');
+  });
+
+  it('generates message without files when none provided', () => {
+    expect(
+      buildCommitMessage([{ name: 'ClawOS', files: [] }]),
+    ).toBe('chore: sync project metadata (ClawOS)');
+  });
+
+  it('handles empty project list', () => {
+    expect(buildCommitMessage([])).toBe('chore: sync project metadata');
   });
 });
 
