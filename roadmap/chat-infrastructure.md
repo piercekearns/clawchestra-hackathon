@@ -30,6 +30,8 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 
 **Update (02:58):** Behaviour is NOT deterministic. Third Update in same session: this time recent messages (2:54–2:55 exchange) DID recover correctly. However, old tool-call narration fragments from 2:32 also surfaced at the bottom, out of chronological order (see BUG-003). So recovery sometimes works, sometimes doesn't, and when it does it can over-recover stale fragments.
 
+**Update (03:26):** Message drop occurred WITHOUT Update button. Multiple assistant messages (spec sufficiency discussion, plan vs spec explanation) visible in Gateway Dashboard but never appeared in Clawchestra chat. Last visible message in drawer was from ~03:13. This rules out "Update button causes reload" as the sole trigger — messages can drop during normal operation.
+
 ---
 
 ### BUG-002: User messages missing from chat history
