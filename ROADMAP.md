@@ -19,14 +19,15 @@ items:
     status: in-progress
     priority: 2
     nextAction: >-
-      Triage and fix bugs logged below — audit delivery shipped, testing in
-      progress
+      Final plan_review pass complete with locked decisions, flag contract, and
+      reproducible validation artifact paths — ready to execute Phase 1/2 fixes
     tags:
       - chat
       - bugs
       - reliability
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
+    planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
   - id: git-branch-sync
     title: 'Git Sync: Branch Management (Phase 3)'
     status: up-next
