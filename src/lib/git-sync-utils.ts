@@ -44,14 +44,11 @@ export function groupDirtyFiles(
   return { metadata, documents, code };
 }
 
-/** Get categorized dirty files, preferring backend-categorized data when available */
+/** Get categorized dirty files from backend data */
 export function getProjectDirtyCategories(
   git: GitStatus,
 ): DirtyFileCategories {
-  if (git.allDirtyFiles) return git.allDirtyFiles;
-  // Fallback: categorize legacy dirtyFiles on frontend
-  const files = git.dirtyFiles ?? [];
-  return groupDirtyFiles(files);
+  return git.allDirtyFiles ?? { metadata: [], documents: [], code: [] };
 }
 
 /** Collect files from selected categories */

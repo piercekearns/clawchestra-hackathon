@@ -91,10 +91,6 @@ export interface GitStatus {
   stashCount: number;
   aheadCount?: number;
   behindCount?: number;
-  /** @deprecated Use hasDirtyFiles instead */
-  dashboardDirty?: boolean;
-  /** @deprecated Use allDirtyFiles instead */
-  dirtyFiles?: string[];
   /** True when any files in the repo have uncommitted changes */
   hasDirtyFiles?: boolean;
   /** All dirty files categorized into metadata/documents/code */

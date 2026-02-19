@@ -200,7 +200,10 @@ export function SyncDialog({
     setCommitMessage(
       buildCommitMessage(computeCommitInputs(defaultCats, dirtyProjects, new Set())),
     );
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps intentionally
+  // limited to `open` only: we want a full reset on dialog open, not on every
+  // project/category change (which would discard user selections mid-session).
+  }, [open]);
 
   // Keep default commit message in sync with selection changes
   // (only if user hasn't manually edited it)

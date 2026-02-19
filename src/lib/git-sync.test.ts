@@ -250,6 +250,12 @@ describe('categorizeFile', () => {
   it('classifies README as code', () => {
     expect(categorizeFile('README.md')).toBe('code');
   });
+
+  it('classifies nested doc paths as documents', () => {
+    expect(categorizeFile('docs/specs/sub/deeply-nested.md')).toBe('documents');
+    expect(categorizeFile('docs/plans/v2/refactor-plan.md')).toBe('documents');
+    expect(categorizeFile('roadmap/sub/item.md')).toBe('documents');
+  });
 });
 
 describe('groupDirtyFiles', () => {
@@ -288,7 +294,7 @@ describe('groupDirtyFiles', () => {
 // ---------------------------------------------------------------------------
 
 describe('getProjectDirtyCategories', () => {
-  it('uses allDirtyFiles from backend when available', () => {
+  it('returns allDirtyFiles from backend when available', () => {
     const git: GitStatus = {
       state: 'uncommitted',
       stashCount: 0,
@@ -297,7 +303,6 @@ describe('getProjectDirtyCategories', () => {
         documents: ['ROADMAP.md'],
         code: ['src/main.ts'],
       },
-      dirtyFiles: ['PROJECT.md'], // legacy — should be ignored
     };
     const cats = getProjectDirtyCategories(git);
     expect(cats.metadata).toEqual(['PROJECT.md']);
@@ -305,15 +310,32 @@ describe('getProjectDirtyCategories', () => {
     expect(cats.code).toEqual(['src/main.ts']);
   });
 
-  it('falls back to frontend categorization for legacy data', () => {
+  it('returns empty categories when allDirtyFiles is undefined', () => {
     const git: GitStatus = {
       state: 'uncommitted',
       stashCount: 0,
-      dirtyFiles: ['PROJECT.md', 'src/App.tsx'],
     };
     const cats = getProjectDirtyCategories(git);
-    expect(cats.metadata).toEqual(['PROJECT.md']);
-    expect(cats.code).toEqual(['src/App.tsx']);
+    expect(cats.metadata).toEqual([]);
+    expect(cats.documents).toEqual([]);
+    expect(cats.code).toEqual([]);
+  });
+
+  it('handles nested document paths correctly', () => {
+    const git: GitStatus = {
+      state: 'uncommitted',
+      stashCount: 0,
+      allDirtyFiles: {
+        metadata: [],
+        documents: ['docs/specs/deeply/nested/spec.md', 'docs/plans/sub/plan.md'],
+        code: [],
+      },
+    };
+    const cats = getProjectDirtyCategories(git);
+    expect(cats.documents).toEqual([
+      'docs/specs/deeply/nested/spec.md',
+      'docs/plans/sub/plan.md',
+    ]);
   });
 });
 
