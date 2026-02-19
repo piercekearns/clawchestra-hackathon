@@ -35,6 +35,47 @@ describe('chat message identity helpers', () => {
     expect(isLikelyDuplicateMessage(existing, incoming, 5_000)).toBe(false);
   });
 
+  it('deduplicates local clean message against gateway-recovered wrapped version', () => {
+    const local = {
+      role: 'user' as const,
+      content: 'check the sync dialog\n\n[Attached images: screenshot.jpg]',
+      timestamp: 1000,
+    };
+    const recovered = {
+      role: 'user' as const,
+      content: 'check the sync dialog',
+      timestamp: 1001,
+    };
+
+    // Signatures should match — [Attached images:] is metadata, not user content
+    expect(messageIdentitySignature(local)).toBe(messageIdentitySignature(recovered));
+    expect(isLikelyDuplicateMessage(local, recovered, 5_000)).toBe(true);
+  });
+
+  it('deduplicates clean message against full OpenClaw envelope', () => {
+    const clean = {
+      role: 'user' as const,
+      content: 'run tests',
+      timestamp: 1000,
+    };
+    const wrapped = {
+      role: 'user' as const,
+      content: [
+        'Conversation info (untrusted metadata):',
+        '```json',
+        '{ "message_id": "abc", "sender": "openclaw-control-ui" }',
+        '```',
+        '',
+        '[Thu 2026-02-19 05:28 GMT] User workspace path: /path User request: run tests',
+        '[message_id: abc]',
+      ].join('\n'),
+      timestamp: 1001,
+    };
+
+    expect(messageIdentitySignature(clean)).toBe(messageIdentitySignature(wrapped));
+    expect(isLikelyDuplicateMessage(clean, wrapped, 5_000)).toBe(true);
+  });
+
   it('allows progressive overlap dedupe for assistant messages', () => {
     const existing = { role: 'assistant' as const, content: 'Working on phase 1', timestamp: 1000 };
     const incoming = {

@@ -1,5 +1,6 @@
 import {
   normalizeChatContentForMatch,
+  stripOpenClawEnvelope,
   unwrapGatewayContextWrappedUserContent,
 } from './chat-normalization';
 
@@ -16,7 +17,11 @@ export function unwrapUserContentForDisplay(message: IdentityMessage): string {
 }
 
 export function normalizeMessageIdentityContent(message: IdentityMessage): string {
-  return normalizeChatContentForMatch(unwrapUserContentForDisplay(message));
+  const unwrapped = unwrapUserContentForDisplay(message);
+  // Always strip envelope metadata for identity comparison so locally-sent
+  // clean messages match their gateway-recovered wrapped counterparts.
+  const stripped = message.role === 'user' ? stripOpenClawEnvelope(unwrapped) : unwrapped;
+  return normalizeChatContentForMatch(stripped);
 }
 
 export function messageIdentitySignature(message: IdentityMessage): string {
