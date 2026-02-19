@@ -57,6 +57,49 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 
 ---
 
+### BUG-004: Post-compaction message drop
+**Reported:** 2026-02-19 ~02:44
+**Severity:** High
+**Status:** Open
+
+**Symptoms:**
+- After conversation compaction, the last assistant message in Clawchestra chat was "Now let me check the tests and my own sandbox files:" (a mid-tool-call narration fragment)
+- The actual final assistant message (ending with "Want me to fix all of these or just the critical and medium ones?") was visible in OpenClaw Gateway Dashboard but never appeared in Clawchestra
+- The full column name drift audit response was delivered to Gateway but not to the app
+
+**Context:**
+- Compaction occurred mid-conversation during a heavy session
+- The assistant continued working after compaction (memory flush, then audit response)
+- Likely the compaction event disrupted the streaming/polling pipeline and the subsequent assistant turn's content was never picked up
+
+**Likely area:** Compaction event handling in `gateway.ts` — all three states (`compacting`, `compacted`, `compaction_complete`) emit the same "Conversation compacted" bubble immediately. The compaction may interrupt an in-flight poll cycle or cause the send promise to resolve prematurely, dropping subsequent content. The `shouldSuppressForActiveSend` guard (line ~1437) may also be suppressing the post-compaction assistant message.
+
+---
+
+### BUG-005: Compaction bubble shows "compacted" before compaction finishes
+**Reported:** 2026-02-19 ~02:44
+**Severity:** Medium
+**Status:** Open
+
+**Symptoms:**
+- "Conversation compacted" bubble appears as soon as the `compacting` state is received from the gateway
+- User then sees "Thinking..." activity indicator for an extended period while compaction actually finishes
+- Misleading UX: user thinks compaction is done and agent is just slow to reply, when actually compaction is still in progress
+
+**Root cause:** `gateway.ts` line ~1444 treats all three states identically:
+```ts
+if (state === 'compacted' || state === 'compacting' || state === 'compaction_complete') {
+  emit({ kind: 'compaction', sessionKey, runId, message: 'Conversation compacted' });
+}
+```
+
+**Proposed fix:** 
+- On `compacting` state: show bubble with spinner and text "Compacting conversation..."
+- On `compacted` / `compaction_complete` state: update bubble to "Conversation compacted" (no spinner)
+- Requires adding a `loading` state to `SystemBubbleMeta` or a new `compacting` SystemBubbleKind
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:

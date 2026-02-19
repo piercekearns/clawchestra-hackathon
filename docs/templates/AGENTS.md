@@ -10,9 +10,9 @@ Before making changes, always read:
 ## Dashboard schema compliance
 
 - Keep `PROJECT.md` frontmatter valid.
-- Use statuses: `in-flight`, `up-next`, `simmering`, `dormant`, `shipped`.
+- Use project statuses: `in-progress`, `up-next`, `pending`, `dormant`, `archived`.
 - Keep `ROADMAP.md` frontmatter `items` valid with statuses:
-  `pending`, `in-progress`, `complete`.
+  `pending`, `up-next`, `in-progress`, `complete`.
 - Update `lastActivity` when major status changes happen.
 
 ## Agent behavior

@@ -5,7 +5,7 @@ This document mirrors the `ProjectFrontmatter` schema implemented in `/src/lib/s
 ## Required fields
 
 - `title`: string
-- `status`: one of `in-flight`, `up-next`, `simmering`, `dormant`, `shipped`, `archived`
+- `status`: one of `in-progress`, `up-next`, `pending`, `dormant`, `archived`
 - `type`: one of `project`, `sub-project`, `idea`
 
 ## Optional fields
@@ -29,11 +29,10 @@ This document mirrors the `ProjectFrontmatter` schema implemented in `/src/lib/s
 
 | Status | Meaning |
 |--------|---------|
-| `in-flight` | Actively being worked on |
+| `in-progress` | Actively being worked on |
 | `up-next` | Queued for work |
-| `simmering` | Low-priority background work |
+| `pending` | Low-priority background work |
 | `dormant` | Inactive, may resume later |
-| `shipped` | Completed and delivered (deprecated — use `archived`) |
 | `archived` | Done, no longer active. Not shown on board, visible via search. |
 
 ## Type Definitions
@@ -82,7 +81,7 @@ Optional markdown notes below frontmatter.
 |-------|------|----------|-------------|
 | `id` | string | Yes | Unique identifier (auto-generated as `roadmap-N` if missing) |
 | `title` | string | Yes | Item display name |
-| `status` | string | Yes | One of: `pending`, `in-progress`, `complete` |
+| `status` | string | Yes | One of: `pending`, `up-next`, `in-progress`, `complete` |
 | `priority` | number | No | Display order (auto-assigned from array position) |
 | `nextAction` | string | No | Current action item |
 | `blockedBy` | string | No | Blocking dependency |

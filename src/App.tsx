@@ -1033,14 +1033,14 @@ export default function App() {
         const before = previousById.get(item.id);
         if (before && before.status !== item.status) {
           const updates: ProjectUpdate = { status: item.status as ProjectStatus };
-          // Auto-assign priority when moving to in-flight (required by schema)
+          // Auto-assign priority when moving to in-progress (required by schema)
           if (item.status === 'in-progress' && item.priority === undefined) {
             const inFlightCount = nextItems.filter(
               (entry) => entry.status === 'in-progress' && entry.id !== item.id,
             ).length;
             updates.priority = inFlightCount + 1;
           }
-          // Clear priority when leaving in-flight
+          // Clear priority when leaving in-progress
           if (before.status === 'in-progress' && item.status !== 'in-progress') {
             updates.priority = null;
           }

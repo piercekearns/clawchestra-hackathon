@@ -83,7 +83,7 @@ This keeps the door open for every project to grow (add ROADMAP.md, docs/, etc.)
 ```yaml
 ---
 title: "Nostr Dating"
-status: idea | up-next | in-flight | archived
+status: in-progress | up-next | pending | dormant | archived
 type: project
 ---
 ```

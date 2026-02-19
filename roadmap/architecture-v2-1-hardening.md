@@ -1,6 +1,6 @@
 ---
 title: Architecture V2.1 Hardening
-status: shipped
+status: complete
 type: deliverable
 priority: 6
 parent: pipeline-dashboard

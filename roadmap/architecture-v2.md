@@ -1,6 +1,6 @@
 ---
 title: Architecture V2
-status: shipped
+status: complete
 priority: 7
 type: deliverable
 parent: pipeline-dashboard

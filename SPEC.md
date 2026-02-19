@@ -145,7 +145,7 @@ The dashboard is not a standalone tracker — it reads live status from each pro
 
 3. **Aggregator model** — Dashboard entries are thin references. If a project has `localPath`, the dashboard reads live status from that repo's `PROJECT.md` (or configured `statusFile`). Dashboard-only fields (priority, tags, icon) stay in the dashboard entry. Status fields come from the repo.
 
-4. **OpenClaw writes files directly** — When the user asks OpenClaw to "move ClawOS to shipped", OpenClaw edits the markdown file itself. The Tauri file watcher detects the change and the dashboard re-renders. No special mutation API needed.
+4. **OpenClaw writes files directly** — When the user asks OpenClaw to "move ClawOS to archived", OpenClaw edits the markdown file itself. The Tauri file watcher detects the change and the dashboard re-renders. No special mutation API needed.
 
 5. **Generic board components** — Board, Column, and Card components work with a `BoardItem` interface, not `ProjectViewModel` directly. This means Phase 6 (hierarchical drill-down into ROADMAP.md) is a data source addition, not a component rewrite.
 
@@ -196,7 +196,6 @@ export const PROJECT_COLUMNS: ColumnDefinition[] = [
   { id: 'up-next', label: 'Up Next' },
   { id: 'pending', label: 'Pending' },
   { id: 'dormant', label: 'Dormant' },
-  { id: 'shipped', label: 'Shipped' },
 ];
 
 // Roadmap item columns (Phase 6)
@@ -215,7 +214,7 @@ Every project markdown file follows this schema:
 ---
 # REQUIRED
 title: "Project Name"
-status: "in-progress" | "up-next" | "pending" | "dormant" | "shipped"
+status: "in-progress" | "up-next" | "pending" | "dormant" | "archived"
 type: "project" | "sub-project" | "idea"
 
 # REQUIRED for in-progress
@@ -303,7 +302,7 @@ export type ProjectStatus =
   | "up-next"
   | "pending"
   | "dormant"
-  | "shipped";
+  | "archived";
 
 export type ProjectType =
   | "project"
@@ -400,7 +399,7 @@ The validator narrows `unknown` data from `gray-matter` into typed `ProjectFront
 import { differenceInDays, parseISO } from 'date-fns';
 
 export const VALID_STATUSES = [
-  "in-progress", "up-next", "pending", "dormant", "shipped"
+  "in-progress", "up-next", "pending", "dormant", "archived"
 ] as const satisfies readonly ProjectStatus[];
 
 export const VALID_TYPES = [

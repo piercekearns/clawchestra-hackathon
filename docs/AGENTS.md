@@ -104,7 +104,7 @@ priority: 2  # (and update Dating App to priority 3)
 
 ## Status Definitions
 
-### `in-flight`
+### `in-progress`
 **Actively being worked on.** Has dedicated time/attention this week.
 
 Criteria:
@@ -117,10 +117,10 @@ Criteria:
 
 Criteria:
 - Scoped and ready to begin
-- Waiting for capacity or a current in-flight item to complete
+- Waiting for capacity or a current in-progress item to complete
 - Has clear enough definition to start
 
-### `simmering`
+### `pending`
 **On the radar but not prioritized.** Ideas being developed, research ongoing.
 
 Criteria:
@@ -134,9 +134,9 @@ Criteria:
 Criteria:
 - Was previously active but paused
 - Blocked indefinitely
-- Lower priority than everything in "simmering"
+- Lower priority than everything in "pending"
 
-### `shipped`
+### `archived`
 **Completed.** Launched, delivered, or closed.
 
 Criteria:
@@ -148,14 +148,14 @@ Criteria:
 ## Changing Status
 
 ### Promotions
-- `simmering` → `up-next`: When scope is clear and it's prioritized
-- `up-next` → `in-flight`: When work actually begins
-- `in-flight` → `shipped`: When complete
+- `pending` → `up-next`: When scope is clear and it's prioritized
+- `up-next` → `in-progress`: When work actually begins
+- `in-progress` → `archived`: When complete
 
 ### Demotions
-- `in-flight` → `up-next`: When paused but still planned soon
-- `in-flight` → `simmering`: When deprioritized significantly
-- `up-next` → `simmering`: When something else takes priority
+- `in-progress` → `up-next`: When paused but still planned soon
+- `in-progress` → `pending`: When deprioritized significantly
+- `up-next` → `pending`: When something else takes priority
 - Any → `dormant`: When indefinitely paused
 
 ### Always update `lastActivity`
@@ -165,8 +165,8 @@ When changing any project, update `lastActivity` to today's date.
 
 ## Field Requirements by Status
 
-| Field | in-flight | up-next | simmering | dormant | shipped |
-|-------|-----------|---------|-----------|---------|---------|
+| Field | in-progress | up-next | pending | dormant | archived |
+|-------|-------------|---------|---------|---------|----------|
 | title | ✓ | ✓ | ✓ | ✓ | ✓ |
 | status | ✓ | ✓ | ✓ | ✓ | ✓ |
 | type | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -261,12 +261,9 @@ projects/pipeline-dashboard/
 
 When a deliverable is complete:
 
-1. Change `status: shipped` in the deliverable file
-2. Add entry to project's `CHANGELOG.md` with:
-   - Item name with ✅
-   - Brief summary of what was built
-   - Date
-3. Optionally move file to `roadmap/done/` folder
+1. Change `status: complete` in ROADMAP.md (auto-migrates to CHANGELOG.md)
+2. Set `completedAt: YYYY-MM-DD` (ISO date)
+3. Human sign-off required — never set `complete` autonomously (see Rule Two)
 
 ---
 

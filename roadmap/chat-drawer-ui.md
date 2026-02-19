@@ -1,6 +1,6 @@
 ---
 title: Chat Drawer UI
-status: shipped
+status: complete
 type: deliverable
 parent: pipeline-dashboard
 specDoc: docs/CHAT-DRAWER-SPEC.md

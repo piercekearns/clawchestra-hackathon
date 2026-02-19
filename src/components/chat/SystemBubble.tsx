@@ -1,11 +1,11 @@
-import { CheckCircle2, HelpCircle, Info, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, HelpCircle, Info, Layers, XCircle } from 'lucide-react';
 import type { SystemBubbleKind, SystemBubbleMeta } from '../../lib/gateway';
 import { cn } from '../../lib/utils';
 
 const ICONS: Record<SystemBubbleKind, typeof CheckCircle2> = {
   completion: CheckCircle2,
   failure: XCircle,
-  compaction: Trash2,
+  compaction: Layers,
   decision: HelpCircle,
   info: Info,
 };
@@ -39,7 +39,7 @@ export function SystemBubble({ meta, content, timestamp }: SystemBubbleProps) {
   const ariaRole = meta.kind === 'failure' ? 'alert' : 'status';
 
   return (
-    <div className="flex justify-center px-4 py-1" role={ariaRole}>
+    <div className="flex justify-center px-4 py-2" role={ariaRole}>
       <div
         className={cn(
           'max-w-[85%] rounded-lg border px-3 py-2',

@@ -1,6 +1,6 @@
 ---
 title: Improve Markdown Rendering
-status: shipped
+status: complete
 type: deliverable
 parent: pipeline-dashboard
 lastActivity: 2026-02-12

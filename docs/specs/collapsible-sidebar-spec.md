@@ -346,7 +346,7 @@ Move app configuration (gateway URL, theme, etc.) from the modal dialog into the
 Settings groups that could live here:
 - **Connection:** Gateway URL, token, session key, auto-connect
 - **Appearance:** Theme (system/light/dark), accent color
-- **Projects:** Scan paths, refresh interval, show shipped toggle
+- **Projects:** Scan paths, refresh interval, show archived toggle
 - **Chat:** Send on enter, timestamps, toast duration
 
 ### Agent Activity Panel
