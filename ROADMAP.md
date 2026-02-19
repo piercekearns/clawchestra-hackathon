@@ -14,12 +14,12 @@ items:
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: github-api-403-errors
     title: "Local Git Intelligence (was: GitHub API 403 Errors)"
-    status: in-progress
+    status: done
     priority: 2
     specDoc: docs/specs/github-api-403-errors-spec.md
     planDoc: docs/plans/github-api-403-errors-plan.md
     nextAction: >-
-      Plan written — run /plan_review, then build
+      Built — needs manual testing (rebuild app to verify)
     tags:
       - bug
       - github
