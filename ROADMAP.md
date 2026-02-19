@@ -1,42 +1,16 @@
 ---
 items:
-  - id: first-friend-readiness
-    title: First Friend Readiness
-    status: up-next
-    priority: 3
-    specDoc: docs/specs/first-friend-readiness-spec.md
-    nextAction: Spec written — deliver Git Sync and Deep Rename first
-    tags:
-      - onboarding
-      - cross-platform
-      - openclaw
-      - ux
-    icon: "\U0001F91D"
   - id: chat-infrastructure
-    title: Chat Infrastructure Overhaul
+    title: "Chat Reliability: Persistent Bugs"
     status: in-progress
     priority: 1
-    nextAction: 'Testing streaming fixes, multi-block message display, activity indicator'
+    nextAction: Triage and fix bugs logged below — audit delivery shipped, testing in progress
     tags:
       - chat
-      - infra
-      - openclaw
-      - architecture
-    icon: "\U0001F527"
+      - bugs
+      - reliability
+    icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
-  - id: github-api-403-errors
-    title: "Local Git Intelligence (was: GitHub API 403 Errors)"
-    status: complete
-    priority: 2
-    specDoc: docs/specs/github-api-403-errors-spec.md
-    planDoc: docs/plans/github-api-403-errors-plan.md
-    nextAction: >-
-      Built — needs manual testing (rebuild app to verify)
-    tags:
-      - bug
-      - github
-      - git
-      - enhancement
   - id: git-sync
     title: Git Sync
     status: up-next
@@ -59,6 +33,18 @@ items:
     tags:
       - infra
       - rename
+  - id: first-friend-readiness
+    title: First Friend Readiness
+    status: up-next
+    priority: 3
+    nextAction: Spec written — deliver Git Sync and Deep Rename first
+    tags:
+      - onboarding
+      - cross-platform
+      - openclaw
+      - ux
+    icon: "\U0001F91D"
+    specDoc: docs/specs/first-friend-readiness-spec.md
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
@@ -83,10 +69,22 @@ items:
       - roadmap
       - ux
       - workflow
+  - id: github-api-403-errors
+    title: 'Local Git Intelligence (was: GitHub API 403 Errors)'
+    status: complete
+    priority: 1
+    nextAction: Built — needs manual testing (rebuild app to verify)
+    tags:
+      - bug
+      - github
+      - git
+      - enhancement
+    specDoc: docs/specs/github-api-403-errors-spec.md
+    planDoc: docs/plans/github-api-403-errors-plan.md
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: complete
-    priority: 1
+    priority: 2
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -96,7 +94,7 @@ items:
   - id: project-card-opens-kanban
     title: Project Card Opens Kanban Directly
     status: complete
-    priority: 2
+    priority: 3
     nextAction: Verified and shipped
     tags:
       - ui
@@ -106,7 +104,7 @@ items:
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: complete
-    priority: 3
+    priority: 4
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -116,7 +114,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: complete
-    priority: 4
+    priority: 5
     nextAction: Built — needs manual testing
     tags:
       - ui
@@ -126,7 +124,7 @@ items:
   - id: deliverable-lifecycle-orchestration
     title: Deliverable Lifecycle Orchestration
     status: complete
-    priority: 5
+    priority: 6
     nextAction: Code shipped - awaiting verification
     tags:
       - roadmap
@@ -138,7 +136,7 @@ items:
   - id: app-ux-review
     title: App UX Review & Improvements
     status: complete
-    priority: 6
+    priority: 7
     nextAction: 'Hands-on review: what works, what doesn''t, what''s missing'
     tags:
       - ui

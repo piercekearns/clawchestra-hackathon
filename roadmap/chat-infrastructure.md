@@ -1,122 +1,76 @@
----
-title: Chat Infrastructure Overhaul
-id: chat-infrastructure
-status: in-progress
-tags: [chat, infra, openclaw, architecture]
-icon: "🔧"
-specDoc: docs/specs/scoped-chat-sessions-spec.md
----
+# Chat Reliability: Persistent Bugs
 
-# Chat Infrastructure Overhaul
-
-Make the dashboard chat a reliable command center for orchestrating project work. The goal is confidence: confident messages arrive, confident they're in the right thread, confident sub-agent work completes and reports back, confident decisions aren't made invisibly.
-
-## The Confidence Chain
-
-Pierce's framing: "I can't orchestrate work through the chat because I'm not confident that..."
-
-1. **...agents will actually run** → WebSocket reliability
-2. **...if they run, they'll complete** → Failure surfacing
-3. **...if they complete, I'll see the output** → Completion delivery + scoped sessions
-4. **...if decisions need to be made, I'll see them** → Decision surfacing
-
-Each link in the chain must work before the next one matters.
+Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commit `605f056`, 2026-02-19) with 650+ lines of reliability improvements including `chat-message-identity.ts`, `chat-turn-engine.ts`, gateway hardening, and dedupe fixes. The following bugs persist or have appeared during testing.
 
 ---
 
-## Phase A: Reliability (Build First)
+## Bug Log
 
-The foundation. Without this, nothing else works.
+### BUG-001: Assistant messages not appearing until app restart
+**Reported:** 2026-02-19 ~02:01
+**Severity:** High
+**Status:** Open
 
-### WebSocket Auto-Reconnection
-- Reliable reconnection when gateway drops or restarts
-- Exponential backoff, connection state tracking, message delivery guarantee post-reconnect
-- Previous attempt reverted (`36fbc72`) — suspected Tauri WebSocket plugin issue
-- Includes: fix default scan path to `~/projects/`
+**Symptoms:**
+- Assistant response visible in OpenClaw Gateway Dashboard but not in Clawchestra chat UI
+- Message appeared after closing and restarting the app
+- Unclear if it was triggered by the next user message or by the restart itself
 
-### Scoped Chat Sessions
-- Change session key from `agent:main:main` to `agent:main:pipeline-dashboard`
-- Clear SQLite chat.db (clean slate)
-- Dashboard gets own conversation thread — sub-agent announces route here, not Telegram
-- This alone fixes a huge part of the "I never see the output" problem
-- See `docs/specs/scoped-chat-sessions-spec.md`
+**Context:**
+- Multiple rapid commits + app update had just occurred
+- The response that was missing was a text-only reply (no tool calls, no streaming fragments)
 
----
-
-## Phase B: Awareness (Build Second)
-
-Make the invisible visible. The user should always know what's happening.
-
-### Completion Delivery Guarantees
-- Sub-agent announce results must reliably arrive in the dashboard session
-- Scoped sessions (Phase A) handles routing — this phase validates it works end-to-end
-- Test: spawn sub-agent from dashboard, verify announce arrives in dashboard chat (not webchat/Telegram)
-- Test: coding agent (Claude Code/Codex) background session completes, result surfaces in dashboard
-- Wake trigger pattern (`openclaw system event --mode now`) for immediate notification
-
-### Failure Alerts
-- Proactive notification when sub-agents OOM, timeout, or error
-- Currently: failures are silent until user asks "what happened?"
-- Needed: system bubble in chat when a spawned task fails — with context (what task, what error, which project)
-- Monitor `process` sessions for crash/timeout, surface alerts immediately
-- Priority over status cards — knowing something broke is more important than watching it work
-
-### Compaction Awareness
-- Surface compaction/memory-flush events as system bubbles
-- Reference Control UI for event names
-- Add to `stateLabels` in `gateway.ts`
-
-### Decision Surfacing (Critical)
-- When sub-agents or coding agents surface decisions that need human input, those decisions must be pulled up to the dashboard chat — not resolved invisibly by the orchestrating agent
-- **The problem:** In a multi-tier hierarchy (user → OpenClaw → Claude Code → sub-agents), decisions can get swallowed at any layer. The orchestrating agent might just pick an option without asking.
-- **Initial approach (conservative):** Surface ALL decisions to the user. Err on the side of asking too much rather than too little.
-- **What a decision looks like in chat:**
-  - Context: which project, which deliverable, which command/workflow produced it
-  - The decision itself: what's being asked, what the options are
-  - Ability to respond inline (reply in chat with the choice)
-- **Examples:**
-  - Plan review recommends changes → surface "Plan review for [deliverable] has 3 recommendations: ..."
-  - Claude Code hits an ambiguous architecture choice → surface "Claude Code asks: should X use approach A or B?"
-  - Sub-agent encounters an error and has recovery options → surface the options
-- **Not in scope (yet):** Structured decision UI (option cards, buttons). That's Phase C / future. For now, natural language in chat is fine — the key is that decisions *reach* the user at all.
+**Likely area:** `reconcileRecentHistory` recovery or `result.messages` from `sendViaTauriWs` not persisting. The `shouldSuppressDuringActiveRun` guard may be filtering valid final responses.
 
 ---
 
----
+### BUG-002: User messages missing from chat history
+**Reported:** 2026-02-19 ~02:01
+**Severity:** High
+**Status:** Open
 
-*Phase C (orchestration UI: session panel, status cards, coding agent integration, build buttons) has been de-scoped and moved to the Collapsible Sidebar roadmap item as expansion ideas. See `roadmap/collapsible-sidebar.md`.*
+**Symptoms:**
+- When scrolling up in chat, large gaps in user message history
+- Last visible user message was from 1:36, but user had sent multiple messages between 1:36 and 2:01
+- Assistant messages from that period may also be missing or only partially visible
 
----
+**Context:**
+- Heavy session with many back-and-forth messages
+- Multiple compactions occurred (7+ compactions noted in session status)
+- App was updated mid-session (code changes pulled in via Update button)
 
-## Research Findings
-
-### What OpenClaw Already Provides
-- `sessions_spawn` — non-blocking, returns `{ status, runId, childSessionKey }` immediately
-- `sessions_list` — list active sessions with optional last N messages
-- `sessions_history` — fetch transcript for any session
-- `/subagents list/log/stop/info/send` — slash commands for management
-- Announce step — results announced back to requester chat session
-- Dedicated `subagent` queue lane (concurrency: 8, separate from main)
-- Auto-archive after 60 min (configurable)
-- `coding-agent` skill — PTY, background mode, process monitoring, wake triggers
-
-### The Gap
-The gateway has all the plumbing. The gap is:
-1. **Routing** (fixed by scoped sessions) — announces go to the right session
-2. **UI** — the dashboard doesn't render sub-agent lifecycle events or decision requests
-3. **Agent discipline** — the orchestrating agent (me) needs clear rules about when to escalate decisions vs. act autonomously
-
-### Decision Surfacing — Agent-Side Rules
-This isn't just a UI problem. The agent (OpenClaw) needs behavioral rules:
-- **Always surface:** Architecture decisions, approach choices (A vs B), plan review recommendations, error recovery options, anything that changes scope or direction
-- **Can act autonomously:** File naming, formatting, ordering of independent tasks, mechanical execution of an already-approved plan
-- **Rule of thumb:** If the decision would change what gets built or how, surface it. If it's execution detail within an approved scope, proceed.
-- These rules should be codified in AGENTS.md and/or SOUL.md so they persist across sessions.
+**Likely area:** Chat message persistence (SQLite/store). Messages may be lost during app updates if the store isn't flushed. Or `collapseChatDuplicates` / `collapseTrailingAssistantRun` in `store.ts` may be over-aggressively deduping.
 
 ---
 
-## Predecessors
+### BUG-003: Streaming delta fragments as separate messages (from 2026-02-18)
+**Reported:** 2026-02-18 ~23:52
+**Severity:** Medium
+**Status:** Open — may be addressed by Codex audit, needs retest
 
-Absorbs and replaces:
-- `websocket-reconnection` (was P6)
-- `scoped-chat-sessions` (was P8)
+**Symptoms:**
+- Final reply appeared first, then intermediate tool-call narration fragments appeared as separate message bubbles below it
+- "Recovered N" system bubble appeared at bottom
+- User messages missing between assistant replies
+
+**Likely area:** `reconcileRecentHistory` surfacing gateway history fragments that should be collapsed into a single turn. `collapseChatDuplicates` not merging same-turn content blocks.
+
+---
+
+## Audit Baseline
+
+The Codex chat audit (commit `605f056`) delivered:
+- `chat-message-identity.ts` — message identity signatures for dedup
+- `chat-turn-engine.ts` — turn lifecycle state machine
+- `gateway.ts` — 157 lines changed (hardened streaming, error handling, logging)
+- `store.ts` — 54 lines changed (dedup logic)
+- `gateway.test.ts` — 30 new test lines
+- `chat-message-identity.test.ts` — 48 new test lines
+- `chat-turn-engine.test.ts` — 40 new test lines
+- `docs/plans/chat-reliability-scenario-matrix.md` — test scenarios
+
+Prior fixes in this area:
+- `98a1189` — GitHub 403 + stuck activity animation (process.poll error handling, WS error extraction, hydration stale window)
+- `6d35643` — harden chat dedupe, queue drain, recovery reconciliation
+- `b01dc48` — don't resolve send when process.poll fails
+- `c45a682` — bound no-final waiting when process.poll scope unavailable
