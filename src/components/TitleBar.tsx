@@ -11,7 +11,7 @@ export function TitleBar() {
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
   const themePreference = useDashboardStore((s) => s.themePreference);
   const setThemePreference = useDashboardStore((s) => s.setThemePreference);
-  const { updateAvailable, updating, handleUpdate } = useAppUpdate();
+  const { updateAvailable, updating, updateBlockedReason, handleUpdate } = useAppUpdate();
 
   const ToggleIcon = sidebarOpen ? PanelLeftClose : PanelLeft;
   const startWindowDrag = () => {
@@ -70,6 +70,7 @@ export function TitleBar() {
             onMouseDown={(e) => e.stopPropagation()}
             disabled={updating}
             className="pointer-events-auto inline-flex items-center rounded-full bg-[#DFFF00] px-2 py-0.5 text-[11px] font-medium text-neutral-800 transition-colors hover:bg-[#e9ff4d] disabled:cursor-wait"
+            title={updateBlockedReason ?? undefined}
           >
             {updating ? (
               <span className="inline-flex items-center gap-1">
@@ -80,6 +81,9 @@ export function TitleBar() {
               'Update'
             )}
           </button>
+        )}
+        {updateBlockedReason && (
+          <span className="text-[11px] text-status-danger">{updateBlockedReason}</span>
         )}
       </div>
 

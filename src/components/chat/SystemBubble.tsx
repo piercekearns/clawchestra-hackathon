@@ -1,4 +1,4 @@
-import { CheckCircle2, HelpCircle, Info, Layers, XCircle } from 'lucide-react';
+import { CheckCircle2, HelpCircle, Info, Layers, Loader2, XCircle } from 'lucide-react';
 import type { SystemBubbleKind, SystemBubbleMeta } from '../../lib/gateway';
 import { cn } from '../../lib/utils';
 
@@ -48,7 +48,11 @@ export function SystemBubble({ meta, content, timestamp }: SystemBubbleProps) {
         )}
       >
         <div className="flex items-center gap-2">
-          <Icon className={cn('h-4 w-4 flex-shrink-0', iconColor)} aria-hidden="true" />
+          {meta.loading ? (
+            <Loader2 className={cn('h-4 w-4 flex-shrink-0 animate-spin', iconColor)} aria-hidden="true" />
+          ) : (
+            <Icon className={cn('h-4 w-4 flex-shrink-0', iconColor)} aria-hidden="true" />
+          )}
           <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{meta.title}</span>
         </div>
 

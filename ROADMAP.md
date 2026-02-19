@@ -19,8 +19,9 @@ items:
     status: in-progress
     priority: 2
     nextAction: >-
-      Final plan_review pass complete with locked decisions, flag contract, and
-      reproducible validation artifact paths — ready to execute Phase 1/2 fixes
+      Reliability fixes built and validated by tests/build; use this item as
+      ongoing Phase 2 bug intake during daily chat usage, then run holistic
+      review/fix pass on newly logged issues.
     tags:
       - chat
       - bugs

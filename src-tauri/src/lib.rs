@@ -1457,6 +1457,14 @@ struct UpdateLockState {
     age_secs: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateGuardInput {
+    active_turn_count: i64,
+    enforce_flush_guard: bool,
+    allow_force: bool,
+}
+
 fn read_update_lock_state() -> UpdateLockState {
     let lock_dir = Path::new("/tmp/pipeline-dashboard-update.lock");
     if !lock_dir.exists() {
@@ -1542,7 +1550,7 @@ fn check_for_update() -> Result<UpdateStatus, String> {
 }
 
 #[tauri::command]
-async fn run_app_update() -> Result<String, String> {
+async fn run_app_update(update_guard: Option<UpdateGuardInput>) -> Result<String, String> {
     #[cfg(not(target_os = "macos"))]
     {
         return Err(
@@ -1554,6 +1562,15 @@ async fn run_app_update() -> Result<String, String> {
     let settings = load_dashboard_settings()?;
     if settings.update_mode != "source-rebuild" {
         return Err("updateSourceUnavailable: updateMode is set to none".to_string());
+    }
+
+    if let Some(guard) = update_guard {
+        if guard.enforce_flush_guard && guard.active_turn_count > 0 && !guard.allow_force {
+            return Err(format!(
+                "updateBlocked: {} active chat turn(s). Wait for completion before updating.",
+                guard.active_turn_count
+            ));
+        }
     }
 
     let project_dir = settings
@@ -1903,7 +1920,7 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
 // =============================================================================
 
 use once_cell::sync::Lazy;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::Mutex;
 
 // Global database connection (thread-safe)
@@ -1976,6 +1993,17 @@ fn init_chat_db() -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS chat_recovery_cursor (
+            session_key TEXT PRIMARY KEY,
+            last_message_id TEXT,
+            last_timestamp INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(conn)
 }
 
@@ -2013,6 +2041,16 @@ struct PendingTurn {
     has_assistant_output: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     completion_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatRecoveryCursor {
+    session_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_message_id: Option<String>,
+    last_timestamp: i64,
+    updated_at: i64,
 }
 
 #[tauri::command]
@@ -2290,6 +2328,90 @@ fn chat_pending_turns_load(session_key: Option<String>) -> Result<Vec<PendingTur
     Ok(turns)
 }
 
+#[tauri::command]
+fn chat_flush() -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    conn.execute_batch("PRAGMA wal_checkpoint(FULL); PRAGMA optimize;")
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn chat_recovery_cursor_get(session_key: Option<String>) -> Result<Option<ChatRecoveryCursor>, String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    let key = session_key.unwrap_or_else(|| DEFAULT_SESSION_KEY.to_string());
+    let mut stmt = conn
+        .prepare(
+            "SELECT session_key, last_message_id, last_timestamp, updated_at
+             FROM chat_recovery_cursor
+             WHERE session_key = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let cursor = stmt
+        .query_row(params![key], |row| {
+            Ok(ChatRecoveryCursor {
+                session_key: row.get(0)?,
+                last_message_id: row.get(1)?,
+                last_timestamp: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    Ok(cursor)
+}
+
+#[tauri::command]
+fn chat_recovery_cursor_advance(
+    session_key: String,
+    last_timestamp: i64,
+    last_message_id: Option<String>,
+) -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    let now = (unix_timestamp_secs() as i64) * 1000;
+    conn.execute(
+        "INSERT INTO chat_recovery_cursor (session_key, last_message_id, last_timestamp, updated_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(session_key) DO UPDATE SET
+           last_message_id = CASE
+             WHEN excluded.last_timestamp >= chat_recovery_cursor.last_timestamp
+               THEN excluded.last_message_id
+             ELSE chat_recovery_cursor.last_message_id
+           END,
+           last_timestamp = CASE
+             WHEN excluded.last_timestamp >= chat_recovery_cursor.last_timestamp
+               THEN excluded.last_timestamp
+             ELSE chat_recovery_cursor.last_timestamp
+           END,
+           updated_at = excluded.updated_at",
+        params![session_key, last_message_id, last_timestamp, now],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn chat_recovery_cursor_clear(session_key: Option<String>) -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    if let Some(key) = session_key {
+        conn.execute(
+            "DELETE FROM chat_recovery_cursor WHERE session_key = ?1",
+            params![key],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        conn.execute("DELETE FROM chat_recovery_cursor", [])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // =============================================================================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2333,6 +2455,10 @@ pub fn run() {
             chat_pending_turn_save,
             chat_pending_turn_remove,
             chat_pending_turns_load,
+            chat_flush,
+            chat_recovery_cursor_get,
+            chat_recovery_cursor_advance,
+            chat_recovery_cursor_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2441,4 +2567,3 @@ mod hardening_tests {
         assert_eq!(files, vec!["roadmap/renamed.md"]);
     }
 }
-

@@ -4,6 +4,35 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 
 ---
 
+## Phase 2: Ongoing Bug Intake (User-Driven)
+
+Validation matrix runs are optional for now. This roadmap item is the active tracker while you test by using Clawchestra chat in real feature delivery work.
+
+### Intake workflow
+1. Keep using chat in the app as normal while building roadmap work.
+2. When a bug appears, append a new `BUG-###` entry in this document.
+3. Use the same structure as existing bugs:
+   - `Reported`, `Severity`, `Status`
+   - `Symptoms`
+   - `Reproduction pattern`
+   - `Context`
+   - `Likely area`
+4. If the behavior overlaps an existing bug, add an `Update (HH:MM)` block under that bug instead of creating a duplicate ID.
+5. Keep status values consistent: `Open`, `In progress`, `Needs retest`, `Closed (pending verification)`, `Verified`.
+
+### Optional cross-reference to plan scenarios
+When possible, tag each new bug with a matching scenario from:
+- `docs/plans/chat-reliability-scenario-matrix.md`
+- `docs/plans/chat-infrastructure-persistent-bugs-plan.md`
+
+Use this format at the end of each bug:
+- `Scenario links: update-mid-turn, reconnect-mid-run` (or `none yet`)
+
+### Why this structure
+This keeps your real-world bug reports directly comparable to the existing tracker and allows a later holistic review/fix pass without re-triaging from scratch.
+
+---
+
 ## Bug Log
 
 ### BUG-001: Assistant messages not appearing after app update

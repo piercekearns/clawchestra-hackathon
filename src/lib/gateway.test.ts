@@ -598,6 +598,68 @@ describe('gateway client', () => {
     expect(__gatewayTestUtils.getActiveTurnCount()).toBe(3);
   });
 
+  it('filters recovery history to entries after the cursor message', () => {
+    const filtered = __gatewayTestUtils.applyRecoveryCursorFilter(
+      [
+        { id: 'm-1', role: 'assistant', content: 'older', timestamp: 1000 },
+        { id: 'm-2', role: 'assistant', content: 'cursor', timestamp: 2000 },
+        { id: 'm-3', role: 'assistant', content: 'newer', timestamp: 2100 },
+      ],
+      {
+        sessionKey: 'agent:main:pipeline-dashboard',
+        lastMessageId: 'm-2',
+        lastTimestamp: 2000,
+      },
+    );
+
+    expect(filtered.map((message) => message.id)).toEqual(['m-3']);
+  });
+
+  it('falls back to bounded cursor window when nothing is newer', () => {
+    const filtered = __gatewayTestUtils.applyRecoveryCursorFilter(
+      [
+        { id: 'm-1', role: 'assistant', content: 'too old', timestamp: 900_000 },
+        { id: 'm-2', role: 'assistant', content: 'recent', timestamp: 930_000 },
+      ],
+      {
+        sessionKey: 'agent:main:pipeline-dashboard',
+        lastMessageId: 'cursor-id',
+        lastTimestamp: 1_000_000,
+      },
+    );
+
+    expect(filtered.map((message) => message.id)).toEqual(['m-2']);
+  });
+
+  it('does not re-include the exact cursor message during bounded fallback', () => {
+    const filtered = __gatewayTestUtils.applyRecoveryCursorFilter(
+      [
+        { id: 'cursor-id', role: 'assistant', content: 'cursor', timestamp: 1_000_000 },
+        { id: 'm-2', role: 'assistant', content: 'recent', timestamp: 930_000 },
+      ],
+      {
+        sessionKey: 'agent:main:pipeline-dashboard',
+        lastMessageId: 'cursor-id',
+        lastTimestamp: 1_000_000,
+      },
+    );
+
+    expect(filtered.map((message) => message.id)).toEqual(['m-2']);
+  });
+
+  it('maps compaction state semantics to distinct progress/completion metadata', () => {
+    expect(__gatewayTestUtils.resolveCompactionPresentation('compacting', true)).toEqual({
+      title: 'Compacting conversation...',
+      loading: true,
+      status: 'In progress',
+    });
+    expect(__gatewayTestUtils.resolveCompactionPresentation('compaction_complete', true)).toEqual({
+      title: 'Conversation compacted',
+      loading: false,
+      status: 'Complete',
+    });
+  });
+
   it('expires stale active turns during hydration replay', () => {
     const now = 1_000_000;
     // Hydration uses a shorter window (2 min) than active-run timeout (12 min)

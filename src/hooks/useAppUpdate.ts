@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { getActiveTurnCount, subscribeTurnRegistry } from '../lib/gateway';
+import { CHAT_RELIABILITY_FLAGS } from '../lib/chat-reliability-flags';
+import { flushChatPersistenceWrites } from '../lib/chat-persistence';
 import {
   isTauriRuntime,
   checkForUpdate,
@@ -11,9 +14,20 @@ const UPDATE_MONITOR_INTERVAL_MS = 2000;
 const UPDATE_LOCK_APPEAR_GRACE_MS = 15_000;
 const UPDATE_STUCK_TIMEOUT_MS = 20 * 60_000;
 
+export function getUpdateBlockedReason(
+  activeTurnCount: number,
+  enforceFlushGuard: boolean,
+): string | null {
+  if (enforceFlushGuard && activeTurnCount > 0) {
+    return `Update blocked: ${activeTurnCount} active chat turn(s).`;
+  }
+  return null;
+}
+
 export function useAppUpdate() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [updateBlockedReason, setUpdateBlockedReason] = useState<string | null>(null);
   const updateTriggeredRef = useRef(false);
   const monitorTimerRef = useRef<number | null>(null);
   const monitorStartedAtRef = useRef(0);
@@ -104,6 +118,21 @@ export function useAppUpdate() {
 
   const handleUpdate = async () => {
     if (!isTauriRuntime() || updating || updateTriggeredRef.current) return;
+    const updateRequestedAt = Date.now();
+    const activeTurnCount = getActiveTurnCount();
+    const enforceFlushGuard = CHAT_RELIABILITY_FLAGS.chat.update_flush_guard;
+    const blockedReason = getUpdateBlockedReason(activeTurnCount, enforceFlushGuard);
+    if (blockedReason) {
+      console.warn('[Update]', {
+        updateRequestedAt,
+        reason: 'update_blocked_active_turns',
+        activeTurnCount,
+      });
+      setUpdateBlockedReason(blockedReason);
+      return;
+    }
+
+    setUpdateBlockedReason(null);
     updateTriggeredRef.current = true;
     flushSync(() => {
       setUpdating(true);
@@ -112,7 +141,26 @@ export function useAppUpdate() {
       requestAnimationFrame(() => resolve());
     });
     try {
-      await runAppUpdate();
+      const flushStartAt = Date.now();
+      await flushChatPersistenceWrites();
+      const flushEndAt = Date.now();
+      console.log('[Update]', {
+        updateRequestedAt,
+        flushStartAt,
+        flushEndAt,
+        activeTurnCount,
+      });
+      await runAppUpdate({
+        activeTurnCount,
+        enforceFlushGuard,
+        allowForce: false,
+      });
+      console.log('[Update]', {
+        updateRequestedAt,
+        flushStartAt,
+        flushEndAt,
+        restartIssuedAt: Date.now(),
+      });
       startUpdateMonitor();
     } catch (error) {
       console.error('Failed to start update:', error);
@@ -139,5 +187,23 @@ export function useAppUpdate() {
     }
   }, [updating]);
 
-  return { updateAvailable, updating, handleUpdate };
+  useEffect(() => {
+    if (!updateBlockedReason) return;
+    const unsubscribe = subscribeTurnRegistry((turns) => {
+      const hasActiveTurns = turns.some(
+        (turn) =>
+          turn.status === 'queued' ||
+          turn.status === 'running' ||
+          turn.status === 'awaiting_output',
+      );
+      if (!hasActiveTurns) {
+        setUpdateBlockedReason(null);
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [updateBlockedReason]);
+
+  return { updateAvailable, updating, updateBlockedReason, handleUpdate };
 }

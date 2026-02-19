@@ -61,6 +61,7 @@ import type {
 import type { DashboardSettings } from './lib/settings';
 import { useDashboardStore } from './lib/store';
 import {
+  chatRecoveryCursorAdvance,
   getDashboardSettings,
   isTauriRuntime,
   updateDashboardSettings,
@@ -68,6 +69,12 @@ import {
 import { defaultView, projectRoadmapView } from './lib/views';
 import { watchProjects } from './lib/watcher';
 import { messageIdentitySignature } from './lib/chat-message-identity';
+import { CHAT_RELIABILITY_FLAGS } from './lib/chat-reliability-flags';
+import {
+  buildFailureBubbleDedupeKey,
+  classifyUpstreamFailure,
+  shouldParseAssistantContentForSessionDiscovery,
+} from './lib/chat-reliability';
 
 interface Toast {
   id: number;
@@ -94,6 +101,7 @@ const HARD_TERMINAL_ACTIVITY_CLEAR_MS = 10_000;
 const RECOVERY_NEAR_DUP_WINDOW_MS = 10 * 60_000;
 const RECOVERY_BUBBLE_DEDUP_MS = 5 * 60_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
+const UPSTREAM_FAILURE_DEDUP_MS = 60_000;
 
 function getGitHubStatusMeta(
   status?: GitStatus,
@@ -200,9 +208,11 @@ export default function App() {
   const lastRecoveryBubbleRef = useRef<{ signature: string; at: number } | null>(null);
   const recoveryInFlightRef = useRef<Promise<number> | null>(null);
   const backgroundSessionLastSeenRef = useRef<Map<string, number>>(new Map());
+  const failureBubbleDedupeRef = useRef<Map<string, number>>(new Map());
   const queueDrainInFlightRef = useRef(false);
   const blockedQueueMessageIdRef = useRef<string | null>(null);
   const hardClearTimerRef = useRef<number | null>(null);
+  const lastGatewayActiveTurnsRef = useRef(gatewayActiveTurns);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
@@ -319,17 +329,19 @@ export default function App() {
     return 'disconnected';
   }, [gatewayConnected, wsConnectionState]);
 
+  const isChatBusy = chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
+
   const chatActivityLabel = useMemo(() => {
     // Event-driven labels take priority when they're more specific
     if (agentActivity === 'typing') return 'Typing...';
     if (agentActivity === 'working') return 'Working...';
     // Fallback: if a send is in-flight, always show activity
     // (mirrors OpenClaw webchat: indicator persists from send to final)
-    if (chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0) {
+    if (isChatBusy) {
       return 'Working...';
     }
     return null;
-  }, [activeBackgroundSessions.size, agentActivity, chatSending, gatewayActiveTurns]);
+  }, [agentActivity, isChatBusy]);
 
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
@@ -436,8 +448,7 @@ export default function App() {
       }
     };
 
-    const hasActiveWork =
-      chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
+    const hasActiveWork = isChatBusy;
     if (hasActiveWork) {
       clearTimer();
       return;
@@ -505,30 +516,52 @@ export default function App() {
 
     const unsubscribeSystemEvents = subscribeSystemEvents((event) => {
       if (event.kind === 'compaction') {
+        const semanticStatesEnabled = CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states;
+        const isCompacting = semanticStatesEnabled && event.compactionState === 'compacting';
         void addSystemBubble(
           'compaction',
-          'Conversation compacted',
+          isCompacting ? 'Compacting conversation...' : 'Conversation compacted',
           {
             Note: 'Older messages were summarized to free context space',
+            ...(semanticStatesEnabled ? { Status: isCompacting ? 'In progress' : 'Complete' } : {}),
           },
           undefined,
           event.runId,
           event.message,
+          isCompacting,
         );
         return;
       }
 
       if (event.kind === 'error') {
+        const detailsMessage = event.message ?? 'Unknown error';
+        const classified = classifyUpstreamFailure(detailsMessage);
+        const dedupeKey = buildFailureBubbleDedupeKey(
+          classified.type,
+          event.runId,
+          event.sessionKey,
+        );
+        const now = Date.now();
+        for (const [key, seenAt] of failureBubbleDedupeRef.current.entries()) {
+          if (now - seenAt > UPSTREAM_FAILURE_DEDUP_MS) {
+            failureBubbleDedupeRef.current.delete(key);
+          }
+        }
+        const lastSeen = failureBubbleDedupeRef.current.get(dedupeKey) ?? 0;
+        if (now - lastSeen < UPSTREAM_FAILURE_DEDUP_MS) {
+          return;
+        }
+        failureBubbleDedupeRef.current.set(dedupeKey, now);
         void addSystemBubble(
           'failure',
-          'Background task failed',
+          classified.title,
           {
-            Error: event.message ?? 'Unknown error',
+            Error: detailsMessage,
             ...(event.label ? { Task: event.label } : {}),
           },
-          ['Check logs for details'],
+          [classified.action],
           event.runId,
-          event.message,
+          detailsMessage,
         );
         return;
       }
@@ -690,8 +723,8 @@ export default function App() {
 
         let recoveredCount = 0;
         const recoveredSignatures: string[] = [];
-        const shouldSuppressDuringActiveRun =
-          chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
+        const shouldSuppressDuringActiveRun = isChatBusy;
+        let lastMergedMessage: ChatMessage | null = null;
         for (const message of recovered) {
           if (shouldSuppressDuringActiveRun && message.role === 'assistant') {
             // During active runs, assistant deltas are already surfaced via
@@ -716,6 +749,26 @@ export default function App() {
           timestampsBySignature.set(contentSignature, priorTimestamps);
           recoveredCount += 1;
           recoveredSignatures.push(message._id ?? `${contentSignature}:${timestamp}`);
+          if (message._id) {
+            lastMergedMessage = { ...message, timestamp };
+          }
+        }
+
+        if (
+          CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring &&
+          lastMergedMessage &&
+          lastMergedMessage._id &&
+          typeof lastMergedMessage.timestamp === 'number'
+        ) {
+          try {
+            await chatRecoveryCursorAdvance(
+              DEFAULT_SESSION_KEY,
+              lastMergedMessage.timestamp,
+              lastMergedMessage._id,
+            );
+          } catch (error) {
+            console.warn('[Chat] Failed to advance recovery cursor:', error);
+          }
         }
 
         if (recoveredCount > 0) {
@@ -748,19 +801,21 @@ export default function App() {
     } finally {
       recoveryInFlightRef.current = null;
     }
-  }, [
-    activeBackgroundSessions.size,
-    addChatMessage,
-    addSystemBubble,
-    chatSending,
-    gatewayActiveTurns,
-  ]);
+  }, [addChatMessage, addSystemBubble, isChatBusy]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
     if (wsConnectionState !== 'connected') return;
     void reconcileRecentHistory();
   }, [reconcileRecentHistory, wsConnectionState]);
+
+  useEffect(() => {
+    const previous = lastGatewayActiveTurnsRef.current;
+    if (previous > 0 && gatewayActiveTurns === 0 && wsConnectionState === 'connected') {
+      void reconcileRecentHistory();
+    }
+    lastGatewayActiveTurnsRef.current = gatewayActiveTurns;
+  }, [gatewayActiveTurns, reconcileRecentHistory, wsConnectionState]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -1139,7 +1194,7 @@ export default function App() {
   // Process the next queued message (called after a send completes)
   const processNextQueuedMessage = async () => {
     if (queueDrainInFlightRef.current) return;
-    if (chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0) return;
+    if (isChatBusy) return;
 
     const next = chatQueueRef.current[0];
     if (!next) return;
@@ -1168,9 +1223,9 @@ export default function App() {
 
   useEffect(() => {
     if (chatQueue.length === 0) return;
-    if (chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0) return;
+    if (isChatBusy) return;
     void processNextQueuedMessage();
-  }, [activeBackgroundSessions.size, chatQueue.length, chatSending, gatewayActiveTurns]);
+  }, [chatQueue.length, isChatBusy]);
 
   useEffect(() => {
     if (activeBackgroundSessions.size === 0) return;
@@ -1261,12 +1316,13 @@ export default function App() {
     // render-captured `chatMessages` array.
     const priorMessages = useDashboardStore.getState().chatMessages;
 
-    addChatMessage(userMessage);
     setChatSending(true);
     setChatStreamingContent(null);
     setChatResponseToastMessage(null);
 
     try {
+      await addChatMessage(userMessage);
+      let latestCursorCandidate: ChatMessage | null = null;
       const result = await sendMessageWithContext(
         [...priorMessages, userMessage],
         {
@@ -1289,11 +1345,46 @@ export default function App() {
       
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {
-        addChatMessage(msg);
-        if (msg.role === 'assistant') {
+        await addChatMessage(msg);
+        if (
+          CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring &&
+          msg._id &&
+          typeof msg.timestamp === 'number'
+        ) {
+          if (
+            !latestCursorCandidate ||
+            typeof latestCursorCandidate.timestamp !== 'number' ||
+            msg.timestamp > latestCursorCandidate.timestamp
+          ) {
+            latestCursorCandidate = msg;
+          }
+        }
+        if (
+          shouldParseAssistantContentForSessionDiscovery(
+            CHAT_RELIABILITY_FLAGS.chat.activity_strict_sources,
+          ) &&
+          msg.role === 'assistant'
+        ) {
           for (const sessionKey of extractBackgroundSessionKeys(msg.content)) {
             registerBackgroundSession(sessionKey);
           }
+        }
+      }
+
+      if (
+        CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring &&
+        latestCursorCandidate &&
+        latestCursorCandidate._id &&
+        typeof latestCursorCandidate.timestamp === 'number'
+      ) {
+        try {
+          await chatRecoveryCursorAdvance(
+            DEFAULT_SESSION_KEY,
+            latestCursorCandidate.timestamp,
+            latestCursorCandidate._id,
+          );
+        } catch (error) {
+          console.warn('[Chat] Failed to advance recovery cursor after send:', error);
         }
       }
       
@@ -1307,6 +1398,7 @@ export default function App() {
       console.error('[Chat] === SEND FAILED ===', error);
       const messageText = error instanceof Error ? error.message : 'Gateway request failed';
       const lowerMessage = messageText.toLowerCase();
+      const classifiedFailure = classifyUpstreamFailure(messageText);
       // Only mark gateway disconnected for actual connection failures,
       // not for "no response" errors (gateway is reachable, agent just
       // didn't produce output — e.g. session busy, empty response).
@@ -1321,9 +1413,9 @@ export default function App() {
       addError({ type: 'gateway_down', message: messageText });
       void addSystemBubble(
         'failure',
-        isConnectionError ? 'Gateway error' : 'No response from agent',
+        isConnectionError ? 'Gateway error' : classifiedFailure.title,
         { Error: messageText },
-        isConnectionError ? ['Check logs for details'] : ['Agent may be busy — try again'],
+        isConnectionError ? ['Check logs for details'] : [classifiedFailure.action],
       );
       return false;
     } finally {
@@ -1566,9 +1658,7 @@ export default function App() {
         prefillRequest={chatPrefillRequest}
         drawerOpen={chatDrawerOpen}
         responseToastMessage={chatResponseToastMessage}
-        isAgentWorking={
-          chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0
-        }
+        isAgentWorking={isChatBusy}
         queue={chatQueue}
         hasMoreMessages={chatHasMore}
         loadingMoreMessages={chatLoadingMore}

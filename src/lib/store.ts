@@ -17,6 +17,9 @@ import {
   type PersistedChatMessage,
 } from './tauri';
 import {
+  trackChatPersistenceWrite,
+} from './chat-persistence';
+import {
   normalizeChatContentForMatch,
 } from './chat-normalization';
 import {
@@ -70,6 +73,7 @@ interface DashboardState {
     actions?: string[],
     runId?: string,
     content?: string,
+    loading?: boolean,
   ) => Promise<void>;
   loadChatMessages: () => Promise<void>;
   loadMoreChatMessages: () => Promise<void>;
@@ -115,6 +119,10 @@ function isRecoverySystemBubble(message: ChatMessage): boolean {
     message.systemMeta?.kind === 'info' &&
     message.systemMeta?.title === 'Recovered recent chat messages'
   );
+}
+
+function isCompactionSystemBubble(message: ChatMessage): boolean {
+  return message.role === 'system' && message.systemMeta?.kind === 'compaction';
 }
 
 function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage): boolean {
@@ -178,6 +186,34 @@ function collapseChatDuplicates(messages: ChatMessage[]): ChatMessage[] {
         collapsed[sameIdIndex] = message;
         continue;
       }
+    }
+
+    if (isCompactionSystemBubble(message)) {
+      const incomingRunId = message.systemMeta?.runId;
+      const incomingTs = message.timestamp ?? 0;
+      let replaceIndex = -1;
+      for (let i = collapsed.length - 1; i >= 0; i -= 1) {
+        const existing = collapsed[i];
+        if (!isCompactionSystemBubble(existing)) continue;
+        const existingRunId = existing.systemMeta?.runId;
+        if (incomingRunId && existingRunId && incomingRunId === existingRunId) {
+          replaceIndex = i;
+          break;
+        }
+        if (!incomingRunId && !existingRunId) {
+          const existingTs = existing.timestamp ?? 0;
+          if (Math.abs(existingTs - incomingTs) <= CHAT_RECOVERY_BUBBLE_DEDUPE_WINDOW_MS) {
+            replaceIndex = i;
+            break;
+          }
+        }
+      }
+      if (replaceIndex >= 0) {
+        collapsed[replaceIndex] = message;
+      } else {
+        collapsed.push(message);
+      }
+      continue;
     }
 
     if (isRecoverySystemBubble(message)) {
@@ -266,6 +302,10 @@ function deserializePersistedMessage(m: PersistedChatMessage): ChatMessage {
   };
   return sanitizeIncomingChatMessage(message);
 }
+
+export const __storeTestUtils = {
+  collapseChatDuplicates,
+};
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
@@ -360,8 +400,8 @@ export const useDashboardStore = create<DashboardState>()(
         
         // Persist to SQLite if in Tauri (fire-and-forget, acceptable if lost on quick close)
         if (isTauriRuntime()) {
-          try {
-            await chatMessageSave({
+          const write = trackChatPersistenceWrite(
+            chatMessageSave({
               id,
               role: normalizedMessage.role,
               content: normalizedMessage.content,
@@ -369,14 +409,17 @@ export const useDashboardStore = create<DashboardState>()(
               metadata: normalizedMessage.systemMeta
                 ? JSON.stringify({ systemMeta: normalizedMessage.systemMeta })
                 : undefined,
-            });
+            }),
+          );
+          try {
+            await write;
           } catch (error) {
             console.error('[Store] Failed to persist message:', error);
           }
         }
       },
 
-      addSystemBubble: async (kind, title, details, actions, runId, content) => {
+      addSystemBubble: async (kind, title, details, actions, runId, content, loading) => {
         // Don't duplicate title as content — only use title as fallback
         // when there are no details (otherwise it shows the same text twice)
         const resolvedContent = content ?? (details ? '' : title);
@@ -384,7 +427,14 @@ export const useDashboardStore = create<DashboardState>()(
           role: 'system',
           content: resolvedContent,
           timestamp: Date.now(),
-          systemMeta: { kind, title, details, actions, ...(runId ? { runId } : {}) },
+          systemMeta: {
+            kind,
+            title,
+            details,
+            actions,
+            ...(runId ? { runId } : {}),
+            ...(typeof loading === 'boolean' ? { loading } : {}),
+          },
         });
       },
 

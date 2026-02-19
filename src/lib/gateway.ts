@@ -2,6 +2,7 @@ import {
   chatPendingTurnRemove,
   chatPendingTurnSave,
   chatPendingTurnsLoad,
+  chatRecoveryCursorGet,
   checkOpenClawGatewayConnection,
   getOpenClawGatewayConfig,
   isTauriRuntime,
@@ -9,6 +10,7 @@ import {
 } from './tauri';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
+import { CHAT_RELIABILITY_FLAGS } from './chat-reliability-flags';
 import {
   normalizeChatContentForMatch,
   unwrapGatewayContextWrappedUserContent,
@@ -23,6 +25,7 @@ export interface SystemBubbleMeta {
   details?: Record<string, string>;
   actions?: string[];
   runId?: string;
+  loading?: boolean;
 }
 
 export interface ChatMessage {
@@ -167,6 +170,7 @@ export interface SystemEvent {
   kind: SystemEventKind;
   sessionKey?: string;
   runId?: string;
+  compactionState?: 'compacting' | 'compacted' | 'compaction_complete';
   label?: string;
   message?: string;
   status?: string;
@@ -786,6 +790,56 @@ function getHistoryMessageRunId(message: GatewayHistoryMessage): string | undefi
     : undefined;
 }
 
+type RecoveryCursorSnapshot = {
+  sessionKey: string;
+  lastMessageId?: string;
+  lastTimestamp: number;
+};
+
+const RECOVERY_CURSOR_FALLBACK_WINDOW_MS = 90_000;
+
+function applyRecoveryCursorFilter(
+  messages: GatewayHistoryMessage[],
+  cursor: RecoveryCursorSnapshot | null,
+): GatewayHistoryMessage[] {
+  const chronological = toChronologicalHistory(messages);
+  if (!cursor || !CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring) {
+    return chronological;
+  }
+
+  if (cursor.lastMessageId) {
+    const cursorIndex = chronological.findIndex((message) => {
+      const id = getHistoryMessageId(message);
+      const timestamp = getHistoryMessageTimestamp(message);
+      return id === cursor.lastMessageId && timestamp === cursor.lastTimestamp;
+    });
+    if (cursorIndex >= 0) {
+      const afterCursor = chronological.slice(cursorIndex + 1);
+      if (afterCursor.length > 0) return afterCursor;
+    }
+  }
+
+  const newer = chronological.filter((message) => {
+    const timestamp = getHistoryMessageTimestamp(message);
+    if (timestamp === undefined) return false;
+    return timestamp > cursor.lastTimestamp;
+  });
+  if (newer.length > 0) return newer;
+
+  const lowerBound = cursor.lastTimestamp - RECOVERY_CURSOR_FALLBACK_WINDOW_MS;
+  return chronological.filter((message) => {
+    const timestamp = getHistoryMessageTimestamp(message);
+    if (timestamp === undefined) return false;
+    if (cursor.lastMessageId) {
+      const id = getHistoryMessageId(message);
+      if (id === cursor.lastMessageId && timestamp === cursor.lastTimestamp) {
+        return false;
+      }
+    }
+    return timestamp >= lowerBound;
+  });
+}
+
 function toChronologicalHistory(
   messages: GatewayHistoryMessage[],
 ): GatewayHistoryMessage[] {
@@ -804,6 +858,20 @@ function toChronologicalHistory(
   }
 
   return [...messages];
+}
+
+type CompactionState = 'compacting' | 'compacted' | 'compaction_complete';
+
+function resolveCompactionPresentation(
+  state: CompactionState,
+  semanticStatesEnabled: boolean,
+): { title: string; loading: boolean; status: 'In progress' | 'Complete' } {
+  const inProgress = semanticStatesEnabled && state === 'compacting';
+  return {
+    title: inProgress ? 'Compacting conversation...' : 'Conversation compacted',
+    loading: inProgress,
+    status: inProgress ? 'In progress' : 'Complete',
+  };
 }
 
 function extractAssistantMessagesFromHistory(
@@ -1148,6 +1216,21 @@ export async function recoverRecentSessionMessages(options?: {
 
   const { getTauriOpenClawConnection } = await import('./tauri-websocket');
   const sessionKey = options?.sessionKey?.trim() || transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
+  let recoveryCursor: RecoveryCursorSnapshot | null = null;
+  if (CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring) {
+    try {
+      const cursor = await chatRecoveryCursorGet(sessionKey);
+      if (cursor) {
+        recoveryCursor = {
+          sessionKey: cursor.sessionKey,
+          lastMessageId: cursor.lastMessageId,
+          lastTimestamp: cursor.lastTimestamp,
+        };
+      }
+    } catch (error) {
+      console.warn('[Gateway] Failed to load recovery cursor:', error);
+    }
+  }
   const connection = await getTauriOpenClawConnection(
     transport.wsUrl,
     sessionKey,
@@ -1163,7 +1246,7 @@ export async function recoverRecentSessionMessages(options?: {
     ? history.messages.filter(isHistoryMessage)
     : [];
 
-  const chronological = toChronologicalHistory(rawMessages);
+  const chronological = applyRecoveryCursorFilter(rawMessages, recoveryCursor);
   const seen = new Set<string>();
   const recovered: ChatMessage[] = [];
 
@@ -1198,6 +1281,14 @@ export async function recoverRecentSessionMessages(options?: {
         normalized === 'conversation compacted' ||
         normalized === 'compacting conversation...')
     ) {
+      const compactionState: CompactionState =
+        normalized === 'compacting conversation...' || normalized === 'compaction'
+          ? 'compacting'
+          : 'compacted';
+      const presentation = resolveCompactionPresentation(
+        compactionState,
+        CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states,
+      );
       recovered.push({
         role,
         content: '',
@@ -1205,10 +1296,12 @@ export async function recoverRecentSessionMessages(options?: {
         ...(id ? { _id: id } : {}),
         systemMeta: {
           kind: 'compaction',
-          title: 'Conversation compacted',
+          title: presentation.title,
           details: {
             Note: 'Older messages were summarized to free context space',
+            Status: presentation.status,
           },
+          loading: presentation.loading,
         },
       });
       continue;
@@ -1222,6 +1315,7 @@ export async function recoverRecentSessionMessages(options?: {
     });
   }
 
+  recovered.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
   return recovered;
 }
 
@@ -1442,10 +1536,27 @@ export async function wireSystemEventBus(): Promise<void> {
     }
 
     if (state === 'compacted' || state === 'compacting' || state === 'compaction_complete') {
-      emit({ kind: 'compaction', sessionKey, runId, message: 'Conversation compacted' });
+      const compactionState = state as CompactionState;
+      const presentation = resolveCompactionPresentation(
+        compactionState,
+        CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states,
+      );
+      console.log('[Gateway][compaction-transition]', {
+        runId,
+        sessionKey,
+        state: compactionState,
+      });
+      emit({
+        kind: 'compaction',
+        sessionKey,
+        runId,
+        compactionState,
+        message: presentation.title,
+      });
     }
 
-    if (state === 'error') {
+    if (state === 'error' || state === 'error-stop') {
+      const fallbackMessage = extractText(eventRecord.message).trim();
       emit({
         kind: 'error',
         sessionKey,
@@ -1453,7 +1564,7 @@ export async function wireSystemEventBus(): Promise<void> {
         message:
           typeof eventRecord.errorMessage === 'string'
             ? eventRecord.errorMessage
-            : 'Unknown error',
+            : fallbackMessage || 'Unknown error',
         label: typeof eventRecord.label === 'string' ? eventRecord.label : undefined,
       });
     }
@@ -1868,6 +1979,7 @@ async function sendViaTauriWs(
   let sawUnscopedAgentProgress = false;
   let sawRunOwnedContent = false;
   let lastObservedRunActivityAt = sendRequestedAt;
+  let terminalProcessFailureMessage: string | null = null;
   const baselineMessageIds = new Set<string>();
   upsertTurn(turnToken, {
     sessionKey,
@@ -2229,6 +2341,15 @@ async function sendViaTauriWs(
                       pollStableCount = 0;
                       return;
                     }
+                    if (
+                      processSnapshot.terminal &&
+                      (processSnapshot.exitCode ?? 0) !== 0 &&
+                      !terminalProcessFailureMessage
+                    ) {
+                      terminalProcessFailureMessage =
+                        processSnapshot.error?.trim() ||
+                        `Upstream process exited with code ${processSnapshot.exitCode ?? 1}.`;
+                    }
                   } catch (error) {
                     processPollFailCount += 1;
                     const nextCapability = classifyProcessPollCapability(
@@ -2296,9 +2417,19 @@ async function sendViaTauriWs(
         }
       }, pollIntervalMs);
 
-      const stateLabels: Record<string, string> = {
-        compacting: 'Compacting conversation...',
-        compacted: 'Compacting conversation...',
+      const stateLabels: Record<CompactionState, string> = {
+        compacting: resolveCompactionPresentation(
+          'compacting',
+          CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states,
+        ).title,
+        compacted: resolveCompactionPresentation(
+          'compacted',
+          CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states,
+        ).title,
+        compaction_complete: resolveCompactionPresentation(
+          'compaction_complete',
+          CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states,
+        ).title,
       };
 
       // Track whether we've crossed a tool-call boundary since the last content block.
@@ -2436,7 +2567,7 @@ async function sendViaTauriWs(
           clearSawFinal(`chat state=${state}`);
         }
 
-        if (state && stateLabels[state]) {
+        if (state && (state as CompactionState) in stateLabels) {
           setAgentActivity('working', onActivityChange);
         }
 
@@ -2503,7 +2634,7 @@ async function sendViaTauriWs(
           return;
         }
 
-        if (state === 'error') {
+        if (state === 'error' || state === 'error-stop') {
           if (!ownsTerminalEvent(eventRunId)) {
             console.log('[Gateway] Ignoring unscoped error event during active send');
             return;
@@ -2674,6 +2805,14 @@ async function sendViaTauriWs(
           });
           const processSnapshot = parseProcessPollSnapshot(processState);
           if (processSnapshot.terminal) {
+            if (
+              (processSnapshot.exitCode ?? 0) !== 0 &&
+              !terminalProcessFailureMessage
+            ) {
+              terminalProcessFailureMessage =
+                processSnapshot.error?.trim() ||
+                `Upstream process exited with code ${processSnapshot.exitCode ?? 1}.`;
+            }
             console.warn(
               `[Gateway] Recovery backfill observed terminal process state without new assistant output (exitCode=${processSnapshot.exitCode ?? 0})`,
             );
@@ -2788,6 +2927,9 @@ async function sendViaTauriWs(
           ? 'timeout_active_no_final'
           : 'timeout_no_events',
       });
+      if (terminalProcessFailureMessage) {
+        throw new Error(`OpenClaw run failed: ${terminalProcessFailureMessage}`);
+      }
       throw new Error('No response received — agent may be busy or the session is unavailable. Try again in a moment.');
     }
 
@@ -3032,6 +3174,8 @@ export const __gatewayTestUtils = {
   likelyNeedsFinalSettlePass,
   parseProcessPollSnapshot,
   classifyProcessPollCapability,
+  applyRecoveryCursorFilter,
+  resolveCompactionPresentation,
   hasMatchingUserTurnInHistory,
   estimateChatSendFrameBytes,
   OPENCLAW_WS_CLIENT_PAYLOAD_BUDGET_BYTES,

@@ -15,6 +15,12 @@ export type UpdateLockState = {
   ageSecs: number | null;
 };
 
+export type UpdateGuardInput = {
+  activeTurnCount: number;
+  enforceFlushGuard: boolean;
+  allowForce: boolean;
+};
+
 type TauriSlashCommand = {
   name: string;
   desc: string;
@@ -79,7 +85,7 @@ type TauriCommands = {
   };
   check_for_update: { args: Record<string, never>; return: UpdateStatus };
   get_app_update_lock_state: { args: Record<string, never>; return: UpdateLockState };
-  run_app_update: { args: Record<string, never>; return: string };
+  run_app_update: { args: { updateGuard?: UpdateGuardInput | null }; return: string };
   list_slash_commands: { args: Record<string, never>; return: TauriSlashCommand[] };
   // Chat persistence commands
   chat_messages_load: {
@@ -122,6 +128,24 @@ type TauriCommands = {
       hasAssistantOutput: boolean;
       completionReason?: string;
     }>;
+  };
+  chat_flush: { args: Record<string, never>; return: void };
+  chat_recovery_cursor_get: {
+    args: { sessionKey?: string };
+    return: {
+      sessionKey: string;
+      lastMessageId?: string;
+      lastTimestamp: number;
+      updatedAt: number;
+    } | null;
+  };
+  chat_recovery_cursor_advance: {
+    args: { sessionKey: string; lastTimestamp: number; lastMessageId?: string };
+    return: void;
+  };
+  chat_recovery_cursor_clear: {
+    args: { sessionKey?: string };
+    return: void;
   };
 };
 
@@ -252,8 +276,8 @@ export async function getAppUpdateLockState(): Promise<UpdateLockState> {
   return typedInvoke('get_app_update_lock_state');
 }
 
-export async function runAppUpdate(): Promise<string> {
-  return typedInvoke('run_app_update');
+export async function runAppUpdate(updateGuard?: UpdateGuardInput): Promise<string> {
+  return typedInvoke('run_app_update', { updateGuard: updateGuard ?? null });
 }
 
 export async function listSlashCommands(): Promise<TauriSlashCommand[]> {
@@ -282,6 +306,13 @@ export interface PersistedPendingTurn {
   completedAt?: number;
   hasAssistantOutput: boolean;
   completionReason?: string;
+}
+
+export interface PersistedRecoveryCursor {
+  sessionKey: string;
+  lastMessageId?: string;
+  lastTimestamp: number;
+  updatedAt: number;
 }
 
 export async function chatMessagesLoad(
@@ -314,4 +345,24 @@ export async function chatPendingTurnRemove(turnToken: string): Promise<void> {
 
 export async function chatPendingTurnsLoad(sessionKey?: string): Promise<PersistedPendingTurn[]> {
   return typedInvoke('chat_pending_turns_load', { sessionKey });
+}
+
+export async function chatFlush(): Promise<void> {
+  return typedInvoke('chat_flush');
+}
+
+export async function chatRecoveryCursorGet(sessionKey?: string): Promise<PersistedRecoveryCursor | null> {
+  return typedInvoke('chat_recovery_cursor_get', { sessionKey });
+}
+
+export async function chatRecoveryCursorAdvance(
+  sessionKey: string,
+  lastTimestamp: number,
+  lastMessageId?: string,
+): Promise<void> {
+  return typedInvoke('chat_recovery_cursor_advance', { sessionKey, lastTimestamp, lastMessageId });
+}
+
+export async function chatRecoveryCursorClear(sessionKey?: string): Promise<void> {
+  return typedInvoke('chat_recovery_cursor_clear', { sessionKey });
 }
