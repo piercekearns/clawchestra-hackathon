@@ -26,6 +26,29 @@ items:
       - reliability
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
+  - id: git-sync-scope
+    title: 'Git Sync: Scope Expansion'
+    status: up-next
+    priority: 1
+    nextAction: 'Spec written — depends on git-sync phase 1 completion'
+    tags:
+      - git
+      - sync
+      - workflow
+    icon: "\U0001F504"
+    specDoc: docs/specs/git-sync-scope-spec.md
+  - id: git-branch-sync
+    title: 'Git Sync: Branch Management'
+    status: pending
+    priority: 1
+    nextAction: 'Spec written — depends on git-sync-scope completion'
+    tags:
+      - git
+      - sync
+      - branches
+      - ai-agent
+    icon: "\U0001F33F"
+    specDoc: docs/specs/git-branch-sync-spec.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
