@@ -28,17 +28,19 @@ If any answer is YES → update AGENTS.md.
 
 ## Rule Two: Completion Requires Human Sign-Off
 
-**Agents must NEVER mark a roadmap item as `complete` on their own.**
+**Agents must NEVER mark a roadmap item as `complete` on their own. This includes `/build` workflows.**
 
 The workflow is:
 1. Agent ships the code, commits, builds
-2. Item stays `in-progress` with `nextAction` like "Code shipped — awaiting verification"
+2. Item stays `in-progress` with `nextAction` like "Built — awaiting verification"
 3. **Human** tests and explicitly says it's verified/complete
 4. Only then does the agent set `status: complete` and `completedAt: YYYY-MM-DD`
 
 Shipping code ≠ complete. The human decides when something is done.
 
-When setting `status: complete`, always set `completedAt` to the current ISO date (e.g. `2026-02-17`).
+**After a `/build` finishes:** Set `status: in-progress`, `nextAction: "Built — awaiting verification"`. Do NOT set `status: complete` or `status: done`.
+
+When setting `status: complete` (after human sign-off), always set `completedAt` to the current ISO date (e.g. `2026-02-17`).
 
 ---
 
@@ -77,7 +79,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Delete project** | Delete the `.md` file |
 | **Move to column** | Change `status:` to target column value |
 
-**Status values:** `in-flight`, `up-next`, `simmering`, `dormant`, `shipped`, `archived`
+**Status values (ONLY these — app rejects others):** `in-flight` | `up-next` | `simmering` | `dormant` | `shipped` | `archived`
 
 ### Roadmap Items
 
@@ -85,9 +87,11 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 |-----------|-------------------|
 | **View roadmap** | Parse `ROADMAP.md` frontmatter `items:` array |
 | **Add item** | Append to `items:` array in ROADMAP.md frontmatter |
-| **Mark done** | Set item `status: complete` — auto-migrates to CHANGELOG.md |
+| **Mark complete** | Set item `status: complete` (NOT `done`) — auto-migrates to CHANGELOG.md |
 | **Remove** | Delete from `items:` array (not a file deletion) |
 | **Reprioritize** | Change `priority:` values in ROADMAP.md frontmatter |
+
+**Roadmap status values (ONLY these — app rejects others):** `pending` | `up-next` | `in-progress` | `complete`
 
 ### CHANGELOG
 
