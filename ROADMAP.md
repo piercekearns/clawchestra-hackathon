@@ -1,10 +1,10 @@
 ---
 items:
   - id: git-sync
-    title: Git Sync
-    status: in-progress
+    title: Git Sync (Phase 1)
+    status: complete
     priority: 1
-    nextAction: Built + reviewed — awaiting manual testing
+    nextAction: Verified — commit + push working. Phase 2+3 roadmap items created.
     tags:
       - git
       - github
