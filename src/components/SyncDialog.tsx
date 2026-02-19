@@ -80,7 +80,7 @@ function hasDirtyGitStatus(p: ProjectViewModel): p is DirtyProject {
 // ---------------------------------------------------------------------------
 
 export function getBranchIndicator(git: GitStatus): { label: string; safe: boolean } {
-  if (!git.remote) return { label: `${git.branch ?? '?'} (no remote)`, safe: false };
+  if (!git.remote) return { label: `${git.branch ?? '?'} (local)`, safe: true };
   const ahead = git.aheadCount ?? 0;
   const behind = git.behindCount ?? 0;
   if (ahead > 0 && behind > 0)

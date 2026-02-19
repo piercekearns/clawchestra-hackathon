@@ -1,18 +1,19 @@
 ---
 items:
-  - id: git-sync
-    title: Git Sync (Phase 1)
-    status: complete
+  - id: git-sync-scope
+    title: 'Git Sync: Scope Expansion (Phase 2)'
+    status: in-progress
     priority: 1
-    nextAction: Verified — commit + push working. Phase 2+3 roadmap items created.
+    nextAction: >-
+      Spec written — expand dirty file detection to all files with
+      Metadata/Documents/Code categorization. Depends on git-sync phase 1
+      completion.
     tags:
       - git
-      - github
       - sync
       - workflow
     icon: "\U0001F504"
-    specDoc: docs/specs/git-sync-spec.md
-    planDoc: docs/plans/git-sync-plan.md
+    specDoc: docs/specs/git-sync-scope-spec.md
   - id: chat-infrastructure
     title: 'Chat Reliability: Persistent Bugs'
     status: in-progress
@@ -26,24 +27,10 @@ items:
       - reliability
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
-  - id: git-sync-scope
-    title: 'Git Sync: Scope Expansion (Phase 2)'
-    status: up-next
-    priority: 1
-    nextAction: >-
-      Spec written — expand dirty file detection to all files with
-      Metadata/Documents/Code categorization. Depends on git-sync phase 1
-      completion.
-    tags:
-      - git
-      - sync
-      - workflow
-    icon: "\U0001F504"
-    specDoc: docs/specs/git-sync-scope-spec.md
   - id: git-branch-sync
     title: 'Git Sync: Branch Management (Phase 3)'
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: >-
       Spec written — multi-branch cherry-pick + AI conflict resolution + git
       management skill. Requires research phase (ClawHub, gh CLI, Atlassian
@@ -58,7 +45,7 @@ items:
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: Spec written — ready for plan/build
     tags:
       - infra
@@ -67,7 +54,7 @@ items:
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 4
+    priority: 3
     nextAction: Spec written — deliver Git Sync and Deep Rename first
     tags:
       - onboarding
@@ -100,10 +87,23 @@ items:
       - roadmap
       - ux
       - workflow
+  - id: git-sync
+    title: Git Sync (Phase 1)
+    status: complete
+    priority: 1
+    nextAction: Verified — commit + push working. Phase 2+3 roadmap items created.
+    tags:
+      - git
+      - github
+      - sync
+      - workflow
+    icon: "\U0001F504"
+    specDoc: docs/specs/git-sync-spec.md
+    planDoc: docs/plans/git-sync-plan.md
   - id: github-api-403-errors
     title: 'Local Git Intelligence (was: GitHub API 403 Errors)'
     status: complete
-    priority: 1
+    priority: 2
     nextAction: Built — needs manual testing (rebuild app to verify)
     tags:
       - bug
@@ -115,7 +115,7 @@ items:
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: complete
-    priority: 2
+    priority: 3
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -125,7 +125,7 @@ items:
   - id: project-card-opens-kanban
     title: Project Card Opens Kanban Directly
     status: complete
-    priority: 3
+    priority: 4
     nextAction: Verified and shipped
     tags:
       - ui
@@ -135,7 +135,7 @@ items:
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: complete
-    priority: 4
+    priority: 5
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -145,7 +145,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: complete
-    priority: 5
+    priority: 6
     nextAction: Built — needs manual testing
     tags:
       - ui
@@ -155,7 +155,7 @@ items:
   - id: deliverable-lifecycle-orchestration
     title: Deliverable Lifecycle Orchestration
     status: complete
-    priority: 6
+    priority: 7
     nextAction: Code shipped - awaiting verification
     tags:
       - roadmap
@@ -167,7 +167,7 @@ items:
   - id: app-ux-review
     title: App UX Review & Improvements
     status: complete
-    priority: 7
+    priority: 8
     nextAction: 'Hands-on review: what works, what doesn''t, what''s missing'
     tags:
       - ui

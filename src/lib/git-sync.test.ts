@@ -63,13 +63,13 @@ describe('getBranchIndicator', () => {
     expect(result.label).toContain('⚠');
   });
 
-  it('returns unsafe when no remote', () => {
+  it('returns safe with local label when no remote', () => {
     const result = getBranchIndicator({
       ...baseGit,
       remote: undefined,
     });
-    expect(result.safe).toBe(false);
-    expect(result.label).toContain('no remote');
+    expect(result.safe).toBe(true);
+    expect(result.label).toContain('(local)');
   });
 
   it('handles non-default branch name', () => {
@@ -121,8 +121,9 @@ describe('smart push defaults', () => {
     expect(shouldDefaultPushEnabled({ ...baseGit, aheadCount: 1, behindCount: 2 })).toBe(false);
   });
 
-  it('push disabled when no remote', () => {
-    expect(shouldDefaultPushEnabled({ ...baseGit, remote: undefined })).toBe(false);
+  it('push default safe=true when no remote (but push UI hidden by remote check)', () => {
+    // safe=true for no-remote, but push toggle never renders because git.remote is falsy
+    expect(shouldDefaultPushEnabled({ ...baseGit, remote: undefined })).toBe(true);
   });
 });
 
