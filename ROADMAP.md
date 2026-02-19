@@ -5,9 +5,9 @@ items:
     status: in-progress
     priority: 1
     nextAction: >-
-      Spec updated — implement all-file dirty detection +
-      Metadata/Documents/Code categorization, with local-only Kanban
-      auto-commit boundaries clarified.
+      Plan written — implement Phase 2 all-file dirty detection and
+      Metadata/Documents/Code grouping with local-only Kanban auto-commit
+      boundaries preserved.
     tags:
       - git
       - sync
@@ -32,9 +32,9 @@ items:
     status: up-next
     priority: 1
     nextAction: >-
-      Spec updated — multi-branch cherry-pick + AI conflict resolution + git
-      management skill, including explicit no-remote `(local)` branch behavior.
-      Depends on git-sync-scope completion.
+      Plan written — implement branch selection + cherry-pick orchestration +
+      AI conflict handling, including explicit no-remote `(local)` branch
+      behavior. Depends on git-sync-scope completion.
     tags:
       - git
       - sync
@@ -46,7 +46,7 @@ items:
     title: Deep Rename to Clawchestra
     status: up-next
     priority: 2
-    nextAction: Spec written — ready for plan/build
+    nextAction: Plan written — ready for build execution
     tags:
       - infra
       - rename

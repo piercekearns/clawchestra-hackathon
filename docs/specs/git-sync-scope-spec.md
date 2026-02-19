@@ -54,17 +54,24 @@ The git status icons already reflect this:
 
 To reduce Git Sync noise without hiding meaningful changes, enforce this policy:
 
-1. **Local-only repos (no remote): auto-commit only structural Kanban changes**
+1. **Policy axis is trigger/source, not file category**
+   - Auto-commit decisions are based on **how the change was made** (UI structural action vs content/code edit), not whether a touched file is grouped as Metadata or Documents.
+
+2. **Local-only repos (no remote): auto-commit only structural Kanban changes**
    - Project board: move project between columns; reorder priority within a column
    - Roadmap board: move roadmap item between columns; reorder priority within a column
    - Files affected: `PROJECT.md`, `ROADMAP.md`
 
-2. **Local-only repos: keep manual Sync for deeper edits**
+3. **Guardrail for mixed changes in the same file**
+   - Before auto-commit, check whether the target file already has unrelated dirty content.
+   - If it does, skip auto-commit and require manual Sync so we don't accidentally commit AI/content edits along with a UI status/priority move.
+
+4. **Local-only repos: keep manual Sync for deeper edits**
    - AI/content edits (title/body/spec/plan text), create/delete/rename operations
    - Any changes outside pure status/priority movements
    - Any non-dashboard files
 
-3. **Repos with remotes (GitHub-linked): no auto-commit**
+5. **Repos with remotes (GitHub-linked): no auto-commit**
    - Always require explicit Git Sync action (commit/push) to avoid implicit branch/remote side effects
 
 This keeps low-risk intent-obvious board interactions quiet for local repos while preserving explicit control for risky or shareable changes.

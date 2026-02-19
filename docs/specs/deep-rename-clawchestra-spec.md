@@ -4,7 +4,7 @@
 
 ## Summary
 
-The app's UI already says "Clawchestra" (title bar, update script, branding), but the internals are still "Pipeline Dashboard" or "pipeline-dashboard" in ~30 locations across Rust, TypeScript, config files, and shell scripts. This creates confusion for agents reading the code, breaks naming consistency, and would expose the old name to the friend during First Friend Readiness. This is a mechanical rename with one non-trivial piece: migrating Pierce's existing data directory so settings and chat history aren't lost.
+The app's UI already says "Clawchestra" (title bar, update script, branding), but the internals are still "Pipeline Dashboard" or "pipeline-dashboard" in ~30 locations across Rust, TypeScript, config files, and shell scripts. This creates confusion for agents reading the code, breaks naming consistency, and would expose the old name to the friend during First Friend Readiness. This is mostly mechanical, but it now has two hard constraints: it must preserve Git Sync behavior (including local-only UI-triggered auto-commit policy) and it must not create avoidable onboarding friction for First Friend Readiness.
 
 ---
 
@@ -19,11 +19,12 @@ The app's UI already says "Clawchestra" (title bar, update script, branding), bu
 
 1. [Rename Targets](#rename-targets)
 2. [Data Directory Migration](#data-directory-migration)
-3. [FFR Alignment](#ffr-alignment)
-4. [Sequencing Considerations](#sequencing-considerations)
-5. [What NOT to Rename](#what-not-to-rename)
-6. [Build Scope](#build-scope)
-7. [Verification Checklist](#verification-checklist)
+3. [Git Sync Compatibility Requirements](#git-sync-compatibility-requirements)
+4. [FFR Alignment](#ffr-alignment)
+5. [Sequencing Considerations](#sequencing-considerations)
+6. [What NOT to Rename](#what-not-to-rename)
+7. [Build Scope](#build-scope)
+8. [Verification Checklist](#verification-checklist)
 
 ---
 
@@ -44,7 +45,7 @@ After this change, `cargo check` must pass. The `target/` directory will rebuild
 
 | File | Current | New |
 |------|---------|-----|
-| `src-tauri/tauri.conf.json` `identifier` | `com.clawdbot.pipeline-dashboard` | `com.clawdbot.clawchestra` |
+| `src-tauri/tauri.conf.json` `identifier` | `com.clawdbot.pipeline-dashboard` | `io.github.piercekearns.clawchestra` |
 | `src-tauri/capabilities/default.json` `description` | `"Default capability for Pipeline Dashboard"` | `"Default capability for Clawchestra"` |
 
 **Note on identifier change:** Tauri uses the identifier for the app data directory on some platforms. Changing it may affect where Tauri itself stores data (separate from our custom settings path). Test that the app still finds its data after the identifier change.
@@ -59,7 +60,7 @@ After this change, `cargo check` must pass. The `target/` directory will rebuild
 
 **Impact:** After this change, the app connects to a different OpenClaw session. Existing chat history in the gateway for the old session key is orphaned (still in JSONL, just not fetched). New session starts clean. This is acceptable — the local SQLite chat.db retains history regardless of session key.
 
-FFR Phase 2 later makes this configurable via settings (with `agent:main:clawchestra` as the default). Deep Rename just changes the hardcoded constant.
+FFR Phase 2 later makes this configurable via settings (with `agent:main:clawchestra` as the default). Deep Rename sets that default and removes the old hardcoded name so FFR can layer configuration on a clean baseline.
 
 ### Tier 4: Data Paths in `lib.rs`
 
@@ -81,11 +82,11 @@ These paths determine where settings.json and chat.db live on disk. Changing the
 | `lib.rs` | line 1524 | `PIPELINE_DASHBOARD_INSTALL_PATH` | `CLAWCHESTRA_INSTALL_PATH` |
 | `lib.rs` | line 1525 | `PIPELINE_DASHBOARD_RESTART_AFTER_BUILD` | `CLAWCHESTRA_RESTART_AFTER_BUILD` |
 | `lib.rs` | line 2271 | `"pipeline-dashboard-{name}-{uuid}"` (test temp dirs) | `"clawchestra-{name}-{uuid}"` |
-| `update.sh` | line 11 | `OLD_APP_NAME="Pipeline Dashboard"` | Remove entirely (migration complete) |
+| `update.sh` | line 11 | `OLD_APP_NAME="Pipeline Dashboard"` | Keep as one-release fallback, remove in follow-up after first successful post-rename update |
 | `update.sh` | line 13 | `PIPELINE_DASHBOARD_INSTALL_PATH` | `CLAWCHESTRA_INSTALL_PATH` |
 | `update.sh` | line 15 | `PIPELINE_DASHBOARD_RESTART_AFTER_BUILD` | `CLAWCHESTRA_RESTART_AFTER_BUILD` |
 | `update.sh` | line 16 | `"/tmp/pipeline-dashboard-update.lock"` | `"/tmp/clawchestra-update.lock"` |
-| `update.sh` | line 82 | `killall "pipeline-dashboard"` | Remove (binary name is already `Clawchestra`) |
+| `update.sh` | line 82 | `killall "pipeline-dashboard"` | Keep as one-release fallback for legacy process names, remove in follow-up |
 
 ### Tier 6: Frontend / package.json
 
@@ -107,6 +108,27 @@ These paths determine where settings.json and chat.db live on disk. Changing the
 
 ---
 
+## Git Sync Compatibility Requirements
+
+Deep Rename must be neutral with respect to Git Sync semantics.
+
+1. **Do not tie rename behavior to Git Sync category taxonomy**
+   - Metadata/Documents/Code grouping is for Sync UX; rename execution must not depend on that classification.
+
+2. **Preserve local-only UI-triggered auto-commit behavior**
+   - Project/roadmap Kanban status/priority moves on local-only repos should continue to auto-commit after rename.
+   - This relies on trigger source (UI structural move), not file category labels.
+
+3. **Avoid accidental mixed commits during migration**
+   - Rename should be shipped as explicit migration-oriented commits (not via background auto-commit paths).
+   - If any migration step encounters pre-existing unrelated dirty changes in target files, require explicit/manual commit path.
+
+4. **Keep Git Sync branch labels and defaults coherent**
+   - Local-only branch indicators (`(local)`) remain unchanged behaviorally.
+   - Session-key default becomes `agent:main:clawchestra` consistently across backend/frontend.
+
+---
+
 ## Data Directory Migration
 
 This is the most complex part. Pierce has **seven** data locations that reference the old name:
@@ -119,20 +141,23 @@ This is the most complex part. Pierce has **seven** data locations that referenc
 | `~/Library/Application Support/pipeline-dashboard/` | chat.db (SQLite) | Rename to `clawchestra/` |
 | `~/Library/WebKit/pipeline-dashboard/` | WebView storage (localStorage) | See below |
 | `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` | WebView storage (identifier-keyed) | See below |
+| `~/Library/WebKit/io.github.piercekearns.clawchestra/` | New identifier-keyed WebView storage | Created on first launch post-rename |
 | `~/Library/Preferences/com.clawdbot.pipeline-dashboard.plist` | macOS preferences | See below |
+| `~/Library/Preferences/io.github.piercekearns.clawchestra.plist` | New identifier-keyed preferences | Created on first launch post-rename |
 | `~/Library/Caches/pipeline-dashboard/` | App cache | Can delete (non-critical) |
 | `~/Library/Caches/com.clawdbot.pipeline-dashboard/` | Identifier-keyed cache | Can delete (non-critical) |
+| `~/Library/Caches/io.github.piercekearns.clawchestra/` | New identifier-keyed cache | Created on first launch post-rename |
 
 ### Critical: WebView Storage (localStorage)
 
-Zustand's `persist` middleware stores state in **localStorage** inside the Tauri WebView. The localStorage key is `clawchestra-state` (already renamed). However, the WebView's storage location on disk is determined by the **Tauri identifier** (`com.clawdbot.pipeline-dashboard`).
+Zustand's `persist` middleware stores state in **localStorage** inside the Tauri WebView. The localStorage key is `clawchestra-state` (already renamed). However, the WebView's storage location on disk is determined by the **Tauri identifier** (`com.clawdbot.pipeline-dashboard` pre-rename, `io.github.piercekearns.clawchestra` post-rename).
 
-**If we change the identifier to `com.clawdbot.clawchestra`**, the WebView creates a new storage directory. The old localStorage data (theme preference, collapsed columns, column order, sidebar state) is orphaned in the old WebKit directory.
+**If we change the identifier to `io.github.piercekearns.clawchestra`**, the WebView creates a new storage directory. The old localStorage data (theme preference, collapsed columns, column order, sidebar state) is orphaned in the old WebKit directory.
 
 **Options:**
 
 1. **Don't change the identifier** — WebView storage survives, but the app identifier stays as the old name forever. Clean for now, messy long-term.
-2. **Change the identifier + migrate WebKit directories** — Rename `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` → `~/Library/WebKit/com.clawdbot.clawchestra/`. Risky — WebKit may validate directory names against internal state.
+2. **Change the identifier + migrate WebKit directories** — Rename `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` → `~/Library/WebKit/io.github.piercekearns.clawchestra/`. Risky — WebKit may validate directory names against internal state.
 3. **Change the identifier + accept localStorage loss** — User loses theme/sidebar/column preferences. They're trivial to reconfigure (a few clicks). This is the safest option.
 
 **Recommendation: Option 3.** The persisted state is 5 fields (theme, collapsedColumns, columnOrder, sidebarOpen, sidebarWidth) — all trivially recoverable by the user. Attempting to migrate WebKit directories risks corrupting WebView state. Cache directories can be safely deleted (non-critical).
@@ -206,6 +231,21 @@ fn migrate_data_directory() -> Result<(), String> {
 - Cache directories: delete old ones (best-effort, non-fatal)
 - Clean up old `update.sh` references to `OLD_APP_NAME` / `OLD_INSTALL_PATH` — the transition from "Pipeline Dashboard" to "Clawchestra" in `/Applications/` is already handled there and can be removed post-migration.
 
+### Rollback / Recovery Runbook
+
+If migration partially fails in production:
+
+1. Stop the app.
+2. Inspect both old and new directories:
+   - `~/Library/Application Support/Pipeline Dashboard/`
+   - `~/Library/Application Support/Clawchestra/`
+   - `~/Library/Application Support/pipeline-dashboard/`
+   - `~/Library/Application Support/clawchestra/`
+3. If old has the latest data and new is partial/empty:
+   - Move new aside (timestamp suffix), then restore old as source of truth.
+4. Relaunch app once and re-run migration.
+5. If still failing, keep old path as source of truth for that machine, log error details, and disable automatic migration for that install until patched.
+
 ### `env::var("HOME")` vs `dirs` crate
 
 Currently mixed: `get_chat_db_path()` uses `dirs::data_dir()` but `settings_file_path()` uses `env::var("HOME")` with manual platform branching. 
@@ -226,7 +266,7 @@ How each Deep Rename change relates to First Friend Readiness:
 | Data paths → `Clawchestra` / `clawchestra` | FFR Phase 1 switches remaining `env::var("HOME")` to `dirs` | DR handles settings path + migration; FFR handles the other 7 call sites |
 | Env vars → `CLAWCHESTRA_*` | FFR Phase 1 cross-platform update scripts | DR renames; FFR adds Windows equivalents using new names |
 | `update.sh` cleanup | FFR adds `update.bat`/`update.ps1` | DR cleans macOS script; FFR adds cross-platform scripts |
-| Tauri identifier change | FFR Phase 1 cross-platform config | May affect Tauri's own data directory — test on macOS before FFR adds platforms |
+| Tauri identifier → `io.github.piercekearns.clawchestra` | FFR Phase 1 cross-platform config | May affect Tauri's own data directory — test on macOS before FFR adds platforms |
 | Package/crate rename | No FFR impact | Pure rename, no downstream dependency |
 | `killall "pipeline-dashboard"` in update.sh | FFR cross-platform update | Remove — binary name is already `Clawchestra`. FFR uses process name from config |
 
@@ -253,7 +293,16 @@ How each Deep Rename change relates to First Friend Readiness:
 7. **Content/docs** — roadmap parent fields, PROJECT.md, OVERVIEW.md
 
 ### Repo folder name
-The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos/clawchestra/` is optional — it doesn't affect the build, and `git remote` URLs don't change. But for consistency with the friend's experience, it should be renamed. This is a manual step: `mv ~/repos/pipeline-dashboard ~/repos/clawchestra` + update scan paths in settings.
+The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos/clawchestra/` is optional and should be treated as a separate/manual migration step.
+
+**Decision:** Defer folder rename out of this spec's implementation scope.
+
+Why:
+- It changes derived project IDs (`canonicalSlugify(folderName)`), which can churn board identity/state.
+- It adds avoidable moving parts while Git Sync Phase 2/3 are being stabilized.
+- It is not required for internal code rename correctness.
+
+Document it as a follow-up operational step once Deep Rename + Git Sync milestones are verified.
 
 ---
 
@@ -265,6 +314,7 @@ The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos
 | `CHANGELOG.md` entries | Historical record |
 | `REVIEW-FIXES.md` | Historical review document |
 | Git commit history | Obviously |
+| Repo folder path (`~/repos/pipeline-dashboard`) as part of this build | Deferred/manual post-migration step to avoid project ID churn during active Git Sync work |
 | `roadmap.ts` migration code (`shipped` → `complete`) | Legacy migration, still needed |
 | `update.sh` OLD_APP_NAME cleanup logic | Keep until first successful update post-rename confirms `/Applications/Pipeline Dashboard.app` is gone, then remove in a follow-up |
 
@@ -296,7 +346,7 @@ The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos
 2. All internal string references updated (session key, paths, env vars, identifiers)
 3. Data migration function (settings dir + chat DB dir, idempotent)
 4. `settings_file_path()` switched to `dirs` crate (small FFR-aligned improvement)
-5. `update.sh` cleaned up (remove old-name references, update env var names)
+5. `update.sh` cleaned up (new env var names + lock path, with one-release legacy fallback retained)
 6. `package.json` name updated
 7. Documentation content updated (PROJECT.md, OVERVIEW.md, roadmap parent fields)
 8. All tests passing (`bun test` + `cargo check`)
@@ -306,7 +356,7 @@ The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos
 - Making session key configurable (FFR Phase 2)
 - Switching remaining 7 `env::var("HOME")` calls to `dirs` (FFR Phase 1)
 - Cross-platform update scripts (FFR Phase 1)
-- Renaming the git repo folder (manual step, documented in release notes)
+- Renaming the git repo folder (manual follow-up after Deep Rename + Git Sync validation)
 
 ---
 
@@ -329,6 +379,10 @@ After the rename, verify:
 - [ ] Old chat DB dir `~/Library/Application Support/pipeline-dashboard/` no longer exists
 - [ ] Old cache dirs cleaned up (best-effort)
 - [ ] Theme/sidebar preferences reset to defaults (expected — localStorage lost with identifier change)
+- [ ] Migration test: old exists + new missing -> rename occurs once
+- [ ] Migration test: old missing + new exists -> no-op
+- [ ] Migration test: old exists + new exists -> no-op (no overwrite)
+- [ ] Migration test: forced rename error -> app continues with logged warning
 
 ### Functionality
 - [ ] Chat connects to OpenClaw (new session key `agent:main:clawchestra` works)
@@ -336,7 +390,9 @@ After the rename, verify:
 - [ ] Roadmap view works for Clawchestra project
 - [ ] Update button works (new env vars, new lock file path)
 - [ ] Second launch: migration is a no-op (idempotent)
+- [ ] Local-only UI Kanban structural moves still auto-commit as before rename
+- [ ] Git Sync dialog still shows expected dirty state behavior after rename
 
 ### Code Hygiene
-- [ ] `grep -r "pipeline.dashboard\|pipeline_dashboard\|Pipeline Dashboard" src/ src-tauri/src/` returns only: historical comments, migration code, or `killall` fallback
-- [ ] `grep -r "PIPELINE_DASHBOARD" src/ src-tauri/ update.sh` returns nothing
+- [ ] `rg -n --glob '!src-tauri/target/**' --glob '!dist/**' --glob '!node_modules/**' "pipeline.dashboard|pipeline_dashboard|Pipeline Dashboard" src src-tauri/src` returns only: historical comments, migration code, or `killall` fallback
+- [ ] `rg -n --glob '!src-tauri/target/**' --glob '!dist/**' --glob '!node_modules/**' "PIPELINE_DASHBOARD" src src-tauri update.sh` returns nothing
