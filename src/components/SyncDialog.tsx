@@ -9,10 +9,17 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Tooltip } from './Tooltip';
-import type { DirtyFileCategories, DirtyFileCategory, GitStatus, ProjectViewModel } from '../lib/schema';
+import type { DirtyFileCategory, GitStatus, ProjectViewModel } from '../lib/schema';
 import { gitCommit, gitPush } from '../lib/tauri';
 import { cn } from '../lib/utils';
 import { ModalDragZone } from './ui/ModalDragZone';
+import {
+  buildCommitMessage,
+  CATEGORY_LABELS,
+  filesForSelectedCategories,
+  getBranchIndicator,
+  getProjectDirtyCategories,
+} from '../lib/git-sync-utils';
 
 /* ── Brand checkbox: chartreuse bg + dark tick ─────────────────────── */
 function BrandCheckbox({
@@ -76,113 +83,8 @@ function hasDirtyGitStatus(p: ProjectViewModel): p is DirtyProject {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers (pure functions in ../lib/git-sync-utils.ts)
 // ---------------------------------------------------------------------------
-
-export function getBranchIndicator(git: GitStatus): { label: string; safe: boolean } {
-  if (!git.remote) return { label: `${git.branch ?? '?'} (local)`, safe: true };
-  const ahead = git.aheadCount ?? 0;
-  const behind = git.behindCount ?? 0;
-  if (ahead > 0 && behind > 0)
-    return { label: `${git.branch} ↑${ahead} ↓${behind} ⚠`, safe: false };
-  if (behind > 0) return { label: `${git.branch} ↓${behind} ⚠`, safe: false };
-  if (ahead > 0) return { label: `${git.branch} ↑${ahead}`, safe: true };
-  return { label: `${git.branch} ✓`, safe: true };
-}
-
-const METADATA_FILES = new Set(['PROJECT.md']);
-const DOCUMENT_FILES = new Set(['ROADMAP.md', 'CHANGELOG.md']);
-const DOCUMENT_DIR_PREFIXES = ['roadmap/', 'docs/specs/', 'docs/plans/'];
-
-export function categorizeFile(path: string): DirtyFileCategory {
-  if (METADATA_FILES.has(path)) return 'metadata';
-  if (DOCUMENT_FILES.has(path) || DOCUMENT_DIR_PREFIXES.some((p) => path.startsWith(p)))
-    return 'documents';
-  return 'code';
-}
-
-export function groupDirtyFiles(
-  files: string[],
-): { metadata: string[]; documents: string[]; code: string[] } {
-  const metadata: string[] = [];
-  const documents: string[] = [];
-  const code: string[] = [];
-  for (const f of files) {
-    const cat = categorizeFile(f);
-    if (cat === 'metadata') metadata.push(f);
-    else if (cat === 'documents') documents.push(f);
-    else code.push(f);
-  }
-  return { metadata, documents, code };
-}
-
-/** Get categorized dirty files, preferring backend-categorized data when available */
-export function getProjectDirtyCategories(
-  git: GitStatus,
-): DirtyFileCategories {
-  if (git.allDirtyFiles) return git.allDirtyFiles;
-  // Fallback: categorize legacy dirtyFiles on frontend
-  const files = git.dirtyFiles ?? [];
-  return groupDirtyFiles(files);
-}
-
-/** Collect files from selected categories */
-export function filesForSelectedCategories(
-  categories: DirtyFileCategories,
-  selected: Set<DirtyFileCategory>,
-): string[] {
-  const files: string[] = [];
-  if (selected.has('metadata')) files.push(...categories.metadata);
-  if (selected.has('documents')) files.push(...categories.documents);
-  if (selected.has('code')) files.push(...categories.code);
-  return files;
-}
-
-export function buildCommitMessage(
-  projects: { name: string; files: string[]; categories: Set<DirtyFileCategory> }[],
-): string {
-  if (projects.length === 0) return 'chore: sync project changes';
-
-  const nameList =
-    projects.length > 3
-      ? `${projects.slice(0, 3).map((p) => p.name).join(', ')}, ...`
-      : projects.map((p) => p.name).join(', ');
-
-  // Determine which category sets are active across all projects
-  const allCategories = new Set<DirtyFileCategory>();
-  for (const p of projects) {
-    for (const c of p.categories) allCategories.add(c);
-  }
-
-  const allFiles = [...new Set(projects.flatMap((p) => p.files))];
-
-  // Choose commit prefix based on categories
-  let prefix: string;
-  if (allCategories.size === 1 && allCategories.has('metadata')) {
-    prefix = 'chore: sync project metadata';
-  } else if (allCategories.size === 1 && allCategories.has('documents')) {
-    prefix = 'docs: update project docs';
-  } else if (allCategories.size === 1 && allCategories.has('code')) {
-    prefix = 'chore: sync code changes';
-  } else {
-    prefix = 'chore: sync project changes';
-  }
-
-  const filePart =
-    allFiles.length > 0 && allFiles.length <= 4
-      ? ` — ${allFiles.join(', ')}`
-      : allFiles.length > 4
-        ? ` — ${allFiles.slice(0, 3).join(', ')}, +${allFiles.length - 3} more`
-        : '';
-
-  return `${prefix} (${nameList})${filePart}`;
-}
-
-const CATEGORY_LABELS: Record<DirtyFileCategory, string> = {
-  metadata: 'Metadata',
-  documents: 'Documents',
-  code: 'Code',
-};
 
 function buildHelpMessage(project: DirtyProject): string {
   const git = project.gitStatus;
@@ -255,13 +157,17 @@ export function SyncDialog({
     [],
   );
 
-  /** Helper: compute commit message inputs from current selections */
-  const commitMessageInputs = useCallback(
-    (cats: Map<string, Set<DirtyFileCategory>>, projs: DirtyProject[]) => {
+  /** Compute commit message inputs from selections, excluding already-synced projects */
+  const computeCommitInputs = useCallback(
+    (
+      cats: Map<string, Set<DirtyFileCategory>>,
+      projs: DirtyProject[],
+      excludeIds: Set<string>,
+    ) => {
       return projs
         .filter((p) => {
           const sel = cats.get(p.id);
-          return sel && sel.size > 0 && !results.has(p.id);
+          return sel && sel.size > 0 && !excludeIds.has(p.id);
         })
         .map((p) => {
           const projCats = getProjectDirtyCategories(p.gitStatus);
@@ -273,10 +179,13 @@ export function SyncDialog({
           };
         });
     },
-    [results],
+    [],
   );
 
-  // Reset state only when dialog opens (not on project reloads)
+  // Reset all state when dialog opens (not on project reloads).
+  // Dependencies intentionally limited to `open`: reacting to dirtyProjects or
+  // defaultPushIds changes mid-session would discard user selections.
+  const userEditedCommitRef = useRef(false);
   useEffect(() => {
     if (!open) return;
 
@@ -287,25 +196,20 @@ export function SyncDialog({
     setSyncingId(null);
     setBatchSyncing(false);
     syncLockRef.current = false;
+    userEditedCommitRef.current = false;
     setCommitMessage(
-      buildCommitMessage(commitMessageInputs(defaultCats, dirtyProjects)),
+      buildCommitMessage(computeCommitInputs(defaultCats, dirtyProjects, new Set())),
     );
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep default commit message in sync with selection changes
   // (only if user hasn't manually edited it)
-  const userEditedCommitRef = useRef(false);
   useEffect(() => {
     if (!open || userEditedCommitRef.current) return;
     setCommitMessage(
-      buildCommitMessage(commitMessageInputs(selectedCategories, dirtyProjects)),
+      buildCommitMessage(computeCommitInputs(selectedCategories, dirtyProjects, new Set(results.keys()))),
     );
-  }, [selectedCategories, open, dirtyProjects, commitMessageInputs]);
-
-  // Reset manual edit flag when dialog opens
-  useEffect(() => {
-    if (open) userEditedCommitRef.current = false;
-  }, [open]);
+  }, [selectedCategories, open, dirtyProjects, results, computeCommitInputs]);
 
   const toggleCategory = useCallback((projectId: string, category: DirtyFileCategory) => {
     setSelectedCategories((prev) => {

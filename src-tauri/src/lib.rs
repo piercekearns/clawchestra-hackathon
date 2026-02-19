@@ -1163,6 +1163,16 @@ fn probe_repo(repo_path: String) -> Result<RepoProbe, String> {
     })
 }
 
+/// File category for dirty-file classification.
+/// CROSS-REFERENCE: The TypeScript mirror lives in src/lib/git-sync-utils.ts
+/// (METADATA_FILES, DOCUMENT_FILES, DOCUMENT_DIR_PREFIXES). Keep in sync.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FileCategory {
+    Metadata,
+    Documents,
+    Code,
+}
+
 /// Metadata files: Clawchestra-exclusive structural state
 const METADATA_FILES: &[&str] = &["PROJECT.md"];
 
@@ -1172,18 +1182,18 @@ const DOCUMENT_FILES: &[&str] = &["ROADMAP.md", "CHANGELOG.md"];
 const DOCUMENT_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
 
 /// Categorize a dirty file path into metadata, documents, or code.
-fn categorize_dirty_file(path: &str) -> &'static str {
+fn categorize_dirty_file(path: &str) -> FileCategory {
     if METADATA_FILES.contains(&path) {
-        return "metadata";
+        return FileCategory::Metadata;
     }
     if DOCUMENT_FILES.contains(&path)
         || DOCUMENT_DIR_PREFIXES
             .iter()
             .any(|prefix| path.starts_with(prefix))
     {
-        return "documents";
+        return FileCategory::Documents;
     }
-    "code"
+    FileCategory::Code
 }
 
 /// Categorize all dirty paths into the three-category struct.
@@ -1194,9 +1204,9 @@ fn categorize_all_dirty_files(paths: &[String]) -> DirtyFileCategories {
 
     for path in paths {
         match categorize_dirty_file(path) {
-            "metadata" => metadata.push(path.clone()),
-            "documents" => documents.push(path.clone()),
-            _ => code.push(path.clone()),
+            FileCategory::Metadata => metadata.push(path.clone()),
+            FileCategory::Documents => documents.push(path.clone()),
+            FileCategory::Code => code.push(path.clone()),
         }
     }
 
@@ -2597,28 +2607,28 @@ mod hardening_tests {
 
     #[test]
     fn categorize_project_md_as_metadata() {
-        assert_eq!(categorize_dirty_file("PROJECT.md"), "metadata");
+        assert_eq!(categorize_dirty_file("PROJECT.md"), FileCategory::Metadata);
     }
 
     #[test]
     fn categorize_roadmap_changelog_as_documents() {
-        assert_eq!(categorize_dirty_file("ROADMAP.md"), "documents");
-        assert_eq!(categorize_dirty_file("CHANGELOG.md"), "documents");
+        assert_eq!(categorize_dirty_file("ROADMAP.md"), FileCategory::Documents);
+        assert_eq!(categorize_dirty_file("CHANGELOG.md"), FileCategory::Documents);
     }
 
     #[test]
     fn categorize_spec_plan_roadmap_dirs_as_documents() {
-        assert_eq!(categorize_dirty_file("docs/specs/git-sync-spec.md"), "documents");
-        assert_eq!(categorize_dirty_file("docs/plans/git-sync-plan.md"), "documents");
-        assert_eq!(categorize_dirty_file("roadmap/git-sync.md"), "documents");
+        assert_eq!(categorize_dirty_file("docs/specs/git-sync-spec.md"), FileCategory::Documents);
+        assert_eq!(categorize_dirty_file("docs/plans/git-sync-plan.md"), FileCategory::Documents);
+        assert_eq!(categorize_dirty_file("roadmap/git-sync.md"), FileCategory::Documents);
     }
 
     #[test]
     fn categorize_code_files() {
-        assert_eq!(categorize_dirty_file("src/App.tsx"), "code");
-        assert_eq!(categorize_dirty_file("package.json"), "code");
-        assert_eq!(categorize_dirty_file("Cargo.toml"), "code");
-        assert_eq!(categorize_dirty_file("README.md"), "code");
+        assert_eq!(categorize_dirty_file("src/App.tsx"), FileCategory::Code);
+        assert_eq!(categorize_dirty_file("package.json"), FileCategory::Code);
+        assert_eq!(categorize_dirty_file("Cargo.toml"), FileCategory::Code);
+        assert_eq!(categorize_dirty_file("README.md"), FileCategory::Code);
     }
 
     // -----------------------------------------------------------------------

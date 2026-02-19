@@ -6,7 +6,7 @@ import {
   groupDirtyFiles,
   getProjectDirtyCategories,
   filesForSelectedCategories,
-} from '../components/SyncDialog';
+} from './git-sync-utils';
 import type { DirtyFileCategory, GitStatus } from './schema';
 
 // ---------------------------------------------------------------------------

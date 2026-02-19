@@ -1,4 +1,4 @@
-import { gitCommit, getGitStatus } from './tauri';
+import { gitCommit } from './tauri';
 import type { GitStatus } from './schema';
 
 /** Allowed files for auto-commit — only structural Kanban paths. Never broaden this. */
@@ -7,7 +7,10 @@ const AUTO_COMMIT_ALLOWED = new Set(['PROJECT.md', 'ROADMAP.md']);
 /**
  * Auto-commit structural Kanban changes for local-only projects (no remote).
  * Only commits PROJECT.md/ROADMAP.md status/priority moves. Skips if the
- * target files are not actually dirty (pre-existing-dirty guard).
+ * target files are not actually dirty per the provided gitStatus.
+ *
+ * The backend git_commit enforces snapshot validation authoritatively —
+ * this frontend check is a fast-path skip to avoid unnecessary IPC.
  *
  * Returns the commit hash if committed, or null if skipped/failed.
  */
@@ -26,30 +29,22 @@ export async function autoCommitIfLocalOnly(
   const eligible = changedFiles.filter((f) => AUTO_COMMIT_ALLOWED.has(f));
   if (eligible.length === 0) return null;
 
-  // Pre-existing-dirty guard: verify the target files are actually dirty
-  // before committing. The backend git_commit now enforces this at the
-  // Rust level too, but checking here provides a faster skip path.
-  try {
-    const freshStatus = await getGitStatus(dirPath);
-    const allDirty = new Set(
-      freshStatus.allDirtyFiles
-        ? [
-            ...freshStatus.allDirtyFiles.metadata,
-            ...freshStatus.allDirtyFiles.documents,
-            ...freshStatus.allDirtyFiles.code,
-          ]
-        : freshStatus.dirtyFiles ?? [],
-    );
-    const actuallyDirty = eligible.filter((f) => allDirty.has(f));
-    if (actuallyDirty.length === 0) return null;
-  } catch {
-    // If we can't get fresh status, skip auto-commit to be safe
-    console.warn(`[auto-commit] Could not verify dirty state for ${dirPath}, skipping`);
-    return null;
-  }
+  // Quick dirty check using the already-available gitStatus.
+  // No extra IPC call — backend git_commit validates authoritatively.
+  const allDirty = new Set(
+    gitStatus.allDirtyFiles
+      ? [
+          ...gitStatus.allDirtyFiles.metadata,
+          ...gitStatus.allDirtyFiles.documents,
+          ...gitStatus.allDirtyFiles.code,
+        ]
+      : [],
+  );
+  const actuallyDirty = eligible.filter((f) => allDirty.has(f));
+  if (actuallyDirty.length === 0) return null;
 
   try {
-    const hash = await gitCommit(dirPath, 'chore: auto-sync project metadata', eligible);
+    const hash = await gitCommit(dirPath, 'chore: auto-sync project metadata', actuallyDirty);
     return hash;
   } catch {
     // Silently fail — auto-commit is best-effort
