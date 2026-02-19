@@ -394,6 +394,25 @@ The friend is on Linux or Windows. The following macOS-specific code needs platf
 - **Windows:** `.msi` or `.exe` (Tauri supports both via WiX/NSIS)
 - No code signing for first friend (accept unsigned binary warnings)
 
+### Update mechanism (source-rebuild)
+The update button is core functionality — the friend will make code changes via chat (same workflow as Pierce). The rebuild flow must work cross-platform.
+
+**Current state (macOS-only):**
+- `run_app_update` has `#[cfg(not(target_os = "macos"))]` hard block returning error
+- `.app` bundle path detection (macOS-specific)
+- `/bin/sh ./update.sh` (works on macOS/Linux, not Windows)
+- Fallback path: `/Applications/Clawchestra.app`
+
+**What's needed:**
+- Remove macOS-only gate in `run_app_update`
+- Platform-aware binary location: `std::env::current_exe()` works on all platforms (no `.app` walk-up needed on Linux/Windows)
+- Platform-aware rebuild script:
+  - macOS/Linux: `update.sh` (exists, may need adjustments)
+  - Windows: `update.bat` or `update.ps1` (new, same build steps)
+- Both scripts: `npx tauri build --no-bundle` → copy binary to install location → restart
+- Update check (`BUILD_COMMIT` vs `git HEAD`) already cross-platform — no changes needed
+- Env vars: rename `PIPELINE_DASHBOARD_*` → `CLAWCHESTRA_*` (part of Deep Rename)
+
 ---
 
 ## 9. What Exists Today vs What Needs Building
@@ -415,6 +434,7 @@ The friend is on Linux or Windows. The following macOS-specific code needs platf
 | **Adaptive lifecycle prompts** | Hardcoded Claude Code references | Conditional based on detected tools | Small |
 | **Full button customisation** | Doesn't exist | Icon picker, label, prompt editor | Large (separate item) |
 | **Settings in sidebar** | Sidebar shell exists, no content | Settings panel as sidebar content | Medium |
+| **Cross-platform update** | macOS-only (`#[cfg]` block, `.app` bundle path) | Remove gate, platform binary detection, Windows update script | Small-Medium |
 | **Session key config** | Hardcoded `agent:main:pipeline-dashboard` | Configurable, sensible default | Small |
 | **Deep rename** | Package still called `pipeline-dashboard` | Rename Cargo, paths, session key | Medium |
 
@@ -444,10 +464,11 @@ Work is sequenced by the funnel: each stage unlocks the next.
 - Platform-conditional shell execution in `run_command_with_output`
 - Platform-conditional title bar padding in `TitleBar.tsx`
 - Tauri config per-platform overrides (traffic light position only on macOS)
+- Cross-platform update mechanism: remove macOS gate, platform-aware binary detection, `update.sh` (macOS/Linux) + `update.bat`/`update.ps1` (Windows)
 - Verify `tauri build` produces working binaries on Linux and Windows
 - Write/update build instructions in README
 
-**Unlocks:** Friend can build and launch the app on their OS.
+**Unlocks:** Friend can build, launch, and update the app on their OS.
 
 ### Phase 2: Gateway Connection Config
 - Add `gatewayWsUrl`, `gatewayToken`, `gatewaySessionKey` to `DashboardSettings`
