@@ -309,22 +309,32 @@ Results displayed as a checklist:
 - Show what was found, grouped by source
 - Let user decide which to keep/disable (future — not MVP)
 
-**Lifecycle button configuration (skippable for MVP):**
+**Lifecycle button adaptation (MVP — part of this spec):**
 
-For the first friend milestone, the lifecycle buttons can remain as 5 fixed buttons but with **adaptive prompts**:
+The 5 lifecycle buttons (Spec, Plan, Review, Deliver, Build) currently generate prompts that reference Claude Code-specific commands (`/plan_review`, `/build`). Without those tools, the Review and Build buttons produce broken prompts.
+
+For the first friend milestone, the buttons remain as 5 fixed buttons but with **adaptive prompts based on tool detection**:
 
 - If Claude Code detected → current prompts (reference `/plan_review`, `/build`)
-- If Claude Code NOT detected → generic prompts that work with any AI:
+- If Claude Code NOT detected → generic prompts that work with any AI assistant:
   - Review: "Review this plan for completeness, feasibility, and potential issues: {planDoc}"
   - Build: "Implement this roadmap item following the spec and plan: {specDoc}, {planDoc}"
-  - (Spec, Plan, Deliver are already generic enough)
+  - (Spec, Plan, Deliver are already generic enough — no tool-specific references)
 
-**Full button customisation (future — separate roadmap item):**
+This is a code change in `deliverable-lifecycle.ts`: check a `detectedTools` config value and branch the prompt generation. No UI needed — it's automatic.
+
+**Full button customisation (follow-up — Custom Card Actions roadmap item):**
+
+After the friend is onboarded and using the app, the next evolution is full configurability:
 - User-defined buttons: icon (lucide picker), label, prompt template
 - Prompt template variables: `{project.title}`, `{item.title}`, `{item.specDoc}`, `{item.planDoc}`, etc.
 - Per-button "slash command prefix" option (e.g., prepend `/build` before the prompt)
 - Add/remove/reorder buttons
-- This is the existing "Custom Card Actions" roadmap item — it stays separate
+- Configuration surface: sidebar settings panel (built as part of this spec's Phase 5)
+
+The Custom Card Actions roadmap item depends on the sidebar settings panel being built (Phase 5 of this spec). Once FFR ships, Custom Card Actions becomes the natural next step — the surface exists, the tool detection exists, it's just adding the configuration UI.
+
+**Why split:** Adaptive prompts (automatic, no UI) unblock the friend handoff. Full configurability (UI-heavy) is a separate deliverable that builds on the FFR foundation. Shipping them together would delay the handoff unnecessarily.
 
 ### What could go wrong
 - `which` doesn't exist on Windows → use `where` instead, or check `PATH` directly

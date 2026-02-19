@@ -88,9 +88,9 @@ items:
     status: pending
     priority: 3
     nextAction: >-
-      Spec needed — define UI for users to configure custom action icons on
-      roadmap cards with templated chat commands (project name, item name, doc
-      paths auto-injected). Depends on collapsible-sidebar for settings surface.
+      Spec needed — depends on First Friend Readiness (sidebar settings panel +
+      tool detection). Adaptive prompts ship with FFR; this adds full UI for
+      icon/label/prompt customisation per button.
     tags:
       - ui
       - ux
