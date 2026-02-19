@@ -28,6 +28,8 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 
 **Likely area:** Messages aren't being persisted to SQLite before the app reload triggered by Update. The recovery system (`reconcileRecentHistory`) then tries to backfill from gateway history but its dedup/collapse logic drops or truncates the messages during rehydration.
 
+**Update (02:58):** Behaviour is NOT deterministic. Third Update in same session: this time recent messages (2:54–2:55 exchange) DID recover correctly. However, old tool-call narration fragments from 2:32 also surfaced at the bottom, out of chronological order (see BUG-003). So recovery sometimes works, sometimes doesn't, and when it does it can over-recover stale fragments.
+
 ---
 
 ### BUG-002: User messages missing from chat history
@@ -54,7 +56,7 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 
 ---
 
-### BUG-003: Streaming delta fragments as separate messages (from 2026-02-18)
+### BUG-003: Streaming delta fragments as separate messages
 **Reported:** 2026-02-18 ~23:52
 **Severity:** Medium
 **Status:** Open — may be addressed by Codex audit, needs retest
@@ -64,7 +66,9 @@ Post-audit bug log. The Chat Infrastructure audit was delivered via Codex (commi
 - "Recovered N" system bubble appeared at bottom
 - User messages missing between assistant replies
 
-**Likely area:** `reconcileRecentHistory` surfacing gateway history fragments that should be collapsed into a single turn. `collapseChatDuplicates` not merging same-turn content blocks.
+**Additional occurrence (02:58):** After app Update, recovery correctly pulled recent messages but ALSO surfaced two old tool-call narration fragments from 25 minutes earlier (2:32), appending them at the bottom out of chronological order. The fragments were "Now update the compliance block and AGENTS.md with the new status values:" and "Now sync compliance to CLAUDE.md and .cursorrules:" — these are pre-tool-call narration text, not standalone messages.
+
+**Likely area:** `reconcileRecentHistory` surfacing gateway history fragments that should be collapsed into a single turn. `collapseChatDuplicates` not merging same-turn content blocks. The recovery system has no concept of turn boundaries — it treats every content block from the gateway as a potential standalone message, so narration fragments preceding tool calls get promoted to full message bubbles.
 
 ---
 
