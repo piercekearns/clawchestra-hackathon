@@ -48,6 +48,7 @@ import {
 import { commitPlanningDocs, fetchAllRepos, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
 import { enrichItemsWithDocs, readRoadmap, resolveDocFiles, writeRoadmap } from './lib/roadmap';
+import { autoCommitIfLocalOnly } from './lib/auto-commit';
 import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
 import type {
   GitStatus,
@@ -1001,6 +1002,11 @@ export default function App() {
     try {
       await writeRoadmap(nextDocument);
       setRoadmapDocument(nextDocument);
+      // Auto-commit ROADMAP.md for local-only repos
+      const proj = allProjects.find((p) => p.id === selectedProjectId);
+      if (proj?.hasRepo && !proj.gitStatus?.remote) {
+        void autoCommitIfLocalOnly(proj.dirPath, proj.gitStatus, ['ROADMAP.md']);
+      }
       pushToast('success', 'Roadmap saved');
     } catch (error) {
       setRoadmapItems(previousItems);

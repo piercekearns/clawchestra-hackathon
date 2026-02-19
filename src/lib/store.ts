@@ -5,6 +5,7 @@ import type { DashboardError } from './errors';
 import type { ChatMessage, SystemBubbleKind, SystemBubbleMeta } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
 import { createProject, getProjects, removeProject, updateProject, type ProjectUpdate } from './projects';
+import { autoCommitIfLocalOnly } from './auto-commit';
 import { defaultView, type ViewContext } from './views';
 import {
   chatMessagesLoad,
@@ -507,6 +508,14 @@ export const useDashboardStore = create<DashboardState>()(
 
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
+        // Auto-commit for local-only repos (no remote)
+        if (project.hasRepo && !project.gitStatus?.remote) {
+          void autoCommitIfLocalOnly(
+            project.dirPath,
+            project.gitStatus,
+            ['PROJECT.md'],
+          );
+        }
         await get().loadProjects();
       },
 
