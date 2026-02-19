@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Tooltip } from './Tooltip';
-import type { GitStatus, ProjectViewModel } from '../lib/schema';
+import type { DirtyFileCategories, DirtyFileCategory, GitStatus, ProjectViewModel } from '../lib/schema';
 import { gitCommit, gitPush } from '../lib/tauri';
 import { cn } from '../lib/utils';
 import { ModalDragZone } from './ui/ModalDragZone';
@@ -72,7 +72,7 @@ interface SyncResult {
 type DirtyProject = ProjectViewModel & { gitStatus: GitStatus };
 
 function hasDirtyGitStatus(p: ProjectViewModel): p is DirtyProject {
-  return p.gitStatus != null && (p.gitStatus.dashboardDirty === true);
+  return p.gitStatus != null && p.gitStatus.hasDirtyFiles === true;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,35 +90,84 @@ export function getBranchIndicator(git: GitStatus): { label: string; safe: boole
   return { label: `${git.branch} ✓`, safe: true };
 }
 
-type FileCategory = 'metadata' | 'document';
+const METADATA_FILES = new Set(['PROJECT.md']);
+const DOCUMENT_FILES = new Set(['ROADMAP.md', 'CHANGELOG.md']);
+const DOCUMENT_DIR_PREFIXES = ['roadmap/', 'docs/specs/', 'docs/plans/'];
 
-export function categorizeFile(path: string): FileCategory {
-  if (['PROJECT.md', 'ROADMAP.md', 'CHANGELOG.md'].includes(path)) return 'metadata';
-  return 'document';
+export function categorizeFile(path: string): DirtyFileCategory {
+  if (METADATA_FILES.has(path)) return 'metadata';
+  if (DOCUMENT_FILES.has(path) || DOCUMENT_DIR_PREFIXES.some((p) => path.startsWith(p)))
+    return 'documents';
+  return 'code';
 }
 
-export function groupDirtyFiles(files: string[]): { metadata: string[]; documents: string[] } {
+export function groupDirtyFiles(
+  files: string[],
+): { metadata: string[]; documents: string[]; code: string[] } {
   const metadata: string[] = [];
   const documents: string[] = [];
+  const code: string[] = [];
   for (const f of files) {
-    if (categorizeFile(f) === 'metadata') metadata.push(f);
-    else documents.push(f);
+    const cat = categorizeFile(f);
+    if (cat === 'metadata') metadata.push(f);
+    else if (cat === 'documents') documents.push(f);
+    else code.push(f);
   }
-  return { metadata, documents };
+  return { metadata, documents, code };
+}
+
+/** Get categorized dirty files, preferring backend-categorized data when available */
+export function getProjectDirtyCategories(
+  git: GitStatus,
+): DirtyFileCategories {
+  if (git.allDirtyFiles) return git.allDirtyFiles;
+  // Fallback: categorize legacy dirtyFiles on frontend
+  const files = git.dirtyFiles ?? [];
+  return groupDirtyFiles(files);
+}
+
+/** Collect files from selected categories */
+export function filesForSelectedCategories(
+  categories: DirtyFileCategories,
+  selected: Set<DirtyFileCategory>,
+): string[] {
+  const files: string[] = [];
+  if (selected.has('metadata')) files.push(...categories.metadata);
+  if (selected.has('documents')) files.push(...categories.documents);
+  if (selected.has('code')) files.push(...categories.code);
+  return files;
 }
 
 export function buildCommitMessage(
-  projects: { name: string; files: string[] }[],
+  projects: { name: string; files: string[]; categories: Set<DirtyFileCategory> }[],
 ): string {
-  if (projects.length === 0) return 'chore: sync project metadata';
+  if (projects.length === 0) return 'chore: sync project changes';
 
   const nameList =
     projects.length > 3
       ? `${projects.slice(0, 3).map((p) => p.name).join(', ')}, ...`
       : projects.map((p) => p.name).join(', ');
 
-  // Collect unique files across all projects
+  // Determine which category sets are active across all projects
+  const allCategories = new Set<DirtyFileCategory>();
+  for (const p of projects) {
+    for (const c of p.categories) allCategories.add(c);
+  }
+
   const allFiles = [...new Set(projects.flatMap((p) => p.files))];
+
+  // Choose commit prefix based on categories
+  let prefix: string;
+  if (allCategories.size === 1 && allCategories.has('metadata')) {
+    prefix = 'chore: sync project metadata';
+  } else if (allCategories.size === 1 && allCategories.has('documents')) {
+    prefix = 'docs: update project docs';
+  } else if (allCategories.size === 1 && allCategories.has('code')) {
+    prefix = 'chore: sync code changes';
+  } else {
+    prefix = 'chore: sync project changes';
+  }
+
   const filePart =
     allFiles.length > 0 && allFiles.length <= 4
       ? ` — ${allFiles.join(', ')}`
@@ -126,15 +175,23 @@ export function buildCommitMessage(
         ? ` — ${allFiles.slice(0, 3).join(', ')}, +${allFiles.length - 3} more`
         : '';
 
-  return `chore: sync project metadata (${nameList})${filePart}`;
+  return `${prefix} (${nameList})${filePart}`;
 }
+
+const CATEGORY_LABELS: Record<DirtyFileCategory, string> = {
+  metadata: 'Metadata',
+  documents: 'Documents',
+  code: 'Code',
+};
 
 function buildHelpMessage(project: DirtyProject): string {
   const git = project.gitStatus;
   const behindPart = git.behindCount
     ? `, which is ${git.behindCount} commits behind remote`
     : '';
-  return `${project.title} is on branch \`${git.branch}\`${behindPart}. The following dashboard files have uncommitted changes: ${git.dirtyFiles?.join(', ')}. Can you help me sync these?`;
+  const cats = getProjectDirtyCategories(git);
+  const allFiles = [...cats.metadata, ...cats.documents, ...cats.code];
+  return `${project.title} is on branch \`${git.branch}\`${behindPart}. The following files have uncommitted changes: ${allFiles.join(', ')}. Can you help me sync these?`;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +211,10 @@ export function SyncDialog({
     [projects],
   );
 
-  // Selected project IDs (all checked by default)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Per-project category selections: which categories are checked
+  const [selectedCategories, setSelectedCategories] = useState<
+    Map<string, Set<DirtyFileCategory>>
+  >(new Map());
   // Push enabled per project
   const [pushEnabled, setPushEnabled] = useState<Set<string>>(new Set());
   // Sync results per project
@@ -179,23 +238,57 @@ export function SyncDialog({
     return ids;
   }, [dirtyProjects]);
 
+  /** Build default category selections — select all non-empty categories */
+  const buildDefaultCategories = useCallback(
+    (projs: DirtyProject[]) => {
+      const map = new Map<string, Set<DirtyFileCategory>>();
+      for (const p of projs) {
+        const cats = getProjectDirtyCategories(p.gitStatus);
+        const selected = new Set<DirtyFileCategory>();
+        if (cats.metadata.length > 0) selected.add('metadata');
+        if (cats.documents.length > 0) selected.add('documents');
+        // Code is NOT selected by default (higher risk)
+        map.set(p.id, selected);
+      }
+      return map;
+    },
+    [],
+  );
+
+  /** Helper: compute commit message inputs from current selections */
+  const commitMessageInputs = useCallback(
+    (cats: Map<string, Set<DirtyFileCategory>>, projs: DirtyProject[]) => {
+      return projs
+        .filter((p) => {
+          const sel = cats.get(p.id);
+          return sel && sel.size > 0 && !results.has(p.id);
+        })
+        .map((p) => {
+          const projCats = getProjectDirtyCategories(p.gitStatus);
+          const sel = cats.get(p.id)!;
+          return {
+            name: p.title,
+            files: filesForSelectedCategories(projCats, sel),
+            categories: sel,
+          };
+        });
+    },
+    [results],
+  );
+
   // Reset state only when dialog opens (not on project reloads)
   useEffect(() => {
     if (!open) return;
 
-    setSelectedIds(new Set(dirtyProjects.map((p) => p.id)));
+    const defaultCats = buildDefaultCategories(dirtyProjects);
+    setSelectedCategories(defaultCats);
     setPushEnabled(defaultPushIds);
     setResults(new Map());
     setSyncingId(null);
     setBatchSyncing(false);
     syncLockRef.current = false;
     setCommitMessage(
-      buildCommitMessage(
-        dirtyProjects.map((p) => ({
-          name: p.title,
-          files: p.gitStatus.dirtyFiles ?? [],
-        })),
-      ),
+      buildCommitMessage(commitMessageInputs(defaultCats, dirtyProjects)),
     );
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -204,27 +297,23 @@ export function SyncDialog({
   const userEditedCommitRef = useRef(false);
   useEffect(() => {
     if (!open || userEditedCommitRef.current) return;
-    const selected = dirtyProjects.filter((p) => selectedIds.has(p.id));
     setCommitMessage(
-      buildCommitMessage(
-        selected.map((p) => ({
-          name: p.title,
-          files: p.gitStatus.dirtyFiles ?? [],
-        })),
-      ),
+      buildCommitMessage(commitMessageInputs(selectedCategories, dirtyProjects)),
     );
-  }, [selectedIds, open, dirtyProjects]);
+  }, [selectedCategories, open, dirtyProjects, commitMessageInputs]);
 
   // Reset manual edit flag when dialog opens
   useEffect(() => {
     if (open) userEditedCommitRef.current = false;
   }, [open]);
 
-  const toggleSelected = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+  const toggleCategory = useCallback((projectId: string, category: DirtyFileCategory) => {
+    setSelectedCategories((prev) => {
+      const next = new Map(prev);
+      const cats = new Set(prev.get(projectId) ?? []);
+      if (cats.has(category)) cats.delete(category);
+      else cats.add(category);
+      next.set(projectId, cats);
       return next;
     });
   }, []);
@@ -238,23 +327,40 @@ export function SyncDialog({
     });
   }, []);
 
+  /** Whether a project has any categories selected */
+  const isProjectSelected = useCallback(
+    (projectId: string) => {
+      const cats = selectedCategories.get(projectId);
+      return cats != null && cats.size > 0;
+    },
+    [selectedCategories],
+  );
+
   const selectedCount = useMemo(
-    () => dirtyProjects.filter((p) => selectedIds.has(p.id) && !results.has(p.id)).length,
-    [dirtyProjects, selectedIds, results],
+    () =>
+      dirtyProjects.filter(
+        (p) => isProjectSelected(p.id) && !results.has(p.id),
+      ).length,
+    [dirtyProjects, isProjectSelected, results],
   );
 
   // Sync a single project
   const syncProject = useCallback(
     async (project: DirtyProject): Promise<SyncResult> => {
-      const git = project.gitStatus;
-      if (!git.dirtyFiles?.length) {
+      const cats = getProjectDirtyCategories(project.gitStatus);
+      const sel = selectedCategories.get(project.id);
+      if (!sel || sel.size === 0) {
+        return { projectId: project.id, success: true, hash: 'no-op' };
+      }
+      const files = filesForSelectedCategories(cats, sel);
+      if (files.length === 0) {
         return { projectId: project.id, success: true, hash: 'no-op' };
       }
 
       try {
-        const hash = await gitCommit(project.dirPath, commitMessage, git.dirtyFiles);
+        const hash = await gitCommit(project.dirPath, commitMessage, files);
         let pushed = false;
-        if (pushEnabled.has(project.id) && git.remote) {
+        if (pushEnabled.has(project.id) && project.gitStatus.remote) {
           await gitPush(project.dirPath);
           pushed = true;
         }
@@ -263,7 +369,7 @@ export function SyncDialog({
         return { projectId: project.id, success: false, error: String(error) };
       }
     },
-    [commitMessage, pushEnabled],
+    [commitMessage, pushEnabled, selectedCategories],
   );
 
   // Sync one project (per-project button)
@@ -290,7 +396,7 @@ export function SyncDialog({
     setBatchSyncing(true);
     try {
       const toSync = dirtyProjects.filter(
-        (p) => selectedIds.has(p.id) && !results.has(p.id),
+        (p) => isProjectSelected(p.id) && !results.has(p.id),
       );
       for (const project of toSync) {
         setSyncingId(project.id);
@@ -302,7 +408,7 @@ export function SyncDialog({
     } finally {
       syncLockRef.current = false;
     }
-  }, [dirtyProjects, selectedIds, results, syncProject]);
+  }, [dirtyProjects, isProjectSelected, results, syncProject]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -339,7 +445,10 @@ export function SyncDialog({
               const branch = getBranchIndicator(git);
               const result = results.get(project.id);
               const isSyncing = syncingId === project.id;
-              const { metadata, documents } = groupDirtyFiles(git.dirtyFiles ?? []);
+              const cats = getProjectDirtyCategories(git);
+              const projSelected = selectedCategories.get(project.id) ?? new Set<DirtyFileCategory>();
+              const hasAnySelected = projSelected.size > 0;
+              const codeSelected = projSelected.has('code');
 
               return (
                 <div
@@ -352,16 +461,8 @@ export function SyncDialog({
                         : 'border-neutral-200 dark:border-neutral-700'
                   }`}
                 >
-                  {/* Top row: checkbox, name, branch, action */}
+                  {/* Top row: name, branch, action */}
                   <div className="flex items-center gap-2">
-                    {!result && (
-                      <BrandCheckbox
-                        checked={selectedIds.has(project.id)}
-                        onChange={() => toggleSelected(project.id)}
-                        className="h-4 w-4"
-                        disabled={isSyncing || batchSyncing}
-                      />
-                    )}
                     {result?.success && <Check className="h-4 w-4 shrink-0 text-emerald-500" />}
                     {result && !result.success && <X className="h-4 w-4 shrink-0 text-red-500" />}
 
@@ -381,8 +482,8 @@ export function SyncDialog({
                       {branch.label}
                     </span>
 
-                    {/* Action button — only visible when project is selected */}
-                    {!result && selectedIds.has(project.id) && (
+                    {/* Action button — only visible when project has selected categories */}
+                    {!result && hasAnySelected && (
                       <Button
                         type="button"
                         variant="outline"
@@ -410,9 +511,9 @@ export function SyncDialog({
                     )}
                   </div>
 
-                  {/* Push toggle — only visible when project is selected */}
-                  {!result && git.remote && selectedIds.has(project.id) && (
-                    <div className="ml-6 mt-1 inline-flex items-center gap-1.5 text-xs text-neutral-500">
+                  {/* Push toggle — only visible when project has selected categories */}
+                  {!result && git.remote && hasAnySelected && (
+                    <div className="ml-0 mt-1 inline-flex items-center gap-1.5 text-xs text-neutral-500">
                       <BrandCheckbox
                         checked={pushEnabled.has(project.id)}
                         onChange={() => togglePush(project.id)}
@@ -433,31 +534,48 @@ export function SyncDialog({
                     </div>
                   )}
 
-                  {/* Dirty files grouped */}
-                  <div className="ml-6 mt-1.5 space-y-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                    {metadata.length > 0 && (
-                      <div>
-                        <span className="font-medium text-neutral-600 dark:text-neutral-300">
-                          Metadata:
-                        </span>{' '}
-                        {metadata.join(', ')}
-                      </div>
-                    )}
-                    {documents.length > 0 && (
-                      <div>
-                        <span className="font-medium text-neutral-600 dark:text-neutral-300">
-                          Documents:
-                        </span>{' '}
-                        {documents.join(', ')}
-                      </div>
-                    )}
-                  </div>
+                  {/* Category toggles with file lists */}
+                  {!result && (
+                    <div className="mt-1.5 space-y-1 text-xs">
+                      {(['metadata', 'documents', 'code'] as const).map((category) => {
+                        const files = cats[category];
+                        if (files.length === 0) return null;
+                        const checked = projSelected.has(category);
+                        return (
+                          <div key={category} className="flex items-start gap-1.5">
+                            <BrandCheckbox
+                              checked={checked}
+                              onChange={() => toggleCategory(project.id, category)}
+                              className="mt-0.5 h-3.5 w-3.5"
+                              disabled={isSyncing || batchSyncing}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-medium text-neutral-600 dark:text-neutral-300">
+                                {CATEGORY_LABELS[category]} ({files.length})
+                              </span>
+                              <span className="ml-1 text-neutral-500 dark:text-neutral-400">
+                                {files.length <= 3 ? files.join(', ') : `${files.slice(0, 2).join(', ')}, +${files.length - 2} more`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Code risk indicator */}
+                      {codeSelected && cats.code.length > 0 && (
+                        <div className="ml-5 flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Code changes included — review before committing</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Warning + help for unsafe branches */}
                   {!branch.safe && !result && (
-                    <div className="ml-6 mt-1.5 flex items-center gap-2 text-xs">
+                    <div className="mt-1.5 flex items-center gap-2 text-xs">
                       <span className="text-amber-600 dark:text-amber-400">
-                        ⚠ Branch is {(git.behindCount ?? 0) > 0 && (git.aheadCount ?? 0) > 0 ? 'diverged' : 'behind remote'}
+                        Branch is {(git.behindCount ?? 0) > 0 && (git.aheadCount ?? 0) > 0 ? 'diverged' : 'behind remote'}
                         {' '}— push may fail
                       </span>
                       <button
@@ -473,7 +591,7 @@ export function SyncDialog({
 
                   {/* Error state */}
                   {result && !result.success && (
-                    <div className="ml-6 mt-1.5 space-y-1 text-xs">
+                    <div className="mt-1.5 space-y-1 text-xs">
                       <div className="text-red-600 dark:text-red-400">{result.error}</div>
                       <button
                         type="button"

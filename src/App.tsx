@@ -262,9 +262,9 @@ export default function App() {
     [projects],
   );
 
-  // Dirty project count for Sync button (computed, not stored)
+  // Dirty project count for Sync button
   const dirtyProjects = useMemo(
-    () => allProjects.filter((p) => p.gitStatus?.dashboardDirty),
+    () => allProjects.filter((p) => p.gitStatus?.hasDirtyFiles),
     [allProjects],
   );
 

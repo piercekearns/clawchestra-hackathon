@@ -5,9 +5,8 @@ items:
     status: in-progress
     priority: 1
     nextAction: >-
-      Plan written — implement Phase 2 all-file dirty detection and
-      Metadata/Documents/Code grouping with local-only Kanban auto-commit
-      boundaries preserved.
+      Building via Claude Code (/build) — Phase 2 scope expansion in
+      progress.
     tags:
       - git
       - sync

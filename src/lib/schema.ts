@@ -69,6 +69,14 @@ export interface ProjectFrontmatter {
 
 export type GitStatusState = 'clean' | 'uncommitted' | 'unpushed' | 'behind' | 'unknown';
 
+export type DirtyFileCategory = 'metadata' | 'documents' | 'code';
+
+export interface DirtyFileCategories {
+  metadata: string[];
+  documents: string[];
+  code: string[];
+}
+
 export interface GitStatus {
   state: GitStatusState;
   branch?: string;
@@ -83,10 +91,14 @@ export interface GitStatus {
   stashCount: number;
   aheadCount?: number;
   behindCount?: number;
-  /** True when dashboard-managed files have uncommitted changes */
+  /** @deprecated Use hasDirtyFiles instead */
   dashboardDirty?: boolean;
-  /** Dashboard-managed files with uncommitted changes */
+  /** @deprecated Use allDirtyFiles instead */
   dirtyFiles?: string[];
+  /** True when any files in the repo have uncommitted changes */
+  hasDirtyFiles?: boolean;
+  /** All dirty files categorized into metadata/documents/code */
+  allDirtyFiles?: DirtyFileCategories;
 }
 
 export interface ProjectViewModel extends BoardItem {

@@ -13,6 +13,14 @@ use serde_json::{json, Value};
 // Embedded at compile time by build.rs
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
 const DEFAULT_SESSION_KEY: &str = "agent:main:pipeline-dashboard";
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DirtyFileCategories {
+    metadata: Vec<String>,
+    documents: Vec<String>,
+    code: Vec<String>,
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct GitStatus {
@@ -29,10 +37,10 @@ struct GitStatus {
     stash_count: u32,
     ahead_count: Option<u32>,
     behind_count: Option<u32>,
-    /// True when dashboard-managed files have uncommitted changes
-    dashboard_dirty: bool,
-    /// Dashboard-managed files with uncommitted changes
-    dirty_files: Vec<String>,
+    /// True when any files in the repo have uncommitted changes
+    has_dirty_files: bool,
+    /// All dirty files categorized into metadata/documents/code
+    all_dirty_files: DirtyFileCategories,
 }
 
 #[derive(Serialize)]
@@ -1155,23 +1163,48 @@ fn probe_repo(repo_path: String) -> Result<RepoProbe, String> {
     })
 }
 
-/// Dashboard-managed file names (exact match)
-const DASHBOARD_FILES: &[&str] = &["PROJECT.md", "ROADMAP.md", "CHANGELOG.md"];
-/// Dashboard-managed directory prefixes (recursive match)
-const DASHBOARD_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
+/// Metadata files: Clawchestra-exclusive structural state
+const METADATA_FILES: &[&str] = &["PROJECT.md"];
 
-fn is_dashboard_file(path: &str) -> bool {
-    DASHBOARD_FILES.contains(&path)
-        || DASHBOARD_DIR_PREFIXES
+/// Document file names (exact match) — planning artifacts with external relevance
+const DOCUMENT_FILES: &[&str] = &["ROADMAP.md", "CHANGELOG.md"];
+/// Document directory prefixes (recursive match)
+const DOCUMENT_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
+
+/// Categorize a dirty file path into metadata, documents, or code.
+fn categorize_dirty_file(path: &str) -> &'static str {
+    if METADATA_FILES.contains(&path) {
+        return "metadata";
+    }
+    if DOCUMENT_FILES.contains(&path)
+        || DOCUMENT_DIR_PREFIXES
             .iter()
             .any(|prefix| path.starts_with(prefix))
+    {
+        return "documents";
+    }
+    "code"
 }
 
-fn filter_dashboard_dirty_files(status_porcelain: &str) -> Vec<String> {
-    parse_dirty_paths(status_porcelain)
-        .into_iter()
-        .filter(|p| is_dashboard_file(p))
-        .collect()
+/// Categorize all dirty paths into the three-category struct.
+fn categorize_all_dirty_files(paths: &[String]) -> DirtyFileCategories {
+    let mut metadata = Vec::new();
+    let mut documents = Vec::new();
+    let mut code = Vec::new();
+
+    for path in paths {
+        match categorize_dirty_file(path) {
+            "metadata" => metadata.push(path.clone()),
+            "documents" => documents.push(path.clone()),
+            _ => code.push(path.clone()),
+        }
+    }
+
+    DirtyFileCategories {
+        metadata,
+        documents,
+        code,
+    }
 }
 
 #[tauri::command]
@@ -1256,9 +1289,10 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
         }
     };
 
-    // Dashboard-specific dirty detection
-    let dirty_files = filter_dashboard_dirty_files(&status_porcelain);
-    let dashboard_dirty = !dirty_files.is_empty();
+    // Parse all dirty files once, then categorize
+    let all_paths = parse_dirty_paths(&status_porcelain);
+    let all_dirty_files = categorize_all_dirty_files(&all_paths);
+    let has_dirty_files = !all_paths.is_empty();
 
     Ok(GitStatus {
         state,
@@ -1273,14 +1307,33 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
         stash_count,
         ahead_count,
         behind_count,
-        dashboard_dirty,
-        dirty_files,
+        has_dirty_files,
+        all_dirty_files,
     })
 }
 
 #[tauri::command]
 fn git_fetch(repo_path: String) -> Result<String, String> {
     run_git(&repo_path, &["fetch", "origin"])
+}
+
+/// Validate a repo-relative file path for safety.
+/// Rejects absolute paths, directory traversal, and empty strings.
+fn validate_commit_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("Empty file path".to_string());
+    }
+    if path.starts_with('/') || path.starts_with('\\') {
+        return Err(format!("Absolute path not allowed: {}", path));
+    }
+    if path.contains("..") {
+        return Err(format!("Path traversal not allowed: {}", path));
+    }
+    // Reject paths with null bytes
+    if path.contains('\0') {
+        return Err(format!("Invalid characters in path: {}", path));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1298,10 +1351,23 @@ fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<
         return Err("repo_path is not a git repository".to_string());
     }
 
-    // Validate all files are dashboard-managed
+    // Path safety: reject absolute paths, traversal, empty, null bytes
     for file in &files {
-        if !is_dashboard_file(file) {
-            return Err(format!("Refusing to commit non-dashboard file: {}", file));
+        validate_commit_path(file)?;
+    }
+
+    // Snapshot validation: only commit files that are actually dirty right now.
+    // This prevents committing arbitrary files that weren't in the dirty snapshot.
+    let status_porcelain =
+        run_git_preserving_columns(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
+    let currently_dirty: HashSet<String> =
+        parse_dirty_paths(&status_porcelain).into_iter().collect();
+    for file in &files {
+        if !currently_dirty.contains(file.as_str()) {
+            return Err(format!(
+                "File is not in the current dirty snapshot: {}",
+                file
+            ));
         }
     }
 
@@ -2525,45 +2591,121 @@ mod hardening_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    // -----------------------------------------------------------------------
+    // categorize_dirty_file
+    // -----------------------------------------------------------------------
+
     #[test]
-    fn is_dashboard_file_detects_exact_names() {
-        assert!(is_dashboard_file("PROJECT.md"));
-        assert!(is_dashboard_file("ROADMAP.md"));
-        assert!(is_dashboard_file("CHANGELOG.md"));
-        assert!(!is_dashboard_file("README.md"));
-        assert!(!is_dashboard_file("src/main.rs"));
+    fn categorize_project_md_as_metadata() {
+        assert_eq!(categorize_dirty_file("PROJECT.md"), "metadata");
     }
 
     #[test]
-    fn is_dashboard_file_detects_dir_prefixes() {
-        assert!(is_dashboard_file("roadmap/git-sync.md"));
-        assert!(is_dashboard_file("docs/specs/git-sync-spec.md"));
-        assert!(is_dashboard_file("docs/plans/git-sync-plan.md"));
-        // Recursive: nested subdirectories
-        assert!(is_dashboard_file("docs/specs/deep/nested.md"));
-        // Non-dashboard directories
-        assert!(!is_dashboard_file("src/components/Header.tsx"));
-        assert!(!is_dashboard_file("docs/README.md"));
+    fn categorize_roadmap_changelog_as_documents() {
+        assert_eq!(categorize_dirty_file("ROADMAP.md"), "documents");
+        assert_eq!(categorize_dirty_file("CHANGELOG.md"), "documents");
     }
 
     #[test]
-    fn filter_dashboard_dirty_files_from_porcelain() {
-        let porcelain = " M PROJECT.md\n M src/main.rs\n?? roadmap/new-item.md\n M ROADMAP.md";
-        let files = filter_dashboard_dirty_files(porcelain);
-        assert_eq!(files, vec!["PROJECT.md", "roadmap/new-item.md", "ROADMAP.md"]);
+    fn categorize_spec_plan_roadmap_dirs_as_documents() {
+        assert_eq!(categorize_dirty_file("docs/specs/git-sync-spec.md"), "documents");
+        assert_eq!(categorize_dirty_file("docs/plans/git-sync-plan.md"), "documents");
+        assert_eq!(categorize_dirty_file("roadmap/git-sync.md"), "documents");
     }
 
     #[test]
-    fn filter_dashboard_dirty_files_none_dirty() {
-        let porcelain = " M src/App.tsx\n M package.json";
-        let files = filter_dashboard_dirty_files(porcelain);
-        assert!(files.is_empty());
+    fn categorize_code_files() {
+        assert_eq!(categorize_dirty_file("src/App.tsx"), "code");
+        assert_eq!(categorize_dirty_file("package.json"), "code");
+        assert_eq!(categorize_dirty_file("Cargo.toml"), "code");
+        assert_eq!(categorize_dirty_file("README.md"), "code");
+    }
+
+    // -----------------------------------------------------------------------
+    // categorize_all_dirty_files
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn categorize_all_mixed_dirty_files() {
+        let paths = vec![
+            "PROJECT.md".to_string(),
+            "ROADMAP.md".to_string(),
+            "src/App.tsx".to_string(),
+            "docs/specs/new-spec.md".to_string(),
+            "package.json".to_string(),
+        ];
+        let cats = categorize_all_dirty_files(&paths);
+        assert_eq!(cats.metadata, vec!["PROJECT.md"]);
+        assert_eq!(cats.documents, vec!["ROADMAP.md", "docs/specs/new-spec.md"]);
+        assert_eq!(cats.code, vec!["src/App.tsx", "package.json"]);
     }
 
     #[test]
-    fn filter_dashboard_dirty_files_handles_renames() {
-        let porcelain = "R  old-roadmap.md -> roadmap/renamed.md";
-        let files = filter_dashboard_dirty_files(porcelain);
-        assert_eq!(files, vec!["roadmap/renamed.md"]);
+    fn categorize_all_empty() {
+        let cats = categorize_all_dirty_files(&[]);
+        assert!(cats.metadata.is_empty());
+        assert!(cats.documents.is_empty());
+        assert!(cats.code.is_empty());
+    }
+
+    #[test]
+    fn categorize_all_code_only() {
+        let paths = vec![
+            "src/main.rs".to_string(),
+            ".gitignore".to_string(),
+        ];
+        let cats = categorize_all_dirty_files(&paths);
+        assert!(cats.metadata.is_empty());
+        assert!(cats.documents.is_empty());
+        assert_eq!(cats.code, vec!["src/main.rs", ".gitignore"]);
+    }
+
+    #[test]
+    fn categorize_handles_renames_to_document_dir() {
+        // A rename target in a document directory should be categorized as documents
+        let paths = vec!["roadmap/renamed.md".to_string()];
+        let cats = categorize_all_dirty_files(&paths);
+        assert_eq!(cats.documents, vec!["roadmap/renamed.md"]);
+    }
+
+    // -----------------------------------------------------------------------
+    // validate_commit_path
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn validate_commit_path_allows_relative_paths() {
+        assert!(validate_commit_path("PROJECT.md").is_ok());
+        assert!(validate_commit_path("src/App.tsx").is_ok());
+        assert!(validate_commit_path("docs/specs/new-spec.md").is_ok());
+    }
+
+    #[test]
+    fn validate_commit_path_rejects_absolute_paths() {
+        let err = validate_commit_path("/etc/passwd").unwrap_err();
+        assert!(err.contains("Absolute path"));
+
+        let err = validate_commit_path("\\Windows\\System32\\config").unwrap_err();
+        assert!(err.contains("Absolute path"));
+    }
+
+    #[test]
+    fn validate_commit_path_rejects_traversal() {
+        let err = validate_commit_path("../secret.txt").unwrap_err();
+        assert!(err.contains("traversal"));
+
+        let err = validate_commit_path("src/../../etc/passwd").unwrap_err();
+        assert!(err.contains("traversal"));
+    }
+
+    #[test]
+    fn validate_commit_path_rejects_empty() {
+        let err = validate_commit_path("").unwrap_err();
+        assert!(err.contains("Empty"));
+    }
+
+    #[test]
+    fn validate_commit_path_rejects_null_bytes() {
+        let err = validate_commit_path("file\0.txt").unwrap_err();
+        assert!(err.contains("Invalid characters"));
     }
 }
