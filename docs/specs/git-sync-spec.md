@@ -6,7 +6,7 @@ The dashboard writes to PROJECT.md frontmatter when users drag kanban cards, upd
 
 **Status:** Spec Draft
 **Created:** 2026-02-18
-**Updated:** 2026-02-18
+**Updated:** 2026-02-19
 **Author:** Clawdbot
 **Roadmap Item:** `roadmap/git-sync.md`
 
@@ -103,24 +103,37 @@ interface GitStatus {
 
 The current `state` is coarse-grained — it tells us "this repo has uncommitted changes" but not *which files* changed or *whether those changes were from the dashboard*.
 
-**Enhancement**: Extend `GitStatus` with dashboard-specific fields:
+**What already exists (from Local Git Intelligence build, commit `7184c60`):**
 
 ```typescript
 interface GitStatus {
-  state: GitStatusState;
+  state: 'clean' | 'uncommitted' | 'unpushed' | 'behind' | 'unknown';
   branch?: string;
   details?: string;
   remote?: string;
+  lastCommitDate?: string;
+  lastCommitMessage?: string;
+  lastCommitAuthor?: string;
+  commitsThisWeek?: number;
+  latestTag?: string;
+  stashCount: number;
+  aheadCount?: number;    // ← already tracks commits ahead of upstream
+  behindCount?: number;   // ← already tracks commits behind upstream
+}
+```
+
+`aheadCount` and `behindCount` already exist — no new fields needed for branch tracking. `diverged` is simply `aheadCount > 0 && behindCount > 0`, derived at display time.
+
+**New fields needed (dashboard-specific dirty tracking):**
+
+```typescript
+interface GitStatus {
+  // ... all existing fields ...
+
   /** True when dashboard-managed files have uncommitted changes */
   dashboardDirty?: boolean;
   /** List of dashboard-managed files with uncommitted changes */
   dirtyFiles?: string[];
-  /** Commits ahead of upstream (0 = in sync, undefined = no upstream) */
-  ahead?: number;
-  /** Commits behind upstream (0 = in sync, undefined = no upstream) */
-  behind?: number;
-  /** True when local and remote have diverged (both ahead and behind) */
-  diverged?: boolean;
 }
 ```
 
@@ -134,7 +147,7 @@ The Tauri backend checks `git diff --name-only` (unstaged) and `git diff --name-
 
 If any of these have uncommitted changes, `dashboardDirty = true`.
 
-Branch tracking comes from `git rev-list --left-right --count HEAD...@{upstream}`.
+Branch tracking already handled by `get_git_status` — uses `git rev-list --left-right --count HEAD...@{upstream}` to populate `aheadCount`/`behindCount`.
 
 ---
 
@@ -241,7 +254,7 @@ The Sync Dialog shows branch context to help users make informed decisions, but 
 | `main ✓` | In sync with upstream | Commit & Push |
 | `main ↑2` | 2 commits ahead, clean fast-forward | Commit & Push |
 | `dev ↓3 ⚠` | 3 commits behind remote | Commit only (push disabled by default) |
-| `main ↑1 ↓2 ⚠` | Diverged (ahead and behind) | Commit only + warning |
+| `main ↑1 ↓2 ⚠` | Diverged (`aheadCount > 0 && behindCount > 0`) | Commit only + warning |
 | `main (no remote)` | No upstream configured | Commit only |
 | `feature-x` | On a non-default branch | Commit & Push (to feature-x) |
 
@@ -368,6 +381,12 @@ Users can override any of these — the defaults just protect against accidental
 
 ---
 
+## Cross-Platform Note
+
+Git Sync ships before First Friend Readiness in the delivery sequence (Git Sync → Deep Rename → FFR). All git commands go through the existing `run_command_with_output` helper, which is currently macOS/Unix-only. FFR Phase 1 (Cross-Platform Foundation) makes this helper cross-platform (Windows `cmd`/`powershell` support). Git Sync inherits that automatically — no cross-platform work needed within this spec.
+
+---
+
 ## What Phase 1 Does NOT Do
 
 - ❌ **Auto-commit or auto-push** — ever
@@ -411,7 +430,7 @@ interface DashboardState {
 }
 ```
 
-`dirtyProjectCount` is updated during the existing `loadProjects()` scan — no separate polling needed. The Tauri backend already runs `git status` per project; it just needs to additionally check `git diff --name-only` against the dashboard file allowlist.
+`dirtyProjectCount` is updated during the existing `loadProjects()` scan — no separate polling needed. The Tauri backend already runs `get_git_status` per project (enriched with `aheadCount`, `behindCount`, etc. from Local Git Intelligence); it just needs to additionally check `git diff --name-only` against the dashboard file allowlist to populate the new `dashboardDirty` and `dirtyFiles` fields.
 
 ### No persistence needed
 
@@ -422,7 +441,7 @@ Dirty state is derived from the filesystem on every scan. Nothing to persist.
 ## Build Scope
 
 ### Phase 1 — Sync Dialog
-- Extend Tauri git status scanning: `dashboardDirty`, `dirtyFiles`, `ahead`, `behind`, `diverged`
+- Extend Tauri `get_git_status`: add `dashboardDirty` and `dirtyFiles` fields (`aheadCount`/`behindCount` already exist from Local Git Intelligence)
 - Add orange dot indicator to project cards
 - Add Sync button with badge count to Header (hidden when 0)
 - Sync Dialog: project list with branch indicators, change categories, per-project + batch commit, push toggle with smart defaults
