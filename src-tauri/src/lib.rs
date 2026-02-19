@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 // Embedded at compile time by build.rs
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
 const DEFAULT_SESSION_KEY: &str = "agent:main:pipeline-dashboard";
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct GitStatus {
     state: String,
@@ -1079,6 +1079,25 @@ fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Like `run_git` but only trims trailing whitespace, preserving leading
+/// spaces that are significant in column-formatted output (e.g. `git status --porcelain`).
+fn run_git_preserving_columns(repo_path: &str, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .trim_end()
+            .to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 fn parse_dirty_paths(status_porcelain: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut paths = Vec::new();
@@ -1123,7 +1142,8 @@ fn probe_repo(repo_path: String) -> Result<RepoProbe, String> {
 
     let git_branch = run_git(&repo_str, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
     let git_remote = run_git(&repo_str, &["config", "--get", "remote.origin.url"]).ok();
-    let status_porcelain = run_git(&repo_str, &["status", "--porcelain"]).unwrap_or_default();
+    let status_porcelain =
+        run_git_preserving_columns(&repo_str, &["status", "--porcelain"]).unwrap_or_default();
     let dirty_paths = parse_dirty_paths(&status_porcelain);
 
     Ok(RepoProbe {
@@ -1158,7 +1178,8 @@ fn filter_dashboard_dirty_files(status_porcelain: &str) -> Vec<String> {
 fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
     let branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
     let remote = run_git(&repo_path, &["config", "--get", "remote.origin.url"]).ok();
-    let status_porcelain = run_git(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
+    let status_porcelain =
+        run_git_preserving_columns(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
 
     // Collect enriched git data (combined log query: date, subject, author)
     let (last_commit_date, last_commit_message, last_commit_author) =
@@ -2420,3 +2441,4 @@ mod hardening_tests {
         assert_eq!(files, vec!["roadmap/renamed.md"]);
     }
 }
+
