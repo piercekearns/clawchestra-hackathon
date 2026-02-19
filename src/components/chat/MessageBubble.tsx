@@ -3,6 +3,7 @@ import { Check, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../../lib/gateway';
+import { stripOpenClawEnvelope } from '../../lib/chat-normalization';
 import { cn } from '../../lib/utils';
 
 interface MessageBubbleProps {
@@ -100,6 +101,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = role === 'user';
   const isAssistant = role === 'assistant';
   const roleLabel = isUser ? 'You' : isAssistant ? 'Clawdbot' : 'System';
+  const displayContent = isUser ? stripOpenClawEnvelope(message.content) : message.content;
 
   return (
     <div
@@ -121,7 +123,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       >
         {/* Copy whole message - appears on hover */}
         <CopyButton
-          text={message.content}
+          text={displayContent}
           className="absolute right-1.5 top-1.5 opacity-0 group-hover/msg:opacity-100 focus:opacity-100"
         />
 
@@ -133,7 +135,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               code: CodeBlock,
             }}
           >
-            {message.content}
+            {displayContent}
           </ReactMarkdown>
         </div>
       </article>

@@ -2,6 +2,50 @@ const CONTEXT_PREFIX_PATTERN =
   /^(User workspace path:[^\n]*|User is viewing project:[^\n]*|User is viewing:[^\n]*)/u;
 const USER_REQUEST_MARKER = 'User request:';
 
+/**
+ * Strip OpenClaw envelope metadata from user message content for display.
+ *
+ * OpenClaw wraps user messages with context blocks:
+ * - `Conversation info (untrusted metadata):` + JSON code block
+ * - `[Thu 2026-02-19 05:15 GMT]` timestamp prefix
+ * - `User workspace path:` / `User request:` wrappers
+ * - `[message_id: ...]` tags
+ *
+ * This function strips all of these, returning only the user's actual message.
+ */
+export function stripOpenClawEnvelope(content: string): string {
+  let text = content.replace(/\r\n/g, '\n').trim();
+  if (!text) return text;
+
+  // Strip leading "Conversation info (untrusted metadata):" block with JSON code fence
+  text = text.replace(
+    /^Conversation info \(untrusted metadata\):\s*```json?\s*\n[\s\S]*?\n```\s*/u,
+    '',
+  ).trim();
+
+  // Strip leading timestamp envelope: [Thu 2026-02-19 05:15 GMT]
+  text = text.replace(
+    /^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s+[A-Z]{2,5})?\]\s*/u,
+    '',
+  ).trim();
+
+  // Strip "User workspace path: /path User request: " wrapper
+  const requestMatch = text.match(
+    /^User workspace path:\s*\S+\s+User request:\s*([\s\S]+)$/u,
+  );
+  if (requestMatch) {
+    text = requestMatch[1].trim();
+  }
+
+  // Strip trailing [message_id: ...] tags
+  text = text.replace(/\s*\[message_id:\s*[^\]]+\]\s*$/u, '').trim();
+
+  // Strip leading [Attached images: ...] if at the very start (already displayed as images)
+  text = text.replace(/\s*\[Attached images?:\s*[^\]]+\]\s*$/u, '').trim();
+
+  return text;
+}
+
 function looksLikeWorkspacePathToken(token: string): boolean {
   if (!token) return false;
   return (
@@ -18,7 +62,26 @@ export function normalizeChatContentForMatch(content: string): string {
 }
 
 export function unwrapGatewayContextWrappedUserContent(content: string): string | null {
-  const normalized = content.replace(/\r\n/g, '\n').trim();
+  let normalized = content.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return null;
+
+  // Strip OpenClaw 2026.2.17+ envelope metadata that wraps the context wrapper:
+  // - "Conversation info (untrusted metadata):" JSON code block
+  // - [timestamp] prefix
+  // - Trailing [message_id: ...] / [Attached images: ...] tags
+  normalized = normalized
+    .replace(
+      /^Conversation info \(untrusted metadata\):\s*```json?\s*\n[\s\S]*?\n```\s*/u,
+      '',
+    )
+    .replace(
+      /^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s+[A-Z]{2,5})?\]\s*/u,
+      '',
+    )
+    .replace(/\s*\[message_id:\s*[^\]]+\]\s*$/u, '')
+    .replace(/\s*\[Attached images?:\s*[^\]]+\]\s*$/u, '')
+    .trim();
+
   if (!normalized) return null;
   const hasKnownContextPrefix = CONTEXT_PREFIX_PATTERN.test(normalized);
 
