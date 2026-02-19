@@ -13,6 +13,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
+import type { SearchableRoadmapItem } from './components/search';
 import type {
   ChatConnectionState,
   ChatPrefillRequest,
@@ -63,7 +64,7 @@ import {
 } from './lib/tauri';
 import { defaultView, projectRoadmapView } from './lib/views';
 import { watchProjects } from './lib/watcher';
-import { normalizeChatContentWithContextUnwrap } from './lib/chat-normalization';
+import { messageIdentitySignature } from './lib/chat-message-identity';
 
 interface Toast {
   id: number;
@@ -86,13 +87,10 @@ const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
 const BACKGROUND_SESSION_STALE_MS = 3 * 60_000;
 const CONNECTION_LOSS_BUBBLE_DELAY_MS = 5000;
+const HARD_TERMINAL_ACTIVITY_CLEAR_MS = 10_000;
 const RECOVERY_NEAR_DUP_WINDOW_MS = 10 * 60_000;
 const RECOVERY_BUBBLE_DEDUP_MS = 5 * 60_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
-
-function normalizeMessageContent(content: string): string {
-  return normalizeChatContentWithContextUnwrap(content);
-}
 
 function getGitHubStatusMeta(
   status?: GitStatus,
@@ -161,6 +159,7 @@ export default function App() {
   const setProjects = useDashboardStore((state) => state.setProjects);
   const addError = useDashboardStore((state) => state.addError);
   const setGatewayConnected = useDashboardStore((state) => state.setGatewayConnected);
+  const setAgentActivity = useDashboardStore((state) => state.setAgentActivity);
   const setViewContext = useDashboardStore((state) => state.setViewContext);
   const addChatMessage = useDashboardStore((state) => state.addChatMessage);
   const addSystemBubble = useDashboardStore((state) => state.addSystemBubble);
@@ -199,6 +198,7 @@ export default function App() {
   const backgroundSessionLastSeenRef = useRef<Map<string, number>>(new Map());
   const queueDrainInFlightRef = useRef(false);
   const blockedQueueMessageIdRef = useRef<string | null>(null);
+  const hardClearTimerRef = useRef<number | null>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
@@ -213,6 +213,34 @@ export default function App() {
   }, []);
 
   const allProjects = useMemo(() => flattenProjects(projects), [projects]);
+
+  // Gather roadmap items from all projects for search
+  const [allSearchableRoadmapItems, setAllSearchableRoadmapItems] = useState<SearchableRoadmapItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const gatherRoadmapItems = async () => {
+      const items: SearchableRoadmapItem[] = [];
+      for (const project of allProjects) {
+        if (!project.hasRoadmap || !project.roadmapFilePath) continue;
+        try {
+          const roadmap = await readRoadmap(project.roadmapFilePath);
+          for (const item of roadmap.items) {
+            items.push({
+              ...item,
+              projectId: project.id,
+              projectTitle: project.title,
+            });
+          }
+        } catch {
+          // Skip projects with unreadable roadmaps
+        }
+      }
+      if (!cancelled) setAllSearchableRoadmapItems(items);
+    };
+    void gatherRoadmapItems();
+    return () => { cancelled = true; };
+  }, [allProjects]);
 
   // Filter out sub-projects from top-level view
   const topLevelProjects = useMemo(
@@ -389,6 +417,54 @@ export default function App() {
       window.clearInterval(interval);
     };
   }, [chatSending, gatewayActiveTurns, wsConnectionState]);
+
+  useEffect(() => {
+    const clearTimer = () => {
+      if (hardClearTimerRef.current !== null) {
+        window.clearTimeout(hardClearTimerRef.current);
+        hardClearTimerRef.current = null;
+      }
+    };
+
+    const hasActiveWork =
+      chatSending || gatewayActiveTurns > 0 || activeBackgroundSessions.size > 0;
+    if (hasActiveWork) {
+      clearTimer();
+      return;
+    }
+
+    if (agentActivity === 'idle' && !chatStreamingContent) {
+      clearTimer();
+      return;
+    }
+
+    if (hardClearTimerRef.current !== null) return clearTimer;
+
+    hardClearTimerRef.current = window.setTimeout(() => {
+      hardClearTimerRef.current = null;
+      const stillNoActiveWork =
+        getActiveTurnCount() === 0 &&
+        !chatSending &&
+        activeBackgroundSessions.size === 0;
+
+      if (!stillNoActiveWork) return;
+
+      setAgentActivity('idle');
+      setChatStreamingContent((current) => (current ? null : current));
+      console.log(
+        `[Chat] Hard-cleared stale activity state after ${HARD_TERMINAL_ACTIVITY_CLEAR_MS}ms`,
+      );
+    }, HARD_TERMINAL_ACTIVITY_CLEAR_MS);
+
+    return clearTimer;
+  }, [
+    activeBackgroundSessions.size,
+    agentActivity,
+    chatSending,
+    chatStreamingContent,
+    gatewayActiveTurns,
+    setAgentActivity,
+  ]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -595,7 +671,7 @@ export default function App() {
         );
         const timestampsBySignature = new Map<string, number[]>();
         for (const message of current) {
-          const signature = `${message.role}:${normalizeMessageContent(message.content)}`;
+          const signature = messageIdentitySignature(message);
           const timestamp = message.timestamp ?? 0;
           const bucket = timestampsBySignature.get(signature) ?? [];
           bucket.push(timestamp);
@@ -616,7 +692,7 @@ export default function App() {
           const timestamp = message.timestamp ?? Date.now();
           if (message._id && existingIds.has(message._id)) continue;
 
-          const contentSignature = `${message.role}:${normalizeMessageContent(message.content)}`;
+          const contentSignature = messageIdentitySignature(message);
           const priorTimestamps = timestampsBySignature.get(contentSignature) ?? [];
           const isNearDuplicate = priorTimestamps.some(
             (existingTimestamp) =>
@@ -1472,12 +1548,21 @@ export default function App() {
       <SearchModal
         isOpen={searchOpen}
         projects={allProjects}
+        roadmapItems={allSearchableRoadmapItems}
         onClose={() => setSearchOpen(false)}
-        onSelect={(project) => {
+        onSelectProject={(project) => {
           if (project.hasRoadmap) {
             void openRoadmapView(project);
           } else {
             setSelectedProjectId(project.id);
+          }
+        }}
+        onSelectRoadmapItem={(item) => {
+          const project = allProjects.find((p) => p.id === item.projectId);
+          if (project) {
+            void openRoadmapView(project).then(() => {
+              setSelectedRoadmapItemId(item.id);
+            });
           }
         }}
       />

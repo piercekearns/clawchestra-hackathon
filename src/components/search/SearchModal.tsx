@@ -1,19 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import Fuse from 'fuse.js';
-import type { ProjectViewModel } from '../../lib/schema';
+import type { ProjectViewModel, RoadmapItem } from '../../lib/schema';
 import { SearchResultItem } from './SearchResultItem';
+
+export interface SearchableRoadmapItem extends RoadmapItem {
+  /** Parent project ID */
+  projectId: string;
+  /** Parent project title (for display) */
+  projectTitle: string;
+}
+
+export type SearchResult =
+  | { type: 'project'; item: ProjectViewModel }
+  | { type: 'roadmap'; item: SearchableRoadmapItem };
 
 interface SearchModalProps {
   isOpen: boolean;
   projects: ProjectViewModel[];
+  roadmapItems: SearchableRoadmapItem[];
   onClose: () => void;
-  onSelect: (project: ProjectViewModel) => void;
+  onSelectProject: (project: ProjectViewModel) => void;
+  onSelectRoadmapItem: (item: SearchableRoadmapItem) => void;
 }
 
-export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModalProps) {
+export function SearchModal({
+  isOpen,
+  projects,
+  roadmapItems,
+  onClose,
+  onSelectProject,
+  onSelectRoadmapItem,
+}: SearchModalProps) {
   const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(-1); // Start with nothing selected
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -33,37 +53,53 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
     return flatten(projects);
   }, [projects]);
 
-  // Fuse.js search instance
+  // Build unified search results
+  const projectEntries: SearchResult[] = useMemo(
+    () => allProjects.map((p) => ({ type: 'project' as const, item: p })),
+    [allProjects],
+  );
+
+  const roadmapEntries: SearchResult[] = useMemo(
+    () => roadmapItems.map((r) => ({ type: 'roadmap' as const, item: r })),
+    [roadmapItems],
+  );
+
+  const allEntries = useMemo(
+    () => [...projectEntries, ...roadmapEntries],
+    [projectEntries, roadmapEntries],
+  );
+
+  // Fuse.js search instance over unified entries
   const fuse = useMemo(
     () =>
-      new Fuse(allProjects, {
+      new Fuse(allEntries, {
         keys: [
-          { name: 'title', weight: 2 },
-          { name: 'tags', weight: 1.5 },
-          { name: 'nextAction', weight: 1 },
-          { name: 'id', weight: 0.5 },
+          { name: 'item.title', weight: 2 },
+          { name: 'item.tags', weight: 1.5 },
+          { name: 'item.nextAction', weight: 1 },
+          { name: 'item.id', weight: 0.5 },
+          { name: 'item.projectTitle', weight: 0.5 },
         ],
         threshold: 0.4,
         includeScore: true,
       }),
-    [allProjects],
+    [allEntries],
   );
 
   // Search results
   const results = useMemo(() => {
     if (!query.trim()) {
-      // Show all projects sorted by status priority when no query
-      return allProjects.slice(0, 15);
+      // No query: show projects first, then roadmap items, capped at 20
+      return [...projectEntries.slice(0, 10), ...roadmapEntries.slice(0, 10)].slice(0, 20);
     }
-    return fuse.search(query).slice(0, 15).map((r) => r.item);
-  }, [query, fuse, allProjects]);
+    return fuse.search(query).slice(0, 20).map((r) => r.item);
+  }, [query, fuse, projectEntries, roadmapEntries]);
 
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
       setQuery('');
-      setSelectedIndex(-1); // Start with nothing selected
-      // Focus input after a brief delay for animation
+      setSelectedIndex(-1);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isOpen]);
@@ -75,7 +111,6 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
     } else if (selectedIndex >= results.length) {
       setSelectedIndex(results.length - 1);
     }
-    // Only react to results.length changes, not selectedIndex changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results.length]);
 
@@ -88,6 +123,18 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
     }
   }, [selectedIndex]);
 
+  const handleSelect = useCallback(
+    (result: SearchResult) => {
+      if (result.type === 'project') {
+        onSelectProject(result.item);
+      } else {
+        onSelectRoadmapItem(result.item);
+      }
+      onClose();
+    },
+    [onSelectProject, onSelectRoadmapItem, onClose],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       switch (e.key) {
@@ -97,13 +144,12 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setSelectedIndex((i) => Math.max(i - 1, -1)); // Allow going back to -1 (nothing selected)
+          setSelectedIndex((i) => Math.max(i - 1, -1));
           break;
         case 'Enter':
           e.preventDefault();
           if (selectedIndex >= 0 && results[selectedIndex]) {
-            onSelect(results[selectedIndex]);
-            onClose();
+            handleSelect(results[selectedIndex]);
           }
           break;
         case 'Escape':
@@ -112,15 +158,7 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
           break;
       }
     },
-    [results, selectedIndex, onSelect, onClose],
-  );
-
-  const handleSelect = useCallback(
-    (project: ProjectViewModel) => {
-      onSelect(project);
-      onClose();
-    },
-    [onSelect, onClose],
+    [results, selectedIndex, handleSelect, onClose],
   );
 
   if (!isOpen) return null;
@@ -135,9 +173,7 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
       />
 
       {/* Modal */}
-      <div
-        className="relative z-10 w-full max-w-xl overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
-      >
+      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900">
         {/* Search Input */}
         <div className="flex items-center gap-3 border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <Search className="h-5 w-5 shrink-0 text-neutral-400" />
@@ -147,10 +183,10 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
-              setSelectedIndex(-1); // Reset selection when query changes
+              setSelectedIndex(-1);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search projects..."
+            placeholder="Search projects and deliverables..."
             className="flex-1 bg-transparent text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-500"
           />
           {query && (
@@ -168,21 +204,18 @@ export function SearchModal({ isOpen, projects, onClose, onSelect }: SearchModal
         </div>
 
         {/* Results */}
-        <div
-          ref={resultsRef}
-          className="max-h-[50vh] overflow-y-auto p-2"
-        >
+        <div ref={resultsRef} className="max-h-[50vh] overflow-y-auto p-2">
           {results.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-neutral-500">
-              No projects found
+              No results found
             </div>
           ) : (
-            results.map((project, index) => (
-              <div key={project.id} data-selected={index === selectedIndex}>
+            results.map((result, index) => (
+              <div key={`${result.type}-${result.item.id}`} data-selected={index === selectedIndex}>
                 <SearchResultItem
-                  project={project}
+                  result={result}
                   isSelected={index === selectedIndex}
-                  onClick={() => handleSelect(project)}
+                  onClick={() => handleSelect(result)}
                 />
               </div>
             ))
