@@ -64,7 +64,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4"
       onClick={onClose}
     >
       <ModalDragZone />
