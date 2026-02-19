@@ -10,63 +10,87 @@
 
 ## Context
 
-Git Sync phase 1 only detects and offers to commit "dashboard-managed files" — a hardcoded list of files that Clawchestra directly writes to (`PROJECT.md`, `ROADMAP.md`, `CHANGELOG.md`, `roadmap/`, `docs/specs/`, `docs/plans/`).
+Git Sync phase 1 only detects and offers to commit "dashboard-managed files" — a hardcoded list of files that Clawchestra directly writes to (`PROJECT.md`, `ROADMAP.md`, etc.).
 
-However, Clawchestra is also used to make code changes via the AI chat interface. When a user asks OpenClaw to refactor a component or update CSS, those changes happen in `src/` or other code directories. Currently, those changes are **detected** (the git status icon turns amber) but the Sync dialog doesn't offer to commit them.
+However, Clawchestra is also used to make code changes via the AI chat interface, and it tracks repos where changes are made by external tools (VS Code, Codex, Claude Code). Currently those changes are **detected** (git status icons turn amber/blue/rose) but the Sync dialog doesn't offer to commit them.
 
-Additionally, changes made by external tools (VS Code, Codex, Claude Code) to repos that Clawchestra tracks are also detected but not actionable through the Sync dialog.
+## The Three Categories
 
-## Problem
+Files are grouped by their relationship to Clawchestra:
 
-- Users make code changes through Clawchestra's AI chat but can't commit them through Git Sync
-- Users make changes in external editors to tracked repos and see the amber icon but can't act on it
-- The current "dashboard-managed files" scope is an artificial limitation that doesn't match how the app is actually used
+### Metadata — Clawchestra-exclusive
+- **Files:** `PROJECT.md`
+- **What triggers changes:** Dragging cards between columns, editing project details, changing priority/tags/icon
+- **Relationship:** Only Clawchestra reads or writes these. Committing them is "selfish" — it's for Clawchestra's own continuity. If you deleted the local repo and re-cloned from GitHub, the PROJECT.md would restore the app's knowledge of that project's status.
+- **Risk level:** Zero — these changes can never break a build or affect the project's actual functionality.
 
-## Proposed Solution
+### Documents — Clawchestra + external relevance
+- **Files:** `ROADMAP.md`, `CHANGELOG.md`, `roadmap/*.md`, `docs/specs/*.md`, `docs/plans/*.md`
+- **What triggers changes:** Adding/removing/reordering roadmap items, marking deliverables complete, writing or updating specs and plans
+- **Relationship:** Clawchestra creates and manages these, but they're useful outside the app too. If you're working on a project in VS Code or with a coding agent, the ROADMAP.md tells you what to work on next. These are planning documentation that happens to be managed through Clawchestra's UI.
+- **Risk level:** Low — structured markdown files, no build impact, but represent planning decisions that matter.
 
-### Three-Category File Grouping
+### Code — everything else
+- **Files:** `src/`, `package.json`, config files, tests, assets, etc.
+- **What triggers changes:** AI chat code changes via OpenClaw, OR external tools (VS Code, Codex, Claude Code, cloud Codex instances)
+- **Relationship:** Not Clawchestra-specific at all. These are the actual project files. Clawchestra can detect their dirty state and help commit them, but it didn't create the changes.
+- **Risk level:** Variable — code changes can break builds, introduce bugs, cause merge conflicts. The Sync dialog should make it clear when you're committing code vs metadata.
 
-Expand the Sync dialog to show ALL dirty files, grouped into three categories:
+### How detection already works
 
-| Category | Files | Trigger |
-|---|---|---|
-| **Metadata** | `PROJECT.md` | Moving cards between columns, editing project details, changing priority/tags |
-| **Documents** | `ROADMAP.md`, `CHANGELOG.md`, `roadmap/*.md`, `docs/specs/*.md`, `docs/plans/*.md` | Adding/editing/reordering roadmap items, writing specs/plans |
-| **Code** | Everything else (`src/`, configs, tests, assets, etc.) | AI chat code changes, external editor changes, any other modification |
+The app already tracks all of this on every Refresh:
+- `git status --porcelain` → detects ALL uncommitted changes (any tool, any file)
+- `git rev-list --count @{u}..HEAD` → unpushed local commits
+- `git rev-list --count HEAD..@{u}` → remote is ahead (e.g., cloud Codex merged a PR)
 
-### UI Changes
+The git status icons already reflect this:
+- 🟢 Green = clean | 🟠 Amber = uncommitted | 🔵 Blue = unpushed | 🔴 Rose = behind remote
 
-1. **Sync dialog file list:** Show all three groups with collapsible headers, file counts per group
-2. **Per-category selection:** Users can toggle entire categories on/off (e.g., commit metadata + docs but not code)
-3. **Per-file selection (stretch):** Individual file checkboxes within categories for granular control
-4. **Sync button visibility:** Trigger when ANY file is dirty, not just dashboard-managed files
-5. **Commit message:** Auto-generated message reflects which categories and files are included
+**Expanding Git Sync scope makes these icons more actionable** — amber means "open Sync to commit", not just "something changed somewhere."
 
-### Backend Changes
+## Proposed Changes
 
-1. **Remove `filter_dashboard_dirty_files`** — or make it one of three category filters
-2. **`dashboardDirty` → `hasDirtyFiles`** — boolean for "any dirty files exist"
-3. **Categorize files in Rust:** Return `dirtyFiles` grouped by category: `{ metadata: string[], documents: string[], code: string[] }`
-4. **File count in header badge:** Show total dirty file count across all categories
+### Backend (Rust)
 
-### Considerations
+1. **Return all dirty files with categories:**
+   ```rust
+   struct DirtyFiles {
+       metadata: Vec<String>,
+       documents: Vec<String>,
+       code: Vec<String>,
+   }
+   ```
+2. **Replace `dashboardDirty: bool`** with `hasDirtyFiles: bool` (true when any category has files)
+3. **Keep `is_dashboard_file()` logic** but expand to categorize: `categorize_dirty_file(path) -> "metadata" | "documents" | "code"`
 
-- **Code changes are riskier** — the UI should make it clear when you're committing code vs metadata. Metadata commits are "safe" (no build impact), code commits could break things.
-- **Large file lists** — repos with many dirty code files could produce long lists. Collapsible groups + file counts handle this.
-- **Commit message convention** — metadata-only commits use `chore: sync project metadata (...)`, mixed commits might use `chore: sync project changes (...)` or let the user decide.
-- **Staged vs unstaged** — currently we show all dirty files regardless of git staging state. We should consider whether to respect existing staging or always stage-then-commit selected files.
+### Frontend (Sync Dialog)
+
+1. **Three collapsible groups** with file counts: `Metadata (1)`, `Documents (3)`, `Code (7)`
+2. **Per-category toggle** — check/uncheck entire category
+3. **Per-file selection (stretch)** — individual checkboxes within categories
+4. **Visual risk indicator** — subtle warning when Code category is selected ("Code changes included — review before committing")
+5. **Sync button triggers on any dirty files**, not just dashboard-managed
+
+### Commit Message
+
+Auto-generated message adapts to what's selected:
+- Metadata only: `chore: sync project metadata (ProjectName) — PROJECT.md`
+- Documents only: `docs: update roadmap (ProjectName) — ROADMAP.md, roadmap/feature.md`
+- Code only: `chore: sync code changes (ProjectName) — src/App.tsx, +2 more`
+- Mixed: `chore: sync project changes (ProjectName) — 3 files across metadata, docs, code`
 
 ## Out of Scope
 
-- Branch management (separate roadmap item: git-branch-sync)
-- Pull/merge operations (detecting "behind remote" is existing, acting on it is branch-sync territory)
-- Diff preview (useful but can be a later enhancement)
+- Branch management (git-branch-sync)
+- Pull/merge operations
+- Diff preview
 - `.gitignore` management
 
 ## Success Criteria
 
-- [ ] All dirty files in a repo appear in the Sync dialog, grouped by category
-- [ ] Users can select/deselect entire categories
-- [ ] Commit message updates dynamically to reflect selection
+- [ ] All dirty files appear in the Sync dialog, grouped by category
+- [ ] Users can toggle entire categories on/off
+- [ ] Code category has a subtle risk indicator
+- [ ] Commit message updates dynamically to reflect selection and categories
 - [ ] Sync button appears for any dirty files, not just dashboard-managed ones
-- [ ] External changes (made in VS Code/Codex) are visible and committable through Sync
+- [ ] External changes (VS Code, Codex) are visible and committable through Sync

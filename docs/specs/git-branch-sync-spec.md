@@ -3,133 +3,144 @@
 > Multi-branch sync with AI-assisted conflict resolution, enabling users to commit and push changes across multiple branches from the Sync dialog.
 
 **Status:** pending
-**Depends on:** git-sync-scope completion
+**Depends on:** git-sync-scope (phase 2) completion
 **Roadmap ID:** git-branch-sync
 
 ---
 
 ## Context
 
-Git Sync (phase 1) commits to whichever branch is currently checked out. Git Sync Scope Expansion (phase 2) lets you commit any file. But many users maintain changes across multiple branches — for example, keeping `ROADMAP.md` in sync between `main` and `staging` even when code differs between them.
+Git Sync phases 1-2 commit to whichever branch is currently checked out. But many users maintain changes across multiple branches — for example, keeping `ROADMAP.md` in sync between `main` and `staging` even when code differs between them.
 
-Currently, syncing across branches requires manual git operations (cherry-pick, checkout, merge) or asking an AI coding agent to do it. This feature brings that capability into the Clawchestra Sync dialog with AI-assisted conflict resolution.
+Additionally, repos can fall behind their remote when changes are pushed from elsewhere (cloud Codex, collaborators, merged PRs on GitHub). The app detects this (rose icon = behind remote) but doesn't help you act on it.
+
+This feature brings multi-branch commit, pull, and AI-assisted conflict resolution into the Sync dialog.
 
 ## Problem
 
-- Users who maintain multiple branches (e.g., main + staging) have no way to sync files across them from the dashboard
-- Cherry-picking structured files (ROADMAP.md, PROJECT.md) across branches that have diverged can cause conflicts
-- Manual branch management requires git expertise or AI assistance outside the app
-- No guidance exists for AI agents on how to safely resolve branch sync conflicts for project metadata files
+- Users who maintain multiple branches have no way to sync files across them from the dashboard
+- Cherry-picking structured files across diverged branches can cause conflicts that need expertise to resolve
+- When a repo is behind remote (cloud Codex merged a PR), there's no way to pull from the dashboard
+- No standardized guidance exists for AI agents on how to safely handle branch sync operations
 
 ## Proposed Solution
 
 ### Phase 3A: Branch Selection UI
 
-1. **Branch awareness in Sync dialog:** Show current branch (already done), add a "Also sync to:" section with other local branches listed
-2. **Branch checkboxes:** Toggle which additional branches receive the commit
-3. **Branch status indicators:** Show if target branches are ahead/behind/diverged relative to current
-4. **Push per branch:** Independent push toggles per branch
+1. **Branch list in Sync dialog:** Below the current branch indicator, show "Also sync to:" with checkboxes for other local branches
+2. **Branch status indicators:** Each branch shows its relationship to remote: `✓ in sync`, `↑2 ahead`, `↓3 behind`, `⚠ diverged`
+3. **Independent push toggles per branch**
+4. **Pull option:** When current branch is behind remote, offer "Pull first?" before sync
 
-### Phase 3B: Cherry-Pick Execution
+### Phase 3B: Multi-Branch Execution
 
-When syncing to additional branches, the sequence is:
+**For non-conflicting cases (cherry-pick):**
 
-```
+The sequence when syncing to additional branches:
 1. Commit selected files on current branch
 2. For each selected target branch:
-   a. git stash (save any unrelated WIP)
-   b. git checkout <target-branch>
-   c. git cherry-pick <commit-hash>
-   d. If conflict → invoke AI resolution
-   e. git checkout <original-branch>
-   f. git stash pop (restore WIP)
-3. Push to selected branches (if push enabled)
-```
+   - Stash any unrelated work-in-progress
+   - Switch to the target branch
+   - Cherry-pick the commit (applies just that one commit's changes)
+   - Switch back to the original branch
+   - Restore stashed work
+3. Push to selected branches if push enabled
 
-**Terminology for non-git-experts:**
-- **Stash** = temporarily save uncommitted work so you can switch branches cleanly
-- **Checkout** = switch to a different branch
-- **Cherry-pick** = take a specific commit and replay it on the current branch
-- **Conflict** = two branches changed the same lines differently; needs human or AI decision
+**What these git operations mean in plain English:**
+- **Stash** = "save my uncommitted work in a drawer so I can switch branches cleanly"
+- **Cherry-pick** = "take that specific commit and replay it on this branch" (unlike merge, which brings ALL commits)
+- This is the right approach because you want the same file change on multiple branches, not a full branch merge
 
 ### Phase 3C: AI-Assisted Conflict Resolution
 
-When a cherry-pick conflicts:
+When a cherry-pick conflicts (the same file was changed differently on both branches):
 
 1. **Detect conflict type:**
-   - Structured file (ROADMAP.md, PROJECT.md) → semantic resolution possible
-   - Code file → needs careful review
-2. **Send to OpenClaw agent** with context:
-   - The conflicting file content (both versions + conflict markers)
-   - Which branches are involved
-   - What the user intended to sync
-   - Git branch sync skill/guide for resolution patterns
-3. **Agent resolves and reports:**
-   - "Merged ROADMAP.md — kept both branches' items, resolved ordering conflict"
-   - Or: "Conflict in src/App.tsx — both branches modified the same function. Here's the diff. Which version do you want?"
-4. **User approves or overrides** in the Sync dialog
+   - Structured file (ROADMAP.md, PROJECT.md) → semantic resolution possible (merge item lists, deduplicate)
+   - Code file → needs careful review, present both versions
+2. **Send to OpenClaw agent** with conflict context + git management skill loaded
+3. **Agent resolves and reports** — e.g., "Merged ROADMAP.md: kept items from both branches, resolved ordering"
+4. **User reviews and approves or overrides** in the Sync dialog
 
-### Git Branch Management Skill
+### Git Management Skill / Agent Guidance
 
-Create a skill (or AGENTS.md guidance) that provides AI agents with:
+**Research findings:** No existing ClawHub skill covers holistic branch management. GitHub Docs cover conflict resolution mechanics but not strategy. Atlassian's Git Tutorials are the best holistic reference (Gitflow, trunk-based, cherry-pick patterns). No single authoritative "how to think about branch management" guide exists.
 
-- **When to cherry-pick vs merge:** Cherry-pick for specific files, merge for full branch sync
-- **Structured file resolution:** ROADMAP.md and PROJECT.md are YAML frontmatter + markdown — conflicts can be resolved semantically (merge item lists, keep both, deduplicate)
-- **Code file resolution:** Prefer the version from the "source" branch (the one the user explicitly changed), flag for review if both branches have unique changes
-- **Non-destructive principles:** Never delete content without explicit user confirmation, always preserve both sides' additions, use `git rerere` for recurring conflict patterns
-- **Remote sync order:** Check ahead/behind before pushing, suggest `git pull --ff-only` if behind, warn if force-push would be needed
+**What we need to build:**
 
-**Source material for the skill:**
+A git management skill/guide synthesized from:
+- [Atlassian: Comparing Git Workflows](https://www.atlassian.com/git/tutorials/comparing-workflows)
+- [Atlassian: Git Cherry Pick](https://www.atlassian.com/git/tutorials/cherry-pick)
 - [GitHub Docs: Resolving merge conflicts via CLI](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/addressing-merge-conflicts/resolving-a-merge-conflict-using-the-command-line)
 - [Git SCM: git-cherry-pick](https://git-scm.com/docs/git-cherry-pick)
-- [Git SCM: git-rerere](https://git-scm.com/docs/git-rerere)
-- Practical patterns from Clawchestra's structured file formats
+- [Git SCM: git-rerere](https://git-scm.com/docs/git-rerere) (reuse recorded resolution)
+- Practical patterns specific to Clawchestra's structured file formats
 
-**Delivery:** Could be a standalone skill file, AGENTS.md section, or both. If Git Sync becomes a core Clawchestra feature, the guidance should ship with the app (injected into agent context when branch sync is triggered).
+**The skill should cover:**
+- When to cherry-pick vs merge vs rebase
+- How to resolve conflicts in structured markdown files (ROADMAP.md, PROJECT.md) — these have YAML frontmatter and can be merged semantically
+- How to resolve code file conflicts — prefer source branch, flag ambiguous cases
+- Non-destructive principles: never delete content without explicit user confirmation
+- Remote sync order: check ahead/behind before pushing, suggest pull if behind
+- `git rerere` configuration for recurring conflict patterns
+- All feasible git commands and their purposes (must stay current with git/GitHub CLI updates)
+
+**Delivery options:**
+1. **Standalone skill** — loaded when branch sync is triggered
+2. **AGENTS.md section** — always-available guidance for any git operations
+3. **Both** — skill for detailed reference, AGENTS.md summary for quick access
+4. If Git Sync becomes a core Clawchestra feature, the guidance should ship with the app context
+
+**Pre-build research phase:** Before writing the skill, do a deeper review of:
+- ClawHub directory for any git-related skills published since last check
+- GitHub's `gh` CLI capabilities for branch operations
+- Whether `git rerere` is practical for automated resolution
+- Atlassian's full workflow comparison guide for distillable decision trees
 
 ## Scenarios
 
 ### Scenario 1: Keep ROADMAP.md in sync across main + staging
-- User edits ROADMAP.md via dashboard (adds a new deliverable)
-- Opens Sync dialog → selects "Also sync to: staging"
-- Commits to main, cherry-picks to staging
-- No conflict (staging's ROADMAP.md is identical to main's) → clean sync
-- Pushes both branches
+- User updates ROADMAP.md via dashboard → Sync dialog shows "Also sync to: staging"
+- Commits to main, cherry-picks to staging → clean (identical ROADMAP.md on both)
+- Pushes both
 
 ### Scenario 2: Branches have diverged
-- Main has ROADMAP.md with items A, B, C
-- Staging has ROADMAP.md with items A, B, D (D was added on staging only)
-- User adds item E via dashboard on main
-- Cherry-pick to staging conflicts (different content after item B)
-- AI resolves: merge to produce A, B, C, D, E — preserves both branches' additions
+- Main: ROADMAP items A, B, C. Staging: items A, B, D (D added on staging only)
+- User adds item E on main → cherry-pick to staging conflicts
+- AI resolves: produce A, B, C, D, E — preserves both branches' additions
 - User reviews and approves
 
-### Scenario 3: Cloud Codex merged a PR, local is behind
-- GitHub remote has new commits from a cloud Codex run
-- User's local repo is behind (rose icon)
-- Before syncing, Clawchestra warns: "main is 3 commits behind remote"
-- Offers: "Pull first?" → runs `git pull --ff-only`
-- If pull succeeds → proceed with sync
-- If pull conflicts → invoke AI resolution
+### Scenario 3: Remote is ahead (cloud Codex merged a PR)
+- Rose icon on project card: "3 commits behind remote"
+- Sync dialog warns: "main is behind remote — pull first?"
+- Pull succeeds → proceed with sync
+- Pull conflicts → AI resolution
+
+### Scenario 4: Code change across branches
+- User changes `src/theme.css` via AI chat on main
+- Wants same change on staging (staging has different code but same CSS structure)
+- Cherry-pick may conflict if staging modified the same CSS
+- AI agent reviews both versions, merges non-destructively
 
 ## Out of Scope
 
 - Creating new branches from the Sync dialog
-- Rebasing workflows (cherry-pick is safer for this use case)
-- PR creation from the Sync dialog (future enhancement)
-- Remote branch management (delete, protect, etc.)
+- Rebasing workflows
+- PR creation from the Sync dialog
+- Remote branch management (delete, protect)
+- Full git GUI (this is targeted sync, not a replacement for VS Code's git panel)
 
 ## Dependencies
 
-- git-sync (phase 1) — base commit/push infrastructure ✅
+- git-sync (phase 1) ✅ — base commit/push infrastructure
 - git-sync-scope (phase 2) — all-file detection and categorization
 - OpenClaw agent integration — already built into Clawchestra chat
 
 ## Success Criteria
 
-- [ ] Branch selector appears in Sync dialog showing local branches
-- [ ] Users can select additional branches to sync to
+- [ ] Branch selector in Sync dialog showing local branches with status
 - [ ] Cherry-pick executes cleanly for non-conflicting cases
 - [ ] AI agent resolves conflicts with user-reviewable output
-- [ ] Git branch management skill/guide exists and is loaded during branch sync operations
-- [ ] Behind-remote detection warns user before sync and offers pull
+- [ ] Git management skill/guide exists and is loaded during branch sync
+- [ ] Behind-remote detection warns and offers pull before sync
+- [ ] Pre-build research phase completed (ClawHub, gh CLI, rerere, Atlassian guides)

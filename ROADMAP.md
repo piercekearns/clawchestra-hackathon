@@ -27,10 +27,13 @@ items:
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: git-sync-scope
-    title: 'Git Sync: Scope Expansion'
+    title: 'Git Sync: Scope Expansion (Phase 2)'
     status: up-next
     priority: 1
-    nextAction: 'Spec written — depends on git-sync phase 1 completion'
+    nextAction: >-
+      Spec written — expand dirty file detection to all files with
+      Metadata/Documents/Code categorization. Depends on git-sync phase 1
+      completion.
     tags:
       - git
       - sync
@@ -38,10 +41,13 @@ items:
     icon: "\U0001F504"
     specDoc: docs/specs/git-sync-scope-spec.md
   - id: git-branch-sync
-    title: 'Git Sync: Branch Management'
+    title: 'Git Sync: Branch Management (Phase 3)'
     status: pending
     priority: 1
-    nextAction: 'Spec written — depends on git-sync-scope completion'
+    nextAction: >-
+      Spec written — multi-branch cherry-pick + AI conflict resolution +
+      git management skill. Requires research phase (ClawHub, gh CLI,
+      Atlassian guides). Depends on git-sync-scope completion.
     tags:
       - git
       - sync
