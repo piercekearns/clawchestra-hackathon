@@ -104,10 +104,6 @@ export interface ProjectViewModel extends BoardItem {
   needsReview: boolean;
   /** True if frontmatter.repo is set (GitHub-linked) */
   hasRepo: boolean;
-  commitActivity?: {
-    lastCommit?: string;
-    commitsThisWeek: number;
-  };
 }
 
 export type RoadmapStatus = 'pending' | 'up-next' | 'in-progress' | 'complete';

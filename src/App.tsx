@@ -1422,11 +1422,7 @@ export default function App() {
                             label={gitHubStatusMeta.label}
                           />
                         ) : null}
-                        {project.commitActivity ? (
-                          <span className="rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] dark:bg-neutral-700">
-                            {project.commitActivity.commitsThisWeek}/wk
-                          </span>
-                        ) : null}
+                        {/* commitActivity badge removed — not useful on cards */}
                       </>
                     );
                   }}

@@ -99,11 +99,7 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
                   {project.gitStatus.branch ? ` (${project.gitStatus.branch})` : ''}
                 </Badge>
               )}
-              {project.commitActivity && (
-                <Badge variant="outline">
-                  {project.commitActivity.commitsThisWeek} commit(s)/week
-                </Badge>
-              )}
+              {/* commitActivity badge removed — check GitHub for commit stats */}
             </div>
 
             {project.children.length > 0 && (

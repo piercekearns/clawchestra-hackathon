@@ -116,12 +116,6 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
 
       const gitStatus = hasGit ? await fetchGitStatus(dirPath) : undefined;
 
-      // Derive commit activity from local git data (replaces GitHub API)
-      const commitActivity = gitStatus ? {
-        lastCommit: gitStatus.lastCommitDate?.split('T')[0],
-        commitsThisWeek: gitStatus.commitsThisWeek ?? 0,
-      } : undefined;
-
       // Auto-detect GitHub linkage: frontmatter repo field takes priority,
       // otherwise check if git remote points to GitHub
       const hasRepo = Boolean(frontmatter.repo) ||
@@ -146,7 +140,6 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
         isStale: isStale(lastActivity),
         needsReview: needsReview(frontmatter.lastReviewed),
         hasRepo,
-        commitActivity,
         title: frontmatter.title,
         status: frontmatter.status ?? 'simmering',
         priority: frontmatter.priority,
