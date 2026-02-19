@@ -55,7 +55,7 @@ items:
     title: First Friend Readiness
     status: up-next
     priority: 3
-    nextAction: Spec written — deliver Git Sync and Deep Rename first
+    nextAction: Plan written — ready for phased build execution
     tags:
       - onboarding
       - cross-platform
@@ -87,6 +87,22 @@ items:
       - roadmap
       - ux
       - workflow
+  - id: clawchestra-ai-website
+    title: Launch Clawchestra.ai Website
+    status: pending
+    priority: 3
+    nextAction: >-
+      Spec written — run openclaw.ai/clawi.ai design-stack reconnaissance, then
+      resolve distribution/GitHub/DNS prerequisites and write implementation
+      plan with frontend-design execution.
+    tags:
+      - website
+      - marketing
+      - frontend-design
+      - distribution
+      - openclaw
+    icon: "\U0001F310"
+    specDoc: docs/specs/clawchestra-ai-website-spec.md
   - id: git-sync
     title: Git Sync (Phase 1)
     status: complete
