@@ -4,7 +4,7 @@ items:
     title: Git Sync
     status: in-progress
     priority: 1
-    nextAction: 'Built + reviewed — awaiting manual testing'
+    nextAction: Built + reviewed — awaiting manual testing
     tags:
       - git
       - github
@@ -42,12 +42,12 @@ items:
     specDoc: docs/specs/git-sync-scope-spec.md
   - id: git-branch-sync
     title: 'Git Sync: Branch Management (Phase 3)'
-    status: pending
-    priority: 1
+    status: up-next
+    priority: 2
     nextAction: >-
-      Spec written — multi-branch cherry-pick + AI conflict resolution +
-      git management skill. Requires research phase (ClawHub, gh CLI,
-      Atlassian guides). Depends on git-sync-scope completion.
+      Spec written — multi-branch cherry-pick + AI conflict resolution + git
+      management skill. Requires research phase (ClawHub, gh CLI, Atlassian
+      guides). Depends on git-sync-scope completion.
     tags:
       - git
       - sync
@@ -58,7 +58,7 @@ items:
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
-    priority: 1
+    priority: 3
     nextAction: Spec written — ready for plan/build
     tags:
       - infra
@@ -67,7 +67,7 @@ items:
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 2
+    priority: 4
     nextAction: Spec written — deliver Git Sync and Deep Rename first
     tags:
       - onboarding

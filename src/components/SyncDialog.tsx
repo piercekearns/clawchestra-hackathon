@@ -314,7 +314,7 @@ export function SyncDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 top-[46px] z-40 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
       <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-700">
@@ -379,8 +379,8 @@ export function SyncDialog({
                       {branch.label}
                     </span>
 
-                    {/* Action button */}
-                    {!result && (
+                    {/* Action button — only visible when project is selected */}
+                    {!result && selectedIds.has(project.id) && (
                       <Button
                         type="button"
                         variant="outline"
@@ -408,8 +408,8 @@ export function SyncDialog({
                     )}
                   </div>
 
-                  {/* Push toggle for non-completed items */}
-                  {!result && git.remote && (
+                  {/* Push toggle — only visible when project is selected */}
+                  {!result && git.remote && selectedIds.has(project.id) && (
                     <div className="ml-6 mt-1 inline-flex items-center gap-1.5 text-xs text-neutral-500">
                       <BrandCheckbox
                         checked={pushEnabled.has(project.id)}
