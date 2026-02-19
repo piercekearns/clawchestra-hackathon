@@ -312,6 +312,38 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+### BUG-010: "Background task failed — OpenClaw chat aborted" during long tmux monitoring
+**Reported:** 2026-02-19 ~22:08
+**Severity:** Medium
+**Status:** Open
+
+**Symptoms:**
+- During a Claude Code `/build` session monitored via tmux capture-pane polling, user received a "Background task failed — Error: OpenClaw chat aborted — Check logs for details" system bubble in the chat drawer at 22:08
+- The Claude Code session in tmux was still running independently and completed successfully (~12m35s)
+- The OpenClaw agent turn that was monitoring the tmux session was killed — likely hit the agent runtime timeout (default `agents.defaults.timeoutSeconds: 600` = 10 minutes)
+- From the user's perspective: work was happening, then suddenly a red error bubble appeared with no clear explanation of what failed or whether the build was still running
+- The gateway dashboard showed the last tool call activity stopped at 22:08, consistent with the agent turn being aborted
+
+**Root cause hypothesis:**
+- The agent turn started at ~21:56, with many `exec` calls (tmux capture-pane polling with `sleep` waits between captures)
+- By ~22:08 (~12 minutes in), the agent runtime timeout was exceeded
+- OpenClaw aborted the agent turn, which surfaced as "OpenClaw chat aborted" to the chat
+- The underlying Claude Code tmux session was unaffected (tmux is independent of the agent process)
+
+**Impact:**
+- User lost visibility of the build progress in the chat — no more status updates after the abort
+- User saw a scary red error bubble with no context about what specifically failed
+- The actual build work continued and completed successfully, but user had no way to know this without checking the tmux session or gateway dashboard manually
+
+**Possible improvements:**
+- The error bubble should say *what* was aborted (e.g., "Agent monitoring turn timed out after 10 minutes — the tmux session may still be running")
+- For long tmux monitoring tasks, the agent could set a longer timeout or use a different monitoring pattern (e.g., cron-based polling instead of a single long turn)
+- Consider a "check tmux session" recovery action after timeout
+
+**Scenario links:** none yet (new category — agent timeout during tmux monitoring)
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:
