@@ -5,8 +5,9 @@ items:
     status: in-progress
     priority: 1
     nextAction: >-
-      Building via Claude Code (/build) — Phase 2 scope expansion in
-      progress.
+      Code shipped (f4cda66) — awaiting manual verification. Test: open
+      Sync dialog, verify 3-category grouping (Metadata/Documents/Code),
+      Code unchecked by default, commit with mixed categories.
     tags:
       - git
       - sync
