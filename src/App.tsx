@@ -1509,19 +1509,6 @@ export default function App() {
                     return (
                       <>
                         {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
-                        {project.gitStatus?.dashboardDirty && (
-                          <Tooltip text="Uncommitted dashboard changes">
-                            <span
-                              className="inline-flex"
-                              tabIndex={0}
-                              aria-label="Uncommitted dashboard changes"
-                              onClick={(e) => e.stopPropagation()}
-                              onPointerDown={(e) => e.stopPropagation()}
-                            >
-                              <span className="inline-block h-2 w-2 rounded-full bg-orange-400" />
-                            </span>
-                          </Tooltip>
-                        )}
                         {project.hasRepo ? (
                           <GitHubStatusBadge
                             className={gitHubStatusMeta.className}
