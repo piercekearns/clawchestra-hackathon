@@ -13,16 +13,18 @@ items:
     icon: "\U0001F527"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
   - id: github-api-403-errors
-    title: Investigate GitHub API 403 Errors
+    title: "Local Git Intelligence (was: GitHub API 403 Errors)"
     status: in-progress
     priority: 2
+    specDoc: docs/specs/github-api-403-errors-spec.md
     nextAction: >-
-      Diagnose recurring 403s on /commits endpoint from GitHubStatusBadge —
-      likely rate limiting, may need auth token or caching
+      Implement Rust enriched git status command + git fetch, replace
+      GitHub API calls in project load path with local git queries
     tags:
       - bug
       - github
-      - api
+      - git
+      - enhancement
   - id: git-sync
     title: Git Sync
     status: up-next
