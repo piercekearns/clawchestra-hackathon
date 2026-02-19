@@ -117,7 +117,7 @@ App creates a default settings file on first launch with Pierce-specific default
 ## 4. Stage 2: Connect to OpenClaw
 
 ### Current state
-Rust backend reads `~/.openclaw/openclaw.json` for `gateway.port` and `gateway.auth.token`, then connects to `ws://127.0.0.1:{port}`. This only works when OpenClaw is installed locally on the same machine. Session key is hardcoded to `agent:main:pipeline-dashboard`.
+Rust backend reads `~/.openclaw/openclaw.json` for `gateway.port` and `gateway.auth.token`, then connects to `ws://127.0.0.1:{port}`. This only works when OpenClaw is installed locally on the same machine. Session key default is currently hardcoded to `agent:main:clawchestra` (post Deep Rename), but not yet user-configurable.
 
 ### What's needed
 
@@ -435,8 +435,8 @@ The update button is core functionality — the friend will make code changes vi
 | **Full button customisation** | Doesn't exist | Icon picker, label, prompt editor | Large (separate item) |
 | **Settings in sidebar** | Sidebar shell exists, no content | Settings panel as sidebar content | Medium |
 | **Cross-platform update** | macOS-only (`#[cfg]` block, `.app` bundle path) | Remove gate, platform binary detection, Windows update script | Small-Medium |
-| **Session key config** | Hardcoded `agent:main:pipeline-dashboard` | Configurable, sensible default | Small |
-| **Deep rename** | Package still called `pipeline-dashboard` | Rename Cargo, paths, session key | Medium |
+| **Session key config** | Hardcoded default `agent:main:clawchestra` | Make configurable, keep `agent:main:clawchestra` as sensible default | Small |
+| **Deep rename** | Completed as prerequisite (`io.github.piercekearns.clawchestra`, renamed package/paths/session baseline) | No FFR implementation required; consume as baseline | - |
 
 ---
 
@@ -452,6 +452,11 @@ The update button is core functionality — the friend will make code changes vi
 | **Custom Card Actions** (was pending) | **Removed from roadmap** — fully subsumed by this spec (Stage 4 + Phase 5). |
 | **App Customisation** (pending, P1) | **Deprioritised** — not blocking shareability |
 | **Roadmap Item Quick-Add** (pending, P2) | **Deprioritised** — friend has AI, can add items via chat |
+
+**Assumed baseline after prerequisites:**
+- Tauri identifier is `io.github.piercekearns.clawchestra`
+- Session key default is `agent:main:clawchestra`
+- Internal package/path naming is `clawchestra` (no `pipeline-dashboard` runtime identifiers)
 
 ---
 
@@ -476,7 +481,7 @@ Work is sequenced by the funnel: each stage unlocks the next.
 - Update `resolveTransport` to use settings values
 - Add connection test command (returns version + status)
 - Settings UI fields for gateway config (in existing Settings dialog initially)
-- Change default session key from `agent:main:pipeline-dashboard` to `agent:main:clawchestra`
+- Keep default session key as `agent:main:clawchestra` while making it configurable
 
 **Unlocks:** Friend can connect to their remote OpenClaw instance.
 
