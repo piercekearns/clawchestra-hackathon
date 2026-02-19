@@ -75,6 +75,14 @@ export interface GitStatus {
   details?: string;
   /** Origin remote URL (auto-detected from git config) */
   remote?: string;
+  lastCommitDate?: string;
+  lastCommitMessage?: string;
+  lastCommitAuthor?: string;
+  commitsThisWeek?: number;
+  latestTag?: string;
+  stashCount: number;
+  aheadCount?: number;
+  behindCount?: number;
 }
 
 export interface ProjectViewModel extends BoardItem {

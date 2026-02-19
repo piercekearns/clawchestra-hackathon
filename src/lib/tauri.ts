@@ -67,6 +67,7 @@ type TauriCommands = {
   pick_folder: { args: { initialPath?: string | null }; return: string | null };
   probe_repo: { args: { repoPath: string }; return: RepoProbe };
   get_git_status: { args: { repoPath: string }; return: GitStatus };
+  git_fetch: { args: { repoPath: string }; return: string };
   git_commit: {
     args: { repoPath: string; message: string; files: string[] };
     return: void;
@@ -221,6 +222,10 @@ export async function probeRepo(repoPath: string): Promise<RepoProbe> {
 
 export async function getGitStatus(repoPath: string): Promise<GitStatus> {
   return typedInvoke('get_git_status', { repoPath });
+}
+
+export async function gitFetch(repoPath: string): Promise<string> {
+  return typedInvoke('git_fetch', { repoPath });
 }
 
 export async function gitCommit(repoPath: string, message: string, files: string[]): Promise<void> {

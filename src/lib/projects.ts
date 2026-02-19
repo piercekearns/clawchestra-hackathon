@@ -1,6 +1,5 @@
 import matter from 'gray-matter';
 import type { DashboardError } from './errors';
-import { fetchCommitActivity } from './github';
 import { fetchGitStatus } from './git';
 import { buildHierarchy } from './hierarchy';
 import { canonicalSlugify } from './project-flows';
@@ -116,10 +115,20 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
       ]);
 
       const gitStatus = hasGit ? await fetchGitStatus(dirPath) : undefined;
+
+      // Derive commit activity from local git data (replaces GitHub API)
+      const commitActivity = gitStatus ? {
+        lastCommit: gitStatus.lastCommitDate?.split('T')[0],
+        commitsThisWeek: gitStatus.commitsThisWeek ?? 0,
+      } : undefined;
+
       // Auto-detect GitHub linkage: frontmatter repo field takes priority,
       // otherwise check if git remote points to GitHub
       const hasRepo = Boolean(frontmatter.repo) ||
         Boolean(gitStatus?.remote && gitStatus.remote.includes('github.com'));
+
+      // Use git last commit date for staleness if frontmatter doesn't have lastActivity
+      const lastActivity = frontmatter.lastActivity ?? gitStatus?.lastCommitDate?.split('T')[0];
 
       projects.push({
         id,
@@ -134,9 +143,10 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
         hasGit,
         gitStatus,
         children: [],
-        isStale: isStale(frontmatter.lastActivity),
+        isStale: isStale(lastActivity),
         needsReview: needsReview(frontmatter.lastReviewed),
         hasRepo,
+        commitActivity,
         title: frontmatter.title,
         status: frontmatter.status ?? 'simmering',
         priority: frontmatter.priority,
@@ -160,23 +170,6 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
       errors.push({ type: 'duplicate_project_id', id, paths: dirs });
     }
   }
-
-  // Fetch commit activity for GitHub-linked projects
-  const withRepoSlug = projects.filter((project) => project.hasRepo);
-  await Promise.all(
-    withRepoSlug.map(async (project) => {
-      // Use frontmatter repo slug, or extract from git remote URL
-      const repoSlug = project.frontmatter.repo ?? extractGitHubSlug(project.gitStatus?.remote);
-      if (!repoSlug) return;
-
-      const activity = await fetchCommitActivity(repoSlug);
-      if (!activity) return;
-
-      project.commitActivity = activity;
-      const lastActivity = project.frontmatter.lastActivity ?? activity.lastCommit;
-      project.isStale = isStale(lastActivity);
-    }),
-  );
 
   return { projects: buildHierarchy(projects), errors };
 }

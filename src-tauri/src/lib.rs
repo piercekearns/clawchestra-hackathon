@@ -14,11 +14,21 @@ use serde_json::{json, Value};
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
 const DEFAULT_SESSION_KEY: &str = "agent:main:pipeline-dashboard";
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GitStatus {
     state: String,
     branch: Option<String>,
     details: Option<String>,
     remote: Option<String>,
+    // New fields for local git intelligence
+    last_commit_date: Option<String>,
+    last_commit_message: Option<String>,
+    last_commit_author: Option<String>,
+    commits_this_week: Option<u32>,
+    latest_tag: Option<String>,
+    stash_count: u32,
+    ahead_count: Option<u32>,
+    behind_count: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -1127,62 +1137,100 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
     let remote = run_git(&repo_path, &["config", "--get", "remote.origin.url"]).ok();
     let status_porcelain = run_git(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
 
-    if !status_porcelain.is_empty() {
-        return Ok(GitStatus {
-            state: "uncommitted".to_string(),
-            branch,
-            details: Some("Repository has uncommitted changes".to_string()),
-            remote,
-        });
-    }
+    // Collect enriched git data (combined log query: date, subject, author)
+    let (last_commit_date, last_commit_message, last_commit_author) =
+        match run_git(&repo_path, &["log", "-1", "--format=%aI%n%s%n%an"]) {
+            Ok(output) => {
+                let lines: Vec<&str> = output.splitn(3, '\n').collect();
+                (
+                    lines.first().map(|s| s.to_string()),
+                    lines.get(1).map(|s| s.to_string()),
+                    lines.get(2).map(|s| s.to_string()),
+                )
+            }
+            Err(_) => (None, None, None),
+        };
 
-    let upstream = run_git(
-        &repo_path,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    );
-    if upstream.is_err() {
-        return Ok(GitStatus {
-            state: "clean".to_string(),
-            branch,
-            details: Some("No upstream configured".to_string()),
-            remote,
-        });
-    }
+    let commits_this_week =
+        run_git(&repo_path, &["rev-list", "--count", "--since=7 days ago", "HEAD"])
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok());
 
-    let behind_count = run_git(&repo_path, &["rev-list", "--count", "HEAD..@{u}"])
-        .unwrap_or_else(|_| "0".to_string())
-        .parse::<u32>()
+    let latest_tag = run_git(&repo_path, &["describe", "--tags", "--abbrev=0"]).ok();
+
+    let stash_count = run_git(&repo_path, &["stash", "list"])
+        .map(|s| if s.is_empty() { 0 } else { s.lines().count() as u32 })
         .unwrap_or(0);
 
-    if behind_count > 0 {
-        return Ok(GitStatus {
-            state: "behind".to_string(),
-            branch,
-            details: Some(format!("Behind upstream by {} commit(s)", behind_count)),
-            remote,
-        });
-    }
+    // Determine state, ahead/behind counts
+    let (state, details, ahead_count, behind_count) = if !status_porcelain.is_empty() {
+        (
+            "uncommitted".to_string(),
+            Some("Repository has uncommitted changes".to_string()),
+            None,
+            None,
+        )
+    } else {
+        let has_upstream = run_git(
+            &repo_path,
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        )
+        .is_ok();
 
-    let ahead_count = run_git(&repo_path, &["rev-list", "--count", "@{u}..HEAD"])
-        .unwrap_or_else(|_| "0".to_string())
-        .parse::<u32>()
-        .unwrap_or(0);
+        if !has_upstream {
+            (
+                "clean".to_string(),
+                Some("No upstream configured".to_string()),
+                None,
+                None,
+            )
+        } else {
+            let behind = run_git(&repo_path, &["rev-list", "--count", "HEAD..@{u}"])
+                .unwrap_or_else(|_| "0".to_string())
+                .parse::<u32>()
+                .unwrap_or(0);
+            let ahead = run_git(&repo_path, &["rev-list", "--count", "@{u}..HEAD"])
+                .unwrap_or_else(|_| "0".to_string())
+                .parse::<u32>()
+                .unwrap_or(0);
 
-    if ahead_count > 0 {
-        return Ok(GitStatus {
-            state: "unpushed".to_string(),
-            branch,
-            details: Some(format!("Ahead of upstream by {} commit(s)", ahead_count)),
-            remote,
-        });
-    }
+            let (state, details) = if behind > 0 {
+                (
+                    "behind".to_string(),
+                    Some(format!("Behind upstream by {} commit(s)", behind)),
+                )
+            } else if ahead > 0 {
+                (
+                    "unpushed".to_string(),
+                    Some(format!("Ahead of upstream by {} commit(s)", ahead)),
+                )
+            } else {
+                ("clean".to_string(), Some("Working tree clean".to_string()))
+            };
+
+            (state, details, Some(ahead), Some(behind))
+        }
+    };
 
     Ok(GitStatus {
-        state: "clean".to_string(),
+        state,
         branch,
-        details: Some("Working tree clean".to_string()),
+        details,
         remote,
+        last_commit_date,
+        last_commit_message,
+        last_commit_author,
+        commits_this_week,
+        latest_tag,
+        stash_count,
+        ahead_count,
+        behind_count,
     })
+}
+
+#[tauri::command]
+fn git_fetch(repo_path: String) -> Result<String, String> {
+    run_git(&repo_path, &["fetch", "origin"])
 }
 
 #[tauri::command]
@@ -2194,6 +2242,7 @@ pub fn run() {
             openclaw_chat,
             probe_repo,
             get_git_status,
+            git_fetch,
             git_commit,
             git_push,
             git_init_repo,

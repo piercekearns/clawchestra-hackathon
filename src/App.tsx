@@ -42,7 +42,7 @@ import {
   type GatewayImageAttachment,
   wireSystemEventBus,
 } from './lib/gateway';
-import { commitPlanningDocs, pushRepo } from './lib/git';
+import { commitPlanningDocs, fetchAllRepos, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
 import { enrichItemsWithDocs, readRoadmap, resolveDocFiles, writeRoadmap } from './lib/roadmap';
 import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
@@ -338,7 +338,12 @@ export default function App() {
   }, [themePreference]);
 
   useEffect(() => {
-    void loadProjects();
+    void loadProjects().then(() => {
+      // Fire-and-forget: fetch all remotes on startup, then reload to pick up updated refs
+      const currentProjects = useDashboardStore.getState().projects;
+      const flat = flattenProjects(currentProjects);
+      void fetchAllRepos(flat).then(() => loadProjects());
+    });
   }, [loadProjects]);
 
   // Load persisted chat messages on startup
@@ -1288,7 +1293,14 @@ export default function App() {
         <div className="relative flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
         <Header
           errors={errors}
-          onRefresh={async () => { await loadProjects(); void refreshRoadmapDocsRef.current(); }}
+          onRefresh={async () => {
+            await loadProjects();
+            void refreshRoadmapDocsRef.current();
+            // Also fetch remotes and reload to pick up updated ahead/behind
+            const currentProjects = useDashboardStore.getState().projects;
+            const flat = flattenProjects(currentProjects);
+            void fetchAllRepos(flat).then(() => loadProjects());
+          }}
           onAddProject={() => setAddDialogOpen(true)}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
