@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Check, Clock4 } from 'lucide-react';
+import { Check, Clock4, GitBranch } from 'lucide-react';
 import { GitHubStatusBadge } from './components/GitHubStatusBadge';
 import { Tooltip } from './components/Tooltip';
 import { AddProjectDialog } from './components/AddProjectDialog';
@@ -104,8 +104,11 @@ const RECOVERY_BUBBLE_DEDUP_MS = 5 * 60_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
 const UPSTREAM_FAILURE_DEDUP_MS = 60_000;
 
-/** Inline straight-stroke check icon for use in tooltips and text */
-const StraightCheck = () => (
+/** Inline icons for use in tooltips and text */
+const InlineBranch = () => (
+  <GitBranch className="inline-block h-3 w-3 align-[-2px]" />
+);
+const InlineCheck = () => (
   <Check
     className="inline-block h-3 w-3 align-[-2px]"
     strokeWidth={2.5}
@@ -134,8 +137,8 @@ function getGitHubStatusMeta(
   if (!hasRemote) {
     return {
       className: 'text-neutral-500 dark:text-neutral-400',
-      label: `⑂ ${branch} · not linked to GitHub`,
-      tooltip: `⑂ ${branch} · not linked to GitHub — push this branch to connect`,
+      label: `${branch} · not linked to GitHub`,
+      tooltip: <><InlineBranch /> {branch} · not linked to GitHub — push to connect</>,
     };
   }
 
@@ -148,7 +151,7 @@ function getGitHubStatusMeta(
   let textSuffix = '';
   if (status.state === 'uncommitted') textSuffix = ' · uncommitted changes';
 
-  const label = `⑂ ${branch}${sync}${textSuffix}`;
+  const label = `${branch}${sync}${textSuffix}`;
   const isSynced = status.state === 'clean' && sync === '';
 
   const classMap: Record<string, string> = {
@@ -162,8 +165,8 @@ function getGitHubStatusMeta(
     className: classMap[status.state] ?? 'text-neutral-500 dark:text-neutral-400',
     label,
     tooltip: isSynced
-      ? <>{`⑂ ${branch}`} <StraightCheck /></>
-      : label,
+      ? <><InlineBranch /> {branch} <InlineCheck /></>
+      : <><InlineBranch /> {branch}{sync}{textSuffix}</>,
   };
 }
 
