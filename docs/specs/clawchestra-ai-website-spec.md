@@ -1,177 +1,255 @@
-# Clawchestra.ai Website
+# Clawchestra.ai Website — Spec (Discovery Phase)
 
-> Launch a bold, high-conviction website that explains Clawchestra, proves product value quickly, and makes installation frictionless.
+> Document current decisions, constraints, reconnaissance findings, and pre-plan execution gates before writing a true implementation plan.
 
 ## Summary
 
-Clawchestra needs a dedicated public website that turns first-time visitors into active users by combining strong brand expression, fast product comprehension, and immediate install paths. This spec defines core content, interaction goals, and delivery constraints for a `clawchestra.ai` launch, with design and implementation explicitly executed using the `frontend-design` skill (inspired by `openclaw.ai` / `clawi.ai` energy, but not visually derivative). It also identifies unresolved dependencies that must be closed before launch.
+This discovery brief captures where the Clawchestra.ai website initiative stands after spec review and dependency analysis. It locks the brand and launch posture that are already clear, records technical reconnaissance from reference sites, and defines pre-plan steps: first a constrained visual exploration phase (multiple static variants), then implementation planning after direction selection and prerequisite closure.
+
+The goal is to avoid premature full builds while still moving quickly: produce high-quality direction candidates under fixed constraints, choose a winner, then write a production implementation plan with minimal rework.
 
 ---
 
-**Roadmap Item:** `clawchestra-ai-website`
-**Status:** Draft
-**Created:** 2026-02-19
+**Roadmap Item:** `clawchestra-ai-website`  
+**Spec:** `docs/specs/clawchestra-ai-website-spec.md`  
+**Status:** Draft  
+**Created:** 2026-02-20
 
 ---
 
-## 1. Product Intent
+## 1. Current State Snapshot
 
-The site should answer these questions in under 30 seconds:
-- What is Clawchestra?
-- Why does it matter?
-- What can it do for me?
-- How do I install it right now?
+### What is already defined
 
-Primary conversion event: user starts installation.
-Secondary conversion event: user visits the GitHub repository.
+1. Website intent and core sections are specified in the website spec.
+2. Strong visual direction is already preferred (dither texture, lobster motif, revival yellow + black contrast).
+3. Domain ownership is confirmed (`clawchestra.ai`).
+4. Website item is pending and blocked by reconnaissance + launch/distribution prerequisites.
 
-## 2. Required Outcomes
+### What was missing before this brief
 
-The first release must satisfy all of the following:
+1. No implementation plan document for the website item.
+2. No explicit variant-generation workflow for trying multiple polished directions before full build.
+3. No lock on launch posture language for "friend-first" distribution.
+4. No explicit stack recommendation tied to reference-site evidence.
 
-### A. Branding
-- Prominently display Clawchestra branding and logo above the fold
-- Establish a confident visual identity (not generic landing-page styling)
+---
 
-### B. Product Visualisation
-- Show the app in action with at least one rich visual artifact:
-  - preferred: short embedded demo video
-  - fallback: animated GIF + high-quality screenshots
-- Include at least one interaction cue (hover/scroll animation, timeline reveal, or UI simulation)
+## 2. Constraints Locked Now
 
-### C. Product Story
-- Clearly describe:
-  - what Clawchestra is
-  - what the project exists to do
-  - what goals it helps teams/agents achieve
-- Explain outcomes, not only features
+These are treated as fixed constraints for exploration and implementation unless explicitly changed.
 
-### D. Feature Communication
-- Present key features as scannable sections/cards
-- Tie each feature to a practical benefit
+### Brand and color system
 
-### E. Easy Installation
-- Include a "Quick Start" section that supports multiple install methods and multiple operating systems
-- Installation instructions should minimize cognitive load (copy/paste command blocks + OS tabs or method tabs)
+1. Primary palette:
+   - `#DFFF00` (revival yellow)
+   - near-black
+   - white
+   - neutral greys
+2. The lobster motif remains central to hero composition.
+3. Yellow/black inversion is allowed (dark-primary or inverse-primary), but palette family stays constant.
 
-## 3. Site Information Architecture
+### Typography constraints
 
-Recommended structure:
-1. Hero (branding, one-sentence value prop, primary CTA: Install)
-2. Product in Motion (video/animation of real usage)
-3. What It Is / Why It Exists
-4. Feature Highlights
-5. Quick Start Installation
-6. Powered by OpenClaw
-7. GitHub + community links
-8. FAQ / troubleshooting for install edge cases
+1. Theme families to use for varianting are based on roadmap direction:
+   - Standard
+   - Terminal
+   - Geist
+2. Current app baseline fonts are:
+   - `Space Grotesk` for UI
+   - `IBM Plex Mono` for mono/code contexts
+3. Variant exploration should map each concept to one font-theme package to avoid random mixing.
 
-## 4. Content Requirements
+### UX and messaging constraints
 
-### Must include
-- Clawchestra logo/wordmark
-- GitHub repository link
-- Explicit statement that Clawchestra is powered by OpenClaw
-- Installation guidance for macOS, Linux, and Windows
+1. CTA hierarchy remains:
+   - primary: install / get access
+   - secondary: GitHub
+2. No dead links or fake install pathways.
+3. If install is not public yet, page language must explicitly present invite/private alpha + waitlist.
 
-### Should include
-- "Who this is for" framing (solo builders, teams, agent-native workflows)
-- Credibility elements (real screenshots, architecture snippets, or workflow diagrams)
+---
 
-## 5. Frontend Design Execution (Required Skill)
+## 3. Launch Posture Decision (Locked)
 
-Implementation for this website must use the `frontend-design` skill guidance:
-- Commit to a single intentional aesthetic direction before coding
-- Use expressive typography and cohesive visual system
-- Avoid generic "AI landing page" patterns
-- Use meaningful motion (load sequence, staged reveals, or interactive preview)
-- Ensure responsive behavior on both desktop and mobile
+Initial launch posture:
 
-Design inspiration references (`openclaw.ai`, `clawi.ai`, `blacksmith.sh`) should inform confidence and clarity, but the final execution must be distinctly Clawchestra.
+1. **Friend-first private alpha** for actual installs.
+2. **Public marketing + waitlist** website.
+3. **No public install claim** until distribution artifacts are real and verifiable.
 
-## 6. Visual Direction Concept (Preferred)
+Operational implication:
 
-Preferred concept direction for the first build:
-- High-contrast, poster-like aesthetic with coarse dither/grain texture
-- Hero anchored by a large lobster motif adapted for Clawchestra (conducting baton in one/both claws)
-- Revival yellow (`#DFFF00`) as dominant brand accent with black as core contrast pair
-- Composition should feel bold and intentional, not polished-corporate
+1. Friend install path is private GitHub collaborator access + source-build docs.
+2. Public users get product story + proof + waitlist CTA.
 
-Two acceptable palette modes:
-1. Dark mode primary: near-black background, `#DFFF00` lobster/accents
-2. Inverse mode primary: `#DFFF00` background, near-black lobster/typography
+---
 
-Usage guidance:
-- Lobster artwork can be a large background plane behind hero content, but text contrast must remain AAA/AA readable.
-- Add subtle motion only (parallax drift, grain flicker, reveal masks); avoid heavy animation that obscures copy.
-- Maintain a clear CTA hierarchy above visual treatment: Install first, GitHub second.
-- Keep art export flexible (SVG/PNG/WebP variants + transparent cutout) so sections can reuse motif without repainting layout.
+## 4. Reference-Site Technical Recon (Completed)
 
-## 7. Reference Site Reconnaissance (Required Before Build Plan)
+Targets reviewed:
 
-Before implementation planning, run a targeted technical reconnaissance of `openclaw.ai`, `clawi.ai`, and `blacksmith.sh` to reduce guesswork and avoid low-quality "quick AI site" outcomes.
+1. `openclaw.ai`
+2. `clawi.ai`
+3. `blacksmith.sh`
 
-### Research goals
-- Identify likely framework/runtime used (for example: React/Next.js/Astro/Svelte)
-- Identify styling and component approach (for example: Tailwind, shadcn-style primitives, custom CSS system)
-- Identify animation approach (for example: Framer Motion, GSAP, CSS-only, Lottie/Rive usage)
-- Identify typography strategy and layout system patterns
-- Identify deployment/hosting patterns where discoverable
-- Identify maintainability characteristics (easy to extend, componentization quality, likely update ergonomics)
+### Observed evidence summary
 
-### Required output
-Create a short internal research brief before build planning that includes:
-- observed evidence
-- confidence level for each inference
-- recommendations for the Clawchestra stack choice, optimized for speed and long-term maintainability
-- explicit note on whether to use familiar tooling (`shadcn`, `Tailwind`) or alternatives, with rationale
+1. `openclaw.ai`
+   - Strong Astro markers (`data-astro-*`) and Vite-style assets.
+   - Lightweight static-first output characteristics.
+2. `clawi.ai`
+   - Clear Next.js App Router signatures (`/_next/static`, response headers indicating Next.js).
+   - Heavier app-style runtime/chunk profile.
+3. `blacksmith.sh`
+   - Webflow-generated assets/scripts.
+   - GSAP present for animation-heavy interactions.
 
-## 8. Installation Experience Requirements
+### Recommendation derived from evidence
 
-Quick Start must support multiple pathways:
-- Source build from GitHub (clone + prerequisites + run/build)
-- Packaged binary install per OS (if artifacts exist)
-- Package-manager install paths where available (`npm`, `pnpm`, `bun`, etc.)
+1. Use **Astro + Tailwind** for Clawchestra.ai:
+   - static-first performance
+   - fast iteration
+   - simple deployment
+2. Keep animation approach **CSS-first**, with a single richer motion tool only if needed:
+   - optional: Rive for one hero motion artifact
+   - avoid broad animation-framework sprawl for initial launch.
 
-Every method should show:
-- prerequisites
-- exact command(s)
-- expected result
-- fallback/help link if command fails
+---
 
-## 9. Dependencies and Unresolved Preconditions
+## 5. Hosting, Analytics, and Operations Decisions
 
-### Confirmed
-- Domain ownership: user confirmed `clawchestra.ai` is owned.
+### Hosting/CDN (recommended path)
 
-### Unresolved / Needs Decision
-1. DNS and hosting strategy for `clawchestra.ai`
-2. Public GitHub repository URL and release strategy
-3. Which install channels will be officially supported at launch
-4. Whether package-manager distribution artifacts exist (currently unknown)
-5. Whether signed installers/notarization are required at launch
-6. Marketing media assets availability (demo video/GIF/screenshots)
-7. Reference-site reconnaissance not yet completed (`openclaw.ai`, `clawi.ai`, `blacksmith.sh`)
-8. Hero artwork production workflow not yet finalized (AI-edited lobster asset pipeline + export formats)
+1. Host on Cloudflare Pages.
+2. Manage DNS on existing Cloudflare domain setup for `clawchestra.ai`.
+3. Keep deployment simple (no extra infra layers at first launch).
 
-These must be resolved before a production launch plan is finalized.
+### Analytics
 
-## 10. Acceptance Criteria
+1. Minimal/no analytics at launch is acceptable.
+2. If later needed, add one lightweight privacy-friendly tracker after public install opens.
 
-This item is ready for build verification when:
-- Reference-site reconnaissance brief is completed and reviewed
-- Final implementation stack decision is documented with rationale
-- Website contains all required sections in this spec
-- Visual direction implements approved lobster/baton concept (or documented alternative approved by user)
-- Quick Start provides at least two valid installation methods
-- OS-specific install guidance exists for macOS, Linux, and Windows
-- GitHub link and OpenClaw attribution are visible
-- Product demo media is present and functional
-- Mobile and desktop layouts are both usable and polished
+---
 
-## 11. Out of Scope (Initial Launch)
+## 6. Variant Exploration Phase (Required Before Full Build)
 
-- Full documentation portal migration
-- Authenticated user dashboard/accounts
-- Blog/CMS system
-- Advanced SEO/analytics optimization beyond baseline metadata
+This phase is the mechanism to generate and compare polished directions before committing implementation resources.
+
+### Purpose
+
+1. Generate visual confidence.
+2. Compare directions quickly without full-stack build cost.
+3. Lock one direction based on explicit review criteria.
+
+### Deliverables
+
+Create at least three static direction mockups:
+
+1. `Variant A` — dark-primary poster direction
+2. `Variant B` — inverse/yellow-primary direction
+3. `Variant C` — hybrid editorial direction with stronger typographic emphasis
+
+Format:
+
+1. HTML/CSS mockups (minimal JS only if needed for a key interaction feel).
+2. Responsive states for desktop + mobile.
+3. Shared content skeleton across all variants.
+
+### Fixed across all variants
+
+1. Information architecture sections from spec.
+2. Core headline/value proposition blocks.
+3. CTA order and semantics.
+4. Install/waitlist truthfulness.
+5. Brand palette family.
+
+### Allowed to vary across variants
+
+1. Typography pairing within allowed theme set.
+2. Composition and layout rhythm.
+3. Texture/grain treatment.
+4. Motion language (subtle and intentional).
+5. Illustration treatment/cropping of lobster motif.
+
+### Review rubric
+
+Each variant should be scored on:
+
+1. Clarity in first 30 seconds.
+2. Visual distinctiveness (non-generic quality).
+3. Perceived trust and polish.
+4. Install/waitlist CTA clarity.
+5. Mobile readability and balance.
+6. Ease of scaling into full production implementation.
+
+---
+
+## 7. Full Build Phase (After Variant Selection)
+
+Once one direction is selected, build production site with:
+
+1. Finalized copy system.
+2. Production media assets.
+3. Cloudflare deployment.
+4. Public waitlist flow.
+5. Private-alpha install instructions for invited users.
+
+---
+
+## 8. Media Pipeline Definition (What "Final Media Polish" Means)
+
+For this project, the media polish pipeline is:
+
+1. Define demo shot list (3-5 canonical user flows).
+2. Capture source footage at consistent resolution/fps.
+3. Edit and trim short sequences per website section.
+4. Export optimized artifacts:
+   - primary: `webm`/`mp4`
+   - fallback: still images and optional GIF
+5. Generate poster frames and alt text.
+6. Compress for web budgets and verify load behavior on mobile.
+
+This should be treated as a repeatable pipeline, not ad-hoc asset drops.
+
+---
+
+## 9. Dependencies and Decision Ledger
+
+### Closed decisions
+
+1. Launch mode: friend-first private alpha + public waitlist.
+2. Core brand direction: locked to yellow/black/white/grey family with lobster motif.
+3. Variant-first process before full implementation.
+4. Hosting preference: Cloudflare stack.
+
+### Still open (must close before production launch)
+
+1. Public repository URL and release surface strategy.
+2. Exact private-alpha access flow copy (invite wording, access request handling).
+3. Which install channels are genuinely available on launch date.
+4. Final font mapping per selected variant theme.
+5. Final media asset pack readiness.
+
+---
+
+## 10. Execution Sequence
+
+1. Create reconnaissance brief artifact (already completed at planning level; persist if needed as separate file).
+2. Run Variant Exploration Phase and produce 3 static mockups.
+3. Review and select (or merge) one direction.
+4. Lock copy, font package mapping, and launch CTA text.
+5. Build production website on selected stack.
+6. Deploy to Cloudflare Pages and wire domain.
+7. Ship friend-private install path and public waitlist site.
+
+---
+
+## 11. Exit Criteria for Discovery
+
+This discovery phase is considered successfully executed when:
+
+1. Three polished static variants exist and are reviewable.
+2. One direction is explicitly selected.
+3. Launch posture copy is finalized (private alpha + waitlist).
+4. A separate implementation plan can be written without unresolved foundation decisions.

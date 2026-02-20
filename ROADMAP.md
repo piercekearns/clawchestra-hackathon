@@ -1,23 +1,9 @@
 ---
 items:
-  - id: git-sync-scope
-    title: 'Git Sync: Scope Expansion (Phase 2)'
-    status: in-progress
-    priority: 1
-    nextAction: >-
-      Code shipped (f4cda66) — awaiting manual verification. Test: open Sync
-      dialog, verify 3-category grouping (Metadata/Documents/Code), Code
-      unchecked by default, commit with mixed categories.
-    tags:
-      - git
-      - sync
-      - workflow
-    icon: "\U0001F504"
-    specDoc: docs/specs/git-sync-scope-spec.md
   - id: chat-infrastructure
     title: 'Chat Reliability: Persistent Bugs'
     status: in-progress
-    priority: 2
+    priority: 1
     nextAction: >-
       Force-update path now allowed during active turns (with warning) and
       tracker includes reconnect/resume aspiration; continue Phase 2 bug intake
@@ -70,9 +56,10 @@ items:
     status: pending
     priority: 1
     nextAction: >-
-      Spec updated with bold visual direction (dither lobster + baton concept);
-      run openclaw.ai/clawi.ai/blacksmith.sh stack reconnaissance, then resolve
-      distribution/GitHub/DNS prerequisites and write implementation plan.
+      Discovery brief written — run Variant Exploration Phase (3 polished
+      static mockups under locked brand/copy constraints), choose one
+      direction, then write implementation plan before production build
+      (private-alpha + public waitlist launch posture).
     tags:
       - website
       - marketing
@@ -222,6 +209,20 @@ items:
       - ux
       - roadmap
     icon: "\U0001F3A8"
+  - id: git-sync-scope
+    title: 'Git Sync: Scope Expansion (Phase 2)'
+    status: complete
+    priority: 9
+    nextAction: >-
+      Code shipped (f4cda66) — awaiting manual verification. Test: open Sync
+      dialog, verify 3-category grouping (Metadata/Documents/Code), Code
+      unchecked by default, commit with mixed categories.
+    tags:
+      - git
+      - sync
+      - workflow
+    icon: "\U0001F504"
+    specDoc: docs/specs/git-sync-scope-spec.md
 ---
 
 # Clawchestra — Roadmap
