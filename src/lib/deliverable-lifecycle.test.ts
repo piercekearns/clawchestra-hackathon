@@ -20,7 +20,7 @@ describe('deliverable lifecycle helpers', () => {
     expect(prompt).toContain('no Claude Code needed for specs');
   });
 
-  it('builds update plan prompt with tmux steps and normalized path', () => {
+  it('builds update plan prompt with Tab completion', () => {
     const prompt = buildLifecyclePrompt('plan', {
       project: { id: 'project-1', title: 'Project One', dirPath: '/workspace/project-one' },
       item: {
@@ -34,10 +34,11 @@ describe('deliverable lifecycle helpers', () => {
     expect(prompt).toContain('Update the existing implementation plan using Claude Code via tmux');
     expect(prompt).toContain('coding-agent skill');
     expect(prompt).toContain('tmux new-session');
-    expect(prompt).toContain('/plan docs/plans/item-1-plan.md');
+    expect(prompt).toContain("'/plan' Tab");
+    expect(prompt).toContain('docs/plans/item-1-plan.md');
   });
 
-  it('builds create plan prompt with tmux steps when plan is missing', () => {
+  it('builds create plan prompt with Tab completion when plan is missing', () => {
     const prompt = buildLifecyclePrompt('plan', {
       project: { id: 'project-1', title: 'Project One' },
       item: { id: 'feature-x', title: 'Feature X', docs: { spec: 'docs/specs/feature-x-spec.md' } },
@@ -45,7 +46,8 @@ describe('deliverable lifecycle helpers', () => {
 
     expect(prompt).toContain('Create a new implementation plan using Claude Code via tmux');
     expect(prompt).toContain('tmux new-session -d -s feature-x-plan');
-    expect(prompt).toContain('/plan docs/plans/feature-x-plan.md');
+    expect(prompt).toContain("'/plan' Tab");
+    expect(prompt).toContain('docs/plans/feature-x-plan.md');
     expect(prompt).toContain('spec at docs/specs/feature-x-spec.md');
   });
 
@@ -64,7 +66,7 @@ describe('deliverable lifecycle helpers', () => {
     expect(prompt).toContain('Surface the recommended plan changes');
   });
 
-  it('builds build prompt with explicit tmux steps', () => {
+  it('builds build prompt with Tab completion and sub-agent info', () => {
     const prompt = buildLifecyclePrompt('build', {
       project: { id: 'project-1', title: 'Project One' },
       item: {
@@ -75,10 +77,13 @@ describe('deliverable lifecycle helpers', () => {
     });
 
     expect(prompt).toContain('Build this roadmap item using Claude Code via tmux');
+    expect(prompt).toContain('MUST use Tab to trigger command completion');
     expect(prompt).toContain('coding-agent skill');
     expect(prompt).toContain('tmux new-session -d -s git-sync-build');
     expect(prompt).toContain('claude --dangerously-skip-permissions');
-    expect(prompt).toContain('/build docs/plans/git-sync-plan.md');
+    expect(prompt).toContain("'/build' Tab");
+    expect(prompt).toContain("' docs/plans/git-sync-plan.md' Enter");
+    expect(prompt).toContain('/workflows:work');
     expect(prompt).toContain('Surface non-critical recommendations');
     expect(prompt).toContain('Kill tmux session when complete');
   });
