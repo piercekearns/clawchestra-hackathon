@@ -256,7 +256,7 @@ Deliverables are roadmap items for a specific project.
 
 Create in: `{project-folder}/roadmap/{deliverable-id}.md`
 
-Example: `projects/pipeline-dashboard/roadmap/chat-drawer-ui.md`
+Example: `projects/clawchestra/roadmap/chat-drawer-ui.md`
 
 ### Required Fields
 
@@ -266,7 +266,7 @@ title: Chat Drawer UI
 status: up-next
 type: deliverable
 priority: 1
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-11
 ---
 ```
@@ -284,7 +284,7 @@ tags: [ui, chat]
 For deliverables with specs/plans:
 
 ```
-projects/pipeline-dashboard/
+projects/clawchestra/
 ├── roadmap/
 │   └── chat-drawer-ui.md    # Deliverable (Level 2)
 └── docs/

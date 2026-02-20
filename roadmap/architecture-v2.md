@@ -27,7 +27,7 @@ This deliverable is complete for MVP scope (Phases 1-5):
 - [x] **Phase 5**: migration runner, hardcoded-path removal, settings-based cutover hooks
 
 Finalized operator cutover state:
-- `appSourcePath` points to `/Users/piercekearns/repos/pipeline-dashboard`
+- `appSourcePath` points to `/Users/piercekearns/repos/clawchestra`
 - `workspaceRoots` is repos-only (`/Users/piercekearns/repos`)
 - legacy sandbox app copy retired from `clawdbot-sandbox/projects`
 

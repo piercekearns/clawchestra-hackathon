@@ -50,11 +50,11 @@ Future state: Open the app, see everything at a glance, drag to reorder, chat wi
 Spec is detailed enough for a coding agent to build without clarifying questions. Located at:
 
 ```
-/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/SPEC.md
+/Users/piercekearns/clawdbot-sandbox/projects/clawchestra/SPEC.md
 ```
 
 ---
 
 ## Post-Build
 
-Once live, create a skill (`skills/pipeline-dashboard/`) so I can interact with/modify the dashboard efficiently.
+Once live, create a skill (`skills/clawchestra/`) so I can interact with/modify the dashboard efficiently.

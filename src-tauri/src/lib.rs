@@ -2466,7 +2466,7 @@ async fn run_app_update(update_guard: Option<UpdateGuardInput>) -> Result<String
         .current_dir(&project_dir)
         .env("CLAWCHESTRA_INSTALL_PATH", install_path)
         .env("CLAWCHESTRA_RESTART_AFTER_BUILD", "1")
-        .args(["-c", "./update.sh > /tmp/pipeline-update.log 2>&1"])
+        .args(["-c", "./update.sh > /tmp/clawchestra-update.log 2>&1"])
         .spawn()
         .map_err(|error| error.to_string())?;
 
