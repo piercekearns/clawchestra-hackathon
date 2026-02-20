@@ -515,6 +515,7 @@ export function SyncDialog({
   const userEditedCommitRef = useRef(false);
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
 
     const defaultCats = buildDefaultCategories(dirtyProjects);
     setSelectedCategories(defaultCats);
@@ -540,6 +541,40 @@ export function SyncDialog({
     setCommitMessage(
       buildCommitMessage(computeCommitInputs(defaultCats, dirtyProjects, new Set())),
     );
+
+    // Validate persisted entries — auto-clear stale ones where the repo
+    // no longer has an active cherry-pick conflict
+    const validatePersisted = async () => {
+      const staleIds: string[] = [];
+      for (const [projectId, state] of persisted) {
+        if (cancelled) return;
+        if (!isUnresolvedSyncStep(state.currentStep) || !state.commitHash) continue;
+        const project = projects.find((p) => p.id === projectId);
+        if (!project?.dirPath) continue;
+        try {
+          const v = await gitValidateBranchSyncResume({
+            repoPath: project.dirPath,
+            sourceBranch: state.sourceBranch,
+            commitHash: state.commitHash,
+            remainingTargets: state.remainingTargets,
+          });
+          if (!v.cherryPickInProgress && !v.unresolvedConflicts) {
+            clearExecutionState(projectId);
+            staleIds.push(projectId);
+          }
+        } catch { /* keep entry on validation failure */ }
+      }
+      if (!cancelled && staleIds.length > 0) {
+        setExecutionStateByProject((prev) => {
+          const next = new Map(prev);
+          for (const id of staleIds) next.delete(id);
+          return next;
+        });
+      }
+    };
+    void validatePersisted();
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps intentionally
   // limited to `open` only: we want a full reset on dialog open, not on every
   // project/category change (which would discard user selections mid-session).

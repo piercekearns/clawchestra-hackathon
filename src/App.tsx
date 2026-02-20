@@ -63,6 +63,7 @@ import { useDashboardStore } from './lib/store';
 import {
   chatRecoveryCursorAdvance,
   getDashboardSettings,
+  gitValidateBranchSyncResume,
   isTauriRuntime,
   updateDashboardSettings,
 } from './lib/tauri';
@@ -75,7 +76,7 @@ import {
   classifyUpstreamFailure,
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
-import { readExecutionState, isUnresolvedSyncStep } from './lib/git-sync-utils';
+import { readExecutionState, isUnresolvedSyncStep, clearExecutionState } from './lib/git-sync-utils';
 
 interface Toast {
   id: number;
@@ -272,17 +273,36 @@ export default function App() {
   // Unresolved sync state (conflict/failed persisted in localStorage)
   const [unresolvedSyncCount, setUnresolvedSyncCount] = useState(0);
 
-  const scanUnresolvedSyncState = useCallback(() => {
+  const scanUnresolvedSyncState = useCallback(async () => {
     let count = 0;
     for (const p of allProjects) {
-      if (!p.gitStatus) continue; // must match SyncDialog's filter
+      if (!p.gitStatus) continue;
       const state = readExecutionState(p.id);
-      if (state && isUnresolvedSyncStep(state.currentStep)) count++;
+      if (!state || !isUnresolvedSyncStep(state.currentStep)) continue;
+
+      // Validate that the repo is actually still in a broken state
+      if (state.commitHash) {
+        try {
+          const v = await gitValidateBranchSyncResume({
+            repoPath: p.dirPath,
+            sourceBranch: state.sourceBranch,
+            commitHash: state.commitHash,
+            remainingTargets: state.remainingTargets,
+          });
+          if (!v.cherryPickInProgress && !v.unresolvedConflicts) {
+            clearExecutionState(p.id);
+            continue; // stale — conflict resolved externally
+          }
+        } catch {
+          // validation failed — keep entry, err on side of showing
+        }
+      }
+      count++;
     }
     setUnresolvedSyncCount(count);
   }, [allProjects]);
 
-  useEffect(() => { scanUnresolvedSyncState(); }, [scanUnresolvedSyncState]);
+  useEffect(() => { void scanUnresolvedSyncState(); }, [scanUnresolvedSyncState]);
 
   const selectedProject = useMemo(
     () => allProjects.find((project) => project.id === selectedProjectId),
@@ -1784,7 +1804,7 @@ export default function App() {
         open={syncDialogOpen}
         onOpenChange={(open) => {
           setSyncDialogOpen(open);
-          if (!open) scanUnresolvedSyncState();
+          if (!open) void scanUnresolvedSyncState();
         }}
         projects={allProjects}
         onRequestChatPrefill={(text) => {
