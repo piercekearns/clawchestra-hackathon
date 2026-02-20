@@ -19,9 +19,9 @@ items:
     status: in-progress
     priority: 2
     nextAction: >-
-      Reliability fixes built and validated by tests/build; use this item as
-      ongoing Phase 2 bug intake during daily chat usage, then run holistic
-      review/fix pass on newly logged issues.
+      Force-update path now allowed during active turns (with warning) and
+      tracker includes reconnect/resume aspiration; continue Phase 2 bug intake
+      during daily chat usage, then run holistic review/fix pass on new issues.
     tags:
       - chat
       - bugs

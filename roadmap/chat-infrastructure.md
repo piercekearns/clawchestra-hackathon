@@ -31,6 +31,11 @@ Use this format at the end of each bug:
 ### Why this structure
 This keeps your real-world bug reports directly comparable to the existing tracker and allows a later holistic review/fix pass without re-triaging from scratch.
 
+### Follow-up aspiration (post-update reliability)
+Candidate enhancement to track as second-wave reliability work:
+- Allow update/restart during an active turn and, after reconnect, recover the last in-flight user/assistant turn as if the session was uninterrupted.
+- If recovery is partial, surface an explicit "resume/recovering" state so users know whether they need to retry.
+
 ---
 
 ## Bug Log

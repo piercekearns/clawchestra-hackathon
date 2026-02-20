@@ -19,7 +19,7 @@ export function getUpdateBlockedReason(
   enforceFlushGuard: boolean,
 ): string | null {
   if (enforceFlushGuard && activeTurnCount > 0) {
-    return `Update blocked: ${activeTurnCount} active chat turn(s).`;
+    return `Active chat turn detected (${activeTurnCount}) — update will force restart and may interrupt current response.`;
   }
   return null;
 }
@@ -122,17 +122,17 @@ export function useAppUpdate() {
     const activeTurnCount = getActiveTurnCount();
     const enforceFlushGuard = CHAT_RELIABILITY_FLAGS.chat.update_flush_guard;
     const blockedReason = getUpdateBlockedReason(activeTurnCount, enforceFlushGuard);
-    if (blockedReason) {
+    const forcingActiveTurnUpdate = Boolean(blockedReason);
+    if (forcingActiveTurnUpdate) {
       console.warn('[Update]', {
         updateRequestedAt,
-        reason: 'update_blocked_active_turns',
+        reason: 'update_force_active_turns',
         activeTurnCount,
       });
       setUpdateBlockedReason(blockedReason);
-      return;
+    } else {
+      setUpdateBlockedReason(null);
     }
-
-    setUpdateBlockedReason(null);
     updateTriggeredRef.current = true;
     flushSync(() => {
       setUpdating(true);
@@ -153,7 +153,7 @@ export function useAppUpdate() {
       await runAppUpdate({
         activeTurnCount,
         enforceFlushGuard,
-        allowForce: false,
+        allowForce: forcingActiveTurnUpdate,
       });
       console.log('[Update]', {
         updateRequestedAt,
