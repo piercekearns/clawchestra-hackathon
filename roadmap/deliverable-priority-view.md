@@ -3,7 +3,7 @@ title: Deliverable Priority View
 status: up-next
 type: deliverable
 priority: 5
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-11
 tags: [ui, roadmap, hierarchy]
 ---

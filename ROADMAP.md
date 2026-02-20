@@ -32,13 +32,14 @@ items:
     planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
-    status: up-next
-    priority: 1
-    nextAction: Plan written — ready for build execution
+    status: in-progress
+    priority: 3
+    nextAction: Built — awaiting verification
     tags:
       - infra
       - rename
     specDoc: docs/specs/deep-rename-clawchestra-spec.md
+    planDoc: docs/plans/deep-rename-clawchestra-plan.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next

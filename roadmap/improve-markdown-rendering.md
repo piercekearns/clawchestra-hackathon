@@ -2,7 +2,7 @@
 title: Improve Markdown Rendering
 status: complete
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 tags: [ui, markdown, p2]
 shippedDate: 2026-02-12

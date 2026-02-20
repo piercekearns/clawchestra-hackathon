@@ -2,7 +2,7 @@
 title: Chat Persistence
 status: complete
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 shippedDate: 2026-02-12
 specDoc: docs/chat-persistence/SPEC.md

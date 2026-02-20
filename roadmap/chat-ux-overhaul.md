@@ -2,7 +2,7 @@
 title: Chat UX Overhaul (MVP)
 status: complete
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 specDoc: docs/plans/2026-02-12-feat-chat-ux-overhaul-plan.md
 tags: [chat, ux, bugs, slash-commands]

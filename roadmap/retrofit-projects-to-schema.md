@@ -3,7 +3,7 @@ title: Retrofit Existing Projects to Schema
 status: up-next
 priority: 3
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 tags:
   - schema
   - cleanup

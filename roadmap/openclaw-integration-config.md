@@ -3,7 +3,7 @@ title: Configurable OpenClaw Integration
 status: up-next
 type: deliverable
 priority: 5
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 tags: [integration, config, sharing]
 dependsOn: [architecture-v2]

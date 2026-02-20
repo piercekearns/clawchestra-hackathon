@@ -3,7 +3,7 @@ title: Architecture V2
 status: complete
 priority: 7
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 tags:
   - architecture

@@ -3,7 +3,7 @@ title: Project Modal Improvements
 status: up-next
 type: deliverable
 priority: 1
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 tags: [ui, ux, core]
 specDoc: docs/specs/project-modal-improvements-spec.md

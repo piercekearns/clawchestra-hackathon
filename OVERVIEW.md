@@ -1,5 +1,5 @@
 ---
-title: Pipeline Dashboard
+title: Clawchestra
 status: up-next
 type: project
 priority: 1
@@ -7,7 +7,7 @@ tags: [tooling, productivity, agent-native]
 icon: 📊
 ---
 
-# Pipeline Dashboard
+# Clawchestra
 
 *Visual, interactive project pipeline with embedded OpenClaw.*
 

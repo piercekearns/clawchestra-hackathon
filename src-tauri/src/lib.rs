@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 
 // Embedded at compile time by build.rs
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
-const DEFAULT_SESSION_KEY: &str = "agent:main:pipeline-dashboard";
+const DEFAULT_SESSION_KEY: &str = "agent:main:clawchestra";
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct DirtyFileEntry {
@@ -220,37 +220,21 @@ fn default_openclaw_context_policy() -> String {
 }
 
 fn settings_file_path() -> Result<PathBuf, String> {
-    if let Ok(path) = env::var("PIPELINE_SETTINGS_PATH") {
+    if let Ok(path) = env::var("CLAWCHESTRA_SETTINGS_PATH") {
         return expand_tilde(&path);
     }
 
-    let home = env::var("HOME").map_err(|error| error.to_string())?;
-    let path = if cfg!(target_os = "macos") {
-        Path::new(&home)
-            .join("Library")
-            .join("Application Support")
-            .join("Pipeline Dashboard")
-            .join("settings.json")
-    } else if cfg!(target_os = "windows") {
-        if let Ok(appdata) = env::var("APPDATA") {
-            Path::new(&appdata)
-                .join("Pipeline Dashboard")
-                .join("settings.json")
-        } else {
-            Path::new(&home)
-                .join("AppData")
-                .join("Roaming")
-                .join("Pipeline Dashboard")
-                .join("settings.json")
-        }
+    let base = if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+        dirs::data_dir()
+            .ok_or_else(|| "Could not find application support directory".to_string())?
+            .join("Clawchestra")
     } else {
-        Path::new(&home)
-            .join(".config")
-            .join("pipeline-dashboard")
-            .join("settings.json")
+        dirs::config_dir()
+            .ok_or_else(|| "Could not find config directory".to_string())?
+            .join("clawchestra")
     };
 
-    Ok(path)
+    Ok(base.join("settings.json"))
 }
 
 const MUTATION_LOCK_TIMEOUT_MS: u64 = 5_000;
@@ -563,6 +547,63 @@ fn load_dashboard_settings() -> Result<DashboardSettings, String> {
     let sanitized = sanitize_settings(parsed)?;
     write_dashboard_settings_file(&sanitized)?;
     Ok(sanitized)
+}
+
+/// Migrate data directories from old "Pipeline Dashboard" / "pipeline-dashboard" names
+/// to new "Clawchestra" / "clawchestra" names. Idempotent: only renames when old exists
+/// and new does not. Runs once on first launch post-rename, then is a no-op.
+fn migrate_data_directories() {
+    // Settings directory: "Pipeline Dashboard" → "Clawchestra" (macOS/Windows)
+    // or "pipeline-dashboard" → "clawchestra" (Linux)
+    if let Some(data_dir) = dirs::data_dir() {
+        if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+            let old = data_dir.join("Pipeline Dashboard");
+            let new = data_dir.join("Clawchestra");
+            migrate_dir(&old, &new, "settings");
+        } else {
+            if let Some(config_dir) = dirs::config_dir() {
+                let old = config_dir.join("pipeline-dashboard");
+                let new = config_dir.join("clawchestra");
+                migrate_dir(&old, &new, "settings");
+            }
+        }
+
+        // Chat DB directory: "pipeline-dashboard" → "clawchestra"
+        let old_db = data_dir.join("pipeline-dashboard");
+        let new_db = data_dir.join("clawchestra");
+        migrate_dir(&old_db, &new_db, "chat-db");
+    }
+
+    // Best-effort cache cleanup
+    if let Some(cache_dir) = dirs::cache_dir() {
+        let _ = fs::remove_dir_all(cache_dir.join("pipeline-dashboard"));
+        let _ = fs::remove_dir_all(cache_dir.join("com.clawdbot.pipeline-dashboard"));
+    }
+
+    // Best-effort old preferences cleanup (macOS)
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            let old_plist = home
+                .join("Library")
+                .join("Preferences")
+                .join("com.clawdbot.pipeline-dashboard.plist");
+            let _ = fs::remove_file(old_plist);
+        }
+    }
+}
+
+fn migrate_dir(old: &Path, new: &Path, label: &str) {
+    if old.exists() && !new.exists() {
+        println!("[Migration] Migrating {label}: {} → {}", old.display(), new.display());
+        if let Some(parent) = new.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        match fs::rename(old, new) {
+            Ok(()) => println!("[Migration] {label} migrated successfully"),
+            Err(e) => eprintln!("[Migration] {label} migration failed (continuing): {e}"),
+        }
+    }
 }
 
 fn run_migrations() {
@@ -998,7 +1039,7 @@ fn new_idempotency_key() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    format!("pipeline-dashboard-{nanos}")
+    format!("clawchestra-{nanos}")
 }
 
 #[tauri::command]
@@ -2275,7 +2316,7 @@ struct UpdateGuardInput {
 }
 
 fn read_update_lock_state() -> UpdateLockState {
-    let lock_dir = Path::new("/tmp/pipeline-dashboard-update.lock");
+    let lock_dir = Path::new("/tmp/clawchestra-update.lock");
     if !lock_dir.exists() {
         return UpdateLockState {
             lock_present: false,
@@ -2423,8 +2464,8 @@ async fn run_app_update(update_guard: Option<UpdateGuardInput>) -> Result<String
 
     let _ = Command::new("/bin/sh")
         .current_dir(&project_dir)
-        .env("PIPELINE_DASHBOARD_INSTALL_PATH", install_path)
-        .env("PIPELINE_DASHBOARD_RESTART_AFTER_BUILD", "1")
+        .env("CLAWCHESTRA_INSTALL_PATH", install_path)
+        .env("CLAWCHESTRA_RESTART_AFTER_BUILD", "1")
         .args(["-c", "./update.sh > /tmp/pipeline-update.log 2>&1"])
         .spawn()
         .map_err(|error| error.to_string())?;
@@ -2736,7 +2777,7 @@ static CHAT_DB: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| Mutex::new(None))
 fn get_chat_db_path() -> Result<PathBuf, String> {
     let data_dir =
         dirs::data_dir().ok_or_else(|| "Could not find app data directory".to_string())?;
-    let app_dir = data_dir.join("pipeline-dashboard");
+    let app_dir = data_dir.join("clawchestra");
     fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
     Ok(app_dir.join("chat.db"))
 }
@@ -3229,6 +3270,7 @@ pub fn run() {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|_app| {
+            migrate_data_directories();
             run_migrations();
             Ok(())
         })
@@ -3291,7 +3333,7 @@ mod hardening_tests {
 
     fn test_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "pipeline-dashboard-{}-{}",
+            "clawchestra-{}-{}",
             name,
             uuid::Uuid::new_v4()
         ));

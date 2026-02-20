@@ -3,7 +3,7 @@ title: Architecture V2.1 Hardening
 status: complete
 type: deliverable
 priority: 6
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 tags: [architecture, hardening, concurrency]
 specDoc: docs/ARCHITECTURE-V2-SPEC.md

@@ -117,7 +117,7 @@ describe('gateway client', () => {
       label: 'Plan review',
       runtime: '2m 31s',
       status: 'completed',
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       runId: 'run_123',
     });
 
@@ -125,7 +125,7 @@ describe('gateway client', () => {
       label: 'Plan review',
       runtime: '2m 31s',
       status: 'ok',
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       runId: 'run_123',
       tokens: undefined,
     });
@@ -532,7 +532,7 @@ describe('gateway client', () => {
 
   it('estimates chat.send frame payload size for guardrail checks', () => {
     const size = __gatewayTestUtils.estimateChatSendFrameBytes({
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       message: 'hello',
       deliver: false,
       idempotencyKey: 'run-1',
@@ -544,7 +544,7 @@ describe('gateway client', () => {
 
   it('detects oversized chat.send frame payloads', () => {
     const size = __gatewayTestUtils.estimateChatSendFrameBytes({
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       message: 'hello',
       deliver: false,
       idempotencyKey: 'run-1',
@@ -563,7 +563,7 @@ describe('gateway client', () => {
   it('counts only active lifecycle turns', () => {
     __gatewayTestUtils.upsertTurnForTests({
       turnToken: 'turn-a',
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       status: 'queued',
       submittedAt: 1,
       lastSignalAt: 1,
@@ -571,7 +571,7 @@ describe('gateway client', () => {
     });
     __gatewayTestUtils.upsertTurnForTests({
       turnToken: 'turn-b',
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       status: 'running',
       submittedAt: 2,
       lastSignalAt: 2,
@@ -579,7 +579,7 @@ describe('gateway client', () => {
     });
     __gatewayTestUtils.upsertTurnForTests({
       turnToken: 'turn-c',
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       status: 'awaiting_output',
       submittedAt: 3,
       lastSignalAt: 3,
@@ -587,7 +587,7 @@ describe('gateway client', () => {
     });
     __gatewayTestUtils.upsertTurnForTests({
       turnToken: 'turn-d',
-      sessionKey: 'agent:main:pipeline-dashboard',
+      sessionKey: 'agent:main:clawchestra',
       status: 'completed',
       submittedAt: 4,
       lastSignalAt: 4,
@@ -606,7 +606,7 @@ describe('gateway client', () => {
         { id: 'm-3', role: 'assistant', content: 'newer', timestamp: 2100 },
       ],
       {
-        sessionKey: 'agent:main:pipeline-dashboard',
+        sessionKey: 'agent:main:clawchestra',
         lastMessageId: 'm-2',
         lastTimestamp: 2000,
       },
@@ -622,7 +622,7 @@ describe('gateway client', () => {
         { id: 'm-2', role: 'assistant', content: 'recent', timestamp: 930_000 },
       ],
       {
-        sessionKey: 'agent:main:pipeline-dashboard',
+        sessionKey: 'agent:main:clawchestra',
         lastMessageId: 'cursor-id',
         lastTimestamp: 1_000_000,
       },
@@ -638,7 +638,7 @@ describe('gateway client', () => {
         { id: 'm-2', role: 'assistant', content: 'recent', timestamp: 930_000 },
       ],
       {
-        sessionKey: 'agent:main:pipeline-dashboard',
+        sessionKey: 'agent:main:clawchestra',
         lastMessageId: 'cursor-id',
         lastTimestamp: 1_000_000,
       },

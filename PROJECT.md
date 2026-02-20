@@ -12,7 +12,7 @@ lastActivity: '2026-02-18'
 nextAction: Complete data retrofit for scan-based discovery
 ---
 
-# Pipeline Dashboard
+# Clawchestra
 
 Tauri-based project management dashboard. The tool that tracks itself.
 

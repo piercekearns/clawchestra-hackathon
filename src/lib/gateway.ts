@@ -117,7 +117,7 @@ interface OpenClawConnection {
   close: () => void;
 }
 
-export const DEFAULT_SESSION_KEY = 'agent:main:pipeline-dashboard';
+export const DEFAULT_SESSION_KEY = 'agent:main:clawchestra';
 const DEFAULT_HTTP_GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost:18789';
 const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;

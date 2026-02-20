@@ -3,7 +3,7 @@ title: WebSocket Auto-Reconnection
 status: up-next
 type: deliverable
 priority: 6
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 tags: [reliability, gateway, websocket]
 ---

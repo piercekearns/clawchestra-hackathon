@@ -2,7 +2,7 @@
 title: Chat Drawer UI
 status: complete
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 specDoc: docs/CHAT-DRAWER-SPEC.md
 planDoc: docs/plans/2026-02-11-feat-chat-drawer-ui-integration-plan.md
 lastActivity: 2026-02-12

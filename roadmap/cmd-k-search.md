@@ -2,7 +2,7 @@
 title: Cmd+K Search Modal
 status: complete
 type: deliverable
-parent: pipeline-dashboard
+parent: clawchestra
 lastActivity: 2026-02-12
 shippedDate: 2026-02-12
 planDoc: docs/plans/2026-02-12-feat-cmd-k-search-plan.md
