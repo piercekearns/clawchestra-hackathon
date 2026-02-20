@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   GitCommitHorizontal,
   HelpCircle,
   Loader2,
@@ -72,6 +73,203 @@ function BrandCheckbox({
         <Check className="text-neutral-900" style={{ width: '75%', height: '75%' }} strokeWidth={3} />
       )}
     </button>
+  );
+}
+
+/* ── Branch picker dropdown ────────────────────────────────────────── */
+function BranchPicker({
+  git,
+  branch,
+  branchTargets,
+  selectedTargets,
+  selectedTargetPush,
+  pushEnabled,
+  pullFirstEnabled,
+  hasAnySelected,
+  projectId,
+  togglePush,
+  togglePullFirst,
+  toggleTargetBranch,
+  toggleTargetPush,
+  disabled,
+}: {
+  git: GitStatus;
+  branch: { label: string; safe: boolean };
+  branchTargets: GitBranchState[];
+  selectedTargets: Set<string>;
+  selectedTargetPush: Set<string>;
+  pushEnabled: boolean;
+  pullFirstEnabled: boolean;
+  hasAnySelected: boolean;
+  projectId: string;
+  togglePush: (id: string) => void;
+  togglePullFirst: (id: string) => void;
+  toggleTargetBranch: (id: string, branch: string) => void;
+  toggleTargetPush: (id: string, branch: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape, true);
+    };
+  }, [open]);
+
+  const targetCount = selectedTargets.size;
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        type="button"
+        className={cn(
+          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors',
+          branch.safe
+            ? 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+            : 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40',
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
+      >
+        {git.branch ?? '?'}{branch.safe ? ' ✓' : ' ⚠'}
+        {targetCount > 0 && (
+          <span className="font-medium text-revival-accent-400">+{targetCount}</span>
+        )}
+        <ChevronDown className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[14rem] max-h-[300px] overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-0 py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+          {/* Source branch — always checked, not deselectable */}
+          <div className="px-3 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <BrandCheckbox checked disabled className="h-3.5 w-3.5" onChange={() => {}} />
+              <span className="text-xs font-medium text-neutral-700 dark:text-neutral-200">
+                {git.branch ?? '?'}
+              </span>
+              <span className="text-[10px] text-neutral-400">source</span>
+            </div>
+
+            {/* Pull first (nested under source) */}
+            {git.remote && (git.behindCount ?? 0) > 0 && (
+              <div className="ml-5 mt-1 inline-flex items-center gap-1.5">
+                <BrandCheckbox
+                  checked={pullFirstEnabled}
+                  onChange={() => togglePullFirst(projectId)}
+                  className="h-3 w-3"
+                  disabled={disabled}
+                />
+                <span
+                  className="cursor-pointer select-none text-xs text-neutral-500"
+                  onClick={() => { if (!disabled) togglePullFirst(projectId); }}
+                >
+                  Pull first ({git.behindCount} behind)
+                </span>
+              </div>
+            )}
+
+            {/* Push after commit (nested under source) */}
+            {git.remote && hasAnySelected && (
+              <div className="ml-5 mt-1 inline-flex items-center gap-1.5">
+                <BrandCheckbox
+                  checked={pushEnabled}
+                  onChange={() => togglePush(projectId)}
+                  className="h-3 w-3"
+                  disabled={disabled}
+                />
+                <span
+                  className="cursor-pointer select-none text-xs text-neutral-500"
+                  onClick={() => { if (!disabled) togglePush(projectId); }}
+                >
+                  Push after commit
+                </span>
+                {!branch.safe && (
+                  <Tooltip text="Branch is behind or diverged — push may fail">
+                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  </Tooltip>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Cherry-pick targets */}
+          {branchTargets.length > 0 && (
+            <>
+              <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
+              <div className="px-3 py-1">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-400">
+                  Cherry-pick to
+                </span>
+              </div>
+              {branchTargets.map((target) => {
+                const targetIndicator = getTargetBranchIndicator(target);
+                const checked = selectedTargets.has(target.name);
+                return (
+                  <div key={target.name} className="px-3 py-1">
+                    <div className="flex items-center gap-1.5">
+                      <BrandCheckbox
+                        checked={checked}
+                        onChange={() => toggleTargetBranch(projectId, target.name)}
+                        className="h-3.5 w-3.5"
+                        disabled={disabled}
+                      />
+                      <span
+                        className="cursor-pointer select-none text-xs text-neutral-600 dark:text-neutral-300"
+                        onClick={() => { if (!disabled) toggleTargetBranch(projectId, target.name); }}
+                      >
+                        {target.name}
+                      </span>
+                      {target.localOnly && (
+                        <span className="text-[10px] text-neutral-400">(local)</span>
+                      )}
+                      {!target.localOnly && !targetIndicator.safe && (
+                        <Tooltip text="This branch is behind or diverged; cherry-pick may conflict">
+                          <AlertTriangle className="h-3 w-3 text-amber-500" />
+                        </Tooltip>
+                      )}
+                    </div>
+                    {checked && target.hasUpstream && (
+                      <div className="ml-5 mt-1 inline-flex items-center gap-1.5">
+                        <BrandCheckbox
+                          checked={selectedTargetPush.has(target.name)}
+                          onChange={() => toggleTargetPush(projectId, target.name)}
+                          className="h-3 w-3"
+                          disabled={disabled}
+                        />
+                        <span
+                          className="cursor-pointer select-none text-[11px] text-neutral-500"
+                          onClick={() => { if (!disabled) toggleTargetPush(projectId, target.name); }}
+                        >
+                          Push after cherry-pick
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1209,16 +1407,23 @@ export function SyncDialog({
                       {project.title}
                     </span>
 
-                    {/* Branch indicator */}
-                    <span
-                      className={`shrink-0 text-xs ${
-                        branch.safe
-                          ? 'text-neutral-500 dark:text-neutral-400'
-                          : 'text-amber-600 dark:text-amber-400'
-                      }`}
-                    >
-                      {branch.label}
-                    </span>
+                    {/* Branch picker dropdown */}
+                    <BranchPicker
+                      git={git}
+                      branch={branch}
+                      branchTargets={branchTargets}
+                      selectedTargets={selectedTargets}
+                      selectedTargetPush={selectedTargetPush}
+                      pushEnabled={pushEnabled.has(project.id)}
+                      pullFirstEnabled={pullFirstEnabled.has(project.id)}
+                      hasAnySelected={hasAnySelected}
+                      projectId={project.id}
+                      togglePush={togglePush}
+                      togglePullFirst={togglePullFirst}
+                      toggleTargetBranch={toggleTargetBranch}
+                      toggleTargetPush={toggleTargetPush}
+                      disabled={isSyncing || batchSyncing}
+                    />
 
                     {/* Action button — visible with selected categories or resumable state */}
                     {!result && canSyncProject && (
@@ -1338,91 +1543,6 @@ export function SyncDialog({
                         </div>
                       )}
 
-                      {git.remote && (git.behindCount ?? 0) > 0 && (
-                        <div className="ml-5 inline-flex items-center gap-1.5 text-neutral-500">
-                          <BrandCheckbox
-                            checked={pullFirstEnabled.has(project.id)}
-                            onChange={() => togglePullFirst(project.id)}
-                            className="h-3.5 w-3.5"
-                            disabled={isSyncing || batchSyncing}
-                          />
-                          <span
-                            className="cursor-pointer select-none"
-                            onClick={() => { if (!isSyncing && !batchSyncing) togglePullFirst(project.id); }}
-                          >
-                            Pull first ({git.behindCount} behind)
-                          </span>
-                        </div>
-                      )}
-
-                      {branchTargets.length > 0 && (
-                        <details className="ml-5 mt-1">
-                          <summary className="cursor-pointer select-none text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
-                            Also sync to ({branchTargets.length} branches)
-                            {selectedTargets.size > 0 && (
-                              <span className="ml-1 text-brand-lime">({selectedTargets.size} selected)</span>
-                            )}
-                          </summary>
-                          <div className="mt-1 space-y-1">
-                            {branchTargets.map((target) => {
-                              const targetIndicator = getTargetBranchIndicator(target);
-                              const checked = selectedTargets.has(target.name);
-                              return (
-                                <div key={target.name} className="space-y-1">
-                                  <div className="inline-flex items-center gap-1.5 text-neutral-500">
-                                    <BrandCheckbox
-                                      checked={checked}
-                                      onChange={() => toggleTargetBranch(project.id, target.name)}
-                                      className="h-3.5 w-3.5"
-                                      disabled={isSyncing || batchSyncing}
-                                    />
-                                    <span
-                                      className="cursor-pointer select-none"
-                                      onClick={() => {
-                                        if (!isSyncing && !batchSyncing) toggleTargetBranch(project.id, target.name);
-                                      }}
-                                    >
-                                      {targetIndicator.label}
-                                    </span>
-                                    {!targetIndicator.safe && (
-                                      <Tooltip text="This branch is behind or diverged; cherry-pick may conflict">
-                                        <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                      </Tooltip>
-                                    )}
-                                  </div>
-                                  {checked && target.hasUpstream && (
-                                    <div className="ml-5 inline-flex items-center gap-1.5 text-neutral-500">
-                                      <BrandCheckbox
-                                        checked={selectedTargetPush.has(target.name)}
-                                        onChange={() => toggleTargetPush(project.id, target.name)}
-                                        className="h-3.5 w-3.5"
-                                        disabled={isSyncing || batchSyncing}
-                                      />
-                                      <span
-                                        className="cursor-pointer select-none"
-                                        onClick={() => {
-                                          if (!isSyncing && !batchSyncing) toggleTargetPush(project.id, target.name);
-                                        }}
-                                      >
-                                        Push {target.name} after cherry-pick
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </details>
-                      )}
-
-                      {selectedTargets.size > 0 && (
-                        <div className="ml-5 rounded border border-neutral-200/80 bg-neutral-50/70 px-2 py-1 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-300">
-                          Source: <span className="font-medium">{git.branch ?? '?'}</span>
-                          {' '}• Targets: <span className="font-medium">{[...selectedTargets].join(', ')}</span>
-                          {pullFirstEnabled.has(project.id) && <>{' '}• <span className="font-medium">Pull first</span></>}
-                        </div>
-                      )}
-
                       {/* Code risk indicator */}
                       {codeSelected && cats.code.length > 0 && (
                         <div className="ml-5 flex items-center gap-1 text-amber-600 dark:text-amber-400">
@@ -1431,28 +1551,6 @@ export function SyncDialog({
                         </div>
                       )}
 
-                      {/* Push toggle — below categories, indented to show it's secondary */}
-                      {git.remote && hasAnySelected && (
-                        <div className="ml-5 mt-1 inline-flex items-center gap-1.5 text-neutral-500">
-                          <BrandCheckbox
-                            checked={pushEnabled.has(project.id)}
-                            onChange={() => togglePush(project.id)}
-                            className="h-3.5 w-3.5"
-                            disabled={isSyncing || batchSyncing}
-                          />
-                          <span
-                            className="cursor-pointer select-none"
-                            onClick={() => { if (!isSyncing && !batchSyncing) togglePush(project.id); }}
-                          >
-                            Push after commit
-                          </span>
-                          {!branch.safe && (
-                            <Tooltip text="Branch is behind or diverged — push may fail">
-                              <AlertTriangle className="h-3 w-3 text-amber-500" />
-                            </Tooltip>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
 
