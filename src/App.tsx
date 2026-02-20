@@ -63,7 +63,6 @@ import { useDashboardStore } from './lib/store';
 import {
   chatRecoveryCursorAdvance,
   getDashboardSettings,
-  gitValidateBranchSyncResume,
   isTauriRuntime,
   updateDashboardSettings,
 } from './lib/tauri';
@@ -76,7 +75,7 @@ import {
   classifyUpstreamFailure,
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
-import { readExecutionState, isUnresolvedSyncStep, clearExecutionState } from './lib/git-sync-utils';
+import { readExecutionState, isUnresolvedSyncStep } from './lib/git-sync-utils';
 
 interface Toast {
   id: number;
@@ -108,30 +107,32 @@ const UPSTREAM_FAILURE_DEDUP_MS = 60_000;
 function getGitHubStatusMeta(
   status?: GitStatus,
 ): { className: string; label: string; tooltip: string } {
+  const branch = status?.branch;
+  const branchPrefix = branch ? `${branch}: ` : '';
   switch (status?.state) {
     case 'clean':
       return {
         className: 'text-emerald-500 dark:text-emerald-400',
-        label: 'Repository is clean',
-        tooltip: status.details || 'Repository is clean.',
+        label: `${branchPrefix}Repository is clean`,
+        tooltip: `${branchPrefix}${status.details || 'Working tree clean'}`,
       };
     case 'uncommitted':
       return {
         className: 'text-amber-500 dark:text-amber-400',
-        label: 'Repository has uncommitted changes',
-        tooltip: status.details || 'Repository has uncommitted changes.',
+        label: `${branchPrefix}Uncommitted changes`,
+        tooltip: `${branchPrefix}${status.details || 'Repository has uncommitted changes'}`,
       };
     case 'unpushed':
       return {
         className: 'text-sky-500 dark:text-sky-400',
-        label: 'Repository has unpushed commits',
-        tooltip: status.details || 'Repository has unpushed commits.',
+        label: `${branchPrefix}Unpushed commits`,
+        tooltip: `${branchPrefix}${status.details || 'Ahead of upstream'}`,
       };
     case 'behind':
       return {
         className: 'text-rose-500 dark:text-rose-400',
-        label: 'Repository is behind remote',
-        tooltip: status.details || 'Repository is behind its remote.',
+        label: `${branchPrefix}Behind remote`,
+        tooltip: `${branchPrefix}${status.details || 'Behind upstream'}`,
       };
     default:
       return {
@@ -273,36 +274,17 @@ export default function App() {
   // Unresolved sync state (conflict/failed persisted in localStorage)
   const [unresolvedSyncCount, setUnresolvedSyncCount] = useState(0);
 
-  const scanUnresolvedSyncState = useCallback(async () => {
+  const scanUnresolvedSyncState = useCallback(() => {
     let count = 0;
     for (const p of allProjects) {
       if (!p.gitStatus) continue;
       const state = readExecutionState(p.id);
-      if (!state || !isUnresolvedSyncStep(state.currentStep)) continue;
-
-      // Validate that the repo is actually still in a broken state
-      if (state.commitHash) {
-        try {
-          const v = await gitValidateBranchSyncResume({
-            repoPath: p.dirPath,
-            sourceBranch: state.sourceBranch,
-            commitHash: state.commitHash,
-            remainingTargets: state.remainingTargets,
-          });
-          if (!v.cherryPickInProgress && !v.unresolvedConflicts) {
-            clearExecutionState(p.id);
-            continue; // stale — conflict resolved externally
-          }
-        } catch {
-          // validation failed — keep entry, err on side of showing
-        }
-      }
-      count++;
+      if (state && isUnresolvedSyncStep(state.currentStep)) count++;
     }
     setUnresolvedSyncCount(count);
   }, [allProjects]);
 
-  useEffect(() => { void scanUnresolvedSyncState(); }, [scanUnresolvedSyncState]);
+  useEffect(() => { scanUnresolvedSyncState(); }, [scanUnresolvedSyncState]);
 
   const selectedProject = useMemo(
     () => allProjects.find((project) => project.id === selectedProjectId),
@@ -1804,7 +1786,7 @@ export default function App() {
         open={syncDialogOpen}
         onOpenChange={(open) => {
           setSyncDialogOpen(open);
-          if (!open) void scanUnresolvedSyncState();
+          if (!open) scanUnresolvedSyncState();
         }}
         projects={allProjects}
         onRequestChatPrefill={(text) => {
