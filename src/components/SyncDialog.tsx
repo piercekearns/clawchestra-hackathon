@@ -1356,65 +1356,70 @@ export function SyncDialog({
                       )}
 
                       {branchTargets.length > 0 && (
-                        <div className="ml-5 mt-1 space-y-1">
-                          <div className="text-neutral-500 dark:text-neutral-400">
-                            Also sync to
-                          </div>
-                          {branchTargets.map((target) => {
-                            const targetIndicator = getTargetBranchIndicator(target);
-                            const checked = selectedTargets.has(target.name);
-                            return (
-                              <div key={target.name} className="space-y-1">
-                                <div className="inline-flex items-center gap-1.5 text-neutral-500">
-                                  <BrandCheckbox
-                                    checked={checked}
-                                    onChange={() => toggleTargetBranch(project.id, target.name)}
-                                    className="h-3.5 w-3.5"
-                                    disabled={isSyncing || batchSyncing}
-                                  />
-                                  <span
-                                    className="cursor-pointer select-none"
-                                    onClick={() => {
-                                      if (!isSyncing && !batchSyncing) toggleTargetBranch(project.id, target.name);
-                                    }}
-                                  >
-                                    {targetIndicator.label}
-                                  </span>
-                                  {!targetIndicator.safe && (
-                                    <Tooltip text="This branch is behind or diverged; cherry-pick may conflict">
-                                      <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                    </Tooltip>
-                                  )}
-                                </div>
-                                {checked && target.hasUpstream && (
-                                  <div className="ml-5 inline-flex items-center gap-1.5 text-neutral-500">
+                        <details className="ml-5 mt-1">
+                          <summary className="cursor-pointer select-none text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+                            Also sync to ({branchTargets.length} branches)
+                            {selectedTargets.size > 0 && (
+                              <span className="ml-1 text-brand-lime">({selectedTargets.size} selected)</span>
+                            )}
+                          </summary>
+                          <div className="mt-1 space-y-1">
+                            {branchTargets.map((target) => {
+                              const targetIndicator = getTargetBranchIndicator(target);
+                              const checked = selectedTargets.has(target.name);
+                              return (
+                                <div key={target.name} className="space-y-1">
+                                  <div className="inline-flex items-center gap-1.5 text-neutral-500">
                                     <BrandCheckbox
-                                      checked={selectedTargetPush.has(target.name)}
-                                      onChange={() => toggleTargetPush(project.id, target.name)}
+                                      checked={checked}
+                                      onChange={() => toggleTargetBranch(project.id, target.name)}
                                       className="h-3.5 w-3.5"
                                       disabled={isSyncing || batchSyncing}
                                     />
                                     <span
                                       className="cursor-pointer select-none"
                                       onClick={() => {
-                                        if (!isSyncing && !batchSyncing) toggleTargetPush(project.id, target.name);
+                                        if (!isSyncing && !batchSyncing) toggleTargetBranch(project.id, target.name);
                                       }}
                                     >
-                                      Push {target.name} after cherry-pick
+                                      {targetIndicator.label}
                                     </span>
+                                    {!targetIndicator.safe && (
+                                      <Tooltip text="This branch is behind or diverged; cherry-pick may conflict">
+                                        <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                      </Tooltip>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+                                  {checked && target.hasUpstream && (
+                                    <div className="ml-5 inline-flex items-center gap-1.5 text-neutral-500">
+                                      <BrandCheckbox
+                                        checked={selectedTargetPush.has(target.name)}
+                                        onChange={() => toggleTargetPush(project.id, target.name)}
+                                        className="h-3.5 w-3.5"
+                                        disabled={isSyncing || batchSyncing}
+                                      />
+                                      <span
+                                        className="cursor-pointer select-none"
+                                        onClick={() => {
+                                          if (!isSyncing && !batchSyncing) toggleTargetPush(project.id, target.name);
+                                        }}
+                                      >
+                                        Push {target.name} after cherry-pick
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
                       )}
 
-                      {(hasAnySelected || canResume) && (
+                      {selectedTargets.size > 0 && (
                         <div className="ml-5 rounded border border-neutral-200/80 bg-neutral-50/70 px-2 py-1 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-300">
                           Source: <span className="font-medium">{git.branch ?? '?'}</span>
-                          {' '}• Targets: <span className="font-medium">{[...selectedTargets].join(', ') || 'none'}</span>
-                          {' '}• Pull first: <span className="font-medium">{pullFirstEnabled.has(project.id) ? 'yes' : 'no'}</span>
+                          {' '}• Targets: <span className="font-medium">{[...selectedTargets].join(', ')}</span>
+                          {pullFirstEnabled.has(project.id) && <>{' '}• <span className="font-medium">Pull first</span></>}
                         </div>
                       )}
 
