@@ -1,24 +1,9 @@
 ---
 items:
-  - id: git-branch-sync
-    title: 'Git Sync: Branch Management (Phase 3)'
-    status: in-progress
-    priority: 1
-    nextAction: >-
-      Plan written — implement branch selection + cherry-pick orchestration + AI
-      conflict handling, including explicit no-remote `(local)` branch behavior.
-      Depends on git-sync-scope completion.
-    tags:
-      - git
-      - sync
-      - branches
-      - ai-agent
-    icon: "\U0001F33F"
-    specDoc: docs/specs/git-branch-sync-spec.md
   - id: chat-infrastructure
     title: 'Chat Reliability: Persistent Bugs'
     status: in-progress
-    priority: 2
+    priority: 1
     nextAction: >-
       Force-update path now allowed during active turns (with warning) and
       tracker includes reconnect/resume aspiration; continue Phase 2 bug intake
@@ -30,6 +15,21 @@ items:
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
     planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
+  - id: git-branch-sync
+    title: 'Git Sync: Branch Management (Phase 3)'
+    status: in-progress
+    priority: 2
+    nextAction: >-
+      Plan written — implement branch selection + cherry-pick orchestration + AI
+      conflict handling, including explicit no-remote `(local)` branch behavior.
+      Depends on git-sync-scope completion.
+    tags:
+      - git
+      - sync
+      - branches
+      - ai-agent
+    icon: "\U0001F33F"
+    specDoc: docs/specs/git-branch-sync-spec.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
