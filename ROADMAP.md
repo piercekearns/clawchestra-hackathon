@@ -44,6 +44,22 @@ items:
       - ai-agent
     icon: "\U0001F33F"
     specDoc: docs/specs/git-branch-sync-spec.md
+  - id: rate-limit-resilience
+    title: Rate Limit Resilience & Provider Failover
+    status: pending
+    priority: 1
+    nextAction: >-
+      Exploratory spec written — needs research phase to validate OpenClaw
+      failover behaviour (bug #19249), event stream signals, and auth
+      profile detection. Then plan Layer 1 (detection/display), Layer 2
+      (failover guidance), Layer 3 (smart model routing).
+    tags:
+      - chat
+      - resilience
+      - failover
+      - onboarding
+    icon: "\U0001F6E1\uFE0F"
+    specDoc: docs/specs/rate-limit-resilience-spec.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
