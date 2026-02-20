@@ -275,6 +275,7 @@ export default function App() {
   const scanUnresolvedSyncState = useCallback(() => {
     let count = 0;
     for (const p of allProjects) {
+      if (!p.gitStatus) continue; // must match SyncDialog's filter
       const state = readExecutionState(p.id);
       if (state && isUnresolvedSyncStep(state.currentStep)) count++;
     }

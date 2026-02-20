@@ -1506,23 +1506,33 @@ export function SyncDialog({
                         );
                       })}
 
-                      {canResume && executionState && (
-                        <div className="ml-5 rounded border border-amber-300/70 bg-amber-50/60 px-2 py-1.5 text-amber-700 dark:border-amber-700/80 dark:bg-amber-950/30 dark:text-amber-300">
+                      {executionState && isUnresolvedSyncStep(executionState.currentStep) && (
+                        <div className={`ml-5 rounded border px-2 py-1.5 ${
+                          executionState.currentStep === 'conflict'
+                            ? 'border-amber-300/70 bg-amber-50/60 text-amber-700 dark:border-amber-700/80 dark:bg-amber-950/30 dark:text-amber-300'
+                            : 'border-red-300/70 bg-red-50/60 text-red-700 dark:border-red-700/80 dark:bg-red-950/30 dark:text-red-300'
+                        }`}>
                           <div className="font-medium">
-                            Interrupted run detected ({executionState.currentStep})
+                            {executionState.currentStep === 'conflict'
+                              ? `Unresolved conflict on ${executionState.currentTarget ?? 'unknown branch'}`
+                              : 'Previous sync failed'}
                           </div>
-                          <div>
-                            Remaining: {executionState.remainingTargets.join(', ') || 'none'}
-                          </div>
+                          {executionState.remainingTargets.length > 0 && (
+                            <div>
+                              Remaining: {executionState.remainingTargets.join(', ')}
+                            </div>
+                          )}
                           <div className="mt-1 inline-flex items-center gap-2">
-                            <button
-                              type="button"
-                              className="text-revival-accent-400 hover:underline"
-                              onClick={() => handleSyncOne(project)}
-                              disabled={isSyncing || batchSyncing}
-                            >
-                              Resume
-                            </button>
+                            {canResume && (
+                              <button
+                                type="button"
+                                className="text-revival-accent-400 hover:underline"
+                                onClick={() => handleSyncOne(project)}
+                                disabled={isSyncing || batchSyncing}
+                              >
+                                Resume
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="text-neutral-500 hover:underline"
@@ -1536,7 +1546,7 @@ export function SyncDialog({
                               }}
                               disabled={isSyncing || batchSyncing}
                             >
-                              Cancel state
+                              Dismiss
                             </button>
                           </div>
                         </div>
