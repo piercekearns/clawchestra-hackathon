@@ -107,40 +107,45 @@ const UPSTREAM_FAILURE_DEDUP_MS = 60_000;
 function getGitHubStatusMeta(
   status?: GitStatus,
 ): { className: string; label: string; tooltip: string } {
-  const branch = status?.branch;
-  const branchPrefix = branch ? `${branch}: ` : '';
-  switch (status?.state) {
-    case 'clean':
-      return {
-        className: 'text-emerald-500 dark:text-emerald-400',
-        label: `${branchPrefix}Repository is clean`,
-        tooltip: `${branchPrefix}${status.details || 'Working tree clean'}`,
-      };
-    case 'uncommitted':
-      return {
-        className: 'text-amber-500 dark:text-amber-400',
-        label: `${branchPrefix}Uncommitted changes`,
-        tooltip: `${branchPrefix}${status.details || 'Repository has uncommitted changes'}`,
-      };
-    case 'unpushed':
-      return {
-        className: 'text-sky-500 dark:text-sky-400',
-        label: `${branchPrefix}Unpushed commits`,
-        tooltip: `${branchPrefix}${status.details || 'Ahead of upstream'}`,
-      };
-    case 'behind':
-      return {
-        className: 'text-rose-500 dark:text-rose-400',
-        label: `${branchPrefix}Behind remote`,
-        tooltip: `${branchPrefix}${status.details || 'Behind upstream'}`,
-      };
-    default:
-      return {
-        className: 'text-neutral-500 dark:text-neutral-400',
-        label: 'Git status unavailable',
-        tooltip: status?.details || 'Git status unavailable.',
-      };
+  if (!status?.state || status.state === 'unknown') {
+    return {
+      className: 'text-neutral-500 dark:text-neutral-400',
+      label: 'Git status unavailable',
+      tooltip: status?.details || 'Git status unavailable',
+    };
   }
+
+  const branch = status.branch ?? '?';
+  const ahead = status.aheadCount ?? 0;
+  const behind = status.behindCount ?? 0;
+  const hasRemote = Boolean(status.remote);
+
+  // Universal arrow notation for remote sync state
+  let sync = '';
+  if (hasRemote) {
+    if (ahead > 0 && behind > 0) sync = ` ↑${ahead} ↓${behind}`;
+    else if (ahead > 0) sync = ` ↑${ahead}`;
+    else if (behind > 0) sync = ` ↓${behind}`;
+    else sync = ' ✓';
+  }
+
+  let suffix = '';
+  if (status.state === 'uncommitted') suffix = ' · uncommitted changes';
+  else if (!hasRemote) suffix = ' · no upstream';
+
+  const tooltip = `⑂ ${branch}${sync}${suffix}`;
+  const classMap: Record<string, string> = {
+    clean: 'text-emerald-500 dark:text-emerald-400',
+    uncommitted: 'text-amber-500 dark:text-amber-400',
+    unpushed: 'text-sky-500 dark:text-sky-400',
+    behind: 'text-rose-500 dark:text-rose-400',
+  };
+
+  return {
+    className: classMap[status.state] ?? 'text-neutral-500 dark:text-neutral-400',
+    label: tooltip,
+    tooltip,
+  };
 }
 
 function pruneExpiredRuns(map: Map<string, number>, ttlMs: number): void {
