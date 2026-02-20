@@ -1449,6 +1449,10 @@ const DOCUMENT_FILES: &[&str] = &["ROADMAP.md", "CHANGELOG.md"];
 const DOCUMENT_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
 
 /// Categorize a dirty file path into metadata, documents, or code.
+///
+/// NOTE: Also used by check_for_update() to decide whether commits warrant
+/// an update prompt. Adding paths to DOCUMENT_FILES or DOCUMENT_DIR_PREFIXES
+/// will suppress update notifications for changes limited to those paths.
 fn categorize_dirty_file(path: &str) -> FileCategory {
     if METADATA_FILES.contains(&path) {
         return FileCategory::Metadata;
@@ -2401,13 +2405,20 @@ fn check_for_update() -> Result<UpdateStatus, String> {
         });
     }
 
-    let current_commit = settings
-        .app_source_path
-        .as_deref()
-        .and_then(get_current_git_head);
-    let update_available = match &current_commit {
-        Some(current) => current != BUILD_COMMIT && BUILD_COMMIT != "unknown",
-        None => false, // Can't determine, don't show button
+    let repo_path = settings.app_source_path.as_deref();
+    let current_commit = repo_path.and_then(get_current_git_head);
+    let update_available = match (&current_commit, repo_path) {
+        (Some(current), Some(repo)) if current != BUILD_COMMIT && BUILD_COMMIT != "unknown" => {
+            run_git(repo, &["diff", "--name-only", &format!("{BUILD_COMMIT}..{current}")])
+                .map(|output| {
+                    output
+                        .lines()
+                        .filter(|line| !line.is_empty())
+                        .any(|line| categorize_dirty_file(line) == FileCategory::Code)
+                })
+                .unwrap_or(true) // If diff fails, assume update needed (safe default)
+        }
+        _ => false,
     };
 
     Ok(UpdateStatus {
