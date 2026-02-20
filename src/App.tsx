@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock4, GitBranch } from 'lucide-react';
-import { GitHubStatusBadge } from './components/GitHubStatusBadge';
+import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
 import { AddProjectDialog } from './components/AddProjectDialog';
 import { Board } from './components/Board';
@@ -150,7 +150,7 @@ function getGitHubStatusMeta(
 ): { className: string; label: string; tooltip: ReactNode } {
   if (!status?.state || status.state === 'unknown') {
     return {
-      className: 'text-neutral-500 dark:text-neutral-400',
+      className: 'text-neutral-600 dark:text-neutral-400',
       label: 'Git status unavailable',
       tooltip: status?.details || 'Git status unavailable',
     };
@@ -164,7 +164,7 @@ function getGitHubStatusMeta(
   // No upstream — branch isn't published to a remote
   if (!hasRemote) {
     return {
-      className: 'text-neutral-500 dark:text-neutral-400',
+      className: 'text-neutral-600 dark:text-neutral-400',
       label: `${branch} · not linked to GitHub`,
       tooltip: <><InlineBranch /> {branch} · not linked to GitHub — push to connect</>,
     };
@@ -183,14 +183,14 @@ function getGitHubStatusMeta(
   const isSynced = status.state === 'clean' && sync === '';
 
   const classMap: Record<string, string> = {
-    clean: 'text-emerald-500 dark:text-emerald-400',
-    uncommitted: 'text-amber-500 dark:text-amber-400',
-    unpushed: 'text-sky-500 dark:text-sky-400',
-    behind: 'text-rose-500 dark:text-rose-400',
+    clean: 'text-emerald-600 dark:text-emerald-400',
+    uncommitted: 'text-amber-600 dark:text-amber-400',
+    unpushed: 'text-sky-600 dark:text-sky-400',
+    behind: 'text-rose-600 dark:text-rose-400',
   };
 
   return {
-    className: classMap[status.state] ?? 'text-neutral-500 dark:text-neutral-400',
+    className: classMap[status.state] ?? 'text-neutral-600 dark:text-neutral-400',
     label,
     tooltip: isSynced
       ? <><InlineBranch /> {branch} <InlineCheck /></>
@@ -1719,10 +1719,12 @@ export default function App() {
                       <>
                         {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
                         {project.hasRepo ? (
-                          <GitHubStatusBadge
-                            className={gitHubStatusMeta.className}
-                            tooltip={gitHubStatusMeta.tooltip}
-                            label={gitHubStatusMeta.label}
+                          <BranchPopover
+                            project={project}
+                            badgeClassName={gitHubStatusMeta.className}
+                            badgeTooltip={gitHubStatusMeta.tooltip}
+                            badgeLabel={gitHubStatusMeta.label}
+                            onCheckoutComplete={() => { void loadProjects(); }}
                           />
                         ) : null}
                       </>
