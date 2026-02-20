@@ -110,6 +110,77 @@ export function getTargetBranchIndicator(branch: GitBranchState): { label: strin
 }
 
 // ---------------------------------------------------------------------------
+// Branch sync execution state (shared with SyncDialog + App)
+// ---------------------------------------------------------------------------
+
+export type BranchSyncStep =
+  | 'source-commit'
+  | 'pull-first'
+  | 'source-push'
+  | 'target-cherry-pick'
+  | 'target-complete'
+  | 'conflict'
+  | 'failed'
+  | 'resume-after-conflict';
+
+const VALID_STEPS = new Set<BranchSyncStep>([
+  'source-commit', 'pull-first', 'source-push',
+  'target-cherry-pick', 'target-complete',
+  'conflict', 'failed', 'resume-after-conflict',
+]);
+
+export interface BranchSyncExecutionState {
+  projectId: string;
+  sourceBranch: string;
+  commitHash?: string;
+  completedTargets: string[];
+  remainingTargets: string[];
+  currentStep: BranchSyncStep;
+  currentTarget?: string;
+  targetPushBranches?: string[];
+  sourcePushEnabled?: boolean;
+  sourcePushed?: boolean;
+  pendingStashRef?: string;
+  updatedAt: number;
+}
+
+export function executionStateKey(projectId: string): string {
+  return `clawchestra:branch-sync:${projectId}`;
+}
+
+export function readExecutionState(projectId: string): BranchSyncExecutionState | null {
+  try {
+    const raw = localStorage.getItem(executionStateKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BranchSyncExecutionState;
+    if (!VALID_STEPS.has(parsed.currentStep)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function writeExecutionState(projectId: string, state: BranchSyncExecutionState): void {
+  try {
+    localStorage.setItem(executionStateKey(projectId), JSON.stringify(state));
+  } catch {
+    // localStorage failures should not block sync execution
+  }
+}
+
+export function clearExecutionState(projectId: string): void {
+  try {
+    localStorage.removeItem(executionStateKey(projectId));
+  } catch {
+    // no-op
+  }
+}
+
+export function isUnresolvedSyncStep(step: BranchSyncStep): boolean {
+  return step === 'conflict' || step === 'failed';
+}
+
+// ---------------------------------------------------------------------------
 // Commit message generation
 // ---------------------------------------------------------------------------
 

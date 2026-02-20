@@ -11,6 +11,7 @@ interface HeaderProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   dirtyProjectCount: number;
+  unresolvedSyncCount: number;
   onOpenSync: () => void;
 }
 
@@ -21,6 +22,7 @@ export function Header({
   searchQuery,
   onSearchQueryChange,
   dirtyProjectCount,
+  unresolvedSyncCount,
   onOpenSync,
 }: HeaderProps) {
   return (
@@ -51,7 +53,7 @@ export function Header({
           Refresh
         </Button>
 
-        {dirtyProjectCount > 0 && (
+        {(dirtyProjectCount > 0 || unresolvedSyncCount > 0) && (
           <Button
             type="button"
             variant="outline"
@@ -60,8 +62,12 @@ export function Header({
             className="inline-flex items-center gap-1"
           >
             Git Sync
-            <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-400 px-1 text-[11px] font-bold text-neutral-900">
-              {dirtyProjectCount}
+            <span className={`ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold ${
+              unresolvedSyncCount > 0
+                ? 'bg-red-500 text-white'
+                : 'bg-orange-400 text-neutral-900'
+            }`}>
+              {unresolvedSyncCount > 0 ? unresolvedSyncCount : dirtyProjectCount}
             </span>
           </Button>
         )}

@@ -35,10 +35,15 @@ import { ModalDragZone } from './ui/ModalDragZone';
 import {
   buildCommitMessage,
   CATEGORY_LABELS,
+  clearExecutionState,
   filesForSelectedCategories,
   getBranchIndicator,
   getProjectDirtyCategories,
   getTargetBranchIndicator,
+  isUnresolvedSyncStep,
+  readExecutionState,
+  writeExecutionState,
+  type BranchSyncExecutionState,
 } from '../lib/git-sync-utils';
 
 /* ── Brand checkbox: chartreuse bg + dark tick ─────────────────────── */
@@ -329,21 +334,6 @@ interface ConflictContext {
   details: string;
 }
 
-interface BranchSyncExecutionState {
-  projectId: string;
-  sourceBranch: string;
-  commitHash?: string;
-  completedTargets: string[];
-  remainingTargets: string[];
-  currentStep: string;
-  currentTarget?: string;
-  targetPushBranches?: string[];
-  sourcePushEnabled?: boolean;
-  sourcePushed?: boolean;
-  pendingStashRef?: string;
-  updatedAt: number;
-}
-
 interface ConflictResolutionDraft {
   path: string;
   strategy: string;
@@ -370,36 +360,6 @@ function buildHelpMessage(project: DirtyProject): string {
   const cats = getProjectDirtyCategories(git);
   const allFiles = [...cats.metadata, ...cats.documents, ...cats.code];
   return `${project.title} is on branch \`${git.branch}\`${behindPart}. The following files have uncommitted changes: ${allFiles.join(', ')}. Can you help me sync these?`;
-}
-
-function executionStateKey(projectId: string): string {
-  return `clawchestra:branch-sync:${projectId}`;
-}
-
-function readExecutionState(projectId: string): BranchSyncExecutionState | null {
-  try {
-    const raw = localStorage.getItem(executionStateKey(projectId));
-    if (!raw) return null;
-    return JSON.parse(raw) as BranchSyncExecutionState;
-  } catch {
-    return null;
-  }
-}
-
-function writeExecutionState(state: BranchSyncExecutionState): void {
-  try {
-    localStorage.setItem(executionStateKey(state.projectId), JSON.stringify(state));
-  } catch {
-    // localStorage failures should not block sync execution
-  }
-}
-
-function clearExecutionState(projectId: string): void {
-  try {
-    localStorage.removeItem(executionStateKey(projectId));
-  } catch {
-    // no-op
-  }
 }
 
 function buildConflictPrefill(
@@ -469,6 +429,19 @@ export function SyncDialog({
   const [branchStatesByProject, setBranchStatesByProject] = useState<Map<string, GitBranchState[]>>(new Map());
   // Persisted interrupted execution states
   const [executionStateByProject, setExecutionStateByProject] = useState<Map<string, BranchSyncExecutionState>>(new Map());
+
+  // Include projects with persisted unresolved state (even if not dirty)
+  const syncProjects = useMemo(() => {
+    const dirtyIds = new Set(dirtyProjects.map((p) => p.id));
+    const unresolvedExtras = projects.filter((p): p is DirtyProject => {
+      if (dirtyIds.has(p.id)) return false;
+      if (!p.gitStatus) return false;
+      const state = executionStateByProject.get(p.id);
+      return state != null && isUnresolvedSyncStep(state.currentStep);
+    });
+    return [...dirtyProjects, ...unresolvedExtras];
+  }, [dirtyProjects, executionStateByProject, projects]);
+
   // In-dialog conflict resolution drafts
   const [conflictDraftsByProject, setConflictDraftsByProject] = useState<Map<string, ConflictResolutionDraft[]>>(new Map());
   const [loadingConflictDraftIds, setLoadingConflictDraftIds] = useState<Set<string>>(new Set());
@@ -551,7 +524,7 @@ export function SyncDialog({
     setTargetPushEnabled(new Map());
     setBranchStatesByProject(new Map());
     const persisted = new Map<string, BranchSyncExecutionState>();
-    for (const project of dirtyProjects) {
+    for (const project of projects) {
       const existing = readExecutionState(project.id);
       if (existing) persisted.set(project.id, existing);
     }
@@ -582,13 +555,18 @@ export function SyncDialog({
   }, [selectedCategories, open, dirtyProjects, results, computeCommitInputs]);
 
   // Load branch states lazily for branch-target selection UI.
+  // Depends only on `open` — NOT on syncProjects — because updateExecutionState
+  // fires on every sync step, which would change syncProjects identity and trigger
+  // redundant gitGetBranchStates IPC calls for ALL projects mid-sync.
+  // Individual project refreshes after sync use refreshBranchStatesForProject.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
 
+    const projectsToLoad = syncProjects; // snapshot from current render
     const loadBranchStates = async () => {
       const entries = await Promise.all(
-        dirtyProjects.map(async (project) => {
+        projectsToLoad.map(async (project) => {
           try {
             const states = await gitGetBranchStates(project.dirPath);
             return [project.id, states] as const;
@@ -605,7 +583,10 @@ export function SyncDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, dirtyProjects]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally open-only;
+  // syncProjects is captured as a snapshot. Mid-sync step changes should NOT reload
+  // all branch states; refreshBranchStatesForProject handles targeted reloads.
+  }, [open]);
 
   const refreshBranchStatesForProject = useCallback(async (project: DirtyProject) => {
     try {
@@ -678,7 +659,7 @@ export function SyncDialog({
 
   const selectedCount = useMemo(
     () =>
-      dirtyProjects.filter(
+      syncProjects.filter(
         (p) =>
           (isProjectSelected(p.id)
             || Boolean(
@@ -688,12 +669,12 @@ export function SyncDialog({
             ))
           && !results.has(p.id),
       ).length,
-    [dirtyProjects, executionStateByProject, isProjectSelected, results],
+    [syncProjects, executionStateByProject, isProjectSelected, results],
   );
 
   const selectedCommitCount = useMemo(
-    () => dirtyProjects.filter((p) => isProjectSelected(p.id) && !results.has(p.id)).length,
-    [dirtyProjects, isProjectSelected, results],
+    () => syncProjects.filter((p) => isProjectSelected(p.id) && !results.has(p.id)).length,
+    [syncProjects, isProjectSelected, results],
   );
 
   // Sync a single project
@@ -778,7 +759,7 @@ export function SyncDialog({
           completedTargets: [...next.completedTargets],
           remainingTargets: [...next.remainingTargets],
         };
-        writeExecutionState(payload);
+        writeExecutionState(project.id, payload);
         setExecutionStateByProject((prev) => new Map(prev).set(project.id, payload));
       };
 
@@ -1226,7 +1207,7 @@ export function SyncDialog({
               pendingStashRef: undefined,
               updatedAt: Date.now(),
             };
-            writeExecutionState(nextExecution);
+            writeExecutionState(project.id, nextExecution);
             setExecutionStateByProject((prev) => new Map(prev).set(project.id, nextExecution));
             setResults((prev) => {
               const next = new Map(prev);
@@ -1314,7 +1295,7 @@ export function SyncDialog({
     syncLockRef.current = true;
     setBatchSyncing(true);
     try {
-      const toSync = dirtyProjects.filter(
+      const toSync = syncProjects.filter(
         (p) =>
           (
             isProjectSelected(p.id)
@@ -1338,7 +1319,7 @@ export function SyncDialog({
       syncLockRef.current = false;
     }
   }, [
-    dirtyProjects,
+    syncProjects,
     executionStateByProject,
     isProjectSelected,
     refreshBranchStatesForProject,
@@ -1369,7 +1350,7 @@ export function SyncDialog({
           <div>
             <h2 className="text-lg font-semibold">Sync Changes</h2>
             <p className="text-sm text-neutral-500">
-              {dirtyProjects.length} project{dirtyProjects.length !== 1 ? 's' : ''} with uncommitted changes
+              {syncProjects.length} project{syncProjects.length !== 1 ? 's' : ''} to sync
             </p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={handleClose} className="h-8 w-8">
@@ -1380,7 +1361,7 @@ export function SyncDialog({
         {/* Project list */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           <div className="space-y-3">
-            {dirtyProjects.map((project) => {
+            {syncProjects.map((project) => {
               const git = project.gitStatus;
               const branch = getBranchIndicator(git);
               const result = results.get(project.id);
@@ -1593,16 +1574,21 @@ export function SyncDialog({
                   {/* Error state */}
                   {result && !result.success && (
                     <div className="mt-1.5 space-y-1 text-xs">
-                      <div className="text-red-600 dark:text-red-400">{result.error}</div>
                       {result.conflict ? (
                         <>
-                          <div className="text-amber-600 dark:text-amber-400">
-                            Conflict detected in {result.conflict.targetBranch}: {result.conflict.files.join(', ') || 'unknown files'}
+                          <div className="flex items-start gap-1.5 text-amber-600 dark:text-amber-400">
+                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span>
+                              Conflict in <span className="font-medium">{result.conflict.targetBranch}</span>
+                              {' '}— {result.conflict.files.length === 1
+                                ? result.conflict.files[0]
+                                : `${result.conflict.files.length} files`} need{result.conflict.files.length === 1 ? 's' : ''} resolution
+                            </span>
                           </div>
-                          <div className="inline-flex items-center gap-3">
+                          <div className="ml-[18px] flex flex-wrap items-center gap-x-3 gap-y-1">
                             <button
                               type="button"
-                              className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
+                              className="inline-flex items-center gap-0.5 font-medium text-revival-accent-400 hover:underline"
                               onClick={() => {
                                 void generateConflictDrafts(project, result.conflict as ConflictContext);
                               }}
@@ -1611,13 +1597,13 @@ export function SyncDialog({
                               {loadingConflictDraft ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <HelpCircle className="h-3 w-3" />
+                                <RefreshCw className="h-3 w-3" />
                               )}
-                              {loadingConflictDraft ? 'Generating proposal...' : 'Generate AI proposal'}
+                              {loadingConflictDraft ? 'Generating...' : 'Resolve with AI'}
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
+                              className="inline-flex items-center gap-0.5 text-neutral-500 hover:text-neutral-300 hover:underline"
                               onClick={() => {
                                 onRequestChatPrefill(buildConflictPrefill(project, result.conflict as ConflictContext));
                               }}
@@ -1625,22 +1611,15 @@ export function SyncDialog({
                               <HelpCircle className="h-3 w-3" />
                               Open in chat
                             </button>
-                            <button
-                              type="button"
-                              className="text-neutral-500 hover:underline"
-                              onClick={() => {
-                                const commands = [
-                                  `git -C "${project.dirPath}" checkout ${result.conflict?.targetBranch}`,
-                                  `git -C "${project.dirPath}" status`,
-                                  `git -C "${project.dirPath}" cherry-pick --abort`,
-                                  `git -C "${project.dirPath}" checkout ${result.conflict?.sourceBranch}`,
-                                ];
-                                onRequestChatPrefill(`Manual recovery commands:\n${commands.join('\n')}`);
-                              }}
-                            >
-                              Show manual fallback
-                            </button>
                           </div>
+                          <details className="ml-[18px]">
+                            <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
+                              Details
+                            </summary>
+                            <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
+                              {result.error}
+                            </pre>
+                          </details>
                           {conflictDrafts.length > 0 && (
                             <div className="mt-2 space-y-2 rounded border border-neutral-300/80 bg-neutral-100/70 p-2 dark:border-neutral-700 dark:bg-neutral-800/60">
                               <div className="text-neutral-600 dark:text-neutral-300">
@@ -1704,14 +1683,30 @@ export function SyncDialog({
                           )}
                         </>
                       ) : (
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
-                          onClick={() => onRequestChatPrefill(buildHelpMessage(project))}
-                        >
-                          <HelpCircle className="h-3 w-3" />
-                          Ask agent to help
-                        </button>
+                        <>
+                          <div className="flex items-start gap-1.5 text-red-600 dark:text-red-400">
+                            <X className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span>Sync failed</span>
+                          </div>
+                          <div className="ml-[18px] flex items-center gap-3">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-0.5 font-medium text-revival-accent-400 hover:underline"
+                              onClick={() => onRequestChatPrefill(buildHelpMessage(project))}
+                            >
+                              <HelpCircle className="h-3 w-3" />
+                              Ask agent to help
+                            </button>
+                          </div>
+                          <details className="ml-[18px]">
+                            <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
+                              Details
+                            </summary>
+                            <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
+                              {result.error}
+                            </pre>
+                          </details>
+                        </>
                       )}
                     </div>
                   )}

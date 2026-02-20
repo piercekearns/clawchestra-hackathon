@@ -75,6 +75,7 @@ import {
   classifyUpstreamFailure,
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
+import { readExecutionState, isUnresolvedSyncStep } from './lib/git-sync-utils';
 
 interface Toast {
   id: number;
@@ -267,6 +268,20 @@ export default function App() {
     () => allProjects.filter((p) => p.gitStatus?.hasDirtyFiles),
     [allProjects],
   );
+
+  // Unresolved sync state (conflict/failed persisted in localStorage)
+  const [unresolvedSyncCount, setUnresolvedSyncCount] = useState(0);
+
+  const scanUnresolvedSyncState = useCallback(() => {
+    let count = 0;
+    for (const p of allProjects) {
+      const state = readExecutionState(p.id);
+      if (state && isUnresolvedSyncStep(state.currentStep)) count++;
+    }
+    setUnresolvedSyncCount(count);
+  }, [allProjects]);
+
+  useEffect(() => { scanUnresolvedSyncState(); }, [scanUnresolvedSyncState]);
 
   const selectedProject = useMemo(
     () => allProjects.find((project) => project.id === selectedProjectId),
@@ -1545,6 +1560,7 @@ export default function App() {
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           dirtyProjectCount={dirtyProjects.length}
+          unresolvedSyncCount={unresolvedSyncCount}
           onOpenSync={() => setSyncDialogOpen(true)}
         />
 
@@ -1765,8 +1781,11 @@ export default function App() {
 
       <SyncDialog
         open={syncDialogOpen}
-        onOpenChange={setSyncDialogOpen}
-        projects={dirtyProjects}
+        onOpenChange={(open) => {
+          setSyncDialogOpen(open);
+          if (!open) scanUnresolvedSyncState();
+        }}
+        projects={allProjects}
         onRequestChatPrefill={(text) => {
           setSyncDialogOpen(false);
           setChatDrawerOpen(true);
@@ -1775,7 +1794,7 @@ export default function App() {
             text,
           });
         }}
-        onSyncComplete={() => void loadProjects()}
+        onSyncComplete={() => { void loadProjects(); }}
       />
 
       <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
