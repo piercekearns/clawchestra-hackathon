@@ -105,6 +105,60 @@ export interface GitStatus {
   allDirtyFiles?: DirtyFileCategories;
 }
 
+export interface GitBranchState {
+  name: string;
+  isCurrent: boolean;
+  hasUpstream: boolean;
+  aheadCount: number;
+  behindCount: number;
+  diverged: boolean;
+  localOnly: boolean;
+}
+
+export interface GitStashResult {
+  stashed: boolean;
+  stashRef?: string;
+  summary: string;
+}
+
+export type GitCherryPickStatus = 'applied' | 'conflict' | 'failed';
+
+export interface GitCherryPickResult {
+  status: GitCherryPickStatus;
+  message: string;
+  conflictingFiles: string[];
+}
+
+export interface GitConflictFileContext {
+  path: string;
+  currentContent: string;
+  oursContent: string;
+  theirsContent: string;
+}
+
+export interface GitConflictResolutionInput {
+  path: string;
+  content: string;
+}
+
+export type GitConflictApplyStatus = 'applied' | 'conflict' | 'failed';
+
+export interface GitConflictApplyResult {
+  status: GitConflictApplyStatus;
+  message: string;
+  conflictingFiles: string[];
+  hash?: string;
+}
+
+export interface GitResumeValidation {
+  valid: boolean;
+  reasons: string[];
+  currentBranch?: string;
+  missingTargets: string[];
+  cherryPickInProgress: boolean;
+  unresolvedConflicts: boolean;
+}
+
 export interface ProjectViewModel extends BoardItem {
   id: string;
   /** Absolute path to the PROJECT.md file */

@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import {
   getBranchIndicator,
+  getTargetBranchIndicator,
   buildCommitMessage,
   categorizeFile,
   groupDirtyFiles,
   getProjectDirtyCategories,
   filesForSelectedCategories,
 } from './git-sync-utils';
-import type { DirtyFileCategory, DirtyFileEntry, GitStatus } from './schema';
+import type { DirtyFileCategory, DirtyFileEntry, GitBranchState, GitStatus } from './schema';
 
 /** Helper: create a DirtyFileEntry with default 'modified' status */
 function entry(path: string, status: DirtyFileEntry['status'] = 'modified'): DirtyFileEntry {
@@ -89,6 +90,57 @@ describe('getBranchIndicator', () => {
     expect(result.safe).toBe(true);
     expect(result.label).toContain('feature-x');
     expect(result.label).toContain('✓');
+  });
+});
+
+describe('getTargetBranchIndicator', () => {
+  const baseBranch: GitBranchState = {
+    name: 'staging',
+    isCurrent: false,
+    hasUpstream: true,
+    aheadCount: 0,
+    behindCount: 0,
+    diverged: false,
+    localOnly: false,
+  };
+
+  it('formats in-sync target branch', () => {
+    const result = getTargetBranchIndicator(baseBranch);
+    expect(result.safe).toBe(true);
+    expect(result.label).toContain('staging');
+    expect(result.label).toContain('✓');
+  });
+
+  it('formats behind target branch as unsafe', () => {
+    const result = getTargetBranchIndicator({
+      ...baseBranch,
+      behindCount: 2,
+    });
+    expect(result.safe).toBe(false);
+    expect(result.label).toContain('↓2');
+    expect(result.label).toContain('⚠');
+  });
+
+  it('formats diverged target branch', () => {
+    const result = getTargetBranchIndicator({
+      ...baseBranch,
+      aheadCount: 3,
+      behindCount: 1,
+      diverged: true,
+    });
+    expect(result.safe).toBe(false);
+    expect(result.label).toContain('↑3');
+    expect(result.label).toContain('↓1');
+  });
+
+  it('formats local-only target branch', () => {
+    const result = getTargetBranchIndicator({
+      ...baseBranch,
+      hasUpstream: false,
+      localOnly: true,
+    });
+    expect(result.safe).toBe(true);
+    expect(result.label).toContain('(local)');
   });
 });
 

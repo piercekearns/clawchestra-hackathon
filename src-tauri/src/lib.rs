@@ -1,12 +1,17 @@
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs::{self, OpenOptions};
+use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -50,6 +55,76 @@ struct GitStatus {
     /// All dirty files categorized into metadata/documents/code
     all_dirty_files: DirtyFileCategories,
 }
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitBranchState {
+    name: String,
+    is_current: bool,
+    has_upstream: bool,
+    ahead_count: u32,
+    behind_count: u32,
+    diverged: bool,
+    local_only: bool,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitStashResult {
+    stashed: bool,
+    stash_ref: Option<String>,
+    summary: String,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitCherryPickResult {
+    /// "applied" | "conflict" | "failed"
+    status: String,
+    message: String,
+    conflicting_files: Vec<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitConflictFileContext {
+    path: String,
+    current_content: String,
+    ours_content: String,
+    theirs_content: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitConflictResolutionInput {
+    path: String,
+    content: String,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitConflictApplyResult {
+    /// "applied" | "conflict" | "failed"
+    status: String,
+    message: String,
+    conflicting_files: Vec<String>,
+    hash: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitResumeValidation {
+    valid: bool,
+    reasons: Vec<String>,
+    current_branch: Option<String>,
+    missing_targets: Vec<String>,
+    cherry_pick_in_progress: bool,
+    unresolved_conflicts: bool,
+}
+
+static BRANCH_SYNC_LOCKS: Lazy<Mutex<HashMap<String, String>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+const BRANCH_SYNC_LOCK_STALE_SECS: u64 = 60 * 60 * 4;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1114,6 +1189,114 @@ fn run_git_preserving_columns(repo_path: &str, args: &[&str]) -> Result<String, 
     }
 }
 
+#[derive(Debug)]
+struct GitCommandOutput {
+    success: bool,
+    stdout: String,
+    stderr: String,
+}
+
+fn run_git_capture(repo_path: &str, args: &[&str]) -> Result<GitCommandOutput, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    Ok(GitCommandOutput {
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+    })
+}
+
+fn combine_git_output(output: &GitCommandOutput) -> String {
+    match (output.stdout.is_empty(), output.stderr.is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => output.stdout.clone(),
+        (true, false) => output.stderr.clone(),
+        (false, false) => format!("{}\n{}", output.stdout, output.stderr),
+    }
+}
+
+fn branch_sync_lock_file_path(normalized_repo_path: &str) -> Result<PathBuf, String> {
+    let mut hasher = DefaultHasher::new();
+    normalized_repo_path.hash(&mut hasher);
+    let lock_id = format!("{:016x}", hasher.finish());
+    let lock_dir = app_support_dir()?.join("branch-sync-locks");
+    fs::create_dir_all(&lock_dir).map_err(|error| error.to_string())?;
+    Ok(lock_dir.join(format!("{lock_id}.lock")))
+}
+
+fn parse_lock_pid(lock_path: &Path) -> Option<i32> {
+    fs::read_to_string(lock_path).ok().and_then(|content| {
+        content.lines().find_map(|line| {
+            line.strip_prefix("pid=")
+                .and_then(|value| value.trim().parse::<i32>().ok())
+        })
+    })
+}
+
+fn parse_lock_token(lock_path: &Path) -> Option<String> {
+    fs::read_to_string(lock_path).ok().and_then(|content| {
+        content.lines().find_map(|line| {
+            line.strip_prefix("token=")
+                .map(|value| value.trim().to_string())
+        })
+    })
+}
+
+fn new_branch_sync_lock_token() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    format!("bsl-{}-{}", std::process::id(), nanos)
+}
+
+fn is_pid_alive(pid: i32) -> bool {
+    #[cfg(unix)]
+    {
+        Command::new("kill")
+            .arg("-0")
+            .arg(pid.to_string())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+fn is_branch_sync_file_lock_stale(lock_path: &Path) -> bool {
+    let elapsed = fs::metadata(lock_path)
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|modified| modified.elapsed().ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(BRANCH_SYNC_LOCK_STALE_SECS + 1);
+
+    if elapsed >= BRANCH_SYNC_LOCK_STALE_SECS {
+        return true;
+    }
+
+    #[cfg(unix)]
+    {
+        parse_lock_pid(lock_path)
+            .map(|pid| !is_pid_alive(pid))
+            .unwrap_or(true)
+    }
+    #[cfg(not(unix))]
+    {
+        // Non-unix: treat recent lock as active and rely on age for staleness.
+        false
+    }
+}
+
 /// Parse porcelain status into (path, status_label) pairs.
 fn parse_dirty_entries(status_porcelain: &str) -> Vec<(String, &'static str)> {
     let mut seen = HashSet::new();
@@ -1286,15 +1469,23 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
             Err(_) => (None, None, None),
         };
 
-    let commits_this_week =
-        run_git(&repo_path, &["rev-list", "--count", "--since=7 days ago", "HEAD"])
-            .ok()
-            .and_then(|s| s.parse::<u32>().ok());
+    let commits_this_week = run_git(
+        &repo_path,
+        &["rev-list", "--count", "--since=7 days ago", "HEAD"],
+    )
+    .ok()
+    .and_then(|s| s.parse::<u32>().ok());
 
     let latest_tag = run_git(&repo_path, &["describe", "--tags", "--abbrev=0"]).ok();
 
     let stash_count = run_git(&repo_path, &["stash", "list"])
-        .map(|s| if s.is_empty() { 0 } else { s.lines().count() as u32 })
+        .map(|s| {
+            if s.is_empty() {
+                0
+            } else {
+                s.lines().count() as u32
+            }
+        })
         .unwrap_or(0);
 
     // Always compute ahead/behind when upstream exists (needed for Sync Dialog branch awareness)
@@ -1375,6 +1566,502 @@ fn git_fetch(repo_path: String) -> Result<String, String> {
     run_git(&repo_path, &["fetch", "origin"])
 }
 
+fn validate_branch_name(repo_path: &str, branch: &str) -> Result<(), String> {
+    if branch.trim().is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+    run_git(repo_path, &["check-ref-format", "--branch", branch])
+        .map(|_| ())
+        .map_err(|error| format!("Invalid branch name `{}`: {}", branch, error))
+}
+
+fn branch_upstream(repo_path: &str, branch: &str) -> Option<String> {
+    run_git(
+        repo_path,
+        &[
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            &format!("{branch}@{{upstream}}"),
+        ],
+    )
+    .ok()
+}
+
+fn rev_count(repo_path: &str, range: &str) -> u32 {
+    run_git(repo_path, &["rev-list", "--count", range])
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0)
+}
+
+#[tauri::command]
+fn git_get_branch_states(repo_path: String) -> Result<Vec<GitBranchState>, String> {
+    let current_branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
+    let all_branches = run_git(
+        &repo_path,
+        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )?;
+
+    let mut states: Vec<GitBranchState> = all_branches
+        .lines()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| {
+            let upstream = branch_upstream(&repo_path, name);
+            let (ahead_count, behind_count) = if let Some(upstream_ref) = upstream.as_deref() {
+                (
+                    rev_count(&repo_path, &format!("{upstream_ref}..{name}")),
+                    rev_count(&repo_path, &format!("{name}..{upstream_ref}")),
+                )
+            } else {
+                (0, 0)
+            };
+            let has_upstream = upstream.is_some();
+            GitBranchState {
+                name: name.to_string(),
+                is_current: current_branch
+                    .as_deref()
+                    .map(|current| current == name)
+                    .unwrap_or(false),
+                has_upstream,
+                ahead_count,
+                behind_count,
+                diverged: ahead_count > 0 && behind_count > 0,
+                local_only: !has_upstream,
+            }
+        })
+        .collect();
+
+    states.sort_by(|left, right| {
+        right
+            .is_current
+            .cmp(&left.is_current)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    Ok(states)
+}
+
+#[tauri::command]
+fn git_sync_lock_acquire(repo_path: String) -> Result<String, String> {
+    let normalized = normalize_path(&repo_path)?;
+    let lock_path = branch_sync_lock_file_path(&normalized)?;
+    let token = new_branch_sync_lock_token();
+
+    if lock_path.exists() && is_branch_sync_file_lock_stale(&lock_path) {
+        let _ = fs::remove_file(&lock_path);
+        append_hardening_log(
+            "stale_branch_sync_lock_removed",
+            &format!("repo={} lock={}", normalized, lock_path.to_string_lossy()),
+        );
+    }
+
+    {
+        let guard = BRANCH_SYNC_LOCKS
+            .lock()
+            .map_err(|_| "branchSyncLockPoisoned".to_string())?;
+        if guard.contains_key(&normalized) {
+            return Err("branchSyncLocked: another branch sync is already running".to_string());
+        }
+    }
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "branchSyncLocked: another branch sync is already running".to_string()
+            } else {
+                format!(
+                    "branchSyncLockFailed: could not create lock `{}`: {}",
+                    lock_path.to_string_lossy(),
+                    error
+                )
+            }
+        })?;
+    let _ = writeln!(file, "pid={}", std::process::id());
+    let _ = writeln!(file, "token={}", token);
+    let _ = writeln!(file, "repo={}", normalized);
+    let _ = writeln!(file, "at={}", unix_timestamp_secs());
+
+    let mut guard = BRANCH_SYNC_LOCKS
+        .lock()
+        .map_err(|_| "branchSyncLockPoisoned".to_string())?;
+    if guard.contains_key(&normalized) {
+        let _ = fs::remove_file(&lock_path);
+        return Err("branchSyncLocked: another branch sync is already running".to_string());
+    }
+    guard.insert(normalized, token.clone());
+    Ok(token)
+}
+
+#[tauri::command]
+fn git_sync_lock_release(repo_path: String, token: String) -> Result<(), String> {
+    let normalized = normalize_path(&repo_path)?;
+    let lock_path = branch_sync_lock_file_path(&normalized)?;
+    let mut guard = BRANCH_SYNC_LOCKS
+        .lock()
+        .map_err(|_| "branchSyncLockPoisoned".to_string())?;
+
+    if token.trim().is_empty() {
+        return Err("branchSyncLockTokenMissing".to_string());
+    }
+
+    if let Some(in_memory_token) = guard.get(&normalized) {
+        if in_memory_token != &token {
+            return Err("branchSyncLockTokenMismatch".to_string());
+        }
+    } else if lock_path.exists() {
+        let on_disk_token = parse_lock_token(&lock_path);
+        if on_disk_token.as_deref() != Some(token.as_str()) {
+            return Err("branchSyncLockTokenMismatch".to_string());
+        }
+    } else {
+        return Ok(());
+    }
+
+    guard.remove(&normalized);
+    if lock_path.exists() {
+        let on_disk_token = parse_lock_token(&lock_path);
+        if on_disk_token.as_deref() == Some(token.as_str()) {
+            let _ = fs::remove_file(&lock_path);
+        } else {
+            return Err("branchSyncLockTokenMismatch".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn git_checkout_branch(repo_path: String, branch: String) -> Result<(), String> {
+    validate_branch_name(&repo_path, &branch)?;
+    run_git(&repo_path, &["checkout", &branch])
+        .map(|_| ())
+        .map_err(|error| format!("git checkout failed for `{}`: {}", branch, error))
+}
+
+#[tauri::command]
+fn git_stash_push(
+    repo_path: String,
+    include_untracked: bool,
+    message: Option<String>,
+) -> Result<GitStashResult, String> {
+    let mut args: Vec<String> = vec!["stash".to_string(), "push".to_string()];
+    if include_untracked {
+        args.push("--include-untracked".to_string());
+    }
+    if let Some(value) = message
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        args.push("-m".to_string());
+        args.push(value.to_string());
+    }
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = run_git_capture(&repo_path, &arg_refs)?;
+    let summary = combine_git_output(&output);
+    if !output.success {
+        return Err(format!("git stash push failed: {}", summary));
+    }
+    let stashed = !summary.contains("No local changes to save");
+    Ok(GitStashResult {
+        stashed,
+        stash_ref: if stashed {
+            Some("stash@{0}".to_string())
+        } else {
+            None
+        },
+        summary: if summary.is_empty() {
+            "Stash completed".to_string()
+        } else {
+            summary
+        },
+    })
+}
+
+#[tauri::command]
+fn git_pop_stash(repo_path: String, stash_ref: Option<String>) -> Result<(), String> {
+    let reference = stash_ref
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("stash@{0}")
+        .to_string();
+    let output = run_git_capture(&repo_path, &["stash", "pop", &reference])?;
+    if output.success {
+        Ok(())
+    } else {
+        Err(format!(
+            "git stash pop failed for `{}`: {}",
+            reference,
+            combine_git_output(&output)
+        ))
+    }
+}
+
+fn validate_commit_hash(repo_path: &str, commit_hash: &str) -> Result<(), String> {
+    let candidate = commit_hash.trim();
+    if candidate.is_empty() {
+        return Err("Commit hash cannot be empty".to_string());
+    }
+    run_git(
+        repo_path,
+        &["rev-parse", "--verify", &format!("{candidate}^{{commit}}")],
+    )
+    .map(|_| ())
+    .map_err(|error| format!("Invalid commit hash `{}`: {}", candidate, error))
+}
+
+#[tauri::command]
+fn git_cherry_pick_commit(
+    repo_path: String,
+    commit_hash: String,
+) -> Result<GitCherryPickResult, String> {
+    validate_commit_hash(&repo_path, &commit_hash)?;
+    let output = run_git_capture(&repo_path, &["cherry-pick", "--no-edit", &commit_hash])?;
+    let message = combine_git_output(&output);
+    if output.success {
+        return Ok(GitCherryPickResult {
+            status: "applied".to_string(),
+            message,
+            conflicting_files: vec![],
+        });
+    }
+
+    let cherry_pick_head_exists = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
+    let conflicting_files = run_git(&repo_path, &["diff", "--name-only", "--diff-filter=U"])
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    if cherry_pick_head_exists || !conflicting_files.is_empty() {
+        Ok(GitCherryPickResult {
+            status: "conflict".to_string(),
+            message,
+            conflicting_files,
+        })
+    } else {
+        Ok(GitCherryPickResult {
+            status: "failed".to_string(),
+            message,
+            conflicting_files: vec![],
+        })
+    }
+}
+
+#[tauri::command]
+fn git_abort_cherry_pick(repo_path: String) -> Result<(), String> {
+    let cherry_pick_head_exists = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
+    if !cherry_pick_head_exists {
+        return Ok(());
+    }
+    run_git(&repo_path, &["cherry-pick", "--abort"])
+        .map(|_| ())
+        .map_err(|error| format!("git cherry-pick --abort failed: {}", error))
+}
+
+#[tauri::command]
+fn git_pull_current(repo_path: String) -> Result<(), String> {
+    let has_upstream = run_git(
+        &repo_path,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    )
+    .is_ok();
+    if !has_upstream {
+        return Err("Current branch has no upstream configured".to_string());
+    }
+    let output = run_git_capture(&repo_path, &["pull", "--ff-only"])?;
+    if output.success {
+        Ok(())
+    } else {
+        Err(format!("git pull failed: {}", combine_git_output(&output)))
+    }
+}
+
+fn unresolved_conflict_files(repo_path: &str) -> Vec<String> {
+    run_git(repo_path, &["diff", "--name-only", "--diff-filter=U"])
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+}
+
+fn git_show_stage_content(repo_path: &str, stage: u8, path: &str) -> String {
+    run_git_capture(repo_path, &["show", &format!(":{stage}:{path}")])
+        .map(|output| output.stdout)
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn git_get_conflict_context(repo_path: String) -> Result<Vec<GitConflictFileContext>, String> {
+    let files = unresolved_conflict_files(&repo_path);
+    let contexts = files
+        .iter()
+        .map(|path| {
+            let absolute_path = Path::new(&repo_path).join(path);
+            let current_content = fs::read_to_string(&absolute_path).unwrap_or_default();
+            GitConflictFileContext {
+                path: path.to_string(),
+                current_content,
+                ours_content: git_show_stage_content(&repo_path, 2, path),
+                theirs_content: git_show_stage_content(&repo_path, 3, path),
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(contexts)
+}
+
+#[tauri::command]
+fn git_apply_conflict_resolution(
+    repo_path: String,
+    resolutions: Vec<GitConflictResolutionInput>,
+) -> Result<GitConflictApplyResult, String> {
+    if resolutions.is_empty() {
+        return Err("No conflict resolutions supplied".to_string());
+    }
+
+    let mut staged_paths: Vec<String> = Vec::with_capacity(resolutions.len());
+    for resolution in resolutions {
+        validate_commit_path(&resolution.path)?;
+        let absolute = Path::new(&repo_path).join(&resolution.path);
+        if let Some(parent) = absolute.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        fs::write(&absolute, resolution.content).map_err(|error| {
+            format!(
+                "Failed writing resolved file `{}`: {}",
+                absolute.to_string_lossy(),
+                error
+            )
+        })?;
+        staged_paths.push(resolution.path);
+    }
+
+    let mut add_command = Command::new("git");
+    add_command
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("add")
+        .arg("--")
+        .args(staged_paths.iter());
+    let add_output = add_command.output().map_err(|error| error.to_string())?;
+    if !add_output.status.success() {
+        return Err(format!(
+            "git add failed during conflict apply: {}",
+            String::from_utf8_lossy(&add_output.stderr).trim()
+        ));
+    }
+
+    let continue_output = run_git_capture(&repo_path, &["cherry-pick", "--continue"])?;
+    if continue_output.success {
+        let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"]).ok();
+        return Ok(GitConflictApplyResult {
+            status: "applied".to_string(),
+            message: combine_git_output(&continue_output),
+            conflicting_files: vec![],
+            hash,
+        });
+    }
+
+    let conflicts = unresolved_conflict_files(&repo_path);
+    let still_in_cherry_pick = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
+    if still_in_cherry_pick || !conflicts.is_empty() {
+        Ok(GitConflictApplyResult {
+            status: "conflict".to_string(),
+            message: combine_git_output(&continue_output),
+            conflicting_files: conflicts,
+            hash: None,
+        })
+    } else {
+        Ok(GitConflictApplyResult {
+            status: "failed".to_string(),
+            message: combine_git_output(&continue_output),
+            conflicting_files: vec![],
+            hash: None,
+        })
+    }
+}
+
+#[tauri::command]
+fn git_validate_branch_sync_resume(
+    repo_path: String,
+    source_branch: String,
+    commit_hash: String,
+    remaining_targets: Vec<String>,
+) -> Result<GitResumeValidation, String> {
+    let mut reasons: Vec<String> = vec![];
+    let current_branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
+
+    if current_branch
+        .as_deref()
+        .map(|branch| branch != source_branch)
+        .unwrap_or(true)
+    {
+        reasons.push(format!(
+            "Current branch does not match source branch `{}`",
+            source_branch
+        ));
+    }
+
+    if run_git(
+        &repo_path,
+        &[
+            "rev-parse",
+            "--verify",
+            &format!("{}^{{commit}}", commit_hash),
+        ],
+    )
+    .is_err()
+    {
+        reasons.push(format!("Commit `{}` is no longer available", commit_hash));
+    }
+
+    let missing_targets = remaining_targets
+        .iter()
+        .filter_map(|target| {
+            run_git(
+                &repo_path,
+                &["show-ref", "--verify", &format!("refs/heads/{target}")],
+            )
+            .err()
+            .map(|_| target.to_string())
+        })
+        .collect::<Vec<_>>();
+    if !missing_targets.is_empty() {
+        reasons.push(format!(
+            "Some target branches are missing: {}",
+            missing_targets.join(", ")
+        ));
+    }
+
+    let cherry_pick_in_progress = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
+    if cherry_pick_in_progress {
+        reasons.push("A cherry-pick is already in progress".to_string());
+    }
+
+    let unresolved_conflicts = !unresolved_conflict_files(&repo_path).is_empty();
+    if unresolved_conflicts {
+        reasons.push("Repository has unresolved conflicts".to_string());
+    }
+
+    Ok(GitResumeValidation {
+        valid: reasons.is_empty(),
+        reasons,
+        current_branch,
+        missing_targets,
+        cherry_pick_in_progress,
+        unresolved_conflicts,
+    })
+}
+
 /// Validate a repo-relative file path for safety.
 /// Rejects absolute paths, directory traversal, and empty strings.
 fn validate_commit_path(path: &str) -> Result<(), String> {
@@ -1436,9 +2123,7 @@ fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<
         .arg("add")
         .arg("--")
         .args(files.iter());
-    let add_output = add_cmd
-        .output()
-        .map_err(|error| error.to_string())?;
+    let add_output = add_cmd.output().map_err(|error| error.to_string())?;
 
     if !add_output.status.success() {
         return Err(format!(
@@ -2043,9 +2728,7 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
 // Chat Persistence (SQLite)
 // =============================================================================
 
-use once_cell::sync::Lazy;
 use rusqlite::{params, Connection, OptionalExtension};
-use std::sync::Mutex;
 
 // Global database connection (thread-safe)
 static CHAT_DB: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| Mutex::new(None));
@@ -2462,7 +3145,9 @@ fn chat_flush() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn chat_recovery_cursor_get(session_key: Option<String>) -> Result<Option<ChatRecoveryCursor>, String> {
+fn chat_recovery_cursor_get(
+    session_key: Option<String>,
+) -> Result<Option<ChatRecoveryCursor>, String> {
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
     let key = session_key.unwrap_or_else(|| DEFAULT_SESSION_KEY.to_string());
@@ -2565,8 +3250,20 @@ pub fn run() {
             probe_repo,
             get_git_status,
             git_fetch,
+            git_get_branch_states,
             git_commit,
             git_push,
+            git_sync_lock_acquire,
+            git_sync_lock_release,
+            git_checkout_branch,
+            git_stash_push,
+            git_pop_stash,
+            git_cherry_pick_commit,
+            git_abort_cherry_pick,
+            git_pull_current,
+            git_get_conflict_context,
+            git_apply_conflict_resolution,
+            git_validate_branch_sync_resume,
             git_init_repo,
             check_for_update,
             get_app_update_lock_state,
@@ -2661,14 +3358,26 @@ mod hardening_tests {
     #[test]
     fn categorize_roadmap_changelog_as_documents() {
         assert_eq!(categorize_dirty_file("ROADMAP.md"), FileCategory::Documents);
-        assert_eq!(categorize_dirty_file("CHANGELOG.md"), FileCategory::Documents);
+        assert_eq!(
+            categorize_dirty_file("CHANGELOG.md"),
+            FileCategory::Documents
+        );
     }
 
     #[test]
     fn categorize_spec_plan_roadmap_dirs_as_documents() {
-        assert_eq!(categorize_dirty_file("docs/specs/git-sync-spec.md"), FileCategory::Documents);
-        assert_eq!(categorize_dirty_file("docs/plans/git-sync-plan.md"), FileCategory::Documents);
-        assert_eq!(categorize_dirty_file("roadmap/git-sync.md"), FileCategory::Documents);
+        assert_eq!(
+            categorize_dirty_file("docs/specs/git-sync-spec.md"),
+            FileCategory::Documents
+        );
+        assert_eq!(
+            categorize_dirty_file("docs/plans/git-sync-plan.md"),
+            FileCategory::Documents
+        );
+        assert_eq!(
+            categorize_dirty_file("roadmap/git-sync.md"),
+            FileCategory::Documents
+        );
     }
 
     #[test]
@@ -2685,7 +3394,10 @@ mod hardening_tests {
 
     /// Helper: create a test entry with "modified" status
     fn e(path: &str) -> DirtyFileEntry {
-        DirtyFileEntry { path: path.to_string(), status: "modified".to_string() }
+        DirtyFileEntry {
+            path: path.to_string(),
+            status: "modified".to_string(),
+        }
     }
 
     /// Helper: create a test (path, status) tuple
@@ -2693,12 +3405,34 @@ mod hardening_tests {
         (path.to_string(), "modified")
     }
 
+    fn init_git_repo_with_commit(name: &str) -> (PathBuf, String) {
+        let dir = test_dir(name);
+        let repo_path = dir.to_string_lossy().to_string();
+        run_git(&repo_path, &["init"]).expect("git init");
+        run_git(&repo_path, &["config", "user.email", "test@example.com"]).expect("set email");
+        run_git(&repo_path, &["config", "user.name", "Test User"]).expect("set name");
+        fs::write(dir.join("README.md"), "seed\n").expect("write file");
+        run_git(&repo_path, &["add", "README.md"]).expect("git add");
+        run_git(&repo_path, &["commit", "-m", "seed"]).expect("git commit");
+        let head = run_git(&repo_path, &["rev-parse", "--short", "HEAD"]).expect("head hash");
+        (dir, head)
+    }
+
     #[test]
     fn categorize_all_mixed_dirty_files() {
-        let entries = vec![t("PROJECT.md"), t("ROADMAP.md"), t("src/App.tsx"), t("docs/specs/new-spec.md"), t("package.json")];
+        let entries = vec![
+            t("PROJECT.md"),
+            t("ROADMAP.md"),
+            t("src/App.tsx"),
+            t("docs/specs/new-spec.md"),
+            t("package.json"),
+        ];
         let cats = categorize_all_dirty_files(entries);
         assert_eq!(cats.metadata, vec![e("PROJECT.md")]);
-        assert_eq!(cats.documents, vec![e("ROADMAP.md"), e("docs/specs/new-spec.md")]);
+        assert_eq!(
+            cats.documents,
+            vec![e("ROADMAP.md"), e("docs/specs/new-spec.md")]
+        );
         assert_eq!(cats.code, vec![e("src/App.tsx"), e("package.json")]);
     }
 
@@ -2765,5 +3499,96 @@ mod hardening_tests {
     fn validate_commit_path_rejects_null_bytes() {
         let err = validate_commit_path("file\0.txt").unwrap_err();
         assert!(err.contains("Invalid characters"));
+    }
+
+    #[test]
+    fn branch_sync_lock_blocks_concurrent_acquire_for_same_repo() {
+        let repo = test_dir("branch-sync-lock");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        let first_token =
+            git_sync_lock_acquire(repo_path.clone()).expect("first acquire should succeed");
+        let second = git_sync_lock_acquire(repo_path.clone());
+        assert!(second.is_err());
+        assert!(second.unwrap_err().contains("branchSyncLocked"));
+
+        let wrong_release = git_sync_lock_release(repo_path.clone(), "wrong-token".to_string());
+        assert!(wrong_release.is_err());
+        assert!(wrong_release
+            .unwrap_err()
+            .contains("branchSyncLockTokenMismatch"));
+
+        git_sync_lock_release(repo_path.clone(), first_token).expect("release should succeed");
+        let second_token = git_sync_lock_acquire(repo_path.clone())
+            .expect("acquire should succeed again after release");
+        git_sync_lock_release(repo_path, second_token).expect("final release should succeed");
+
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn resume_validation_succeeds_for_matching_repo_state() {
+        let (repo, head) = init_git_repo_with_commit("resume-valid");
+        let repo_path = repo.to_string_lossy().to_string();
+        let source_branch =
+            run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).expect("source branch");
+        run_git(&repo_path, &["branch", "staging"]).expect("create staging branch");
+
+        let validation = git_validate_branch_sync_resume(
+            repo_path.clone(),
+            source_branch,
+            head,
+            vec!["staging".to_string()],
+        )
+        .expect("validation should run");
+        assert!(validation.valid);
+        assert!(validation.reasons.is_empty());
+        assert!(validation.missing_targets.is_empty());
+
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn resume_validation_flags_missing_target_branch() {
+        let (repo, head) = init_git_repo_with_commit("resume-missing-target");
+        let repo_path = repo.to_string_lossy().to_string();
+        let source_branch =
+            run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).expect("source branch");
+
+        let validation = git_validate_branch_sync_resume(
+            repo_path.clone(),
+            source_branch,
+            head,
+            vec!["nonexistent-target".to_string()],
+        )
+        .expect("validation should run");
+        assert!(!validation.valid);
+        assert_eq!(
+            validation.missing_targets,
+            vec!["nonexistent-target".to_string()]
+        );
+        assert!(validation
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("missing")));
+
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn combine_git_output_prefers_available_streams() {
+        let only_stdout = GitCommandOutput {
+            success: true,
+            stdout: "ok".to_string(),
+            stderr: String::new(),
+        };
+        assert_eq!(combine_git_output(&only_stdout), "ok");
+
+        let only_stderr = GitCommandOutput {
+            success: false,
+            stdout: String::new(),
+            stderr: "error".to_string(),
+        };
+        assert_eq!(combine_git_output(&only_stderr), "error");
     }
 }

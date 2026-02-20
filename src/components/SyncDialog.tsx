@@ -5,12 +5,30 @@ import {
   GitCommitHorizontal,
   HelpCircle,
   Loader2,
+  RefreshCw,
   X,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Tooltip } from './Tooltip';
-import type { DirtyFileCategory, GitStatus, ProjectViewModel } from '../lib/schema';
-import { gitCommit, gitPush } from '../lib/tauri';
+import type { DirtyFileCategory, GitBranchState, GitStatus, ProjectViewModel } from '../lib/schema';
+import {
+  gitApplyConflictResolution,
+  gitAbortCherryPick,
+  gitCherryPickCommit,
+  gitCheckoutBranch,
+  gitCommit,
+  gitGetConflictContext,
+  gitGetBranchStates,
+  getGitStatus,
+  gitPopStash,
+  gitPullCurrent,
+  gitPush,
+  gitStashPush,
+  gitSyncLockAcquire,
+  gitSyncLockRelease,
+  gitValidateBranchSyncResume,
+  sendOpenClawMessage,
+} from '../lib/tauri';
 import { cn } from '../lib/utils';
 import { ModalDragZone } from './ui/ModalDragZone';
 import {
@@ -19,6 +37,7 @@ import {
   filesForSelectedCategories,
   getBranchIndicator,
   getProjectDirtyCategories,
+  getTargetBranchIndicator,
 } from '../lib/git-sync-utils';
 
 /* ── Brand checkbox: chartreuse bg + dark tick ─────────────────────── */
@@ -74,6 +93,47 @@ interface SyncResult {
   hash?: string;
   error?: string;
   pushed?: boolean;
+  branchResults?: BranchExecutionResult[];
+  conflict?: ConflictContext;
+}
+
+interface BranchExecutionResult {
+  branch: string;
+  status: 'success' | 'skipped' | 'conflict' | 'failed';
+  hash?: string;
+  pushed?: boolean;
+  reason?: string;
+}
+
+interface ConflictContext {
+  sourceBranch: string;
+  targetBranch: string;
+  commitHash: string;
+  files: string[];
+  details: string;
+}
+
+interface BranchSyncExecutionState {
+  projectId: string;
+  sourceBranch: string;
+  commitHash?: string;
+  completedTargets: string[];
+  remainingTargets: string[];
+  currentStep: string;
+  currentTarget?: string;
+  targetPushBranches?: string[];
+  sourcePushEnabled?: boolean;
+  sourcePushed?: boolean;
+  pendingStashRef?: string;
+  updatedAt: number;
+}
+
+interface ConflictResolutionDraft {
+  path: string;
+  strategy: string;
+  summary: string;
+  proposedContent: string;
+  currentContent: string;
 }
 
 type DirtyProject = ProjectViewModel & { gitStatus: GitStatus };
@@ -94,6 +154,70 @@ function buildHelpMessage(project: DirtyProject): string {
   const cats = getProjectDirtyCategories(git);
   const allFiles = [...cats.metadata, ...cats.documents, ...cats.code];
   return `${project.title} is on branch \`${git.branch}\`${behindPart}. The following files have uncommitted changes: ${allFiles.join(', ')}. Can you help me sync these?`;
+}
+
+function executionStateKey(projectId: string): string {
+  return `clawchestra:branch-sync:${projectId}`;
+}
+
+function readExecutionState(projectId: string): BranchSyncExecutionState | null {
+  try {
+    const raw = localStorage.getItem(executionStateKey(projectId));
+    if (!raw) return null;
+    return JSON.parse(raw) as BranchSyncExecutionState;
+  } catch {
+    return null;
+  }
+}
+
+function writeExecutionState(state: BranchSyncExecutionState): void {
+  try {
+    localStorage.setItem(executionStateKey(state.projectId), JSON.stringify(state));
+  } catch {
+    // localStorage failures should not block sync execution
+  }
+}
+
+function clearExecutionState(projectId: string): void {
+  try {
+    localStorage.removeItem(executionStateKey(projectId));
+  } catch {
+    // no-op
+  }
+}
+
+function buildConflictPrefill(
+  project: DirtyProject,
+  conflict: ConflictContext,
+): string {
+  return [
+    `I hit a cherry-pick conflict while syncing ${project.title}.`,
+    `Source branch: ${conflict.sourceBranch}`,
+    `Target branch: ${conflict.targetBranch}`,
+    `Commit: ${conflict.commitHash}`,
+    `Conflicting files: ${conflict.files.join(', ') || '(none detected)'}`,
+    '',
+    'Please propose a safe non-destructive resolution strategy and exact git steps.',
+    'If structured files are involved, preserve all roadmap/spec/plan content and deduplicate.',
+    '',
+    `Git output:`,
+    conflict.details || '(no details)',
+  ].join('\n');
+}
+
+function stripCodeFence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('```')) return trimmed;
+  const firstNewline = trimmed.indexOf('\n');
+  if (firstNewline === -1) return trimmed;
+  const lastFence = trimmed.lastIndexOf('```');
+  if (lastFence <= firstNewline) return trimmed;
+  return trimmed.slice(firstNewline + 1, lastFence).trim();
+}
+
+function truncateForPrompt(text: string, maxChars = 10_000): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n\n[TRUNCATED ${text.length - maxChars} chars]`;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +243,20 @@ export function SyncDialog({
   >(new Map());
   // Push enabled per project
   const [pushEnabled, setPushEnabled] = useState<Set<string>>(new Set());
+  // Optional pull-first for source branch when behind
+  const [pullFirstEnabled, setPullFirstEnabled] = useState<Set<string>>(new Set());
+  // Additional branch targets per project
+  const [targetBranches, setTargetBranches] = useState<Map<string, Set<string>>>(new Map());
+  // Per-project target branch push toggles
+  const [targetPushEnabled, setTargetPushEnabled] = useState<Map<string, Set<string>>>(new Map());
+  // Branch state snapshots for each project
+  const [branchStatesByProject, setBranchStatesByProject] = useState<Map<string, GitBranchState[]>>(new Map());
+  // Persisted interrupted execution states
+  const [executionStateByProject, setExecutionStateByProject] = useState<Map<string, BranchSyncExecutionState>>(new Map());
+  // In-dialog conflict resolution drafts
+  const [conflictDraftsByProject, setConflictDraftsByProject] = useState<Map<string, ConflictResolutionDraft[]>>(new Map());
+  const [loadingConflictDraftIds, setLoadingConflictDraftIds] = useState<Set<string>>(new Set());
+  const [applyingConflictId, setApplyingConflictId] = useState<string | null>(null);
   // Sync results per project
   const [results, setResults] = useState<Map<string, SyncResult>>(new Map());
   // Currently syncing project ID (for spinner)
@@ -192,6 +330,19 @@ export function SyncDialog({
     const defaultCats = buildDefaultCategories(dirtyProjects);
     setSelectedCategories(defaultCats);
     setPushEnabled(defaultPushIds);
+    setPullFirstEnabled(new Set());
+    setTargetBranches(new Map());
+    setTargetPushEnabled(new Map());
+    setBranchStatesByProject(new Map());
+    const persisted = new Map<string, BranchSyncExecutionState>();
+    for (const project of dirtyProjects) {
+      const existing = readExecutionState(project.id);
+      if (existing) persisted.set(project.id, existing);
+    }
+    setExecutionStateByProject(persisted);
+    setConflictDraftsByProject(new Map());
+    setLoadingConflictDraftIds(new Set());
+    setApplyingConflictId(null);
     setResults(new Map());
     setSyncingId(null);
     setBatchSyncing(false);
@@ -214,6 +365,41 @@ export function SyncDialog({
     );
   }, [selectedCategories, open, dirtyProjects, results, computeCommitInputs]);
 
+  // Load branch states lazily for branch-target selection UI.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    const loadBranchStates = async () => {
+      const entries = await Promise.all(
+        dirtyProjects.map(async (project) => {
+          try {
+            const states = await gitGetBranchStates(project.dirPath);
+            return [project.id, states] as const;
+          } catch {
+            return [project.id, [] as GitBranchState[]] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      setBranchStatesByProject(new Map(entries));
+    };
+
+    void loadBranchStates();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, dirtyProjects]);
+
+  const refreshBranchStatesForProject = useCallback(async (project: DirtyProject) => {
+    try {
+      const states = await gitGetBranchStates(project.dirPath);
+      setBranchStatesByProject((prev) => new Map(prev).set(project.id, states));
+    } catch {
+      // leave previous snapshot in place on refresh failure
+    }
+  }, []);
+
   const toggleCategory = useCallback((projectId: string, category: DirtyFileCategory) => {
     setSelectedCategories((prev) => {
       const next = new Map(prev);
@@ -234,6 +420,37 @@ export function SyncDialog({
     });
   }, []);
 
+  const togglePullFirst = useCallback((projectId: string) => {
+    setPullFirstEnabled((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }, []);
+
+  const toggleTargetBranch = useCallback((projectId: string, branch: string) => {
+    setTargetBranches((prev) => {
+      const next = new Map(prev);
+      const selected = new Set(prev.get(projectId) ?? []);
+      if (selected.has(branch)) selected.delete(branch);
+      else selected.add(branch);
+      next.set(projectId, selected);
+      return next;
+    });
+  }, []);
+
+  const toggleTargetPush = useCallback((projectId: string, branch: string) => {
+    setTargetPushEnabled((prev) => {
+      const next = new Map(prev);
+      const selected = new Set(prev.get(projectId) ?? []);
+      if (selected.has(branch)) selected.delete(branch);
+      else selected.add(branch);
+      next.set(projectId, selected);
+      return next;
+    });
+  }, []);
+
   /** Whether a project has any categories selected */
   const isProjectSelected = useCallback(
     (projectId: string) => {
@@ -246,37 +463,615 @@ export function SyncDialog({
   const selectedCount = useMemo(
     () =>
       dirtyProjects.filter(
-        (p) => isProjectSelected(p.id) && !results.has(p.id),
+        (p) =>
+          (isProjectSelected(p.id)
+            || Boolean(
+              executionStateByProject.get(p.id)?.commitHash
+              && executionStateByProject.get(p.id)?.remainingTargets.length
+              && executionStateByProject.get(p.id)?.currentStep !== 'conflict',
+            ))
+          && !results.has(p.id),
       ).length,
+    [dirtyProjects, executionStateByProject, isProjectSelected, results],
+  );
+
+  const selectedCommitCount = useMemo(
+    () => dirtyProjects.filter((p) => isProjectSelected(p.id) && !results.has(p.id)).length,
     [dirtyProjects, isProjectSelected, results],
   );
 
   // Sync a single project
   const syncProject = useCallback(
     async (project: DirtyProject): Promise<SyncResult> => {
+      const persisted = readExecutionState(project.id);
+      let shouldResume = Boolean(
+        persisted && persisted.commitHash && persisted.remainingTargets.length > 0,
+      );
       const cats = getProjectDirtyCategories(project.gitStatus);
       const sel = selectedCategories.get(project.id);
-      if (!sel || sel.size === 0) {
+      if ((!sel || sel.size === 0) && !shouldResume) {
         return { projectId: project.id, success: true, hash: 'no-op' };
       }
-      const files = filesForSelectedCategories(cats, sel);
-      if (files.length === 0) {
+      const files = filesForSelectedCategories(cats, sel ?? new Set<DirtyFileCategory>());
+      if (files.length === 0 && !shouldResume) {
         return { projectId: project.id, success: true, hash: 'no-op' };
       }
 
-      try {
-        const hash = await gitCommit(project.dirPath, commitMessage, files);
-        let pushed = false;
-        if (pushEnabled.has(project.id) && project.gitStatus.remote) {
-          await gitPush(project.dirPath);
-          pushed = true;
+      const fallbackSourceBranch = project.gitStatus.branch ?? 'HEAD';
+      const selectedTargets = [...(targetBranches.get(project.id) ?? new Set<string>())];
+      const perBranchResults: BranchExecutionResult[] = [];
+      let resumedState = shouldResume ? persisted : null;
+
+      const clearPersistedState = () => {
+        clearExecutionState(project.id);
+        setExecutionStateByProject((prev) => {
+          const next = new Map(prev);
+          next.delete(project.id);
+          return next;
+        });
+      };
+
+      if (resumedState) {
+        const resumeValidation = await gitValidateBranchSyncResume({
+          repoPath: project.dirPath,
+          sourceBranch: resumedState.sourceBranch,
+          commitHash: resumedState.commitHash ?? '',
+          remainingTargets: resumedState.remainingTargets,
+        }).catch((error) => ({
+          valid: false,
+          reasons: [String(error)],
+          currentBranch: undefined,
+          missingTargets: [],
+          cherryPickInProgress: false,
+          unresolvedConflicts: false,
+        }));
+
+        if (!resumeValidation.valid) {
+          clearPersistedState();
+          resumedState = null;
+          shouldResume = false;
+          if (!sel || sel.size === 0) {
+            return {
+              projectId: project.id,
+              success: false,
+              error: `Saved sync state is no longer resumable: ${resumeValidation.reasons.join('; ')}`,
+            };
+          }
         }
-        return { projectId: project.id, success: true, hash, pushed };
+      }
+
+      const sourceBranch = resumedState?.sourceBranch ?? fallbackSourceBranch;
+      const resumeTargets = resumedState ? [...resumedState.remainingTargets] : selectedTargets;
+      const targetPushBranches = new Set(
+        resumedState?.targetPushBranches ?? [...(targetPushEnabled.get(project.id) ?? new Set<string>())],
+      );
+      const sourcePushSelected = resumedState?.sourcePushEnabled
+        ?? (pushEnabled.has(project.id) && Boolean(project.gitStatus.remote));
+      let commitHash = resumedState?.commitHash;
+      let sourcePushed = resumedState?.sourcePushed ?? false;
+      let pausedOnConflict = false;
+      let branchSyncLockToken: string | null = null;
+
+      const updateExecutionState = (
+        next: Omit<BranchSyncExecutionState, 'projectId' | 'updatedAt'>,
+      ) => {
+        const payload: BranchSyncExecutionState = {
+          projectId: project.id,
+          updatedAt: Date.now(),
+          ...next,
+          completedTargets: [...next.completedTargets],
+          remainingTargets: [...next.remainingTargets],
+        };
+        writeExecutionState(payload);
+        setExecutionStateByProject((prev) => new Map(prev).set(project.id, payload));
+      };
+
+      const finishExecutionState = () => {
+        clearPersistedState();
+      };
+
+      try {
+        branchSyncLockToken = await gitSyncLockAcquire(project.dirPath);
       } catch (error) {
-        return { projectId: project.id, success: false, error: String(error) };
+        return {
+          projectId: project.id,
+          success: false,
+          error: String(error),
+        };
+      }
+
+      try {
+        if (!resumedState) {
+          updateExecutionState({
+            sourceBranch,
+            currentStep: 'source-commit',
+            completedTargets: [],
+            remainingTargets: resumeTargets,
+            targetPushBranches: [...targetPushBranches],
+            sourcePushEnabled: sourcePushSelected,
+            sourcePushed,
+          });
+        }
+
+        if (!resumedState && pullFirstEnabled.has(project.id) && (project.gitStatus.behindCount ?? 0) > 0) {
+          updateExecutionState({
+            sourceBranch,
+            currentStep: 'pull-first',
+            completedTargets: [],
+            remainingTargets: resumeTargets,
+            targetPushBranches: [...targetPushBranches],
+            sourcePushEnabled: sourcePushSelected,
+            sourcePushed,
+          });
+          const prePullStash = await gitStashPush(
+            project.dirPath,
+            true,
+            `clawchestra-pull-first:${project.id}`,
+          );
+          try {
+            await gitPullCurrent(project.dirPath);
+          } finally {
+            if (prePullStash.stashed) {
+              await gitPopStash(project.dirPath, prePullStash.stashRef ?? null);
+            }
+          }
+        }
+
+        if (!commitHash) {
+          commitHash = await gitCommit(project.dirPath, commitMessage, files);
+          updateExecutionState({
+            sourceBranch,
+            commitHash,
+            currentStep: 'source-push',
+            completedTargets: [],
+            remainingTargets: resumeTargets,
+            targetPushBranches: [...targetPushBranches],
+            sourcePushEnabled: sourcePushSelected,
+            sourcePushed,
+          });
+        }
+
+        if (!sourcePushed && sourcePushSelected) {
+          await gitPush(project.dirPath);
+          sourcePushed = true;
+        }
+
+        const completedTargets: string[] = resumedState ? [...resumedState.completedTargets] : [];
+        let remainingTargets = [...resumeTargets];
+
+        for (const targetBranch of resumeTargets) {
+          const stash = await gitStashPush(
+            project.dirPath,
+            true,
+            `clawchestra-branch-sync:${project.id}:${targetBranch}`,
+          );
+          let checkoutTargetSucceeded = false;
+          let restoreStash = stash.stashed;
+          try {
+            updateExecutionState({
+              sourceBranch,
+              commitHash,
+              currentStep: 'target-cherry-pick',
+              currentTarget: targetBranch,
+              completedTargets,
+              remainingTargets,
+              targetPushBranches: [...targetPushBranches],
+              sourcePushEnabled: sourcePushSelected,
+              sourcePushed,
+            });
+
+            await gitCheckoutBranch(project.dirPath, targetBranch);
+            checkoutTargetSucceeded = true;
+
+            const cherryPick = await gitCherryPickCommit(project.dirPath, commitHash);
+            if (cherryPick.status === 'applied') {
+              let targetPushed = false;
+              const targetState = (branchStatesByProject.get(project.id) ?? []).find((b) => b.name === targetBranch);
+              if (targetState?.hasUpstream && targetPushBranches.has(targetBranch)) {
+                await gitPush(project.dirPath);
+                targetPushed = true;
+              }
+              perBranchResults.push({
+                branch: targetBranch,
+                status: 'success',
+                hash: commitHash,
+                pushed: targetPushed,
+              });
+              completedTargets.push(targetBranch);
+              remainingTargets = remainingTargets.filter((value) => value !== targetBranch);
+              updateExecutionState({
+                sourceBranch,
+                commitHash,
+                currentStep: 'target-complete',
+                completedTargets,
+                remainingTargets,
+                targetPushBranches: [...targetPushBranches],
+                sourcePushEnabled: sourcePushSelected,
+                sourcePushed,
+              });
+            } else if (cherryPick.status === 'conflict') {
+              pausedOnConflict = true;
+              restoreStash = false;
+              const conflict: ConflictContext = {
+                sourceBranch,
+                targetBranch,
+                commitHash,
+                files: cherryPick.conflictingFiles,
+                details: cherryPick.message,
+              };
+              perBranchResults.push({
+                branch: targetBranch,
+                status: 'conflict',
+                hash: commitHash,
+                reason: cherryPick.message,
+              });
+              updateExecutionState({
+                sourceBranch,
+                commitHash,
+                currentStep: 'conflict',
+                currentTarget: targetBranch,
+                completedTargets,
+                remainingTargets,
+                targetPushBranches: [...targetPushBranches],
+                sourcePushEnabled: sourcePushSelected,
+                sourcePushed,
+                pendingStashRef: stash.stashed ? stash.stashRef : undefined,
+              });
+              return {
+                projectId: project.id,
+                success: false,
+                hash: commitHash,
+                pushed: sourcePushed,
+                branchResults: perBranchResults,
+                conflict,
+                error: `Conflict while cherry-picking to ${targetBranch}`,
+              };
+            } else {
+              await gitAbortCherryPick(project.dirPath).catch(() => undefined);
+              perBranchResults.push({
+                branch: targetBranch,
+                status: 'failed',
+                hash: commitHash,
+                reason: cherryPick.message,
+              });
+              updateExecutionState({
+                sourceBranch,
+                commitHash,
+                currentStep: 'failed',
+                currentTarget: targetBranch,
+                completedTargets,
+                remainingTargets,
+                targetPushBranches: [...targetPushBranches],
+                sourcePushEnabled: sourcePushSelected,
+                sourcePushed,
+              });
+              return {
+                projectId: project.id,
+                success: false,
+                hash: commitHash,
+                pushed: sourcePushed,
+                branchResults: perBranchResults,
+                error: cherryPick.message || `Cherry-pick failed on ${targetBranch}`,
+              };
+            }
+          } finally {
+            if (checkoutTargetSucceeded && !pausedOnConflict) {
+              await gitCheckoutBranch(project.dirPath, sourceBranch).catch(() => undefined);
+            }
+            if (restoreStash && stash.stashed) {
+              await gitPopStash(project.dirPath, stash.stashRef ?? null);
+            }
+          }
+        }
+
+        finishExecutionState();
+        return {
+          projectId: project.id,
+          success: true,
+          hash: commitHash,
+          pushed: sourcePushed,
+          branchResults: perBranchResults,
+        };
+      } catch (error) {
+        return {
+          projectId: project.id,
+          success: false,
+          hash: commitHash,
+          pushed: sourcePushed,
+          branchResults: perBranchResults,
+          error: String(error),
+        };
+      } finally {
+        if (!pausedOnConflict) {
+          await gitCheckoutBranch(project.dirPath, sourceBranch).catch(() => undefined);
+        }
+        if (branchSyncLockToken) {
+          await gitSyncLockRelease(project.dirPath, branchSyncLockToken).catch(() => undefined);
+        }
       }
     },
-    [commitMessage, pushEnabled, selectedCategories],
+    [
+      branchStatesByProject,
+      commitMessage,
+      pullFirstEnabled,
+      pushEnabled,
+      selectedCategories,
+      targetBranches,
+      targetPushEnabled,
+    ],
+  );
+
+  const updateConflictDraftContent = useCallback(
+    (projectId: string, path: string, content: string) => {
+      setConflictDraftsByProject((prev) => {
+        const next = new Map(prev);
+        const drafts = (next.get(projectId) ?? []).map((draft) => (
+          draft.path === path ? { ...draft, proposedContent: content } : draft
+        ));
+        next.set(projectId, drafts);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const generateConflictDrafts = useCallback(
+    async (project: DirtyProject, conflict: ConflictContext) => {
+      setLoadingConflictDraftIds((prev) => new Set(prev).add(project.id));
+      try {
+        const conflictContext = await gitGetConflictContext(project.dirPath);
+        if (conflictContext.length === 0) {
+          throw new Error('No unresolved conflict files found in repository state.');
+        }
+
+        const prompt = [
+          'You are resolving git cherry-pick conflicts.',
+          'Return only strict JSON with this shape:',
+          '{"files":[{"path":"string","strategy":"string","summary":"string","resolvedContent":"string"}]}',
+          '',
+          'Rules:',
+          '1. Preserve non-conflicting content from both versions.',
+          '2. Never delete roadmap/spec/plan items without reason.',
+          '3. Prefer deterministic merges over stylistic rewrites.',
+          '',
+          `Source branch: ${conflict.sourceBranch}`,
+          `Target branch: ${conflict.targetBranch}`,
+          `Commit: ${conflict.commitHash}`,
+          '',
+          'Conflict payload:',
+          JSON.stringify(
+            conflictContext.map((file) => ({
+              path: file.path,
+              ours: truncateForPrompt(file.oursContent),
+              theirs: truncateForPrompt(file.theirsContent),
+              current: truncateForPrompt(file.currentContent),
+            })),
+            null,
+            2,
+          ),
+        ].join('\n');
+
+        const raw = await sendOpenClawMessage({
+          message: prompt,
+          attachments: [],
+        });
+
+        const parsed = JSON.parse(stripCodeFence(raw)) as {
+          files?: Array<{
+            path?: string;
+            strategy?: string;
+            summary?: string;
+            resolvedContent?: string;
+          }>;
+        };
+
+        const mappedDrafts = conflictContext.map((contextFile) => {
+          const matched = (parsed.files ?? []).find((candidate) => candidate.path === contextFile.path);
+          return {
+            path: contextFile.path,
+            strategy: matched?.strategy?.trim() || 'manual-review',
+            summary: matched?.summary?.trim() || 'No AI summary returned; review manually.',
+            proposedContent: matched?.resolvedContent ?? contextFile.currentContent,
+            currentContent: contextFile.currentContent,
+          } as ConflictResolutionDraft;
+        });
+
+        setConflictDraftsByProject((prev) => new Map(prev).set(project.id, mappedDrafts));
+      } catch (error) {
+        const conflictContext = await gitGetConflictContext(project.dirPath).catch(() => []);
+        const fallbackDrafts: ConflictResolutionDraft[] = conflictContext.map((contextFile) => ({
+          path: contextFile.path,
+          strategy: 'fallback-ours',
+          summary: 'AI proposal unavailable; defaulted to source/ours version.',
+          proposedContent: contextFile.oursContent || contextFile.currentContent,
+          currentContent: contextFile.currentContent,
+        }));
+        if (fallbackDrafts.length > 0) {
+          setConflictDraftsByProject((prev) => new Map(prev).set(project.id, fallbackDrafts));
+        }
+        setResults((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(project.id);
+          if (!existing) return prev;
+          next.set(project.id, {
+            ...existing,
+            error: `AI proposal generation failed: ${String(error)}`,
+          });
+          return next;
+        });
+      } finally {
+        setLoadingConflictDraftIds((prev) => {
+          const next = new Set(prev);
+          next.delete(project.id);
+          return next;
+        });
+      }
+    },
+    [],
+  );
+
+  const applyConflictDrafts = useCallback(
+    async (project: DirtyProject, conflict: ConflictContext) => {
+      if (syncLockRef.current) return;
+      syncLockRef.current = true;
+      setApplyingConflictId(project.id);
+
+      let shouldContinue = false;
+      let priorBranchResults: BranchExecutionResult[] = [];
+      let resolvedBranchResult: BranchExecutionResult | null = null;
+      let branchSyncLockToken: string | null = null;
+
+      try {
+        const drafts = conflictDraftsByProject.get(project.id) ?? [];
+        if (drafts.length === 0) {
+          throw new Error('No conflict proposal available. Generate a proposal first.');
+        }
+
+        const execution = executionStateByProject.get(project.id);
+        if (!execution?.commitHash || !execution.currentTarget) {
+          throw new Error('Missing execution context for conflict resolution.');
+        }
+
+        branchSyncLockToken = await gitSyncLockAcquire(project.dirPath);
+        try {
+          const applyResult = await gitApplyConflictResolution(
+            project.dirPath,
+            drafts.map((draft) => ({ path: draft.path, content: draft.proposedContent })),
+          );
+
+          if (applyResult.status !== 'applied') {
+            setResults((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(project.id);
+              if (!existing) return prev;
+              next.set(project.id, {
+                ...existing,
+                error: applyResult.message || 'Conflict apply failed',
+                conflict: {
+                  ...conflict,
+                  files: applyResult.conflictingFiles.length > 0 ? applyResult.conflictingFiles : conflict.files,
+                  details: applyResult.message || conflict.details,
+                },
+              });
+              return next;
+            });
+            return;
+          }
+
+          let targetPushed = false;
+          if ((execution.targetPushBranches ?? []).includes(execution.currentTarget)) {
+            const targetStatus = await getGitStatus(project.dirPath);
+            if (targetStatus.remote) {
+              await gitPush(project.dirPath);
+              targetPushed = true;
+            }
+          }
+
+          await gitCheckoutBranch(project.dirPath, execution.sourceBranch);
+          if (execution.pendingStashRef) {
+            await gitPopStash(project.dirPath, execution.pendingStashRef);
+          }
+
+          const completedTargets = [...execution.completedTargets, execution.currentTarget];
+          const remainingTargets = execution.remainingTargets.filter((target) => target !== execution.currentTarget);
+
+          priorBranchResults = (results.get(project.id)?.branchResults ?? []).filter(
+            (item) => item.branch !== execution.currentTarget,
+          );
+          const appliedBranchResult: BranchExecutionResult = {
+            branch: execution.currentTarget,
+            status: 'success',
+            hash: execution.commitHash,
+            pushed: targetPushed,
+          };
+          resolvedBranchResult = appliedBranchResult;
+
+          if (remainingTargets.length === 0) {
+            clearExecutionState(project.id);
+            setExecutionStateByProject((prev) => {
+              const next = new Map(prev);
+              next.delete(project.id);
+              return next;
+            });
+            setResults((prev) => new Map(prev).set(project.id, {
+              projectId: project.id,
+              success: true,
+              hash: execution.commitHash,
+              pushed: execution.sourcePushed,
+              branchResults: [...priorBranchResults, appliedBranchResult],
+            }));
+          } else {
+            const nextExecution: BranchSyncExecutionState = {
+              ...execution,
+              completedTargets,
+              remainingTargets,
+              currentTarget: undefined,
+              currentStep: 'resume-after-conflict',
+              pendingStashRef: undefined,
+              updatedAt: Date.now(),
+            };
+            writeExecutionState(nextExecution);
+            setExecutionStateByProject((prev) => new Map(prev).set(project.id, nextExecution));
+            setResults((prev) => {
+              const next = new Map(prev);
+              next.delete(project.id);
+              return next;
+            });
+            shouldContinue = true;
+          }
+
+          setConflictDraftsByProject((prev) => {
+            const next = new Map(prev);
+            next.delete(project.id);
+            return next;
+          });
+        } finally {
+          if (branchSyncLockToken) {
+            await gitSyncLockRelease(project.dirPath, branchSyncLockToken).catch(() => undefined);
+          }
+        }
+      } catch (error) {
+        setResults((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(project.id);
+          next.set(project.id, {
+            projectId: project.id,
+            success: false,
+            hash: existing?.hash,
+            pushed: existing?.pushed,
+            branchResults: existing?.branchResults,
+            conflict,
+            error: String(error),
+          });
+          return next;
+        });
+      } finally {
+        setApplyingConflictId(null);
+        syncLockRef.current = false;
+      }
+
+      if (shouldContinue) {
+        setSyncingId(project.id);
+        try {
+          const continued = await syncProject(project);
+          const mergedBranchResults = [
+            ...priorBranchResults,
+            ...(resolvedBranchResult ? [resolvedBranchResult] : []),
+            ...(continued.branchResults ?? []),
+          ];
+          setResults((prev) => new Map(prev).set(project.id, {
+            ...continued,
+            branchResults: mergedBranchResults,
+          }));
+        } finally {
+          setSyncingId(null);
+          await refreshBranchStatesForProject(project);
+        }
+      } else {
+        await refreshBranchStatesForProject(project);
+      }
+    },
+    [conflictDraftsByProject, executionStateByProject, refreshBranchStatesForProject, results, syncProject],
   );
 
   // Sync one project (per-project button)
@@ -289,11 +1084,12 @@ export function SyncDialog({
         const result = await syncProject(project);
         setResults((prev) => new Map(prev).set(project.id, result));
         setSyncingId(null);
+        await refreshBranchStatesForProject(project);
       } finally {
         syncLockRef.current = false;
       }
     },
-    [syncProject],
+    [refreshBranchStatesForProject, syncProject],
   );
 
   // Batch sync all selected
@@ -303,19 +1099,36 @@ export function SyncDialog({
     setBatchSyncing(true);
     try {
       const toSync = dirtyProjects.filter(
-        (p) => isProjectSelected(p.id) && !results.has(p.id),
+        (p) =>
+          (
+            isProjectSelected(p.id)
+            || Boolean(
+              executionStateByProject.get(p.id)?.commitHash
+              && executionStateByProject.get(p.id)?.remainingTargets.length
+              && executionStateByProject.get(p.id)?.currentStep !== 'conflict',
+            )
+          )
+          && !results.has(p.id),
       );
       for (const project of toSync) {
         setSyncingId(project.id);
         const result = await syncProject(project);
         setResults((prev) => new Map(prev).set(project.id, result));
+        await refreshBranchStatesForProject(project);
       }
       setSyncingId(null);
       setBatchSyncing(false);
     } finally {
       syncLockRef.current = false;
     }
-  }, [dirtyProjects, isProjectSelected, results, syncProject]);
+  }, [
+    dirtyProjects,
+    executionStateByProject,
+    isProjectSelected,
+    refreshBranchStatesForProject,
+    results,
+    syncProject,
+  ]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -357,8 +1170,22 @@ export function SyncDialog({
               const result = results.get(project.id);
               const isSyncing = syncingId === project.id;
               const cats = getProjectDirtyCategories(git);
+              const branchStates = branchStatesByProject.get(project.id) ?? [];
+              const branchTargets = branchStates.filter((state) => !state.isCurrent);
+              const selectedTargets = targetBranches.get(project.id) ?? new Set<string>();
+              const selectedTargetPush = targetPushEnabled.get(project.id) ?? new Set<string>();
+              const executionState = executionStateByProject.get(project.id);
+              const canResume = Boolean(
+                executionState?.commitHash
+                && executionState.remainingTargets.length > 0
+                && executionState.currentStep !== 'conflict',
+              );
+              const conflictDrafts = conflictDraftsByProject.get(project.id) ?? [];
+              const loadingConflictDraft = loadingConflictDraftIds.has(project.id);
+              const applyingConflict = applyingConflictId === project.id;
               const projSelected = selectedCategories.get(project.id) ?? new Set<DirtyFileCategory>();
               const hasAnySelected = projSelected.size > 0;
+              const canSyncProject = hasAnySelected || canResume;
               const codeSelected = projSelected.has('code');
 
               return (
@@ -393,8 +1220,8 @@ export function SyncDialog({
                       {branch.label}
                     </span>
 
-                    {/* Action button — only visible when project has selected categories */}
-                    {!result && hasAnySelected && (
+                    {/* Action button — visible with selected categories or resumable state */}
+                    {!result && canSyncProject && (
                       <Button
                         type="button"
                         variant="outline"
@@ -405,12 +1232,16 @@ export function SyncDialog({
                       >
                         {isSyncing ? (
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : canResume ? (
+                          <RefreshCw className="mr-1 h-3 w-3" />
                         ) : (
                           <GitCommitHorizontal className="mr-1 h-3 w-3" />
                         )}
-                        {pushEnabled.has(project.id) && git.remote
-                          ? 'Commit & Push'
-                          : 'Commit'}
+                        {canResume
+                          ? 'Resume Sync'
+                          : pushEnabled.has(project.id) && git.remote
+                            ? 'Commit & Push'
+                            : 'Commit'}
                       </Button>
                     )}
 
@@ -421,6 +1252,26 @@ export function SyncDialog({
                       </span>
                     )}
                   </div>
+
+                  {result?.branchResults && result.branchResults.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5 text-xs">
+                      {result.branchResults.map((branchResult) => (
+                        <div
+                          key={`${project.id}-${branchResult.branch}`}
+                          className={cn(
+                            branchResult.status === 'success' && 'text-emerald-600 dark:text-emerald-400',
+                            branchResult.status === 'conflict' && 'text-amber-600 dark:text-amber-400',
+                            branchResult.status === 'failed' && 'text-red-600 dark:text-red-400',
+                            branchResult.status === 'skipped' && 'text-neutral-500 dark:text-neutral-400',
+                          )}
+                        >
+                          {branchResult.branch}: {branchResult.status}
+                          {branchResult.pushed ? ' (pushed)' : ''}
+                          {branchResult.reason ? ` — ${branchResult.reason}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Category toggles with file lists */}
                   {!result && (
@@ -450,6 +1301,122 @@ export function SyncDialog({
                           </div>
                         );
                       })}
+
+                      {canResume && executionState && (
+                        <div className="ml-5 rounded border border-amber-300/70 bg-amber-50/60 px-2 py-1.5 text-amber-700 dark:border-amber-700/80 dark:bg-amber-950/30 dark:text-amber-300">
+                          <div className="font-medium">
+                            Interrupted run detected ({executionState.currentStep})
+                          </div>
+                          <div>
+                            Remaining: {executionState.remainingTargets.join(', ') || 'none'}
+                          </div>
+                          <div className="mt-1 inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="text-revival-accent-400 hover:underline"
+                              onClick={() => handleSyncOne(project)}
+                              disabled={isSyncing || batchSyncing}
+                            >
+                              Resume
+                            </button>
+                            <button
+                              type="button"
+                              className="text-neutral-500 hover:underline"
+                              onClick={() => {
+                                clearExecutionState(project.id);
+                                setExecutionStateByProject((prev) => {
+                                  const next = new Map(prev);
+                                  next.delete(project.id);
+                                  return next;
+                                });
+                              }}
+                              disabled={isSyncing || batchSyncing}
+                            >
+                              Cancel state
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {git.remote && (git.behindCount ?? 0) > 0 && (
+                        <div className="ml-5 inline-flex items-center gap-1.5 text-neutral-500">
+                          <BrandCheckbox
+                            checked={pullFirstEnabled.has(project.id)}
+                            onChange={() => togglePullFirst(project.id)}
+                            className="h-3.5 w-3.5"
+                            disabled={isSyncing || batchSyncing}
+                          />
+                          <span
+                            className="cursor-pointer select-none"
+                            onClick={() => { if (!isSyncing && !batchSyncing) togglePullFirst(project.id); }}
+                          >
+                            Pull first ({git.behindCount} behind)
+                          </span>
+                        </div>
+                      )}
+
+                      {branchTargets.length > 0 && (
+                        <div className="ml-5 mt-1 space-y-1">
+                          <div className="text-neutral-500 dark:text-neutral-400">
+                            Also sync to
+                          </div>
+                          {branchTargets.map((target) => {
+                            const targetIndicator = getTargetBranchIndicator(target);
+                            const checked = selectedTargets.has(target.name);
+                            return (
+                              <div key={target.name} className="space-y-1">
+                                <div className="inline-flex items-center gap-1.5 text-neutral-500">
+                                  <BrandCheckbox
+                                    checked={checked}
+                                    onChange={() => toggleTargetBranch(project.id, target.name)}
+                                    className="h-3.5 w-3.5"
+                                    disabled={isSyncing || batchSyncing}
+                                  />
+                                  <span
+                                    className="cursor-pointer select-none"
+                                    onClick={() => {
+                                      if (!isSyncing && !batchSyncing) toggleTargetBranch(project.id, target.name);
+                                    }}
+                                  >
+                                    {targetIndicator.label}
+                                  </span>
+                                  {!targetIndicator.safe && (
+                                    <Tooltip text="This branch is behind or diverged; cherry-pick may conflict">
+                                      <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                    </Tooltip>
+                                  )}
+                                </div>
+                                {checked && target.hasUpstream && (
+                                  <div className="ml-5 inline-flex items-center gap-1.5 text-neutral-500">
+                                    <BrandCheckbox
+                                      checked={selectedTargetPush.has(target.name)}
+                                      onChange={() => toggleTargetPush(project.id, target.name)}
+                                      className="h-3.5 w-3.5"
+                                      disabled={isSyncing || batchSyncing}
+                                    />
+                                    <span
+                                      className="cursor-pointer select-none"
+                                      onClick={() => {
+                                        if (!isSyncing && !batchSyncing) toggleTargetPush(project.id, target.name);
+                                      }}
+                                    >
+                                      Push {target.name} after cherry-pick
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {(hasAnySelected || canResume) && (
+                        <div className="ml-5 rounded border border-neutral-200/80 bg-neutral-50/70 px-2 py-1 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-300">
+                          Source: <span className="font-medium">{git.branch ?? '?'}</span>
+                          {' '}• Targets: <span className="font-medium">{[...selectedTargets].join(', ') || 'none'}</span>
+                          {' '}• Pull first: <span className="font-medium">{pullFirstEnabled.has(project.id) ? 'yes' : 'no'}</span>
+                        </div>
+                      )}
 
                       {/* Code risk indicator */}
                       {codeSelected && cats.code.length > 0 && (
@@ -506,14 +1473,125 @@ export function SyncDialog({
                   {result && !result.success && (
                     <div className="mt-1.5 space-y-1 text-xs">
                       <div className="text-red-600 dark:text-red-400">{result.error}</div>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
-                        onClick={() => onRequestChatPrefill(buildHelpMessage(project))}
-                      >
-                        <HelpCircle className="h-3 w-3" />
-                        Ask agent to help
-                      </button>
+                      {result.conflict ? (
+                        <>
+                          <div className="text-amber-600 dark:text-amber-400">
+                            Conflict detected in {result.conflict.targetBranch}: {result.conflict.files.join(', ') || 'unknown files'}
+                          </div>
+                          <div className="inline-flex items-center gap-3">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
+                              onClick={() => {
+                                void generateConflictDrafts(project, result.conflict as ConflictContext);
+                              }}
+                              disabled={loadingConflictDraft || applyingConflict}
+                            >
+                              {loadingConflictDraft ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <HelpCircle className="h-3 w-3" />
+                              )}
+                              {loadingConflictDraft ? 'Generating proposal...' : 'Generate AI proposal'}
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
+                              onClick={() => {
+                                onRequestChatPrefill(buildConflictPrefill(project, result.conflict as ConflictContext));
+                              }}
+                            >
+                              <HelpCircle className="h-3 w-3" />
+                              Open in chat
+                            </button>
+                            <button
+                              type="button"
+                              className="text-neutral-500 hover:underline"
+                              onClick={() => {
+                                const commands = [
+                                  `git -C "${project.dirPath}" checkout ${result.conflict?.targetBranch}`,
+                                  `git -C "${project.dirPath}" status`,
+                                  `git -C "${project.dirPath}" cherry-pick --abort`,
+                                  `git -C "${project.dirPath}" checkout ${result.conflict?.sourceBranch}`,
+                                ];
+                                onRequestChatPrefill(`Manual recovery commands:\n${commands.join('\n')}`);
+                              }}
+                            >
+                              Show manual fallback
+                            </button>
+                          </div>
+                          {conflictDrafts.length > 0 && (
+                            <div className="mt-2 space-y-2 rounded border border-neutral-300/80 bg-neutral-100/70 p-2 dark:border-neutral-700 dark:bg-neutral-800/60">
+                              <div className="text-neutral-600 dark:text-neutral-300">
+                                Proposed resolution (edit before apply)
+                              </div>
+                              {conflictDrafts.map((draft) => {
+                                const currentLines = draft.currentContent.split('\n').length;
+                                const proposedLines = draft.proposedContent.split('\n').length;
+                                return (
+                                  <div key={draft.path} className="space-y-1 rounded border border-neutral-300/70 bg-neutral-0/80 p-2 dark:border-neutral-700 dark:bg-neutral-900/60">
+                                    <div className="font-medium text-neutral-700 dark:text-neutral-200">{draft.path}</div>
+                                    <div className="text-neutral-500 dark:text-neutral-400">
+                                      {draft.strategy}: {draft.summary}
+                                    </div>
+                                    <div className="text-neutral-500 dark:text-neutral-400">
+                                      Preview: {currentLines} lines to {proposedLines} lines
+                                    </div>
+                                    <textarea
+                                      value={draft.proposedContent}
+                                      onChange={(event) => {
+                                        updateConflictDraftContent(project.id, draft.path, event.target.value);
+                                      }}
+                                      disabled={applyingConflict}
+                                      className="min-h-[120px] w-full rounded border border-neutral-300 bg-neutral-0 px-2 py-1 font-mono text-[11px] text-neutral-900 focus:border-revival-accent-400 focus:outline-none focus:ring-1 focus:ring-revival-accent-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                                    />
+                                  </div>
+                                );
+                              })}
+                              <div className="inline-flex items-center gap-3">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={applyingConflict}
+                                  onClick={() => {
+                                    void applyConflictDrafts(project, result.conflict as ConflictContext);
+                                  }}
+                                >
+                                  {applyingConflict ? (
+                                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Check className="mr-1.5 h-4 w-4" />
+                                  )}
+                                  Approve, Apply, Continue
+                                </Button>
+                                <button
+                                  type="button"
+                                  className="text-neutral-500 hover:underline"
+                                  disabled={applyingConflict}
+                                  onClick={() => {
+                                    setConflictDraftsByProject((prev) => {
+                                      const next = new Map(prev);
+                                      next.delete(project.id);
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  Discard proposal
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-0.5 text-revival-accent-400 hover:underline"
+                          onClick={() => onRequestChatPrefill(buildHelpMessage(project))}
+                        >
+                          <HelpCircle className="h-3 w-3" />
+                          Ask agent to help
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -545,7 +1623,7 @@ export function SyncDialog({
               <Button
                 type="button"
                 size="sm"
-                disabled={batchSyncing || !commitMessage.trim()}
+                disabled={batchSyncing || (selectedCommitCount > 0 && !commitMessage.trim())}
                 onClick={handleSyncAll}
               >
                 {batchSyncing ? (

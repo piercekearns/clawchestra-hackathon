@@ -176,6 +176,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Open settings** | User clicks Settings button in header |
 | **Update paths** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings` |
 | **Trigger update** | Commit code changes; user clicks Update button |
+| **Run multi-branch Git Sync** | Use Sync dialog: select file categories, optional `Pull first` when behind, optional `Also sync to` branches, then commit on source and cherry-pick to targets. Push/pull controls are hidden for `(local)` branches without upstream. On conflicts, generate/edit an AI proposal in-dialog, explicitly approve apply, then continue sync; manual fallback prompts remain available. |
 | **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`PROJECT.md` / `ROADMAP.md`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
 | **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
 | **Search/filter** | Not available via agent — UI only |

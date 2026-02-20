@@ -1,5 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { GitStatus } from './schema';
+import type {
+  GitBranchState,
+  GitConflictApplyResult,
+  GitConflictFileContext,
+  GitConflictResolutionInput,
+  GitCherryPickResult,
+  GitResumeValidation,
+  GitStashResult,
+  GitStatus,
+} from './schema';
 import type { DashboardSettings } from './settings';
 
 type UpdateStatus = {
@@ -74,11 +83,40 @@ type TauriCommands = {
   probe_repo: { args: { repoPath: string }; return: RepoProbe };
   get_git_status: { args: { repoPath: string }; return: GitStatus };
   git_fetch: { args: { repoPath: string }; return: string };
+  git_get_branch_states: { args: { repoPath: string }; return: GitBranchState[] };
   git_commit: {
     args: { repoPath: string; message: string; files: string[] };
     return: string;
   };
   git_push: { args: { repoPath: string }; return: void };
+  git_sync_lock_acquire: { args: { repoPath: string }; return: string };
+  git_sync_lock_release: { args: { repoPath: string; token: string }; return: void };
+  git_checkout_branch: { args: { repoPath: string; branch: string }; return: void };
+  git_stash_push: {
+    args: { repoPath: string; includeUntracked: boolean; message?: string | null };
+    return: GitStashResult;
+  };
+  git_pop_stash: { args: { repoPath: string; stashRef?: string | null }; return: void };
+  git_cherry_pick_commit: {
+    args: { repoPath: string; commitHash: string };
+    return: GitCherryPickResult;
+  };
+  git_abort_cherry_pick: { args: { repoPath: string }; return: void };
+  git_pull_current: { args: { repoPath: string }; return: void };
+  git_get_conflict_context: { args: { repoPath: string }; return: GitConflictFileContext[] };
+  git_apply_conflict_resolution: {
+    args: { repoPath: string; resolutions: GitConflictResolutionInput[] };
+    return: GitConflictApplyResult;
+  };
+  git_validate_branch_sync_resume: {
+    args: {
+      repoPath: string;
+      sourceBranch: string;
+      commitHash: string;
+      remainingTargets: string[];
+    };
+    return: GitResumeValidation;
+  };
   git_init_repo: {
     args: { repoPath: string; initialCommit: boolean; files: string[] };
     return: void;
@@ -252,12 +290,72 @@ export async function gitFetch(repoPath: string): Promise<string> {
   return typedInvoke('git_fetch', { repoPath });
 }
 
+export async function gitGetBranchStates(repoPath: string): Promise<GitBranchState[]> {
+  return typedInvoke('git_get_branch_states', { repoPath });
+}
+
 export async function gitCommit(repoPath: string, message: string, files: string[]): Promise<string> {
   return typedInvoke('git_commit', { repoPath, message, files });
 }
 
 export async function gitPush(repoPath: string): Promise<void> {
   return typedInvoke('git_push', { repoPath });
+}
+
+export async function gitSyncLockAcquire(repoPath: string): Promise<string> {
+  return typedInvoke('git_sync_lock_acquire', { repoPath });
+}
+
+export async function gitSyncLockRelease(repoPath: string, token: string): Promise<void> {
+  return typedInvoke('git_sync_lock_release', { repoPath, token });
+}
+
+export async function gitCheckoutBranch(repoPath: string, branch: string): Promise<void> {
+  return typedInvoke('git_checkout_branch', { repoPath, branch });
+}
+
+export async function gitStashPush(
+  repoPath: string,
+  includeUntracked: boolean,
+  message?: string | null,
+): Promise<GitStashResult> {
+  return typedInvoke('git_stash_push', { repoPath, includeUntracked, message: message ?? null });
+}
+
+export async function gitPopStash(repoPath: string, stashRef?: string | null): Promise<void> {
+  return typedInvoke('git_pop_stash', { repoPath, stashRef: stashRef ?? null });
+}
+
+export async function gitCherryPickCommit(repoPath: string, commitHash: string): Promise<GitCherryPickResult> {
+  return typedInvoke('git_cherry_pick_commit', { repoPath, commitHash });
+}
+
+export async function gitAbortCherryPick(repoPath: string): Promise<void> {
+  return typedInvoke('git_abort_cherry_pick', { repoPath });
+}
+
+export async function gitPullCurrent(repoPath: string): Promise<void> {
+  return typedInvoke('git_pull_current', { repoPath });
+}
+
+export async function gitGetConflictContext(repoPath: string): Promise<GitConflictFileContext[]> {
+  return typedInvoke('git_get_conflict_context', { repoPath });
+}
+
+export async function gitApplyConflictResolution(
+  repoPath: string,
+  resolutions: GitConflictResolutionInput[],
+): Promise<GitConflictApplyResult> {
+  return typedInvoke('git_apply_conflict_resolution', { repoPath, resolutions });
+}
+
+export async function gitValidateBranchSyncResume(args: {
+  repoPath: string;
+  sourceBranch: string;
+  commitHash: string;
+  remainingTargets: string[];
+}): Promise<GitResumeValidation> {
+  return typedInvoke('git_validate_branch_sync_resume', args);
 }
 
 export async function gitInitRepo(

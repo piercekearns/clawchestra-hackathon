@@ -4,7 +4,13 @@
  * Extracted from SyncDialog.tsx so tests and other modules can import
  * without depending on a React component.
  */
-import type { DirtyFileCategories, DirtyFileCategory, DirtyFileEntry, GitStatus } from './schema';
+import type {
+  DirtyFileCategories,
+  DirtyFileCategory,
+  DirtyFileEntry,
+  GitBranchState,
+  GitStatus,
+} from './schema';
 
 // ---------------------------------------------------------------------------
 // Categorization constants
@@ -88,6 +94,19 @@ export function getBranchIndicator(git: GitStatus): { label: string; safe: boole
   if (behind > 0) return { label: `${git.branch} ↓${behind} ⚠`, safe: false };
   if (ahead > 0) return { label: `${git.branch} ↑${ahead}`, safe: true };
   return { label: `${git.branch} ✓`, safe: true };
+}
+
+export function getTargetBranchIndicator(branch: GitBranchState): { label: string; safe: boolean } {
+  if (branch.localOnly) return { label: `${branch.name} (local)`, safe: true };
+  if (branch.diverged) {
+    return {
+      label: `${branch.name} ↑${branch.aheadCount} ↓${branch.behindCount} ⚠`,
+      safe: false,
+    };
+  }
+  if (branch.behindCount > 0) return { label: `${branch.name} ↓${branch.behindCount} ⚠`, safe: false };
+  if (branch.aheadCount > 0) return { label: `${branch.name} ↑${branch.aheadCount}`, safe: true };
+  return { label: `${branch.name} ✓`, safe: true };
 }
 
 // ---------------------------------------------------------------------------
