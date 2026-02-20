@@ -1063,6 +1063,15 @@ export default function App() {
       const roadmapProject = activeRoadmapProject;
       if (roadmapProject?.hasGit && !roadmapProject.gitStatus?.remote) {
         await autoCommitIfLocalOnly(roadmapProject.dirPath, roadmapProject.gitStatus, ['ROADMAP.md']);
+      } else if (roadmapProject?.hasGit) {
+        // Optimistically mark project dirty so Git Sync badge updates instantly
+        setProjects(
+          allProjects.map((p) =>
+            p.id === roadmapProject.id
+              ? { ...p, gitStatus: { ...p.gitStatus!, hasDirtyFiles: true } }
+              : p,
+          ),
+        );
       }
       pushToast('success', 'Roadmap saved');
     } catch (error) {
@@ -1156,6 +1165,25 @@ export default function App() {
           autoCommitIfLocalOnly(item.dirPath, item.gitStatus, ['PROJECT.md']),
         ),
       );
+
+      // Optimistically mark changed remote-tracked projects dirty so Git Sync
+      // badge updates instantly, before the full loadProjects() completes.
+      const remoteChanged = nextItems.filter(
+        (item) =>
+          changedProjectIds.has(item.id) &&
+          item.hasGit &&
+          item.gitStatus?.remote,
+      );
+      if (remoteChanged.length > 0) {
+        const dirtyIds = new Set(remoteChanged.map((p) => p.id));
+        setProjects(
+          nextItems.map((p) =>
+            dirtyIds.has(p.id)
+              ? { ...p, gitStatus: { ...p.gitStatus!, hasDirtyFiles: true } }
+              : p,
+          ),
+        );
+      }
 
       await loadProjects();
     } catch (error) {
