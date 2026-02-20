@@ -103,6 +103,8 @@ This keeps your real-world bug reports directly comparable to the existing track
 
 **Update (21:51):** Reproduced again during a long tool-heavy turn (~21:45–21:51). A single streaming message (agent reading files, running tests, writing bugs) was being received as one large chat bubble. Mid-stream, the typing animation stopped, the single bubble split into 7+ separate fragment bubbles (visible in screenshot: "Now update the tests to match:", "All passing. Let me run the full test suite...", "141 tests passing. Now let me check TypeScript compilation:", etc.). The final summary message ("Here's the summary: Done — three things handled...") was delivered to the gateway but never appeared in the chat drawer. Status badge still showed "Connected" throughout. Identical triple-symptom: fragment split + animation drop + message loss. No app update or compaction involved this time — pure streaming pipeline failure during a normal long turn.
 
+**Update (01:53, 2026-02-20):** Reproduced again during a long edit-heavy turn (~01:45–01:53). Agent was doing surgical file edits (6 files, DirtyFileEntry struct changes), running tsc, cargo test, bun test. Same triple-symptom: one large streaming bubble split into 6+ fragments ("Now check the Rust tests:", "Need to add PartialEq...", "The tests now need to pass tuples..."), animation dropped, final summary message ("Done. Now each file in the sync dialog will show its git status...") delivered to gateway but not visible in chat. Git Sync badge updated to show 1 (proving the commit landed) but the reply explaining the work was lost. This is now the 3rd reproduction with identical pattern — long tool-heavy turns are the reliable trigger.
+
 ---
 
 ### BUG-004: Post-compaction message drop
