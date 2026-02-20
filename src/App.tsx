@@ -1110,7 +1110,23 @@ export default function App() {
         setProjects(
           allProjects.map((p) =>
             p.id === roadmapProject.id
-              ? { ...p, gitStatus: { ...p.gitStatus!, hasDirtyFiles: true } }
+              ? {
+                  ...p,
+                  gitStatus: {
+                    ...p.gitStatus!,
+                    hasDirtyFiles: true,
+                    allDirtyFiles: {
+                      metadata: p.gitStatus?.allDirtyFiles?.metadata ?? [],
+                      documents: [
+                        ...(p.gitStatus?.allDirtyFiles?.documents ?? []),
+                        ...( (p.gitStatus?.allDirtyFiles?.documents ?? []).some((f) => f.path === 'ROADMAP.md')
+                          ? []
+                          : [{ path: 'ROADMAP.md', status: 'modified' as const }]),
+                      ],
+                      code: p.gitStatus?.allDirtyFiles?.code ?? [],
+                    },
+                  },
+                }
               : p,
           ),
         );
@@ -1221,7 +1237,23 @@ export default function App() {
         setProjects(
           nextItems.map((p) =>
             dirtyIds.has(p.id)
-              ? { ...p, gitStatus: { ...p.gitStatus!, hasDirtyFiles: true } }
+              ? {
+                  ...p,
+                  gitStatus: {
+                    ...p.gitStatus!,
+                    hasDirtyFiles: true,
+                    allDirtyFiles: {
+                      metadata: [
+                        ...(p.gitStatus?.allDirtyFiles?.metadata ?? []),
+                        ...( (p.gitStatus?.allDirtyFiles?.metadata ?? []).some((f) => f.path === 'PROJECT.md')
+                          ? []
+                          : [{ path: 'PROJECT.md', status: 'modified' as const }]),
+                      ],
+                      documents: p.gitStatus?.allDirtyFiles?.documents ?? [],
+                      code: p.gitStatus?.allDirtyFiles?.code ?? [],
+                    },
+                  },
+                }
               : p,
           ),
         );
