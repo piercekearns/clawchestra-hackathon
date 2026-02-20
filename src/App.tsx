@@ -137,7 +137,7 @@ function getGitHubStatusMeta(
 
   let suffix = '';
   if (status.state === 'uncommitted') suffix = ' · uncommitted changes';
-  else if (status.state === 'clean' && sync === '') suffix = ' ✓';
+  else if (status.state === 'clean' && sync === '') suffix = ' · synced';
 
   const tooltip = `⑂ ${branch}${sync}${suffix}`;
   const classMap: Record<string, string> = {

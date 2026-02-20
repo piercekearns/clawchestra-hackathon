@@ -93,7 +93,7 @@ export function getBranchIndicator(git: GitStatus): { label: string; safe: boole
     return { label: `${git.branch} ↑${ahead} ↓${behind} ⚠`, safe: false };
   if (behind > 0) return { label: `${git.branch} ↓${behind} ⚠`, safe: false };
   if (ahead > 0) return { label: `${git.branch} ↑${ahead}`, safe: true };
-  return { label: `${git.branch} ✓`, safe: true };
+  return { label: `${git.branch}`, safe: true };
 }
 
 export function getTargetBranchIndicator(branch: GitBranchState): { label: string; safe: boolean } {
@@ -106,7 +106,7 @@ export function getTargetBranchIndicator(branch: GitBranchState): { label: strin
   }
   if (branch.behindCount > 0) return { label: `${branch.name} ↓${branch.behindCount} ⚠`, safe: false };
   if (branch.aheadCount > 0) return { label: `${branch.name} ↑${branch.aheadCount}`, safe: true };
-  return { label: `${branch.name} ✓`, safe: true };
+  return { label: `${branch.name}`, safe: true };
 }
 
 // ---------------------------------------------------------------------------

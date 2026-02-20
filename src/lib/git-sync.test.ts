@@ -27,14 +27,14 @@ describe('getBranchIndicator', () => {
     stashCount: 0,
   };
 
-  it('returns safe + checkmark for in-sync branch', () => {
+  it('returns safe for in-sync branch', () => {
     const result = getBranchIndicator({
       ...baseGit,
       aheadCount: 0,
       behindCount: 0,
     });
     expect(result.safe).toBe(true);
-    expect(result.label).toContain('✓');
+    expect(result.label).toBe('main');
   });
 
   it('returns safe for ahead-only branch', () => {
@@ -88,8 +88,7 @@ describe('getBranchIndicator', () => {
       behindCount: 0,
     });
     expect(result.safe).toBe(true);
-    expect(result.label).toContain('feature-x');
-    expect(result.label).toContain('✓');
+    expect(result.label).toBe('feature-x');
   });
 });
 
@@ -107,8 +106,7 @@ describe('getTargetBranchIndicator', () => {
   it('formats in-sync target branch', () => {
     const result = getTargetBranchIndicator(baseBranch);
     expect(result.safe).toBe(true);
-    expect(result.label).toContain('staging');
-    expect(result.label).toContain('✓');
+    expect(result.label).toBe('staging');
   });
 
   it('formats behind target branch as unsafe', () => {
