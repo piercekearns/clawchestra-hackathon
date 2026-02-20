@@ -179,7 +179,7 @@ fn default_migration_version() -> u32 {
 }
 
 fn default_scan_paths() -> Vec<String> {
-    if let Ok(path) = std::env::var("PIPELINE_PROJECTS_DIR") {
+    if let Ok(path) = std::env::var("CLAWCHESTRA_PROJECTS_DIR") {
         return vec![path];
     }
 
@@ -1831,6 +1831,10 @@ fn git_pop_stash(repo_path: String, stash_ref: Option<String>) -> Result<(), Str
         .filter(|value| !value.is_empty())
         .unwrap_or("stash@{0}")
         .to_string();
+    // Validate stash ref format to prevent command injection — must be stash@{N}
+    if !reference.starts_with("stash@{") || !reference.ends_with('}') {
+        return Err(format!("Invalid stash reference: `{}`", reference));
+    }
     let output = run_git_capture(&repo_path, &["stash", "pop", &reference])?;
     if output.success {
         Ok(())
@@ -1873,13 +1877,7 @@ fn git_cherry_pick_commit(
     }
 
     let cherry_pick_head_exists = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
-    let conflicting_files = run_git(&repo_path, &["diff", "--name-only", "--diff-filter=U"])
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
+    let conflicting_files = unresolved_conflict_files(&repo_path);
 
     if cherry_pick_head_exists || !conflicting_files.is_empty() {
         Ok(GitCherryPickResult {
@@ -2001,7 +1999,21 @@ fn git_apply_conflict_resolution(
         ));
     }
 
-    let continue_output = run_git_capture(&repo_path, &["cherry-pick", "--continue"])?;
+    // GIT_EDITOR=true prevents the editor from opening when user's .gitconfig
+    // has commit.verbose=true or similar — without this, cherry-pick --continue
+    // would hang waiting for an interactive editor.
+    let continue_raw = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["cherry-pick", "--continue"])
+        .env("GIT_EDITOR", "true")
+        .output()
+        .map_err(|error| error.to_string())?;
+    let continue_output = GitCommandOutput {
+        success: continue_raw.status.success(),
+        stdout: String::from_utf8_lossy(&continue_raw.stdout).trim().to_string(),
+        stderr: String::from_utf8_lossy(&continue_raw.stderr).trim().to_string(),
+    };
     if continue_output.success {
         let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"]).ok();
         return Ok(GitConflictApplyResult {
@@ -2038,6 +2050,12 @@ fn git_validate_branch_sync_resume(
     commit_hash: String,
     remaining_targets: Vec<String>,
 ) -> Result<GitResumeValidation, String> {
+    // Validate inputs before using them in git commands
+    validate_branch_name(&repo_path, &source_branch)?;
+    for target in &remaining_targets {
+        validate_branch_name(&repo_path, target)?;
+    }
+
     let mut reasons: Vec<String> = vec![];
     let current_branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
 

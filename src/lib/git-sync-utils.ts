@@ -69,18 +69,6 @@ export function filesForSelectedCategories(
   return entries.map((e) => e.path);
 }
 
-/** Collect full entries from selected categories (for display) */
-export function entriesForSelectedCategories(
-  categories: DirtyFileCategories,
-  selected: Set<DirtyFileCategory>,
-): DirtyFileEntry[] {
-  const entries: DirtyFileEntry[] = [];
-  if (selected.has('metadata')) entries.push(...categories.metadata);
-  if (selected.has('documents')) entries.push(...categories.documents);
-  if (selected.has('code')) entries.push(...categories.code);
-  return entries;
-}
-
 // ---------------------------------------------------------------------------
 // Branch indicator
 // ---------------------------------------------------------------------------
@@ -155,7 +143,16 @@ export function readExecutionState(projectId: string): BranchSyncExecutionState 
     const raw = localStorage.getItem(executionStateKey(projectId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as BranchSyncExecutionState;
-    if (!VALID_STEPS.has(parsed.currentStep)) return null;
+    // Structural validation — treat malformed data as corrupted
+    if (
+      typeof parsed !== 'object' || parsed === null
+      || typeof parsed.projectId !== 'string'
+      || typeof parsed.sourceBranch !== 'string'
+      || !VALID_STEPS.has(parsed.currentStep)
+      || !Array.isArray(parsed.completedTargets)
+      || !Array.isArray(parsed.remainingTargets)
+      || typeof parsed.updatedAt !== 'number'
+    ) return null;
     return parsed;
   } catch {
     return null;

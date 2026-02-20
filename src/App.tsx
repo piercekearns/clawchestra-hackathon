@@ -51,6 +51,7 @@ import { enrichItemsWithDocs, readRoadmap, resolveDocFiles, writeRoadmap } from 
 import { autoCommitIfLocalOnly } from './lib/auto-commit';
 import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
 import type {
+  DirtyFileCategory,
   GitStatus,
   ProjectStatus,
   ProjectViewModel,
@@ -92,6 +93,33 @@ function applyTheme(preference: ThemePreference) {
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const isDark = preference === 'dark' || (preference === 'system' && systemDark);
   root.classList.toggle('dark', isDark);
+}
+
+/** Optimistically mark a project's git status as dirty with an additional file entry. */
+function withOptimisticDirtyFile(
+  projects: ProjectViewModel[],
+  projectIds: Set<string>,
+  filePath: string,
+  category: DirtyFileCategory,
+): ProjectViewModel[] {
+  return projects.map((p) => {
+    if (!projectIds.has(p.id)) return p;
+    const existing = p.gitStatus?.allDirtyFiles?.[category] ?? [];
+    const alreadyPresent = existing.some((f) => f.path === filePath);
+    return {
+      ...p,
+      gitStatus: {
+        ...p.gitStatus!,
+        hasDirtyFiles: true,
+        allDirtyFiles: {
+          metadata: p.gitStatus?.allDirtyFiles?.metadata ?? [],
+          documents: p.gitStatus?.allDirtyFiles?.documents ?? [],
+          code: p.gitStatus?.allDirtyFiles?.code ?? [],
+          [category]: alreadyPresent ? existing : [...existing, { path: filePath, status: 'modified' as const }],
+        },
+      },
+    };
+  });
 }
 
 const ANNOUNCE_TERMINAL_DEDUP_MS = 45_000;
@@ -1109,30 +1137,7 @@ export default function App() {
       if (roadmapProject?.hasGit && !roadmapProject.gitStatus?.remote) {
         await autoCommitIfLocalOnly(roadmapProject.dirPath, roadmapProject.gitStatus, ['ROADMAP.md'], { justWritten: true });
       } else if (roadmapProject?.hasGit) {
-        // Optimistically mark project dirty so Git Sync badge updates instantly
-        setProjects(
-          allProjects.map((p) =>
-            p.id === roadmapProject.id
-              ? {
-                  ...p,
-                  gitStatus: {
-                    ...p.gitStatus!,
-                    hasDirtyFiles: true,
-                    allDirtyFiles: {
-                      metadata: p.gitStatus?.allDirtyFiles?.metadata ?? [],
-                      documents: [
-                        ...(p.gitStatus?.allDirtyFiles?.documents ?? []),
-                        ...( (p.gitStatus?.allDirtyFiles?.documents ?? []).some((f) => f.path === 'ROADMAP.md')
-                          ? []
-                          : [{ path: 'ROADMAP.md', status: 'modified' as const }]),
-                      ],
-                      code: p.gitStatus?.allDirtyFiles?.code ?? [],
-                    },
-                  },
-                }
-              : p,
-          ),
-        );
+        setProjects(withOptimisticDirtyFile(allProjects, new Set([roadmapProject.id]), 'ROADMAP.md', 'documents'));
       }
       pushToast('success', 'Roadmap saved');
     } catch (error) {
@@ -1237,29 +1242,7 @@ export default function App() {
       );
       if (remoteChanged.length > 0) {
         const dirtyIds = new Set(remoteChanged.map((p) => p.id));
-        setProjects(
-          nextItems.map((p) =>
-            dirtyIds.has(p.id)
-              ? {
-                  ...p,
-                  gitStatus: {
-                    ...p.gitStatus!,
-                    hasDirtyFiles: true,
-                    allDirtyFiles: {
-                      metadata: [
-                        ...(p.gitStatus?.allDirtyFiles?.metadata ?? []),
-                        ...( (p.gitStatus?.allDirtyFiles?.metadata ?? []).some((f) => f.path === 'PROJECT.md')
-                          ? []
-                          : [{ path: 'PROJECT.md', status: 'modified' as const }]),
-                      ],
-                      documents: p.gitStatus?.allDirtyFiles?.documents ?? [],
-                      code: p.gitStatus?.allDirtyFiles?.code ?? [],
-                    },
-                  },
-                }
-              : p,
-          ),
-        );
+        setProjects(withOptimisticDirtyFile(nextItems, dirtyIds, 'PROJECT.md', 'metadata'));
       }
 
       await loadProjects();

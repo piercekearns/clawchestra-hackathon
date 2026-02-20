@@ -840,10 +840,6 @@ export function SyncDialog({
         setExecutionStateByProject((prev) => new Map(prev).set(project.id, payload));
       };
 
-      const finishExecutionState = () => {
-        clearPersistedState();
-      };
-
       try {
         branchSyncLockToken = await gitSyncLockAcquire(project.dirPath);
       } catch (error) {
@@ -1041,7 +1037,7 @@ export function SyncDialog({
           }
         }
 
-        finishExecutionState();
+        clearPersistedState();
         return {
           projectId: project.id,
           success: true,
