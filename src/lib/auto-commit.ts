@@ -34,9 +34,9 @@ export async function autoCommitIfLocalOnly(
   const allDirty = new Set(
     gitStatus.allDirtyFiles
       ? [
-          ...gitStatus.allDirtyFiles.metadata,
-          ...gitStatus.allDirtyFiles.documents,
-          ...gitStatus.allDirtyFiles.code,
+          ...gitStatus.allDirtyFiles.metadata.map((e) => e.path),
+          ...gitStatus.allDirtyFiles.documents.map((e) => e.path),
+          ...gitStatus.allDirtyFiles.code.map((e) => e.path),
         ]
       : [],
   );

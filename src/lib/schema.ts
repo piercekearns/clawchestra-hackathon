@@ -71,10 +71,18 @@ export type GitStatusState = 'clean' | 'uncommitted' | 'unpushed' | 'behind' | '
 
 export type DirtyFileCategory = 'metadata' | 'documents' | 'code';
 
+export type DirtyFileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'copied';
+
+export interface DirtyFileEntry {
+  path: string;
+  /** Git status: modified, added, deleted, renamed, untracked, copied */
+  status: DirtyFileStatus;
+}
+
 export interface DirtyFileCategories {
-  metadata: string[];
-  documents: string[];
-  code: string[];
+  metadata: DirtyFileEntry[];
+  documents: DirtyFileEntry[];
+  code: DirtyFileEntry[];
 }
 
 export interface GitStatus {

@@ -13,12 +13,20 @@ use serde_json::{json, Value};
 // Embedded at compile time by build.rs
 const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
 const DEFAULT_SESSION_KEY: &str = "agent:main:pipeline-dashboard";
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct DirtyFileEntry {
+    path: String,
+    /// Git status: "modified", "added", "deleted", "renamed", "untracked"
+    status: String,
+}
+
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 struct DirtyFileCategories {
-    metadata: Vec<String>,
-    documents: Vec<String>,
-    code: Vec<String>,
+    metadata: Vec<DirtyFileEntry>,
+    documents: Vec<DirtyFileEntry>,
+    code: Vec<DirtyFileEntry>,
 }
 
 #[derive(Serialize, Debug)]
@@ -1106,6 +1114,41 @@ fn run_git_preserving_columns(repo_path: &str, args: &[&str]) -> Result<String, 
     }
 }
 
+/// Parse porcelain status into (path, status_label) pairs.
+fn parse_dirty_entries(status_porcelain: &str) -> Vec<(String, &'static str)> {
+    let mut seen = HashSet::new();
+    let mut entries = Vec::new();
+
+    for line in status_porcelain.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let xy = &line[..2];
+        let trimmed = line[3..].trim();
+        let path = trimmed
+            .split(" -> ")
+            .last()
+            .unwrap_or(trimmed)
+            .trim()
+            .to_string();
+        if path.is_empty() || !seen.insert(path.clone()) {
+            continue;
+        }
+        let status = match xy.trim() {
+            "M" | "MM" | "AM" => "modified",
+            "A" => "added",
+            "D" => "deleted",
+            "R" | "RM" => "renamed",
+            "??" => "untracked",
+            "C" => "copied",
+            _ => "modified", // safe default for uncommon statuses
+        };
+        entries.push((path, status));
+    }
+
+    entries
+}
+
 fn parse_dirty_paths(status_porcelain: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut paths = Vec::new();
@@ -1196,18 +1239,22 @@ fn categorize_dirty_file(path: &str) -> FileCategory {
     FileCategory::Code
 }
 
-/// Categorize all dirty paths into the three-category struct.
+/// Categorize all dirty entries into the three-category struct.
 /// Takes ownership to avoid cloning each path.
-fn categorize_all_dirty_files(paths: Vec<String>) -> DirtyFileCategories {
+fn categorize_all_dirty_files(entries: Vec<(String, &str)>) -> DirtyFileCategories {
     let mut metadata = Vec::new();
     let mut documents = Vec::new();
     let mut code = Vec::new();
 
-    for path in paths {
+    for (path, status) in entries {
+        let entry = DirtyFileEntry {
+            status: status.to_string(),
+            path: path.clone(),
+        };
         match categorize_dirty_file(&path) {
-            FileCategory::Metadata => metadata.push(path),
-            FileCategory::Documents => documents.push(path),
-            FileCategory::Code => code.push(path),
+            FileCategory::Metadata => metadata.push(entry),
+            FileCategory::Documents => documents.push(entry),
+            FileCategory::Code => code.push(entry),
         }
     }
 
@@ -1301,9 +1348,9 @@ fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
     };
 
     // Parse all dirty files once, then categorize (takes ownership to avoid cloning)
-    let all_paths = parse_dirty_paths(&status_porcelain);
-    let has_dirty_files = !all_paths.is_empty();
-    let all_dirty_files = categorize_all_dirty_files(all_paths);
+    let all_entries = parse_dirty_entries(&status_porcelain);
+    let has_dirty_files = !all_entries.is_empty();
+    let all_dirty_files = categorize_all_dirty_files(all_entries);
 
     Ok(GitStatus {
         state,
@@ -2636,19 +2683,23 @@ mod hardening_tests {
     // categorize_all_dirty_files
     // -----------------------------------------------------------------------
 
+    /// Helper: create a test entry with "modified" status
+    fn e(path: &str) -> DirtyFileEntry {
+        DirtyFileEntry { path: path.to_string(), status: "modified".to_string() }
+    }
+
+    /// Helper: create a test (path, status) tuple
+    fn t(path: &str) -> (String, &'static str) {
+        (path.to_string(), "modified")
+    }
+
     #[test]
     fn categorize_all_mixed_dirty_files() {
-        let paths = vec![
-            "PROJECT.md".to_string(),
-            "ROADMAP.md".to_string(),
-            "src/App.tsx".to_string(),
-            "docs/specs/new-spec.md".to_string(),
-            "package.json".to_string(),
-        ];
-        let cats = categorize_all_dirty_files(paths);
-        assert_eq!(cats.metadata, vec!["PROJECT.md"]);
-        assert_eq!(cats.documents, vec!["ROADMAP.md", "docs/specs/new-spec.md"]);
-        assert_eq!(cats.code, vec!["src/App.tsx", "package.json"]);
+        let entries = vec![t("PROJECT.md"), t("ROADMAP.md"), t("src/App.tsx"), t("docs/specs/new-spec.md"), t("package.json")];
+        let cats = categorize_all_dirty_files(entries);
+        assert_eq!(cats.metadata, vec![e("PROJECT.md")]);
+        assert_eq!(cats.documents, vec![e("ROADMAP.md"), e("docs/specs/new-spec.md")]);
+        assert_eq!(cats.code, vec![e("src/App.tsx"), e("package.json")]);
     }
 
     #[test]
@@ -2661,22 +2712,18 @@ mod hardening_tests {
 
     #[test]
     fn categorize_all_code_only() {
-        let paths = vec![
-            "src/main.rs".to_string(),
-            ".gitignore".to_string(),
-        ];
-        let cats = categorize_all_dirty_files(paths);
+        let entries = vec![t("src/main.rs"), t(".gitignore")];
+        let cats = categorize_all_dirty_files(entries);
         assert!(cats.metadata.is_empty());
         assert!(cats.documents.is_empty());
-        assert_eq!(cats.code, vec!["src/main.rs", ".gitignore"]);
+        assert_eq!(cats.code, vec![e("src/main.rs"), e(".gitignore")]);
     }
 
     #[test]
     fn categorize_handles_renames_to_document_dir() {
-        // A rename target in a document directory should be categorized as documents
-        let paths = vec!["roadmap/renamed.md".to_string()];
-        let cats = categorize_all_dirty_files(paths);
-        assert_eq!(cats.documents, vec!["roadmap/renamed.md"]);
+        let entries = vec![t("roadmap/renamed.md")];
+        let cats = categorize_all_dirty_files(entries);
+        assert_eq!(cats.documents, vec![e("roadmap/renamed.md")]);
     }
 
     // -----------------------------------------------------------------------

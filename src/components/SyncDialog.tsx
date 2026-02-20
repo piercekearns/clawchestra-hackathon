@@ -442,7 +442,9 @@ export function SyncDialog({
                                 {CATEGORY_LABELS[category]} ({files.length})
                               </span>
                               <span className="ml-1 text-neutral-500 dark:text-neutral-400">
-                                {files.length <= 3 ? files.join(', ') : `${files.slice(0, 2).join(', ')}, +${files.length - 2} more`}
+                                {files.length <= 3
+                                  ? files.map((f) => `${f.path} (${f.status})`).join(', ')
+                                  : `${files.slice(0, 2).map((f) => `${f.path} (${f.status})`).join(', ')}, +${files.length - 2} more`}
                               </span>
                             </div>
                           </div>

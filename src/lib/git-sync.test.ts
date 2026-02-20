@@ -7,7 +7,12 @@ import {
   getProjectDirtyCategories,
   filesForSelectedCategories,
 } from './git-sync-utils';
-import type { DirtyFileCategory, GitStatus } from './schema';
+import type { DirtyFileCategory, DirtyFileEntry, GitStatus } from './schema';
+
+/** Helper: create a DirtyFileEntry with default 'modified' status */
+function entry(path: string, status: DirtyFileEntry['status'] = 'modified'): DirtyFileEntry {
+  return { path, status };
+}
 
 // ---------------------------------------------------------------------------
 // getBranchIndicator
@@ -299,15 +304,15 @@ describe('getProjectDirtyCategories', () => {
       state: 'uncommitted',
       stashCount: 0,
       allDirtyFiles: {
-        metadata: ['PROJECT.md'],
-        documents: ['ROADMAP.md'],
-        code: ['src/main.ts'],
+        metadata: [entry('PROJECT.md')],
+        documents: [entry('ROADMAP.md')],
+        code: [entry('src/main.ts')],
       },
     };
     const cats = getProjectDirtyCategories(git);
-    expect(cats.metadata).toEqual(['PROJECT.md']);
-    expect(cats.documents).toEqual(['ROADMAP.md']);
-    expect(cats.code).toEqual(['src/main.ts']);
+    expect(cats.metadata).toEqual([entry('PROJECT.md')]);
+    expect(cats.documents).toEqual([entry('ROADMAP.md')]);
+    expect(cats.code).toEqual([entry('src/main.ts')]);
   });
 
   it('returns empty categories when allDirtyFiles is undefined', () => {
@@ -327,26 +332,26 @@ describe('getProjectDirtyCategories', () => {
       stashCount: 0,
       allDirtyFiles: {
         metadata: [],
-        documents: ['docs/specs/deeply/nested/spec.md', 'docs/plans/sub/plan.md'],
+        documents: [entry('docs/specs/deeply/nested/spec.md'), entry('docs/plans/sub/plan.md')],
         code: [],
       },
     };
     const cats = getProjectDirtyCategories(git);
     expect(cats.documents).toEqual([
-      'docs/specs/deeply/nested/spec.md',
-      'docs/plans/sub/plan.md',
+      entry('docs/specs/deeply/nested/spec.md'),
+      entry('docs/plans/sub/plan.md'),
     ]);
   });
 });
 
 describe('filesForSelectedCategories', () => {
   const cats = {
-    metadata: ['PROJECT.md'],
-    documents: ['ROADMAP.md', 'roadmap/item.md'],
-    code: ['src/App.tsx'],
+    metadata: [entry('PROJECT.md')],
+    documents: [entry('ROADMAP.md'), entry('roadmap/item.md')],
+    code: [entry('src/App.tsx')],
   };
 
-  it('returns files for selected categories only', () => {
+  it('returns file paths for selected categories only', () => {
     const selected = new Set<DirtyFileCategory>(['metadata', 'documents']);
     expect(filesForSelectedCategories(cats, selected)).toEqual([
       'PROJECT.md',
@@ -359,7 +364,7 @@ describe('filesForSelectedCategories', () => {
     expect(filesForSelectedCategories(cats, new Set())).toEqual([]);
   });
 
-  it('returns all files when all categories selected', () => {
+  it('returns all file paths when all categories selected', () => {
     const selected = new Set<DirtyFileCategory>(['metadata', 'documents', 'code']);
     expect(filesForSelectedCategories(cats, selected)).toEqual([
       'PROJECT.md',

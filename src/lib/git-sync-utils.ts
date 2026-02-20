@@ -4,7 +4,7 @@
  * Extracted from SyncDialog.tsx so tests and other modules can import
  * without depending on a React component.
  */
-import type { DirtyFileCategories, DirtyFileCategory, GitStatus } from './schema';
+import type { DirtyFileCategories, DirtyFileCategory, DirtyFileEntry, GitStatus } from './schema';
 
 // ---------------------------------------------------------------------------
 // Categorization constants
@@ -51,16 +51,28 @@ export function getProjectDirtyCategories(
   return git.allDirtyFiles ?? { metadata: [], documents: [], code: [] };
 }
 
-/** Collect files from selected categories */
+/** Collect file paths from selected categories (for commit operations) */
 export function filesForSelectedCategories(
   categories: DirtyFileCategories,
   selected: Set<DirtyFileCategory>,
 ): string[] {
-  const files: string[] = [];
-  if (selected.has('metadata')) files.push(...categories.metadata);
-  if (selected.has('documents')) files.push(...categories.documents);
-  if (selected.has('code')) files.push(...categories.code);
-  return files;
+  const entries: DirtyFileEntry[] = [];
+  if (selected.has('metadata')) entries.push(...categories.metadata);
+  if (selected.has('documents')) entries.push(...categories.documents);
+  if (selected.has('code')) entries.push(...categories.code);
+  return entries.map((e) => e.path);
+}
+
+/** Collect full entries from selected categories (for display) */
+export function entriesForSelectedCategories(
+  categories: DirtyFileCategories,
+  selected: Set<DirtyFileCategory>,
+): DirtyFileEntry[] {
+  const entries: DirtyFileEntry[] = [];
+  if (selected.has('metadata')) entries.push(...categories.metadata);
+  if (selected.has('documents')) entries.push(...categories.documents);
+  if (selected.has('code')) entries.push(...categories.code);
+  return entries;
 }
 
 // ---------------------------------------------------------------------------
