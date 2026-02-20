@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
+  ChevronRight,
+  GitBranch,
   GitCommitHorizontal,
   HelpCircle,
   Loader2,
@@ -75,7 +77,7 @@ function BrandCheckbox({
       )}
     >
       {checked && (
-        <Check className="text-neutral-900" style={{ width: '75%', height: '75%' }} strokeWidth={3} />
+        <Check className="text-neutral-900" style={{ width: '75%', height: '75%' }} strokeWidth={3} strokeLinejoin="miter" strokeLinecap="square" />
       )}
     </button>
   );
@@ -158,17 +160,18 @@ function BranchPicker({
         ref={buttonRef}
         type="button"
         className={cn(
-          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors',
+          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors',
           branch.safe
-            ? 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
-            : 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40',
+            ? 'border-transparent text-neutral-500 hover:border-neutral-200 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-800'
+            : 'border-transparent text-amber-600 hover:border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:hover:border-amber-800 dark:hover:bg-amber-950/40',
         )}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((prev) => !prev);
         }}
       >
-        {git.branch ?? '?'}{branch.safe ? ' ✓' : ' ⚠'}
+        <GitBranch className="h-3 w-3" />
+        {git.branch ?? '?'}{!branch.safe && ' ⚠'}
         {targetCount > 0 && (
           <span className="font-medium text-revival-accent-400">+{targetCount}</span>
         )}
@@ -290,6 +293,56 @@ function BranchPicker({
               })}
             </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Collapsible category file list ─────────────────────────────────── */
+function CategoryFiles({
+  category,
+  files,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  category: DirtyFileCategory;
+  files: { path: string; status: string }[];
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <BrandCheckbox
+          checked={checked}
+          onChange={onToggle}
+          className="h-3.5 w-3.5"
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="flex items-center gap-0.5 text-neutral-600 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-100"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          <ChevronRight className={cn('h-3 w-3 transition-transform', expanded && 'rotate-90')} />
+          <span className="font-medium">
+            {CATEGORY_LABELS[category]} ({files.length})
+          </span>
+        </button>
+      </div>
+      {expanded && (
+        <div className="ml-[1.375rem] mt-0.5 space-y-px">
+          {files.map((f) => (
+            <div key={f.path} className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+              <span className="min-w-0 flex-1 truncate">{f.path}</span>
+              <span className="shrink-0 text-[10px] text-neutral-400 dark:text-neutral-500">{f.status}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1414,7 +1467,7 @@ export function SyncDialog({
                 >
                   {/* Top row: name, branch, action */}
                   <div className="flex items-center gap-2">
-                    {result?.success && <Check className="h-4 w-4 shrink-0 text-emerald-500" />}
+                    {result?.success && <Check className="h-4 w-4 shrink-0 text-emerald-500" strokeLinejoin="miter" strokeLinecap="square" />}
                     {result && !result.success && <X className="h-4 w-4 shrink-0 text-red-500" />}
 
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -1493,7 +1546,7 @@ export function SyncDialog({
                     </div>
                   )}
 
-                  {/* Category toggles with file lists */}
+                  {/* Category toggles with collapsible file lists */}
                   {!result && (
                     <div className="mt-1.5 space-y-1 text-xs">
                       {(['metadata', 'documents', 'code'] as const).map((category) => {
@@ -1501,24 +1554,14 @@ export function SyncDialog({
                         if (files.length === 0) return null;
                         const checked = projSelected.has(category);
                         return (
-                          <div key={category} className="flex items-start gap-1.5">
-                            <BrandCheckbox
-                              checked={checked}
-                              onChange={() => toggleCategory(project.id, category)}
-                              className="mt-0.5 h-3.5 w-3.5"
-                              disabled={isSyncing || batchSyncing}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-medium text-neutral-600 dark:text-neutral-300">
-                                {CATEGORY_LABELS[category]} ({files.length})
-                              </span>
-                              <span className="ml-1 text-neutral-500 dark:text-neutral-400">
-                                {files.length <= 3
-                                  ? files.map((f) => `${f.path} (${f.status})`).join(', ')
-                                  : `${files.slice(0, 2).map((f) => `${f.path} (${f.status})`).join(', ')}, +${files.length - 2} more`}
-                              </span>
-                            </div>
-                          </div>
+                          <CategoryFiles
+                            key={category}
+                            category={category}
+                            files={files}
+                            checked={checked}
+                            disabled={isSyncing || batchSyncing}
+                            onToggle={() => toggleCategory(project.id, category)}
+                          />
                         );
                       })}
 
@@ -1748,7 +1791,7 @@ export function SyncDialog({
                                   {applyingConflict ? (
                                     <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                                   ) : (
-                                    <Check className="mr-1.5 h-4 w-4" />
+                                    <Check className="mr-1.5 h-4 w-4" strokeLinejoin="miter" strokeLinecap="square" />
                                   )}
                                   Approve, Apply, Continue
                                 </Button>

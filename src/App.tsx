@@ -120,12 +120,12 @@ function getGitHubStatusMeta(
   const behind = status.behindCount ?? 0;
   const hasRemote = Boolean(status.remote);
 
-  // No upstream — repo exists but branch isn't connected to a remote
+  // No upstream — branch isn't published to a remote
   if (!hasRemote) {
     return {
       className: 'text-neutral-500 dark:text-neutral-400',
-      label: `⑂ ${branch} · no upstream`,
-      tooltip: `⑂ ${branch} · no upstream`,
+      label: `⑂ ${branch} · not linked to GitHub`,
+      tooltip: `⑂ ${branch} · not linked to GitHub — push this branch to connect`,
     };
   }
 
@@ -137,6 +137,7 @@ function getGitHubStatusMeta(
 
   let suffix = '';
   if (status.state === 'uncommitted') suffix = ' · uncommitted changes';
+  else if (status.state === 'clean' && sync === '') suffix = ' ✓';
 
   const tooltip = `⑂ ${branch}${sync}${suffix}`;
   const classMap: Record<string, string> = {

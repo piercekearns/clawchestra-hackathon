@@ -52,7 +52,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
       title={copied ? 'Copied' : 'Copy'}
       aria-label={copied ? 'Copied' : 'Copy'}
     >
-      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? <Check className="h-3.5 w-3.5" strokeLinejoin="miter" strokeLinecap="square" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
   );
 }
