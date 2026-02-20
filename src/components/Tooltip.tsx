@@ -2,8 +2,8 @@ import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 interface TooltipProps {
-  /** Text shown in the tooltip */
-  text: string;
+  /** Content shown in the tooltip (string or JSX) */
+  text: ReactNode;
   /** The element that triggers the tooltip on hover/focus */
   children: ReactNode;
   /** Extra classes on the wrapper span */

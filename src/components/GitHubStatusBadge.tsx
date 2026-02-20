@@ -1,9 +1,10 @@
+import type { ReactNode } from 'react';
 import { GitHubMark } from './icons/GitHubMark';
 import { Tooltip } from './Tooltip';
 
 interface GitHubStatusBadgeProps {
   className: string;
-  tooltip: string;
+  tooltip: ReactNode;
   label: string;
 }
 
