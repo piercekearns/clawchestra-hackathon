@@ -299,6 +299,14 @@ function BranchPicker({
   );
 }
 
+/* ── GitHub repo name parser ────────────────────────────────────────── */
+function parseGitHubRepo(remote?: string): string | null {
+  if (!remote) return null;
+  // Handles https://github.com/org/repo.git and git@github.com:org/repo.git
+  const match = remote.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
+  return match?.[1] ?? null;
+}
+
 /* ── Collapsible category file list ─────────────────────────────────── */
 function CategoryFiles({
   category,
@@ -1470,10 +1478,20 @@ export function SyncDialog({
                     {result?.success && <Check className="h-4 w-4 shrink-0 text-emerald-500" strokeLinejoin="miter" strokeLinecap="square" />}
                     {result && !result.success && <X className="h-4 w-4 shrink-0 text-red-500" />}
 
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                      {project.frontmatter.icon ? `${project.frontmatter.icon} ` : ''}
-                      {project.title}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {project.frontmatter.icon ? `${project.frontmatter.icon} ` : ''}
+                        {project.title}
+                      </span>
+                      {(() => {
+                        const ghRepo = parseGitHubRepo(git.remote);
+                        return ghRepo ? (
+                          <span className="block truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+                            {ghRepo}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
 
                     {/* Branch picker dropdown */}
                     <BranchPicker
