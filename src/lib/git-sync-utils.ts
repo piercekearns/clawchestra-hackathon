@@ -141,6 +141,8 @@ export interface BranchSyncExecutionState {
   sourcePushEnabled?: boolean;
   sourcePushed?: boolean;
   pendingStashRef?: string;
+  errorMessage?: string;
+  conflictFiles?: string[];
   updatedAt: number;
 }
 

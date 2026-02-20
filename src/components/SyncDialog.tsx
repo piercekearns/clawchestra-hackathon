@@ -913,6 +913,8 @@ export function SyncDialog({
                 sourcePushEnabled: sourcePushSelected,
                 sourcePushed,
                 pendingStashRef: stash.stashed ? stash.stashRef : undefined,
+                errorMessage: cherryPick.message,
+                conflictFiles: cherryPick.conflictingFiles,
               });
               return {
                 projectId: project.id,
@@ -941,6 +943,7 @@ export function SyncDialog({
                 targetPushBranches: [...targetPushBranches],
                 sourcePushEnabled: sourcePushSelected,
                 sourcePushed,
+                errorMessage: cherryPick.message,
               });
               return {
                 projectId: project.id,
@@ -1377,6 +1380,19 @@ export function SyncDialog({
                 && executionState.remainingTargets.length > 0
                 && executionState.currentStep !== 'conflict',
               );
+              const persistedConflict: ConflictContext | null =
+                executionState?.currentStep === 'conflict' && executionState.currentTarget
+                  ? {
+                      sourceBranch: executionState.sourceBranch,
+                      targetBranch: executionState.currentTarget,
+                      commitHash: executionState.commitHash ?? '',
+                      files: executionState.conflictFiles ?? [],
+                      details: executionState.errorMessage ?? '',
+                    }
+                  : null;
+              const unresolvedOtherTargets = executionState
+                ? executionState.remainingTargets.filter((t) => t !== executionState.currentTarget)
+                : [];
               const conflictDrafts = conflictDraftsByProject.get(project.id) ?? [];
               const loadingConflictDraft = loadingConflictDraftIds.has(project.id);
               const applyingConflict = applyingConflictId === project.id;
@@ -1507,22 +1523,74 @@ export function SyncDialog({
                       })}
 
                       {executionState && isUnresolvedSyncStep(executionState.currentStep) && (
-                        <div className={`ml-5 rounded border px-2 py-1.5 ${
+                        <div className={`rounded border px-2 py-1.5 ${
                           executionState.currentStep === 'conflict'
                             ? 'border-amber-300/70 bg-amber-50/60 text-amber-700 dark:border-amber-700/80 dark:bg-amber-950/30 dark:text-amber-300'
                             : 'border-red-300/70 bg-red-50/60 text-red-700 dark:border-red-700/80 dark:bg-red-950/30 dark:text-red-300'
                         }`}>
-                          <div className="font-medium">
-                            {executionState.currentStep === 'conflict'
-                              ? `Unresolved conflict on ${executionState.currentTarget ?? 'unknown branch'}`
-                              : 'Previous sync failed'}
-                          </div>
-                          {executionState.remainingTargets.length > 0 && (
-                            <div>
-                              Remaining: {executionState.remainingTargets.join(', ')}
+                          <div className="flex items-start gap-1.5">
+                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium">
+                                {persistedConflict
+                                  ? <>Cherry-pick conflict: <span className="font-semibold">{executionState.sourceBranch}</span> → <span className="font-semibold">{executionState.currentTarget}</span></>
+                                  : <>Sync to <span className="font-semibold">{executionState.currentTarget ?? 'unknown branch'}</span> failed</>}
+                              </div>
+                              {persistedConflict && persistedConflict.files.length > 0 && (
+                                <div className="mt-0.5">
+                                  {persistedConflict.files.length === 1
+                                    ? persistedConflict.files[0]
+                                    : `${persistedConflict.files.length} files`} need{persistedConflict.files.length === 1 ? 's' : ''} resolution
+                                </div>
+                              )}
+                              {unresolvedOtherTargets.length > 0 && (
+                                <div className="mt-0.5 text-neutral-600 dark:text-neutral-400">
+                                  Also pending: {unresolvedOtherTargets.join(', ')}
+                                </div>
+                              )}
                             </div>
-                          )}
-                          <div className="mt-1 inline-flex items-center gap-2">
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            {persistedConflict && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-0.5 font-medium text-revival-accent-400 hover:underline"
+                                  onClick={() => {
+                                    setResults((prev) => new Map(prev).set(project.id, {
+                                      projectId: project.id,
+                                      success: false,
+                                      hash: executionState.commitHash,
+                                      conflict: persistedConflict,
+                                      error: `Conflict while cherry-picking to ${executionState.currentTarget}`,
+                                    }));
+                                    void generateConflictDrafts(project, persistedConflict);
+                                  }}
+                                  disabled={isSyncing || batchSyncing || loadingConflictDraft}
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  Resolve with AI
+                                </button>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-0.5 text-neutral-500 hover:text-neutral-300 hover:underline"
+                                  onClick={() => onRequestChatPrefill(buildConflictPrefill(project, persistedConflict))}
+                                >
+                                  <HelpCircle className="h-3 w-3" />
+                                  Open in chat
+                                </button>
+                              </>
+                            )}
+                            {!persistedConflict && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-0.5 font-medium text-revival-accent-400 hover:underline"
+                                onClick={() => onRequestChatPrefill(buildHelpMessage(project))}
+                              >
+                                <HelpCircle className="h-3 w-3" />
+                                Ask agent to help
+                              </button>
+                            )}
                             {canResume && (
                               <button
                                 type="button"
@@ -1549,6 +1617,16 @@ export function SyncDialog({
                               Dismiss
                             </button>
                           </div>
+                          {executionState.errorMessage && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
+                                Details
+                              </summary>
+                              <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
+                                {executionState.errorMessage}
+                              </pre>
+                            </details>
+                          )}
                         </div>
                       )}
 
@@ -1728,17 +1806,21 @@ export function SyncDialog({
 
         {/* Commit message + actions */}
         <div className="border-t border-neutral-200 px-5 py-4 dark:border-neutral-700">
-          <label className="mb-2 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-            Commit message
-          </label>
-          <input
-            type="text"
-            value={commitMessage}
-            onChange={(e) => { userEditedCommitRef.current = true; setCommitMessage(e.target.value); }}
-            disabled={batchSyncing}
-            className="mb-3 w-full rounded-md border border-neutral-300 bg-neutral-0 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-revival-accent-400 focus:outline-none focus:ring-1 focus:ring-revival-accent-400 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
-            placeholder="chore: sync project metadata"
-          />
+          {dirtyProjects.some((p) => !results.has(p.id)) && (
+            <>
+              <label className="mb-2 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                Commit message
+              </label>
+              <input
+                type="text"
+                value={commitMessage}
+                onChange={(e) => { userEditedCommitRef.current = true; setCommitMessage(e.target.value); }}
+                disabled={batchSyncing}
+                className="mb-3 w-full rounded-md border border-neutral-300 bg-neutral-0 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-revival-accent-400 focus:outline-none focus:ring-1 focus:ring-revival-accent-400 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+                placeholder="chore: sync project metadata"
+              />
+            </>
+          )}
 
           <div className="flex items-center justify-between">
             <Button type="button" variant="outline" size="sm" onClick={handleClose}>
