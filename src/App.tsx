@@ -120,18 +120,23 @@ function getGitHubStatusMeta(
   const behind = status.behindCount ?? 0;
   const hasRemote = Boolean(status.remote);
 
+  // No upstream — repo exists but branch isn't connected to a remote
+  if (!hasRemote) {
+    return {
+      className: 'text-neutral-500 dark:text-neutral-400',
+      label: `⑂ ${branch} · no upstream`,
+      tooltip: `⑂ ${branch} · no upstream`,
+    };
+  }
+
   // Universal arrow notation for remote sync state
   let sync = '';
-  if (hasRemote) {
-    if (ahead > 0 && behind > 0) sync = ` ↑${ahead} ↓${behind}`;
-    else if (ahead > 0) sync = ` ↑${ahead}`;
-    else if (behind > 0) sync = ` ↓${behind}`;
-    else sync = ' ✓';
-  }
+  if (ahead > 0 && behind > 0) sync = ` ↑${ahead} ↓${behind}`;
+  else if (ahead > 0) sync = ` ↑${ahead}`;
+  else if (behind > 0) sync = ` ↓${behind}`;
 
   let suffix = '';
   if (status.state === 'uncommitted') suffix = ' · uncommitted changes';
-  else if (!hasRemote) suffix = ' · no upstream';
 
   const tooltip = `⑂ ${branch}${sync}${suffix}`;
   const classMap: Record<string, string> = {
