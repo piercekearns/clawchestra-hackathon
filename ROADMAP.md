@@ -44,6 +44,20 @@ items:
       - ai-agent
     icon: "\U0001F33F"
     specDoc: docs/specs/git-branch-sync-spec.md
+  - id: ai-commit-messages
+    title: AI-Generated Commit Messages
+    status: pending
+    priority: 2
+    nextAction: >-
+      Spec written — needs model routing decision (which model for cheap
+      AI calls) and implementation. Depends on rate-limit-resilience for
+      smart model routing.
+    tags:
+      - git
+      - ai
+      - ux
+    icon: "\u2728"
+    specDoc: docs/specs/ai-commit-messages-spec.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
