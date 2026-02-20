@@ -109,12 +109,17 @@ function BranchPicker({
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        buttonRef.current && !buttonRef.current.contains(target)
+        && dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -134,9 +139,18 @@ function BranchPicker({
 
   const targetCount = selectedTargets.size;
 
+  // Compute fixed position from button rect
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }, [open]);
+
   return (
-    <div ref={containerRef} className="relative shrink-0">
+    <div className="shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         className={cn(
           'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors',
@@ -156,8 +170,12 @@ function BranchPicker({
         <ChevronDown className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[14rem] max-h-[300px] overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-0 py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+      {open && pos && (
+        <div
+          ref={dropdownRef}
+          className="fixed z-[100] min-w-[14rem] max-h-[300px] overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-0 py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+          style={{ top: pos.top, right: pos.right }}
+        >
           {/* Source branch — always checked, not deselectable */}
           <div className="px-3 py-1.5">
             <div className="flex items-center gap-1.5">

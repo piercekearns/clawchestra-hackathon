@@ -30,20 +30,10 @@ items:
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
     planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
-  - id: deep-rename-clawchestra
-    title: Deep Rename to Clawchestra
-    status: in-progress
-    priority: 3
-    nextAction: Built — awaiting verification
-    tags:
-      - infra
-      - rename
-    specDoc: docs/specs/deep-rename-clawchestra-spec.md
-    planDoc: docs/plans/deep-rename-clawchestra-plan.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: Plan written — ready for phased build execution
     tags:
       - onboarding
@@ -54,8 +44,8 @@ items:
     specDoc: docs/specs/first-friend-readiness-spec.md
   - id: clawchestra-ai-website
     title: Launch Clawchestra.ai Website
-    status: pending
-    priority: 1
+    status: up-next
+    priority: 2
     nextAction: >-
       Discovery brief written — run Variant Exploration Phase (3 polished static
       mockups under locked brand/copy constraints), choose one direction, then
@@ -72,7 +62,7 @@ items:
   - id: ai-commit-messages
     title: AI-Generated Commit Messages
     status: pending
-    priority: 2
+    priority: 1
     nextAction: >-
       Spec written — needs model routing decision (which model for cheap AI
       calls) and implementation. Depends on rate-limit-resilience for smart
@@ -86,7 +76,7 @@ items:
   - id: rate-limit-resilience
     title: Rate Limit Resilience & Provider Failover
     status: pending
-    priority: 3
+    priority: 2
     nextAction: >-
       Exploratory spec written — needs research phase to validate OpenClaw
       failover behaviour (bug #19249), event stream signals, and auth profile
@@ -102,7 +92,7 @@ items:
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
-    priority: 4
+    priority: 3
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
       colour theme system. Geist fonts available locally including Pixel
@@ -115,7 +105,7 @@ items:
   - id: roadmap-item-quick-add
     title: Roadmap Item Quick-Add
     status: pending
-    priority: 5
+    priority: 4
     nextAction: >-
       Spec needed — define UI for manually adding roadmap items with
       schema-compliant defaults
@@ -123,10 +113,20 @@ items:
       - roadmap
       - ux
       - workflow
+  - id: deep-rename-clawchestra
+    title: Deep Rename to Clawchestra
+    status: complete
+    priority: 1
+    nextAction: Built — awaiting verification
+    tags:
+      - infra
+      - rename
+    specDoc: docs/specs/deep-rename-clawchestra-spec.md
+    planDoc: docs/plans/deep-rename-clawchestra-plan.md
   - id: git-sync
     title: Git Sync (Phase 1)
     status: complete
-    priority: 1
+    priority: 2
     nextAction: Verified — commit + push working. Phase 2+3 roadmap items created.
     tags:
       - git
@@ -139,7 +139,7 @@ items:
   - id: github-api-403-errors
     title: 'Local Git Intelligence (was: GitHub API 403 Errors)'
     status: complete
-    priority: 2
+    priority: 3
     nextAction: Built — needs manual testing (rebuild app to verify)
     tags:
       - bug
@@ -151,7 +151,7 @@ items:
   - id: collapsible-kanban-columns
     title: Collapsible Kanban Columns
     status: complete
-    priority: 3
+    priority: 4
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -161,7 +161,7 @@ items:
   - id: project-card-opens-kanban
     title: Project Card Opens Kanban Directly
     status: complete
-    priority: 4
+    priority: 5
     nextAction: Verified and shipped
     tags:
       - ui
@@ -171,7 +171,7 @@ items:
   - id: draggable-kanban-columns
     title: Draggable Kanban Columns
     status: complete
-    priority: 5
+    priority: 6
     nextAction: Code shipped — awaiting verification
     tags:
       - ui
@@ -181,7 +181,7 @@ items:
   - id: collapsible-sidebar
     title: Collapsible Sidebar
     status: complete
-    priority: 6
+    priority: 7
     nextAction: Built — needs manual testing
     tags:
       - ui
@@ -191,7 +191,7 @@ items:
   - id: deliverable-lifecycle-orchestration
     title: Deliverable Lifecycle Orchestration
     status: complete
-    priority: 7
+    priority: 8
     nextAction: Code shipped - awaiting verification
     tags:
       - roadmap
@@ -203,7 +203,7 @@ items:
   - id: app-ux-review
     title: App UX Review & Improvements
     status: complete
-    priority: 8
+    priority: 9
     nextAction: 'Hands-on review: what works, what doesn''t, what''s missing'
     tags:
       - ui
@@ -213,7 +213,7 @@ items:
   - id: git-sync-scope
     title: 'Git Sync: Scope Expansion (Phase 2)'
     status: complete
-    priority: 9
+    priority: 10
     nextAction: >-
       Code shipped (f4cda66) — awaiting manual verification. Test: open Sync
       dialog, verify 3-category grouping (Metadata/Documents/Code), Code
