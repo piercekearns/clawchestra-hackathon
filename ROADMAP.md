@@ -1,23 +1,8 @@
 ---
 items:
-  - id: chat-infrastructure
-    title: 'Chat Reliability: Persistent Bugs'
-    status: in-progress
-    priority: 1
-    nextAction: >-
-      Force-update path now allowed during active turns (with warning) and
-      tracker includes reconnect/resume aspiration; continue Phase 2 bug intake
-      during daily chat usage, then run holistic review/fix pass on new issues.
-    tags:
-      - chat
-      - bugs
-      - reliability
-    icon: "\U0001F41B"
-    specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
-    planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
   - id: git-branch-sync
     title: 'Git Sync: Branch Management (Phase 3)'
-    status: up-next
+    status: in-progress
     priority: 1
     nextAction: >-
       Plan written — implement branch selection + cherry-pick orchestration + AI
@@ -30,10 +15,25 @@ items:
       - ai-agent
     icon: "\U0001F33F"
     specDoc: docs/specs/git-branch-sync-spec.md
+  - id: chat-infrastructure
+    title: 'Chat Reliability: Persistent Bugs'
+    status: in-progress
+    priority: 2
+    nextAction: >-
+      Force-update path now allowed during active turns (with warning) and
+      tracker includes reconnect/resume aspiration; continue Phase 2 bug intake
+      during daily chat usage, then run holistic review/fix pass on new issues.
+    tags:
+      - chat
+      - bugs
+      - reliability
+    icon: "\U0001F41B"
+    specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
+    planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: Plan written — ready for build execution
     tags:
       - infra
@@ -42,7 +42,7 @@ items:
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: Plan written — ready for phased build execution
     tags:
       - onboarding
@@ -56,10 +56,10 @@ items:
     status: pending
     priority: 1
     nextAction: >-
-      Discovery brief written — run Variant Exploration Phase (3 polished
-      static mockups under locked brand/copy constraints), choose one
-      direction, then write implementation plan before production build
-      (private-alpha + public waitlist launch posture).
+      Discovery brief written — run Variant Exploration Phase (3 polished static
+      mockups under locked brand/copy constraints), choose one direction, then
+      write implementation plan before production build (private-alpha + public
+      waitlist launch posture).
     tags:
       - website
       - marketing
