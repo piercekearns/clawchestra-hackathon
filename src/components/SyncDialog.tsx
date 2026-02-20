@@ -43,6 +43,7 @@ import {
   getProjectDirtyCategories,
   getTargetBranchIndicator,
   isUnresolvedSyncStep,
+  parseGitError,
   readExecutionState,
   writeExecutionState,
   type BranchSyncExecutionState,
@@ -296,6 +297,21 @@ function BranchPicker({
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Git error details (collapsible summary + raw output) ──────────── */
+function GitErrorDetails({ raw, className }: { raw: string; className?: string }) {
+  const summary = parseGitError(raw);
+  return (
+    <details className={className}>
+      <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
+        {summary}
+      </summary>
+      <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
+        {raw}
+      </pre>
+    </details>
   );
 }
 
@@ -1399,6 +1415,14 @@ export function SyncDialog({
     }
   }, [onOpenChange, onSyncComplete, results.size]);
 
+  // Lock body scroll when dialog is open to prevent double scrollbar
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -1679,14 +1703,7 @@ export function SyncDialog({
                             </button>
                           </div>
                           {executionState.errorMessage && (
-                            <details className="mt-1">
-                              <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
-                                Details
-                              </summary>
-                              <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
-                                {executionState.errorMessage}
-                              </pre>
-                            </details>
+                            <GitErrorDetails raw={executionState.errorMessage} className="mt-1" />
                           )}
                         </div>
                       )}
@@ -1761,30 +1778,23 @@ export function SyncDialog({
                               Open in chat
                             </button>
                           </div>
-                          <details className="ml-[18px]">
-                            <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
-                              Details
-                            </summary>
-                            <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
-                              {result.error}
-                            </pre>
-                          </details>
+                          <GitErrorDetails raw={result.error ?? ''} className="ml-[18px]" />
                           {conflictDrafts.length > 0 && (
                             <div className="mt-2 space-y-2 rounded border border-neutral-300/80 bg-neutral-100/70 p-2 dark:border-neutral-700 dark:bg-neutral-800/60">
                               <div className="text-neutral-600 dark:text-neutral-300">
-                                Proposed resolution (edit before apply)
+                                AI proposed a fix — review or edit before applying
                               </div>
                               {conflictDrafts.map((draft) => {
-                                const currentLines = draft.currentContent.split('\n').length;
-                                const proposedLines = draft.proposedContent.split('\n').length;
+                                const strategyLabel =
+                                  draft.strategy === 'fallback-ours' ? 'Kept your version (AI was unavailable)'
+                                    : draft.strategy === 'ai-merge' ? 'AI merged both versions'
+                                    : draft.strategy === 'manual-review' ? 'AI proposed a change — review carefully'
+                                    : `AI strategy: ${draft.strategy}`;
                                 return (
                                   <div key={draft.path} className="space-y-1 rounded border border-neutral-300/70 bg-neutral-0/80 p-2 dark:border-neutral-700 dark:bg-neutral-900/60">
                                     <div className="font-medium text-neutral-700 dark:text-neutral-200">{draft.path}</div>
                                     <div className="text-neutral-500 dark:text-neutral-400">
-                                      {draft.strategy}: {draft.summary}
-                                    </div>
-                                    <div className="text-neutral-500 dark:text-neutral-400">
-                                      Preview: {currentLines} lines to {proposedLines} lines
+                                      {strategyLabel}{draft.summary ? ` — ${draft.summary}` : ''}
                                     </div>
                                     <textarea
                                       value={draft.proposedContent}
@@ -1811,7 +1821,7 @@ export function SyncDialog({
                                   ) : (
                                     <Check className="mr-1.5 h-4 w-4" strokeLinejoin="miter" strokeLinecap="square" />
                                   )}
-                                  Approve, Apply, Continue
+                                  Apply &amp; continue sync
                                 </Button>
                                 <button
                                   type="button"
@@ -1847,14 +1857,7 @@ export function SyncDialog({
                               Ask agent to help
                             </button>
                           </div>
-                          <details className="ml-[18px]">
-                            <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-300">
-                              Details
-                            </summary>
-                            <pre className="mt-1 max-h-[120px] overflow-auto whitespace-pre-wrap rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1.5 font-mono text-[10px] text-neutral-400">
-                              {result.error}
-                            </pre>
-                          </details>
+                          <GitErrorDetails raw={result.error ?? ''} className="ml-[18px]" />
                         </>
                       )}
                     </div>

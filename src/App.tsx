@@ -1107,7 +1107,7 @@ export default function App() {
       // which is intentionally cleared in roadmap view.
       const roadmapProject = activeRoadmapProject;
       if (roadmapProject?.hasGit && !roadmapProject.gitStatus?.remote) {
-        await autoCommitIfLocalOnly(roadmapProject.dirPath, roadmapProject.gitStatus, ['ROADMAP.md']);
+        await autoCommitIfLocalOnly(roadmapProject.dirPath, roadmapProject.gitStatus, ['ROADMAP.md'], { justWritten: true });
       } else if (roadmapProject?.hasGit) {
         // Optimistically mark project dirty so Git Sync badge updates instantly
         setProjects(
@@ -1223,7 +1223,7 @@ export default function App() {
       );
       await Promise.all(
         localOnlyChanged.map((item) =>
-          autoCommitIfLocalOnly(item.dirPath, item.gitStatus, ['PROJECT.md']),
+          autoCommitIfLocalOnly(item.dirPath, item.gitStatus, ['PROJECT.md'], { justWritten: true }),
         ),
       );
 

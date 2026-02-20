@@ -564,6 +564,7 @@ export const useDashboardStore = create<DashboardState>()(
             project.dirPath,
             project.gitStatus,
             ['PROJECT.md'],
+            { justWritten: true },
           );
         }
         await get().loadProjects();

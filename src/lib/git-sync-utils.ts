@@ -231,3 +231,59 @@ export function buildCommitMessage(
 
   return `${prefix} (${nameList})${filePart}`;
 }
+
+// ---------------------------------------------------------------------------
+// Git error parsing — extract human-readable summary from raw git output
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse raw git cherry-pick / merge error output into a one-line human summary.
+ * Falls back to first non-hint, non-empty line if no pattern matches.
+ */
+export function parseGitError(raw: string): string {
+  if (!raw) return 'Unknown error';
+
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  // CONFLICT lines are the most informative
+  const conflictLines = lines.filter((l) => l.startsWith('CONFLICT'));
+  if (conflictLines.length > 0) {
+    const summaries: string[] = [];
+
+    for (const line of conflictLines) {
+      // CONFLICT (modify/delete): FILE deleted in HEAD and modified in HASH
+      const modDelete = line.match(/CONFLICT \(modify\/delete\):\s*(\S+)\s+deleted in (.+?) and modified in/);
+      if (modDelete) {
+        summaries.push(`${modDelete[1]} was deleted on one branch but modified on the other`);
+        continue;
+      }
+      // CONFLICT (content): Merge conflict in FILE
+      const content = line.match(/CONFLICT \(content\):\s*Merge conflict in\s+(\S+)/);
+      if (content) {
+        summaries.push(`${content[1]} has conflicting changes on both branches`);
+        continue;
+      }
+      // CONFLICT (add/add): Merge conflict in FILE
+      const addAdd = line.match(/CONFLICT \(add\/add\):\s*Merge conflict in\s+(\S+)/);
+      if (addAdd) {
+        summaries.push(`${addAdd[1]} was added on both branches with different content`);
+        continue;
+      }
+      // Generic CONFLICT (type): rest of message
+      const generic = line.match(/CONFLICT \(([^)]+)\):\s*(.*)/);
+      if (generic) {
+        summaries.push(generic[2]);
+      }
+    }
+
+    if (summaries.length === 1) return summaries[0];
+    if (summaries.length > 1) return `${summaries.length} conflicts: ${summaries.join('; ')}`;
+  }
+
+  // error: lines next
+  const errorLine = lines.find((l) => l.startsWith('error:'));
+  if (errorLine) return errorLine.replace(/^error:\s*/, '');
+
+  // Fallback: first non-hint line
+  return lines.find((l) => !l.startsWith('hint:')) ?? 'Unknown error';
+}

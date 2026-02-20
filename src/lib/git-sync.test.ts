@@ -7,6 +7,7 @@ import {
   groupDirtyFiles,
   getProjectDirtyCategories,
   filesForSelectedCategories,
+  parseGitError,
 } from './git-sync-utils';
 import type { DirtyFileCategory, DirtyFileEntry, GitBranchState, GitStatus } from './schema';
 
@@ -450,5 +451,37 @@ describe('SyncResult type', () => {
     const result = { projectId: 'fail', success: false, error: 'git push failed: rejected' };
     expect(result.success).toBe(false);
     expect(result.error).toContain('rejected');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseGitError
+// ---------------------------------------------------------------------------
+describe('parseGitError', () => {
+  it('parses modify/delete conflict', () => {
+    const raw = `CONFLICT (modify/delete): ROADMAP.md deleted in HEAD and modified in abc1234
+error: could not apply abc1234... chore: sync
+hint: after resolving the conflicts, mark the corrected paths`;
+    const result = parseGitError(raw);
+    expect(result).toContain('ROADMAP.md');
+    expect(result).toContain('deleted');
+  });
+
+  it('parses content conflict', () => {
+    const raw = `Auto-merging src/App.tsx
+CONFLICT (content): Merge conflict in src/App.tsx
+error: could not apply abc1234`;
+    const result = parseGitError(raw);
+    expect(result).toContain('src/App.tsx');
+  });
+
+  it('falls back to error line when no CONFLICT', () => {
+    const raw = `error: could not apply abc1234... commit message
+hint: after resolving the conflicts`;
+    expect(parseGitError(raw)).toContain('could not apply');
+  });
+
+  it('returns unknown for empty input', () => {
+    expect(parseGitError('')).toBe('Unknown error');
   });
 });

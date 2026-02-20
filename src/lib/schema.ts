@@ -283,16 +283,20 @@ export function validateProject(data: unknown): ValidationResult {
     errors.push('status is required');
   }
 
+  // Coerce invalid statuses to 'pending' instead of rejecting the project.
+  // This prevents cards from vanishing when the repo is on the wrong branch
+  // (e.g. stuck mid-cherry-pick) and PROJECT.md has a non-schema status.
+  if (typeof record.status === 'string' && !VALID_STATUSES.includes(record.status as ProjectStatus)) {
+    console.warn(`[schema] Coercing invalid status "${record.status}" to "pending"`);
+    record.status = 'pending';
+  }
+
   if (record.status === 'in-progress' && typeof record.priority !== 'number') {
     errors.push('priority is required for in-progress projects');
   }
 
   if (record.type === 'sub-project' && typeof record.parent !== 'string') {
     errors.push('parent is required for sub-projects');
-  }
-
-  if (typeof record.status === 'string' && !VALID_STATUSES.includes(record.status as ProjectStatus)) {
-    errors.push(`invalid status: ${record.status}`);
   }
 
   if (typeof record.type === 'string' && !VALID_TYPES.includes(record.type as ProjectType)) {

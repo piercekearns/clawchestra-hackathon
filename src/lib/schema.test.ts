@@ -52,16 +52,16 @@ describe('schema', () => {
     }
   });
 
-  it('rejects invalid project status values', () => {
+  it('coerces invalid project status to pending', () => {
     const result = validateProject({
       title: 'Bad Status',
       status: 'not-a-status',
       type: 'project',
     });
 
-    expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.errors.some((error) => error.includes('invalid status'))).toBe(true);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.data.status).toBe('pending');
     }
   });
 
