@@ -153,6 +153,8 @@ export function BranchPopover({
           ref={popoverRef}
           className="fixed z-[100] min-w-[13rem] max-h-[300px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
           style={{ top: pos.top, right: pos.right }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           {loading && (
             <div className="flex items-center justify-center px-3 py-3">
