@@ -5,9 +5,9 @@ items:
     status: in-progress
     priority: 1
     nextAction: >-
-      Code shipped (f4cda66) — awaiting manual verification. Test: open
-      Sync dialog, verify 3-category grouping (Metadata/Documents/Code),
-      Code unchecked by default, commit with mixed categories.
+      Code shipped (f4cda66) — awaiting manual verification. Test: open Sync
+      dialog, verify 3-category grouping (Metadata/Documents/Code), Code
+      unchecked by default, commit with mixed categories.
     tags:
       - git
       - sync
@@ -34,9 +34,9 @@ items:
     status: up-next
     priority: 1
     nextAction: >-
-      Plan written — implement branch selection + cherry-pick orchestration +
-      AI conflict handling, including explicit no-remote `(local)` branch
-      behavior. Depends on git-sync-scope completion.
+      Plan written — implement branch selection + cherry-pick orchestration + AI
+      conflict handling, including explicit no-remote `(local)` branch behavior.
+      Depends on git-sync-scope completion.
     tags:
       - git
       - sync
@@ -44,22 +44,6 @@ items:
       - ai-agent
     icon: "\U0001F33F"
     specDoc: docs/specs/git-branch-sync-spec.md
-  - id: rate-limit-resilience
-    title: Rate Limit Resilience & Provider Failover
-    status: pending
-    priority: 1
-    nextAction: >-
-      Exploratory spec written — needs research phase to validate OpenClaw
-      failover behaviour (bug #19249), event stream signals, and auth
-      profile detection. Then plan Layer 1 (detection/display), Layer 2
-      (failover guidance), Layer 3 (smart model routing).
-    tags:
-      - chat
-      - resilience
-      - failover
-      - onboarding
-    icon: "\U0001F6E1\uFE0F"
-    specDoc: docs/specs/rate-limit-resilience-spec.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
@@ -81,34 +65,10 @@ items:
       - ux
     icon: "\U0001F91D"
     specDoc: docs/specs/first-friend-readiness-spec.md
-  - id: app-customisation
-    title: App Customisation (Themes & Fonts)
-    status: pending
-    priority: 1
-    nextAction: >-
-      Spec needed — define font theme packages (Standard, Terminal, Geist) and
-      colour theme system. Geist fonts available locally including Pixel
-      variants.
-    tags:
-      - ui
-      - ux
-      - theming
-    icon: "\U0001F3A8"
-  - id: roadmap-item-quick-add
-    title: Roadmap Item Quick-Add
-    status: pending
-    priority: 2
-    nextAction: >-
-      Spec needed — define UI for manually adding roadmap items with
-      schema-compliant defaults
-    tags:
-      - roadmap
-      - ux
-      - workflow
   - id: clawchestra-ai-website
     title: Launch Clawchestra.ai Website
     status: pending
-    priority: 3
+    priority: 1
     nextAction: >-
       Spec updated with bold visual direction (dither lobster + baton concept);
       run openclaw.ai/clawi.ai/blacksmith.sh stack reconnaissance, then resolve
@@ -121,6 +81,46 @@ items:
       - openclaw
     icon: "\U0001F310"
     specDoc: docs/specs/clawchestra-ai-website-spec.md
+  - id: rate-limit-resilience
+    title: Rate Limit Resilience & Provider Failover
+    status: pending
+    priority: 2
+    nextAction: >-
+      Exploratory spec written — needs research phase to validate OpenClaw
+      failover behaviour (bug #19249), event stream signals, and auth profile
+      detection. Then plan Layer 1 (detection/display), Layer 2 (failover
+      guidance), Layer 3 (smart model routing).
+    tags:
+      - chat
+      - resilience
+      - failover
+      - onboarding
+    icon: "\U0001F6E1️"
+    specDoc: docs/specs/rate-limit-resilience-spec.md
+  - id: app-customisation
+    title: App Customisation (Themes & Fonts)
+    status: pending
+    priority: 3
+    nextAction: >-
+      Spec needed — define font theme packages (Standard, Terminal, Geist) and
+      colour theme system. Geist fonts available locally including Pixel
+      variants.
+    tags:
+      - ui
+      - ux
+      - theming
+    icon: "\U0001F3A8"
+  - id: roadmap-item-quick-add
+    title: Roadmap Item Quick-Add
+    status: pending
+    priority: 4
+    nextAction: >-
+      Spec needed — define UI for manually adding roadmap items with
+      schema-compliant defaults
+    tags:
+      - roadmap
+      - ux
+      - workflow
   - id: git-sync
     title: Git Sync (Phase 1)
     status: complete

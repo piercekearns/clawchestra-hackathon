@@ -328,7 +328,11 @@ export function SyncDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+    >
       <ModalDragZone />
       <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         {/* Header */}
@@ -418,29 +422,6 @@ export function SyncDialog({
                     )}
                   </div>
 
-                  {/* Push toggle — only visible when project has selected categories */}
-                  {!result && git.remote && hasAnySelected && (
-                    <div className="ml-0 mt-1 inline-flex items-center gap-1.5 text-xs text-neutral-500">
-                      <BrandCheckbox
-                        checked={pushEnabled.has(project.id)}
-                        onChange={() => togglePush(project.id)}
-                        className="h-3.5 w-3.5"
-                        disabled={isSyncing || batchSyncing}
-                      />
-                      <span
-                        className="cursor-pointer select-none"
-                        onClick={() => { if (!isSyncing && !batchSyncing) togglePush(project.id); }}
-                      >
-                        Push after commit
-                      </span>
-                      {!branch.safe && (
-                        <Tooltip text="Branch is behind or diverged — push may fail">
-                          <AlertTriangle className="h-3 w-3 text-amber-500" />
-                        </Tooltip>
-                      )}
-                    </div>
-                  )}
-
                   {/* Category toggles with file lists */}
                   {!result && (
                     <div className="mt-1.5 space-y-1 text-xs">
@@ -473,6 +454,29 @@ export function SyncDialog({
                         <div className="ml-5 flex items-center gap-1 text-amber-600 dark:text-amber-400">
                           <AlertTriangle className="h-3 w-3" />
                           <span>Code changes included — review before committing</span>
+                        </div>
+                      )}
+
+                      {/* Push toggle — below categories, indented to show it's secondary */}
+                      {git.remote && hasAnySelected && (
+                        <div className="ml-5 mt-1 inline-flex items-center gap-1.5 text-neutral-500">
+                          <BrandCheckbox
+                            checked={pushEnabled.has(project.id)}
+                            onChange={() => togglePush(project.id)}
+                            className="h-3.5 w-3.5"
+                            disabled={isSyncing || batchSyncing}
+                          />
+                          <span
+                            className="cursor-pointer select-none"
+                            onClick={() => { if (!isSyncing && !batchSyncing) togglePush(project.id); }}
+                          >
+                            Push after commit
+                          </span>
+                          {!branch.safe && (
+                            <Tooltip text="Branch is behind or diverged — push may fail">
+                              <AlertTriangle className="h-3 w-3 text-amber-500" />
+                            </Tooltip>
+                          )}
                         </div>
                       )}
                     </div>
