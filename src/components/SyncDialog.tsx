@@ -338,8 +338,8 @@ function CategoryFiles({
       {expanded && (
         <div className="ml-[1.375rem] mt-0.5 space-y-px">
           {files.map((f) => (
-            <div key={f.path} className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
-              <span className="min-w-0 flex-1 truncate">{f.path}</span>
+            <div key={f.path} className="inline-flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+              <span className="truncate">{f.path}</span>
               <span className="shrink-0 text-[10px] text-neutral-400 dark:text-neutral-500">{f.status}</span>
             </div>
           ))}
