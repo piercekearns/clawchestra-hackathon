@@ -44,20 +44,6 @@ items:
       - ai-agent
     icon: "\U0001F33F"
     specDoc: docs/specs/git-branch-sync-spec.md
-  - id: ai-commit-messages
-    title: AI-Generated Commit Messages
-    status: pending
-    priority: 2
-    nextAction: >-
-      Spec written — needs model routing decision (which model for cheap
-      AI calls) and implementation. Depends on rate-limit-resilience for
-      smart model routing.
-    tags:
-      - git
-      - ai
-      - ux
-    icon: "\u2728"
-    specDoc: docs/specs/ai-commit-messages-spec.md
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: up-next
@@ -95,10 +81,24 @@ items:
       - openclaw
     icon: "\U0001F310"
     specDoc: docs/specs/clawchestra-ai-website-spec.md
+  - id: ai-commit-messages
+    title: AI-Generated Commit Messages
+    status: pending
+    priority: 2
+    nextAction: >-
+      Spec written — needs model routing decision (which model for cheap AI
+      calls) and implementation. Depends on rate-limit-resilience for smart
+      model routing.
+    tags:
+      - git
+      - ai
+      - ux
+    icon: ✨
+    specDoc: docs/specs/ai-commit-messages-spec.md
   - id: rate-limit-resilience
     title: Rate Limit Resilience & Provider Failover
     status: pending
-    priority: 2
+    priority: 3
     nextAction: >-
       Exploratory spec written — needs research phase to validate OpenClaw
       failover behaviour (bug #19249), event stream signals, and auth profile
@@ -114,7 +114,7 @@ items:
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
-    priority: 3
+    priority: 4
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
       colour theme system. Geist fonts available locally including Pixel
@@ -127,7 +127,7 @@ items:
   - id: roadmap-item-quick-add
     title: Roadmap Item Quick-Add
     status: pending
-    priority: 4
+    priority: 5
     nextAction: >-
       Spec needed — define UI for manually adding roadmap items with
       schema-compliant defaults
