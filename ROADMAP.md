@@ -124,25 +124,10 @@ items:
       - ux
       - theming
     icon: "\U0001F3A8"
-  - id: openclaw-onboarding
-    title: OpenClaw Onboarding Gateway
-    status: pending
-    priority: 4
-    nextAction: >-
-      Spec needed — define how Clawchestra facilitates OpenClaw installation
-      and setup for users who don't already have it. Covers: install guidance,
-      CLI onboarding flow, auto-detection of config, connection handshake.
-      Depends on first-friend-readiness onboarding wizard (Stage 2).
-    tags:
-      - onboarding
-      - openclaw
-      - ux
-      - gateway
-    icon: "\U0001F680"
   - id: roadmap-item-quick-add
     title: Roadmap Item Quick-Add
     status: pending
-    priority: 5
+    priority: 4
     nextAction: >-
       Spec needed — define UI for manually adding roadmap items with
       schema-compliant defaults
@@ -150,6 +135,21 @@ items:
       - roadmap
       - ux
       - workflow
+  - id: clawchestra-apps
+    title: Clawchestra Apps (Mobile & Web)
+    status: pending
+    priority: 5
+    nextAction: >-
+      Blue sky — spec needed once architecture direction + FFR are complete.
+      Covers: iOS app (first), Android app, web app, "Login with OpenClaw"
+      cross-platform identity standard, cross-device sync UX.
+    tags:
+      - mobile
+      - web
+      - cross-platform
+      - openclaw
+      - future-scope
+    icon: "\U0001F4F1"
   - id: deep-rename-clawchestra
     title: Deep Rename to Clawchestra
     status: complete

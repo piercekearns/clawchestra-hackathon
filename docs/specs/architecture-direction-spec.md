@@ -648,38 +648,13 @@ The gitignored `state.json` is always on disk regardless of branch. It could con
 | Web app development | Full remote API; consider operation-based sync if multi-user |
 | Multi-user support | Operation-based sync or CRDTs; explicit conflict UI |
 
-### "Login with OpenClaw" — cross-platform identity and sync
+### Future scope: cross-platform apps and "Login with OpenClaw"
 
-**Concept:** OpenClaw becomes the identity and sync provider for all Clawchestra clients. Instead of "Login with GitHub" or "Login with Google," users "Connect to OpenClaw" — and that single connection carries their identity, their projects, and their AI agent across every platform.
+The architecture we're building (data endpoint, client identity, session keys, programmatic sync) is designed to support mobile and web clients in the future. The end state: a user downloads Clawchestra on any platform, connects to their OpenClaw, and all their projects are there.
 
-**How it works:**
-1. User downloads Clawchestra (desktop, mobile, or web)
-2. App asks: "Connect to your OpenClaw" → user provides connection details (URL + token, or scan a QR code, or paste a one-time code)
-3. Clawchestra connects to OpenClaw, pulls project state from the database, establishes chat session
-4. The user's projects, roadmap items, priorities — all there. Same as their desktop. Same AI agent. Same conversation history.
+"Login with OpenClaw" is a potential standard — instead of Login with Google/GitHub, users connect to their own OpenClaw instance. OpenClaw carries identity, project state, and AI access across every platform. This is future scope, not part of the current architecture direction work.
 
-**The WhatsApp/Signal/Telegram analogy:** Those messaging apps already connect to OpenClaw as chat integrations. Clawchestra is another integration — but instead of just chat, it syncs project state bidirectionally. The user's OpenClaw instance becomes the hub that connects ALL their interfaces: desktop app, mobile app, Telegram, web — all talking to the same AI, all seeing the same projects.
-
-**What "Login with OpenClaw" replaces:**
-- No GitHub login needed (Git CLI auth is local; mobile/web don't need it for project tracking)
-- No email/password accounts (no user database to manage, no auth server to run)
-- No cloud dependency (OpenClaw IS the user's cloud — self-hosted, self-owned)
-
-**What this enables long-term:**
-- User checks roadmap on phone while commuting → sees their AI completed a build overnight
-- User messages OpenClaw on Telegram: "what's left on Revival Fightwear?" → gets an answer because OpenClaw reads the same DB
-- User opens Clawchestra web app on a borrowed laptop → connects to OpenClaw → full project visibility without installing anything
-- All of this syncs automatically because every client reads from the same OpenClaw-hosted database
-
-**When to build this:** Not now. The architecture direction (Phases 1-2) lays the foundation. The data endpoint, client identity, and session key model make all of this possible. The actual mobile/web apps are future roadmap items. But the architecture we're building now is designed with this end state in mind.
-
-### Clawchestra as OpenClaw gateway
-
-**Concept:** Clawchestra's onboarding can be a user's first introduction to OpenClaw. If someone downloads Clawchestra and doesn't have OpenClaw yet, the app doesn't just say "go install OpenClaw" — it facilitates the entire setup.
-
-This makes Clawchestra a distribution channel for OpenClaw: every Clawchestra user is a potential OpenClaw user, and the onboarding friction of "install and configure an AI agent" gets absorbed into the app's setup wizard.
-
-See roadmap item `openclaw-onboarding` for the deliverable tracking this work.
+See roadmap item `clawchestra-apps` for tracking mobile/web/cross-platform work.
 
 ---
 
@@ -687,19 +662,16 @@ See roadmap item `openclaw-onboarding` for the deliverable tracking this work.
 
 ### Question: Should Clawchestra offer "Login with GitHub"?
 
-**Assessment: No utility for current direction. "Login with OpenClaw" is the better model.**
+**Decision: No — skip it.**
 
-What GitHub login would provide:
-- Pre-authenticated git operations (already handled by `gh auth` / SSH keys)
-- User identity (not needed — identity comes from OpenClaw connection)
-- Repository discovery (already handled by scan paths + git remote detection)
+What GitHub login would provide is already handled by other mechanisms:
+- Pre-authenticated git operations → `gh auth` / SSH keys
+- User identity → OpenClaw connection
+- Repository discovery → scan paths + git remote detection
 
-What it would cost:
-- OAuth flow implementation
-- GitHub API dependency
-- Privacy reduction (app now talks to GitHub's servers)
+What it would cost: OAuth flow, GitHub API dependency, privacy reduction (app talks to GitHub's servers).
 
-**Decision: Skip GitHub login. OpenClaw is the identity provider.** The OpenClaw connection carries identity, project state, and AI access. No external auth service needed. Git CLI with existing auth (SSH keys, `gh auth`) handles code operations. If GitHub login becomes useful later (e.g., for a web app that can't use local git CLI), it can be revisited — but "Login with OpenClaw" is the primary model.
+Git CLI with existing auth handles code operations. If GitHub login becomes useful later (e.g., for a web app), it can be revisited as part of `clawchestra-apps`.
 
 ---
 
