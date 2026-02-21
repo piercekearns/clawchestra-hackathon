@@ -8,7 +8,8 @@
 **Date:** 2026-02-21
 **Type:** feat
 **Institutional reference:** `docs/solutions/refactoring/large-scale-tauri-architecture-overhaul.md`
-**Reviews:** `/tmp/claude/plan-review-{dhh,kieran,simplicity}-v2.md`
+**Reviews round 1:** `/tmp/claude/plan-review-{dhh,kieran,simplicity}-v2.md`
+**Reviews round 2:** `/tmp/claude/plan-review-v2-{dhh,architecture,data-integrity,kieran}.md`
 
 ---
 
@@ -32,6 +33,10 @@
 | Schema versioning | `_schemaVersion: 1` declared, no upgrade path | Forward-compat check + migration function pattern | Required for ongoing product evolution |
 | Error recovery UX | Validation errors only in `last-validation.json` | User-visible validation status + state history buffer | Users cannot read log files |
 | Validation feedback | `last-validation.json` file | Log to app structured log | Agents do not proactively read validation files |
+| Timestamp model | Wall-clock milliseconds | Hybrid logical clocks (HLC) | Prevents clock-skew data loss between devices |
+| db.json schema | Undefined — referenced but never specified | Concrete JSON example + Zod schema | Required for sync implementation |
+| Stale agent write handling | No detection — last write wins | Compare incoming values against state history buffer | Prevents silent data loss from two-agent races |
+| Runtime DB layer | Implicit — "the DB" referenced but unspecified | Explicit: `Arc<Mutex<AppState>>` in Rust, Tauri commands for frontend | Blocks Phase 2 without definition |
 
 ---
 
@@ -44,7 +49,7 @@ Agents (Claude Code, Cursor) write files via their tool infrastructure, which do
 Each project has `.clawchestra/state.json` in its root (agent-facing, per-project scope). OpenClaw has `~/.openclaw/clawchestra/db.json` (global, all projects). Clawchestra translates: on DB change → write per-project state.json projections; on state.json external change → merge project-scoped changes into global DB.
 
 **D3: Per-field timestamps are set by Clawchestra on ingest, not by agents.**
-Agents write plain JSON without timestamps. Clawchestra sets `updatedAt` on each changed field during the validate-merge cycle. This keeps the agent-facing schema simple and timestamps accurate (reflect when Clawchestra processed the change). Millisecond precision required — two changes within the same second must not produce a tie. On ties: keep the value from the device that synced most recently.
+Agents write plain JSON without timestamps. Clawchestra sets `updatedAt` on each changed field during the validate-merge cycle. This keeps the agent-facing schema simple and timestamps accurate (reflect when Clawchestra processed the change). Timestamps use hybrid logical clocks (HLC): `max(wall_clock, last_seen_timestamp) + 1`. This guarantees monotonicity within each device and across sync boundaries, preventing clock-skew-induced data loss between devices with unsynchronized clocks. On ties: the client with the lexicographically higher `client_uuid` wins. Arbitrary but deterministic and consistent across all devices — no additional state tracking required.
 
 **D4: Validation uses partial-apply, not full-revert.**
 If an agent writes 5 field changes where 4 are valid and 1 is invalid, the 4 valid changes are applied and the 1 invalid field is reverted to its previous value. This avoids losing valid work due to one bad field. Validation rejections are logged to Clawchestra's structured log and surfaced in the UI via a validation status indicator on the project card.
@@ -91,6 +96,8 @@ Per-project file at `{project_root}/.clawchestra/state.json`:
       "priority": 1,
       "nextAction": "Implement OAuth flow",
       "tags": ["feature", "auth"],
+      "icon": "🔐",
+      "blockedBy": null,
       "specDoc": "docs/specs/auth-system-spec.md",
       "planDoc": "docs/plans/auth-system-plan.md",
       "completedAt": null
@@ -120,6 +127,112 @@ const schemaMigrations: Record<number, (doc: unknown) => unknown> = {
   // 1 -> 2: add example field
   // 2: (doc) => ({ ...doc, newField: defaultValue, _schemaVersion: 2 }),
 };
+```
+
+Pre-schema-migration safety: before running any schema migration function, back up the current state to `.clawchestra/backup/pre-schema-v{from}-{timestamp}.json`. This provides a rollback point specific to each schema upgrade. If a migration function ships with a bug, the backup enables recovery even after the version number has been bumped.
+
+Settings > Advanced: add a "Force re-migrate" command that re-runs all migration functions from `_schemaVersion: 1`. Nuclear option for recovery from migration bugs.
+
+Settings > Project detail: add a "Reset state.json" button that re-projects state.json from the DB, overwriting whatever the agent wrote (handles agent-written future `_schemaVersion` permanently blocking processing).
+
+---
+
+## db.json Schema (concrete definition)
+
+Global file at `~/.openclaw/clawchestra/db.json`:
+
+```json
+{
+  "_schemaVersion": 1,
+  "_lastSyncedAt": 1708531200000,
+  "_hlcCounter": 42,
+  "projects": {
+    "revival-fightwear": {
+      "projectPath": "/Users/pierce/repos/revival-fightwear",
+      "project": {
+        "id": "revival-fightwear",
+        "title": "Revival Fightwear",
+        "status": "in-progress",
+        "status__updatedAt": 1708531100000,
+        "description": "Shopify Fabric theme for combat sports brand",
+        "description__updatedAt": 1708531100000,
+        "parentId": null,
+        "parentId__updatedAt": 1708531100000,
+        "tags": ["shopify", "ecommerce"],
+        "tags__updatedAt": 1708531100000
+      },
+      "roadmapItems": {
+        "auth-system": {
+          "id": "auth-system",
+          "title": "Authentication System",
+          "title__updatedAt": 1708531200000,
+          "status": "in-progress",
+          "status__updatedAt": 1708531200000,
+          "priority": 1,
+          "priority__updatedAt": 1708531200000,
+          "nextAction": "Implement OAuth flow",
+          "nextAction__updatedAt": 1708531200000,
+          "tags": ["feature", "auth"],
+          "tags__updatedAt": 1708531200000,
+          "icon": "🔐",
+          "icon__updatedAt": 1708531200000,
+          "blockedBy": null,
+          "blockedBy__updatedAt": 1708531200000,
+          "specDoc": "docs/specs/auth-system-spec.md",
+          "specDoc__updatedAt": 1708531200000,
+          "planDoc": "docs/plans/auth-system-plan.md",
+          "planDoc__updatedAt": 1708531200000,
+          "completedAt": null,
+          "completedAt__updatedAt": 1708531200000
+        }
+      }
+    }
+  },
+  "clients": {
+    "a1b2c3d4-e5f6-7890-abcd-ef1234567890": {
+      "hostname": "pierces-macbook",
+      "platform": "darwin",
+      "lastSeenAt": 1708531200000
+    }
+  }
+}
+```
+
+Notes:
+- Projects keyed by `project.id` (not filesystem path — paths differ between devices)
+- `projectPath` stored per-project for local projection target (not synced — local-only)
+- Roadmap items keyed by `id` within their project — O(1) lookup for merge operations
+- Per-field `__updatedAt` timestamps enable field-level conflict resolution during sync
+- `_hlcCounter` is the hybrid logical clock counter for this device (see D3)
+- `_schemaVersion` enables forward-compat check and migration functions (same pattern as state.json)
+- `clients` map tracks known devices for the OpenClaw system prompt
+- Expected size: ~20KB for 10 projects with 10 items each, ~200KB for 50 projects (per spec Section 10)
+
+### db.json Zod schema (TypeScript)
+
+```typescript
+export const DbTimestampedField = <T extends z.ZodType>(valueSchema: T) =>
+  z.object({ value: valueSchema, updatedAt: z.number() });
+
+export const DbProjectSchema = z.object({
+  projectPath: z.string(),
+  project: z.record(z.unknown()), // per-field timestamps make this a flat record
+  roadmapItems: z.record(z.record(z.unknown())),
+});
+
+export const DbJsonSchema = z.object({
+  _schemaVersion: z.number().int(),
+  _lastSyncedAt: z.number(),
+  _hlcCounter: z.number().int(),
+  projects: z.record(DbProjectSchema),
+  clients: z.record(z.object({
+    hostname: z.string(),
+    platform: z.string(),
+    lastSeenAt: z.number(),
+  })),
+});
+
+export type DbJson = z.infer<typeof DbJsonSchema>;
 ```
 
 ---
@@ -163,9 +276,11 @@ export const RoadmapItemSchema = z.object({
   priority: z.number().int().optional(),
   nextAction: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  icon: z.string().optional(),
+  blockedBy: z.string().nullable().optional(),
   specDoc: z.string().optional(),
   planDoc: z.string().optional(),
-  completedAt: z.string().nullable(),
+  completedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
 });
 
 export const StateJsonDocumentSchema = z.object({
@@ -207,6 +322,10 @@ export function parseStateJson(raw: unknown):
 
 Note: the existing `schema.ts` exports a `ValidationResult` type at line 259. The new state.json validation type is `StateJsonValidationResult` in a separate module to avoid collision.
 
+Agent input constraint: agents MUST include both `project` and `roadmapItems` in every write. The `AgentStateJsonInputSchema` requires both fields. Partial documents (e.g., only `roadmapItems` without `project`) are rejected. This is documented in the CLAUDE.md injection (Phase 4.1).
+
+Schema migration execution: all schema migrations (`migrateV1ToV2`, etc.) run in Rust (authoritative). The TypeScript Zod schema is always current-version-only. When Rust encounters an older `_schemaVersion`, it runs migration functions in sequence before sending data to the frontend. This keeps migration logic in one place.
+
 ### 1.3 Rust types
 
 Add a new `src-tauri/src/state.rs` module (lib.rs already exceeds 25K tokens — must split):
@@ -239,12 +358,18 @@ enum SyncMode {
     Local,
     Remote,
     Disabled,
+    #[serde(other)]
+    Unknown,  // catch-all for future variants — prevents deserialization crash on downgrade
 }
 ```
 
 ### 1.5 JSON Schema export for agents
 
 Generate `.clawchestra/schema.json` from the Zod definition using `zod-to-json-schema`. Agents can reference this to self-validate before writing. Written alongside state.json during projection.
+
+### 1.6 Introduce `tracing` crate
+
+Add the `tracing` crate to `src-tauri/Cargo.toml` alongside the type definitions. Define event categories as spans: `migration`, `validation`, `sync`, `watcher`, `injection`. The `tracing` crate is zero-cost when no subscriber is attached, so Phases 2–6 use `tracing::info!` / `tracing::warn!` from the start. Phase 7 then becomes "attach the subscriber, add log rotation, build the debug export UI" — no retrofitting pass needed.
 
 ### Verification gate
 
@@ -260,6 +385,41 @@ Generate `.clawchestra/schema.json` from the Zod definition using `zod-to-json-s
 
 **Goal:** Build the core new system — writing, watching, validating, and merging state.json. This is the architectural linchpin.
 
+### 2.0 Runtime database layer
+
+The "DB" referenced throughout this plan is an in-memory Rust struct behind `Arc<Mutex<AppState>>` (standard Tauri managed state pattern). This is the canonical runtime state.
+
+```rust
+struct AppState {
+    db: DbJson,                          // global DB (all projects, per-field timestamps)
+    content_hashes: HashMap<ProjectId, String>,  // SHA-256 of last-written state.json per project
+    state_history: HashMap<ProjectId, VecDeque<HistoryEntry>>,  // circular buffer per project
+    hlc_counter: u64,                    // hybrid logical clock counter
+}
+```
+
+**Persistence:** `db.json` is written to `~/.openclaw/clawchestra/db.json` on every DB mutation (debounced at 500ms) and on app close. Uses atomic write (write to `.tmp`, rename) — same pattern as state.json.
+
+**Frontend reads:** Tauri commands returning typed data (`get_project`, `get_roadmap_items`, `get_all_projects`). The frontend does NOT read db.json directly.
+
+**Frontend writes:** Tauri commands accepting typed data (`update_project_status`, `update_roadmap_item`, `reorder_item`). Each command acquires the Mutex, mutates the DB, writes affected state.json projection(s), and releases the Mutex.
+
+**Concurrency:** `Arc<Mutex<AppState>>` for all shared state. The file watcher thread, Tauri command handlers, and sync operations all acquire this Mutex. Per-project locking is deferred unless profiling shows contention (unlikely with <100 projects). Use `tokio::sync::Mutex` (not `std::sync::Mutex`) to avoid blocking the async runtime.
+
+### Startup sequence
+
+On app launch, operations execute in this order:
+
+1. Load settings from disk
+2. Load db.json from `~/.openclaw/clawchestra/db.json` into `AppState`
+3. Run migrations for all tracked projects (sequentially, per Phase 3)
+4. Start file watcher (Phase 2.3)
+5. Pull from OpenClaw and merge (Phase 6.6) — if sync enabled
+6. Emit `clawchestra-ready` event to frontend
+7. Frontend calls `get_all_projects` and renders
+
+The watcher starts AFTER migrations complete to prevent migration writes from triggering merge cycles on a mid-migration DB.
+
 ### 2.1 `.clawchestra/` directory management
 
 New Tauri command: `ensure_clawchestra_dir(project_path: String) -> Result<String, String>`
@@ -273,7 +433,8 @@ New Tauri command: `write_state_json(project_path: String, state: StateJson) -> 
 - Acquires flock on `.clawchestra/state.json.lock`
 - Serializes `StateJson` to pretty-printed JSON
 - Writes atomically (write to `.tmp`, rename)
-- Computes and stores SHA-256 of written content (for change detection per D8)
+- Computes and stores SHA-256 of written content (for change detection per D8) — **hash MUST be stored BEFORE releasing flock**, so that if the watcher fires between write and hash storage, the hash is already current and the watcher correctly ignores the self-write
+- Read-verify: after rename, read the file back and verify it parses against the Zod schema. If verification fails, immediately restore from the in-memory state and log an error. This catches serialization bugs before they propagate through the state history buffer.
 - Releases lock
 
 Frontend integration: after any DB write that changes project/roadmap state, call `write_state_json` for affected project(s). Debounce at 200ms for rapid changes (e.g., dragging multiple items).
@@ -288,15 +449,28 @@ Replace the existing TypeScript watcher (`src/lib/watcher.ts`) with a unified Ru
   - `state-json-changed` — `.clawchestra/state.json` modified
   - `git-status-changed` — git-tracked files modified
 - On `state-json-changed`:
-  1. Read the file
-  2. Compute SHA-256
-  3. Compare against last-written hash (D8) — if match, ignore (our own write)
-  4. If different (external change): parse JSON, validate, diff, merge
-  5. Log validation results to structured log
-  6. Emit `state-json-merged` event to frontend with applied/rejected field lists
-  7. Frontend refreshes affected project data and shows validation status if rejections occurred
+  1. Check file size — reject files > 1MB with a user-visible warning ("state.json exceeds 1MB limit — likely a bug. File ignored."). This prevents memory exhaustion from malicious or buggy agent writes. (The spec estimates <500KB for 1000 roadmap items, so 1MB is generous.)
+  2. Read the file
+  3. Compute SHA-256
+  4. Compare against last-written hash (D8) — if match, ignore (our own write)
+  5. If different (external change): parse JSON, validate, diff, merge
+  6. Log validation results to structured log (`tracing::info!`)
+  7. Emit `state-json-merged` event to frontend with the updated project data inline (NOT a full reload — the event carries the affected project's current state, avoiding the cost of re-scanning all projects)
+  8. Frontend updates the Zustand store for the affected project and re-renders
 
-Debounce: 100ms (coalesce rapid writes from agents).
+Debounce: 100ms (coalesce rapid writes from agents). This exceeds FSEvents coalescing latency (~75ms on macOS). Note: the merge cycle (read → parse → validate → diff → merge → write-back) must complete faster than the debounce interval to avoid falling behind during rapid agent writes. For typical state.json files (<100KB), this is easily met.
+
+**Frontend subscription pattern:** Components switch from calling `watchProjects()` (which returns an unsubscribe callback from the TypeScript watcher) to calling Tauri's `listen()` API:
+```typescript
+import { listen } from '@tauri-apps/api/event';
+const unlisten = await listen('state-json-merged', (event) => {
+  useStore.getState().updateProjectFromEvent(event.payload);
+});
+```
+
+**Manual refresh button:** Add a refresh icon button in the project header bar. Clicking it re-reads all state.json files and re-projects from the DB. This is a cheap fallback for the rare case where the watcher misses an event (especially on Windows where `ReadDirectoryChangesW` can silently drop events under high file activity or on network drives).
+
+**Windows watcher note:** The `notify` crate on Windows uses `ReadDirectoryChangesW` which has known buffer overflow limitations under high file activity. The manual refresh button and the on-launch integrity check (see Startup Sequence) provide recovery paths.
 
 ### 2.4 Schema validation
 
@@ -319,11 +493,18 @@ TypeScript side: validate all data crossing the Tauri bridge using the Zod schem
 
 When an external change is detected, diff field-by-field:
 - For each field in the incoming state.json that differs from DB:
+  - **Stale write detection:** compare the incoming value against the state history buffer's previous entry (the state BEFORE the most recent Clawchestra-initiated change). If the incoming value equals the previous DB value for a field, it is likely a stale echo from an agent that read before the last change — skip that field. If the incoming value differs from BOTH the current AND previous DB values, it is a genuine new change — apply it. This prevents two-agent races where Agent B's stale snapshot silently reverts Agent A's changes.
   - Validate the new value
-  - If valid: update DB, set `updatedAt` to now (millisecond precision, per D3)
+  - **Coupled field validation:** fields that are semantically coupled must be validated as a unit. If the unit is invalid, reject all fields in the unit:
+    - `status: "complete"` requires valid `completedAt` (YYYY-MM-DD) — reject both if `completedAt` is missing/invalid
+    - `completedAt` present but `status` is not `complete`: accept (preserves historical context), log a warning
+  - If valid: update DB, set `updatedAt` using HLC timestamp (per D3)
   - If invalid: keep DB value, log rejection
 - For new roadmap items (id not in DB): add them (validate all required fields)
 - For removed roadmap items (id in DB but not in state.json): do NOT delete — agents removing items from state.json is treated as "I didn't include it" not "delete it". Deletion requires explicit action via UI or OpenClaw chat.
+- **Priority conflict resolution:** if an incoming change sets a `priority` that already exists within the same status column, auto-resolve by shifting existing items down (increment their priorities). Log the shift as an info event.
+
+**Ingest-time ordering limitation:** because timestamps reflect when Clawchestra processed the change (not when the agent wrote it), a delayed watcher event from an old agent write can appear newer than a recent user action. The state history buffer (2.7) is the designed recovery path — users can "undo last agent change" to restore their intended state.
 
 ### 2.6 Clawchestra-side flock
 
@@ -336,18 +517,43 @@ Implement flock in Rust for Clawchestra's own concurrent access:
 
 ### 2.7 State history buffer
 
-Maintain a circular buffer of the last 20 state snapshots in the DB (per-project). On each merge, store the pre-merge state. This enables:
-- "Undo last agent change" in the UI
+Maintain a circular buffer of state snapshots in the DB (per-project). Default size: 20 entries, configurable via `DashboardSettings.stateHistoryBufferSize`. On each merge, store the pre-merge state with metadata:
+
+```typescript
+interface HistoryEntry {
+  timestamp: number;          // HLC timestamp
+  source: 'agent' | 'ui' | 'sync' | 'migration';
+  changedFields: string[];    // e.g., ["roadmapItems.auth-system.status"]
+  state: StateJsonDocument;   // full snapshot
+}
+```
+
+This enables:
+- "Undo last agent change" in the UI — with context about WHAT changed and WHO changed it
 - Debugging when an agent write produces unexpected results
 - Graceful recovery from corrupted state.json (revert to last-known-good)
+- Stale write detection in merge logic (compare against previous entry, see 2.5)
 
-When state.json is unreadable (corrupt JSON, partial write): keep last-known-good state in memory, surface a non-blocking warning in the UI, write the last-known-good state back to state.json.
+**Permanent entries:** migration creates a permanent entry (outside the circular buffer) storing the pre-migration state. This can never be overwritten by subsequent buffer rotation, ensuring the user can always revert to the original imported data.
+
+When state.json is unreadable (corrupt JSON, partial write): keep last-known-good state in memory, surface a non-blocking warning in the UI, write the last-known-good state back to state.json. Use a "read, wait 50ms, read again, compare" strategy for suspected corrupt files before triggering auto-repair — this prevents overwriting an in-progress agent write.
+
+### 2.8 Zustand store migration
+
+The Zustand store (`src/lib/store.ts`) currently manages all project state via `loadProjects()` which calls `scanProjects()` → parses PROJECT.md + ROADMAP.md from disk → populates `ProjectViewModel[]`.
+
+Post-migration:
+- `loadProjects()` switches to calling Tauri command `get_all_projects` which returns typed data from the in-memory DB
+- Store actions (`updateProject`, `reorderItem`, etc.) call Tauri commands instead of writing markdown files
+- The store subscribes to `state-json-merged` and `clawchestra-ready` Tauri events for reactive updates
+- `ProjectViewModel` retains all existing UI-facing fields. Deprecated fields (`roadmapFileItems`, `changelogEntries`) are removed in Phase 5 after all consumers are updated
+- Persisted UI preferences (sidebar state, selected project, etc.) remain in the existing Zustand persist middleware — no change
 
 ### Verification gate
 
 - `npx tsc --noEmit` clean
 - `cargo check` clean
-- `bun test` — add tests for: Zod schema validation, Rust validation logic, merge logic, state.json round-trip, content-hash change detection, state history buffer
+- `bun test` — add tests for: Zod schema validation, Rust validation logic, merge logic, state.json round-trip, content-hash change detection, state history buffer, stale write detection, coupled field validation
 - Manual test: write a state.json manually in a project dir, verify Clawchestra picks it up
 
 ---
@@ -390,7 +596,15 @@ Before any destructive operation, automatically backup to `.clawchestra/backup/`
 - Copy `CHANGELOG.md` → `.clawchestra/backup/CHANGELOG.md.bak`
 - Copy `PROJECT.md` → `.clawchestra/backup/PROJECT.md.bak`
 - Backup directory is gitignored along with the rest of `.clawchestra/`
-- Retain backups for 30 days, then clean up
+- **Migration backups are retained permanently** (not subject to 30-day cleanup). They are small files (<50KB total) and represent an irreversible one-time event. Ongoing state history backups follow normal retention.
+
+**Migration manifest:** write `.clawchestra/backup/migration-manifest.json` listing:
+- Every item migrated (id, title, original status)
+- Every field modified during sanitization (original value → new value)
+- Every warning generated (missing completedAt, generated id, etc.)
+- Fields removed during migration that exist in ROADMAP.md but not in state.json schema
+- Markdown body of ROADMAP.md preserved in backup only (not migrated to database)
+- CHANGELOG.md entries: preserved in backup only unless a `changelogEntries` array is added to the DB schema in a future version
 
 This replaces the v1 Revival Fightwear hardcoded exception. All projects get backups.
 
@@ -401,20 +615,24 @@ On app launch, for each tracked project:
 1. Derive migration state from filesystem
 2. If `NotStarted` and project has `ROADMAP.md`:
    - Create backups (3.3)
-   - Read ROADMAP.md YAML frontmatter (`items:` array)
+   - Read ROADMAP.md YAML frontmatter (`items:` array). Wrap YAML parsing in try/catch — on parse failure: log the error with specific failure location, surface user-visible error ("ROADMAP.md in {project} has invalid YAML. Migration skipped — check backup."), do NOT proceed with deletion, allow retry after user fixes the file.
    - Read CHANGELOG.md YAML frontmatter (`entries:` array) if present
    - Import all items into DB with correct statuses and `completedAt` dates
+   - **completedAt handling:** items with `status: complete` and no `completedAt` (common in existing data — e.g., `deep-rename-clawchestra`, `git-sync`): set `completedAt` to the migration date (YYYY-MM-DD) and log a warning: "Item '{id}' was complete but had no completedAt — set to migration date". Items with `status: complete` and existing `completedAt`: preserve the original date. Items with `completedAt` but status != `complete`: keep `completedAt` as-is (historical context), log a warning.
    - Use a migration-specific sanitizer (NOT the existing `sanitizeRoadmapItem` which returns `null` for invalid items — migration should import with `status: pending` and a warning flag instead)
-   - Log import results to structured log
+   - **Id generation:** items with no `id` get a stable id based on content (`slugify(title)`) rather than position index. Check for id collisions after generation; suffix duplicates: `{id}-2`, `{id}-3`, etc. Log warnings for each generated/deduplicated id.
+   - Log import results to structured log; write migration manifest (3.3)
 3. If `Imported` (DB rows exist, no state.json):
    - Ensure `.clawchestra/` directory
    - Write `.clawchestra/state.json` projection
-   - Append `.clawchestra/` to project's `.gitignore` (create if needed)
+   - Append `.clawchestra/` to project's `.gitignore` (create if needed). **Ensure a trailing newline exists before appending** to prevent the last existing pattern and `.clawchestra/` from ending up on the same line.
+   - **Git safety:** before committing, check `git status --porcelain` for the specific files being committed. If unrelated files are staged, stash them first (matching the pattern in Phase 4.2). Use `git stash create` + `git stash store` so the stash entry persists even if the process crashes.
    - Commit: "chore: add .clawchestra to gitignore and create state projection"
 4. If `Projected` (state.json + gitignore done, ROADMAP.md still exists):
-   - **Verify state.json is readable and matches DB BEFORE deletion** (v2 fix — v1 verified after)
+   - **Verify against BACKUP, not DB:** parse the backup ROADMAP.md (`.clawchestra/backup/ROADMAP.md.bak`). For every item in the backup, verify a corresponding item exists in the DB with the same `id`, `title`, `status`, and `completedAt`. Log any field-level differences as warnings. Require that item count matches (no items silently dropped). Only proceed with deletion if this integrity check passes.
    - If verification passes: delete ROADMAP.md, delete CHANGELOG.md
    - Rename PROJECT.md → CLAWCHESTRA.md (if PROJECT.md exists)
+   - Git stash protocol (same as step 3)
    - Commit: "chore: migrate orchestration data to Clawchestra database"
 5. Derive state again — should be `Complete`
 
@@ -433,7 +651,9 @@ These files (`roadmap/{item-id}.md`) are NOT migrated into the DB. They stay git
 
 When importing ROADMAP.md YAML:
 - Use a migration-specific sanitizer (NOT the existing `sanitizeRoadmapItem` which drops invalid items)
-- Items with invalid/unrecoverable data are imported with `status: pending` and logged as warnings
+- **Unrecoverable data** is defined as: item is not an object, or item has no `title` AND no `id` (nothing to identify it by). These are logged as errors and skipped.
+- **Recoverable invalid data:** missing `status` → default to `pending`. Invalid `status` value → default to `pending`. Missing `id` → generate from `slugify(title)`. Missing `title` → use `id` as title. Invalid `priority` → strip (optional field). All recoveries are logged as warnings in the migration manifest.
+- Items with recoverable invalid data are imported with corrected values and logged as warnings
 - Log all import warnings to structured log
 
 ### 3.8 Auto-rename offer (post-migration)
@@ -465,8 +685,10 @@ The injected CLAUDE.md section:
 
 Project orchestration state lives in `.clawchestra/state.json` (gitignored, always on disk).
 
-**Read:** Open `.clawchestra/state.json` to see project status, roadmap items, priorities.
-**Write:** Edit `.clawchestra/state.json` to update status, add items, change priorities. Clawchestra validates and syncs automatically.
+**Read:** Open `.clawchestra/state.json` to see project status, roadmap items, priorities. Always read immediately before writing — do not cache contents across operations.
+**Write:** Edit `.clawchestra/state.json` to update status, add items, change priorities. Include BOTH `project` and `roadmapItems` in every write. Clawchestra validates and syncs automatically.
+
+**Schema:** See `.clawchestra/schema.json` for the full JSON Schema definition.
 
 **Schema rules:**
 - Project statuses: in-progress | up-next | pending | dormant | archived
@@ -474,11 +696,17 @@ Project orchestration state lives in `.clawchestra/state.json` (gitignored, alwa
 - When setting status: complete, always set completedAt: YYYY-MM-DD
 - Priorities are unique per column
 - Do NOT delete items from state.json — removal requires explicit action via Clawchestra UI
+- Items you omit from `roadmapItems` are NOT deleted — Clawchestra restores them on next projection
 
 **Do NOT edit:** CLAWCHESTRA.md (human documentation only), any files in `.clawchestra/` other than state.json.
 ```
 
-The AGENTS.md section updates: replace all "edit ROADMAP.md" references with "edit .clawchestra/state.json". Replace "read PROJECT.md" with "read CLAWCHESTRA.md for documentation, .clawchestra/state.json for machine-readable state."
+The AGENTS.md section updates use exact string replacements (not broad content replacement):
+- `ROADMAP.md` → `.clawchestra/state.json` (all occurrences in "edit ROADMAP.md" / "read ROADMAP.md" contexts)
+- `PROJECT.md` → `CLAWCHESTRA.md` (all occurrences referencing the project file)
+- `"read PROJECT.md"` → `"read CLAWCHESTRA.md for documentation, .clawchestra/state.json for machine-readable state"`
+- `YAML frontmatter` → `JSON` (in schema shape descriptions)
+- Keep all other AGENTS.md content untouched — no broad find-and-replace beyond these exact patterns
 
 ### 4.2 Injection command (simplified)
 
@@ -490,7 +718,7 @@ fn inject_agent_guidance(project_path: String) -> Result<Vec<BranchResult>, Stri
 struct BranchResult {
     name: String,
     success: bool,
-    skip_reason: Option<String>, // "already_injected" | "worktree_checked_out" | "dirty" | "detached"
+    skip_reason: Option<String>, // "already_injected" | "worktree_checked_out" | "dirty" | "detached" | "submodules"
 }
 ```
 
@@ -498,9 +726,10 @@ No `InjectionOptions` struct. No dry-run mode. No retry-only mode. No per-branch
 
 Logic:
 1. Stash current changes if working tree is dirty (use `git stash create` + `git stash store` so the stash entry persists even if the process crashes — safer than `git stash push`)
-2. Record original branch
+2. Record original branch (including whether HEAD is detached — if detached, record the commit SHA for restoration via `git checkout <sha>` instead of `git checkout <branch>`)
 3. Detect worktree-checked-out branches and skip them (prevents git checkout failures)
-4. For each local branch:
+4. Detect projects with git submodules (`.gitmodules` exists) and skip them with `skip_reason: "submodules"` — submodule state changes across branches can cause unexpected failures
+5. For each local branch (with a 60-second timeout per branch and a cancel button in the UI):
    a. Check if already injected (idempotency — look for "Clawchestra Integration" section header)
    b. If already injected: skip
    c. `git checkout "$branch"`
@@ -628,10 +857,11 @@ export default function (api: any) {
         }
       }
 
-      // Path validation
+      // Path validation — use path.sep suffix to prevent prefix confusion
+      // (e.g., DATA_ROOT="/foo/bar" must not match "/foo/bar-evil/secret")
       const requestedPath = req.params[0] || 'db.json';
       const resolved = path.resolve(DATA_ROOT, requestedPath);
-      if (!resolved.startsWith(DATA_ROOT)) {
+      if (resolved !== DATA_ROOT && !resolved.startsWith(DATA_ROOT + path.sep)) {
         return res.status(403).json({ error: 'Path traversal blocked' });
       }
 
@@ -667,6 +897,8 @@ Changes from v1: bearer token authentication, async filesystem operations, reque
 
 New Tauri command: `install_openclaw_extension(openclaw_path: String) -> Result<(), String>`
 - Writes the extension file to `{openclaw_path}/extensions/clawchestra-data-endpoint.ts`
+- **Extension versioning:** embed a `const EXTENSION_VERSION = '1.0.0';` at the top of the extension file. On every app launch, read the installed extension's version. If stale (older than current Clawchestra's expected version), surface an update prompt: "Your OpenClaw extension is outdated. Update now?" Auto-update for local installs; manual instructions for remote.
+- **Module system:** the extension uses `require()` (CJS). Verify that OpenClaw's extension system uses CJS before shipping. If OpenClaw uses ESM, switch to `import()` syntax. Document this dependency in the extension file header.
 - For local OpenClaw: direct filesystem write
 - For remote OpenClaw: manual installation documented in 3 steps (v2 removes the "AI self-setup" flow — too fragile for a product)
 - Verify installation by hitting `GET /clawchestra/data/db.json`
@@ -715,19 +947,24 @@ Implement in `src/lib/sync.ts`:
 **On launch:**
 1. Read local DB
 2. If sync mode is `Local`: read `~/.openclaw/clawchestra/db.json`
-3. If sync mode is `Remote`: GET `{remote_url}/clawchestra/data/db.json` (with bearer token)
-4. Merge: for each field, keep the one with the newer `updatedAt` timestamp (millisecond precision)
-5. Write merged result to both local DB and remote
+3. If sync mode is `Remote`: GET `{remote_url}/clawchestra/data/db.json` (with bearer token). On read failure from remote: do NOT merge — keep local state, surface warning: "Remote sync data could not be read. Using local data only."
+4. Merge: for each field, keep the one with the newer HLC timestamp (per D3). On ties: lexicographic `client_uuid` comparison.
+5. Update `_hlcCounter` to `max(local_counter, remote_counter) + 1`
+6. Write merged result to both local DB and remote
+7. **Clock skew detection:** compare `Date.now()` between local and remote. If difference exceeds 5 seconds, surface a non-blocking warning: "Clock difference detected between devices. Sync results may be unexpected."
 
 **On close:**
-1. Flush current DB state to remote (no debounce)
-2. 3-second timeout — do NOT block app shutdown on sync
-3. If sync fails: log warning, close anyway (data safe in local DB, will sync on next launch)
+1. **Drain pending watcher events and complete any in-progress merges** before initiating the final sync flush — prevents race where a mid-merge state.json change is lost because sync reads the DB before the merge completes
+2. Flush current DB state to remote (no debounce). Use atomic write for remote db.json (write to `.tmp`, rename) to prevent partial-transfer corruption.
+3. 3-second timeout — do NOT block app shutdown on sync
+4. If sync fails: log warning, set a `_syncFailedOnClose: true` flag in local settings so that on next launch, sync is attempted with higher priority (before showing UI). Close anyway — data safe in local DB, will sync on next launch.
 
 Deferred to v2 of the product (not this plan):
 - Continuous sync (debounced 2-second trigger on every state change)
 - Sync status indicator UI in the header
 - Offline queue with reconnect retry
+
+**Known limitation:** without continuous sync, db.json on OpenClaw can be stale for the duration of a session. If a user asks OpenClaw "what's my roadmap status?" mid-session, OpenClaw reads stale data. The OpenClaw system prompt (6.5) should include: "Note: Data reflects the last time Clawchestra synced. For real-time status, check the Clawchestra app directly."
 
 ### Verification gate (includes integration testing)
 
@@ -767,9 +1004,9 @@ Grep for any remaining references to ROADMAP.md/CHANGELOG.md in source code (not
 
 ### 7.1 Structured logging (Rust)
 
-Switch from `println!` / ad-hoc logging to the `tracing` crate:
+Attach the `tracing` subscriber (crate introduced in Phase 1.6, used throughout Phases 2–6):
 - JSON-structured log entries: `{ timestamp, level, event_type, details }`
-- Categories: `migration`, `validation`, `sync`, `watcher`, `injection`
+- Categories already defined in Phase 1.6: `migration`, `validation`, `sync`, `watcher`, `injection`
 - Log to `.clawchestra/activity.log` (per-project for project events) and `~/.clawchestra/app.log` (global for app events)
 - Log rotation: cap at 1MB, rotate to `.log.1`
 
@@ -788,7 +1025,7 @@ Settings > Advanced > "Copy debug info":
 When partial-apply rejects fields:
 - Small warning badge on the project card: "1 agent write was partially rejected"
 - Click to expand: shows which fields were rejected and why
-- Auto-dismisses after the next successful agent write
+- **Validation rejection history:** keep the last 20 rejection events per project in a viewable list (accessible from the project detail modal). Do NOT auto-dismiss the current status after the next successful agent write — instead, mark it as resolved but keep it in the history. This way, if an agent misbehaves at 2 AM and then writes valid data before the user opens the app, the user can still see what happened.
 
 ### Verification gate
 
@@ -817,7 +1054,7 @@ Phase 1 (Audit, Types, Validation) ──┐
                                                         └── Phase 7 (Logging & Error Reporting)
 ```
 
-Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for both. Phase 6 requires Phase 5. Phase 7 can be started as early as Phase 2 but should be finalized after Phase 6.
+Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for both. Phase 6 requires Phase 5. Phase 7 (logging finalization) depends on Phase 6, but the `tracing` crate is introduced in Phase 1.6 and used throughout all subsequent phases — Phase 7 only adds the subscriber, log rotation, and debug export UI.
 
 ---
 
@@ -833,6 +1070,10 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 | Sync conflict loses data | Low | Medium | Per-field timestamps with millisecond precision; fail-open to "show both"; no silent overwrites |
 | Two Clawchestra instances race | Low | Medium | Flock (fail-closed); single-instance recommendation in docs |
 | Schema version mismatch | Low | Medium | Forward-compat check; clear user-facing error; migration functions for upgrades |
+| Clock skew between devices | Medium | Medium | Hybrid logical clocks (D3); clock skew detection warning on sync; deterministic UUID tiebreaker |
+| Stale agent write reverts recent changes | Medium | Medium | Stale write detection via state history buffer comparison (2.5); "read before write" guidance in CLAUDE.md |
+| Windows watcher misses events | Low | Low | Manual refresh button; on-launch integrity check; `ReadDirectoryChangesW` limitations documented |
+| Schema migration ships with bug | Low | High | Pre-migration backup; force re-migrate command; migration manifest for audit trail |
 
 ---
 
@@ -840,8 +1081,8 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 
 | Category | Files | Change Type |
 |----------|-------|-------------|
-| **New modules** | `src/lib/state-json.ts`, `src/lib/sync.ts` | Create |
-| **New Rust modules** | `src-tauri/src/state.rs`, `src-tauri/src/migration.rs` | Create |
+| **New modules** | `src/lib/state-json.ts`, `src/lib/sync.ts`, `src/lib/db-json.ts` | Create |
+| **New Rust modules** | `src-tauri/src/state.rs`, `src-tauri/src/migration.rs`, `src-tauri/src/watcher.rs` | Create |
 | **Rust backend** | `src-tauri/src/lib.rs` | Moderate (delegate to new modules, settings) |
 | **Schema/types** | `src/lib/schema.ts`, `src/lib/settings.ts`, `src/lib/tauri.ts` | Moderate |
 | **State management** | `src/lib/store.ts`, `src/lib/projects.ts` | Significant |
@@ -871,5 +1112,9 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 - Schema version mismatch produces clear user-facing error
 - Clean release build passes
 - All existing tests pass (with updated fixtures)
-- Validation rejections visible in UI
+- Validation rejections visible in UI with rejection history
 - Debug export produces useful support information
+- Stale agent writes detected and handled without silent data loss
+- Migration manifest generated for every migrated project
+- HLC timestamps prevent clock-skew-induced data loss during sync
+- db.json schema defined and versioned alongside state.json

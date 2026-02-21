@@ -35,11 +35,8 @@ items:
     status: up-next
     priority: 1
     nextAction: >-
-      Spec finalized (39 decisions, all questions resolved, second/third-order
-      effects documented) — write implementation plan for Phase 1 (state.json,
-      rename, file locking, CLAUDE.md injection, schema validation, ROADMAP.md
-      + CHANGELOG.md migration) + Phase 2 (OpenClaw data endpoint, system
-      prompt, client identity, programmatic sync). Run to completion before FFR.
+      Full implementation plan written (9 phases, 7 critical design decisions,
+      concrete state.json schema). Ready for /deepen-plan then /build execution.
     tags:
       - architecture
       - openclaw
@@ -47,6 +44,7 @@ items:
       - multi-platform
     icon: "\U0001F3D7️"
     specDoc: docs/specs/architecture-direction-spec.md
+    planDoc: docs/plans/architecture-direction-plan.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
