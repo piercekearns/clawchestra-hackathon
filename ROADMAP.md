@@ -109,10 +109,29 @@ items:
       - onboarding
     icon: "\U0001F6E1️"
     specDoc: docs/specs/rate-limit-resilience-spec.md
+  - id: roadmap-item-quick-add
+    title: Roadmap Item Quick-Add (AI Chat-First)
+    status: pending
+    priority: 3
+    nextAction: >-
+      Spec written — reimagined as the first distributed AI surface. Primary
+      creation method: AI chat box embedded in the new card UI where users
+      describe what they want in natural language and OpenClaw structures it
+      into a schema-compliant roadmap item. Optional manual input fields
+      exposed for users who prefer direct editing. First proof-of-concept
+      for the distributed AI surfaces pattern. Depends on
+      architecture-direction completion.
+    tags:
+      - roadmap
+      - ux
+      - workflow
+      - ai-surfaces
+    icon: "➕"
+    specDoc: docs/specs/roadmap-item-quick-add-spec.md
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
-    priority: 3
+    priority: 4
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
       colour theme system. Geist fonts available locally including Pixel
@@ -122,21 +141,79 @@ items:
       - ux
       - theming
     icon: "\U0001F3A8"
-  - id: roadmap-item-quick-add
-    title: Roadmap Item Quick-Add
+  - id: distributed-ai-surfaces
+    title: Distributed AI Surfaces
     status: pending
-    priority: 4
+    priority: 5
     nextAction: >-
-      Spec needed — define UI for manually adding roadmap items with
-      schema-compliant defaults
+      Spec needed — architectural redesign to support context-aware AI chat
+      components embedded throughout the app, replacing the single chat drawer
+      as the sole interaction point. Each surface auto-injects context based
+      on its UI location (git sync dialog, roadmap item form, project card,
+      etc.) so the user never has to state what they're working on — the UI
+      location IS the instruction. Depends on architecture-direction
+      completion. Roadmap-item-quick-add serves as P3 proof-of-concept for
+      this pattern. Spec must account for app-layer redesign sufficient to
+      absorb this class of feature, not bolt-on additions.
     tags:
-      - roadmap
+      - architecture
+      - ai
       - ux
-      - workflow
+      - chat
+      - openclaw
+    icon: "\U0001F4AC"
+    specDoc: docs/specs/distributed-ai-surfaces-spec.md
+  - id: project-conversation-hub
+    title: Project Conversation Hub
+    status: pending
+    priority: 6
+    nextAction: >-
+      Spec needed — Conductor/Codex-inspired threaded conversation management
+      organized by project. Projects become conversation containers with
+      multiple concurrent sub-conversations (per roadmap item, general
+      project-level, etc.). Conversations accessible directly from project
+      cards and roadmap item cards via visual indicators — click a card to
+      surface its active threads and open the sidebar to that conversation,
+      or create a new thread from that location. No hierarchy navigation
+      needed. History persisted per-project, per-item. Depends on
+      distributed-ai-surfaces for the multi-surface foundation.
+    tags:
+      - chat
+      - projects
+      - ux
+      - threads
+      - navigation
+    icon: "\U0001F5C2️"
+    specDoc: docs/specs/project-conversation-hub-spec.md
+  - id: embedded-agent-terminals
+    title: Embedded Agent Terminals
+    status: pending
+    priority: 7
+    nextAction: >-
+      Comprehensive spec written — Model D (Parallel Tracks) chosen.
+      Three-phase progression: (1) Embedded terminals via tauri-plugin-pty
+      + xterm.js — direct agent access tied to projects/items, Conductor-
+      style multiplexing. (2) Enhanced session management — dashboard,
+      status indicators, notifications, output parsing, named sessions,
+      scrollback persistence. (3) Optional protocol integration (ACP/
+      JSON-RPC) for native UI when agents support it, terminal stays as
+      option. Non-destructive: OpenClaw retains all capabilities, direct
+      agent sessions are a parallel lane. Landscape research covers
+      Conductor, Codex, OpenCode, Kilo Code, ACP. Phase 1 needs spike:
+      xterm.js + Tauri v2 performance validation.
+      Depends on project-conversation-hub for the container model.
+    tags:
+      - agents
+      - terminals
+      - claude-code
+      - codex
+      - projects
+    icon: "\U0001F4BB"
+    specDoc: docs/specs/embedded-agent-terminals-spec.md
   - id: clawchestra-apps
     title: Clawchestra Apps (Mobile & Web)
     status: pending
-    priority: 5
+    priority: 8
     nextAction: >-
       Blue sky — spec needed once architecture direction + FFR are complete.
       Covers: iOS app (first), Android app, web app, "Login with OpenClaw"
