@@ -30,11 +30,33 @@ items:
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
     planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
+  - id: architecture-direction
+    title: Architecture Direction
+    status: up-next
+    priority: 1
+    nextAction: >-
+      Spec finalized (39 decisions, all questions resolved, second/third-order
+      effects documented) — write implementation plan for Phase 1 (state.json,
+      rename, file locking, CLAUDE.md injection, schema validation, ROADMAP.md
+      + CHANGELOG.md migration) + Phase 2 (OpenClaw data endpoint, system
+      prompt, client identity, programmatic sync). Run to completion before FFR.
+    tags:
+      - architecture
+      - openclaw
+      - sync
+      - multi-platform
+    icon: "\U0001F3D7️"
+    specDoc: docs/specs/architecture-direction-spec.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 1
-    nextAction: Plan written — ready for phased build execution
+    priority: 2
+    nextAction: >-
+      Spec exists — needs revision against finalized architecture-direction
+      spec (PROJECT.md → CLAWCHESTRA.md references, branch injection in
+      onboarding Stage 3, state.json in project discovery). Cross-platform
+      foundation (Phase 1) can start NOW in parallel with architecture
+      direction. Onboarding wizard (Phase 3) blocked on architecture Phase 1.
     tags:
       - onboarding
       - cross-platform
@@ -45,7 +67,7 @@ items:
   - id: clawchestra-ai-website
     title: Launch Clawchestra.ai Website
     status: up-next
-    priority: 2
+    priority: 3
     nextAction: >-
       Discovery brief written — run Variant Exploration Phase (3 polished static
       mockups under locked brand/copy constraints), choose one direction, then
