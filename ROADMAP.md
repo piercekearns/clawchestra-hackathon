@@ -1,20 +1,20 @@
 ---
 items:
-  - id: git-branch-sync
-    title: 'Git Sync: Branch Management (Phase 3)'
+  - id: architecture-direction
+    title: Architecture Direction
     status: in-progress
     priority: 1
     nextAction: >-
-      Plan written — implement branch selection + cherry-pick orchestration + AI
-      conflict handling, including explicit no-remote `(local)` branch behavior.
-      Depends on git-sync-scope completion.
+      Phase 5 frontend alignment — run deepen-plan against plan-v2.md then build.
+      Phases 1-4 + hardening complete (all Rust modules built).
     tags:
-      - git
+      - architecture
+      - openclaw
       - sync
-      - branches
-      - ai-agent
-    icon: "\U0001F33F"
-    specDoc: docs/specs/git-branch-sync-spec.md
+      - multi-platform
+    icon: "\U0001F3D7️"
+    specDoc: docs/specs/architecture-direction-spec.md
+    planDoc: docs/plans/architecture-direction-plan-v2.md
   - id: chat-infrastructure
     title: 'Chat Reliability: Persistent Bugs'
     status: in-progress
@@ -30,25 +30,10 @@ items:
     icon: "\U0001F41B"
     specDoc: docs/specs/chat-infrastructure-phase-a-spec.md
     planDoc: docs/plans/chat-infrastructure-persistent-bugs-plan.md
-  - id: architecture-direction
-    title: Architecture Direction
-    status: up-next
-    priority: 1
-    nextAction: >-
-      Full implementation plan written (9 phases, 7 critical design decisions,
-      concrete state.json schema). Ready for /deepen-plan then /build execution.
-    tags:
-      - architecture
-      - openclaw
-      - sync
-      - multi-platform
-    icon: "\U0001F3D7️"
-    specDoc: docs/specs/architecture-direction-spec.md
-    planDoc: docs/plans/architecture-direction-plan.md
   - id: first-friend-readiness
     title: First Friend Readiness
     status: up-next
-    priority: 2
+    priority: 1
     nextAction: >-
       Spec exists — needs revision against finalized architecture-direction spec
       (PROJECT.md → CLAWCHESTRA.md references, branch injection in onboarding
@@ -65,7 +50,7 @@ items:
   - id: clawchestra-ai-website
     title: Launch Clawchestra.ai Website
     status: up-next
-    priority: 3
+    priority: 2
     nextAction: >-
       Discovery brief written — run Variant Exploration Phase (3 polished static
       mockups under locked brand/copy constraints), choose one direction, then
@@ -357,6 +342,21 @@ items:
       - workflow
     icon: "\U0001F504"
     specDoc: docs/specs/git-sync-scope-spec.md
+  - id: git-branch-sync
+    title: 'Git Sync: Branch Management (Phase 3)'
+    status: complete
+    priority: 11
+    nextAction: >-
+      Plan written — implement branch selection + cherry-pick orchestration + AI
+      conflict handling, including explicit no-remote `(local)` branch behavior.
+      Depends on git-sync-scope completion.
+    tags:
+      - git
+      - sync
+      - branches
+      - ai-agent
+    icon: "\U0001F33F"
+    specDoc: docs/specs/git-branch-sync-spec.md
 ---
 
 # Clawchestra — Roadmap

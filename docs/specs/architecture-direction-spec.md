@@ -1037,4 +1037,32 @@ This section captures the cascading impacts of the architecture direction on exi
 
 ---
 
+## 20. Extended Vision and Future Decisions
+
+### Macro Goal
+
+Clawchestra is a universal project tracker — not just for code. Any project (coding, writing, personal, business) can be tracked. The roadmap/kanban is always up to date regardless of where work happened (local, cloud, different device). Users see ALL projects at a macro level and can drill into any level of detail without switching tools.
+
+### D42 — Cloud agent read/write path via OpenClaw HTTP
+
+CLAUDE.md injection includes the OpenClaw API endpoint URL and bearer token instructions. Cloud agents (Claude Code web, Codex CLI) read/write db.json directly via HTTP when state.json is unavailable. Public repos get a placeholder instead of the actual token.
+
+### D43 — Branch-aware spec/plan reading via `git show`
+
+When a user clicks a spec/plan doc and the file isn't on the current branch, Clawchestra uses `git show <branch>:<path>` (no checkout). Checks `specDocBranch` field first (if recorded), falls back to scanning all local branches. Shows a "Viewing from branch: X" banner in the doc viewer.
+
+### D44 — Smart import is AI-driven, not programmatic
+
+Clawchestra does NOT implement custom parsers for Notion/Trello/Linear/etc. OpenClaw does the parsing. Clawchestra provides file picker, prompt templates, and picks up the result via the state.json watcher.
+
+### D45 — Non-code projects have no git assumption
+
+Projects can be added without a git repo. GitSync, auto-commit, branch injection, and git status are disabled. All other features (kanban, spec/plan docs, state.json, chat) work.
+
+### D46 — Spec/plan branch metadata
+
+`specDocBranch` / `planDocBranch` optional fields in state.json and db.json. Set during merge cycle when spec_doc/plan_doc field is ingested: current branch at ingest time. Used for targeted `git show` lookups. Falls back to branch scanning if absent.
+
+---
+
 *This document is the canonical reference for Clawchestra's architectural direction. Update it as decisions evolve.*

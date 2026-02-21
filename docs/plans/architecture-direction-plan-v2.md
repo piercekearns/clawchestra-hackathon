@@ -14,6 +14,51 @@
 
 ---
 
+## Enhancement Summary (Deepen-Plan Pass)
+
+**Deepened on:** 2026-02-21
+**Targeting:** Phase 5 onwards (Phases 1–4 + hardening sprint complete)
+**Research agents used:** Pattern Recognition, Simplicity Reviewer, Architecture Strategist, Kieran TypeScript, Security Sentinel, Agent-Native Reviewer, Data Migration Expert, Performance Oracle, Race Condition Reviewer, Data Integrity Guardian (11 agents total)
+
+### Critical Findings
+
+1. **Roadmap data pipeline not addressed (CRITICAL).** Phase 5 is missing migration of `openRoadmapView()`, `persistRoadmapChanges()`, and `allSearchableRoadmapItems` in App.tsx — all still read/write ROADMAP.md directly. Without this, the entire migration is broken at the UI layer. Added as Phase 5.16.
+2. **`getProjects()` rewrite missing (CRITICAL).** The plan's Phase 2.8 describes the Zustand store migration but never lists concrete implementation steps for switching `loadProjects()` from file-scanning to Tauri commands. Added as Phase 5.17.
+3. **Injection content contradicts plan schema.** `injection.rs` lines 28-31 tell agents to include `_schemaVersion`, `_generatedAt`, `_generatedBy` — the plan's `AgentStateJsonInputSchema` strips these. Must resolve before Phase 5.4.
+4. **Agent injection has no agent-accessible path.** `inject_agent_guidance` is Tauri-only. Agents on new branches cannot trigger it. Added mitigation to Phase 5.4.
+5. **Migration.rs has 2 HIGH issues.** No git commits (leaves dirty state) and field-level verification is non-blocking (plan says it should block). Added as Pre-Phase 5 prerequisites.
+
+### Already Completed (skip during build)
+
+- **5.5** Auto-commit + store updates — already done in hardening sprint
+- **5.9** Lifecycle prompts — `deliverable-lifecycle.ts` already references state.json
+- **5.11** Old TypeScript watcher — already deleted
+
+### Simplification Recommendations Applied
+
+- **5.15** Settings Dialog sync UI → deferred to Phase 6 (not needed for core alignment)
+- **6.6** `_syncFailedOnClose` flag → removed (unnecessary complexity)
+- **7.1** Per-project + global log files → single `~/.clawchestra/app.log`
+- **7.3** Validation rejection history viewer → badge-only (click shows last rejection)
+
+### Recommended Execution Order (from Kieran TypeScript + Data Integrity reviews)
+
+```
+Group 1 (constants, no deps):     5.1, 5.5✓, 5.13
+Group 2 (file references):        5.6, 5.8, 5.3, 5.19 (dual-filename warning)
+Group 3 (components + data):      5.2, 5.7, 5.16 (roadmap pipeline), 5.17 (loadProjects), 5.18 (useProjectModal)
+Group 4 (agent guidance):         5.4, 5.9✓, 5.10
+Group 5 (cleanup + verification): 5.11✓, 5.12 (AFTER all Group 3 consumers redirected), 5.14
+```
+
+**Atomic cutover strategy (from Data Integrity Finding 1 — CRITICAL):**
+All write operations across 5.7, 5.16, 5.17, 5.18 must check a per-project `stateJsonMigrated` flag:
+- `true` → Tauri command path (state.json)
+- `false` → existing `writeRoadmap()` path (ROADMAP.md)
+This prevents partial cutover and data divergence during transition.
+
+---
+
 ## Changes from v1
 
 | Area | v1 | v2 | Rationale |
@@ -503,7 +548,7 @@ New Tauri command: `write_state_json(project_path: String, state: StateJson) -> 
 - Read-verify: after rename, read the file back and verify it parses against the Zod schema. If verification fails, immediately restore from the in-memory state and log an error. This catches serialization bugs before they propagate through the state history buffer.
 - Releases lock
 
-Frontend integration: after any DB write that changes project/roadmap state, call `write_state_json` for affected project(s). Debounce at 200ms for rapid changes (e.g., dragging multiple items).
+Frontend integration: after any DB write that changes project/roadmap state, call `write_state_json` for affected project(s). Debounce at 200ms **per-project** for rapid changes (e.g., dragging multiple items). Per-project debounce ensures editing project A does not delay project B's state.json write.
 
 ### 2.3 Unified file watcher (Rust)
 
@@ -603,6 +648,8 @@ This enables:
 - Stale write detection in merge logic (compare against previous entry, see 2.5)
 
 **Permanent entries:** migration creates a permanent entry (outside the circular buffer) storing the pre-migration state. This can never be overwritten by subsequent buffer rotation, ensuring the user can always revert to the original imported data.
+
+**Memory impact (from performance review):** Each history entry stores a full `StateJson` snapshot. Estimated memory per project: ~100KB (10 items) to ~4MB (500 items) for the full 20-entry buffer. At 50 projects with 30 items each, total buffer memory is ~15MB — acceptable for a desktop app. Log buffer size at startup (`tracing::info!`) for diagnostics. The configurable `stateHistoryBufferSize` in `DashboardSettings` is the escape hatch for memory-constrained machines.
 
 When state.json is unreadable (corrupt JSON, partial write): keep last-known-good state in memory, surface a non-blocking warning in the UI, write the last-known-good state back to state.json. Use a "read, wait 50ms, read again, compare" strategy for suspected corrupt files before triggering auto-repair — this prevents overwriting an in-progress agent write.
 
@@ -802,7 +849,23 @@ Project orchestration state lives in `.clawchestra/state.json` (gitignored, alwa
 - Items you omit from `roadmapItems` are NOT deleted — Clawchestra restores them on next projection
 
 **Do NOT edit:** CLAWCHESTRA.md (human documentation only), any files in `.clawchestra/` other than state.json.
+
+**Remote access (cloud environments):**
+If `.clawchestra/state.json` is not available (cloud agent, CI, different device),
+access the project database via the OpenClaw data API:
+- GET  {openclaw_url}/clawchestra/data/db.json
+- PUT  {openclaw_url}/clawchestra/data/db.json (full document replace)
+- Authorization: Bearer {bearer_token}
+
+When writing via PUT: read first, modify only this project's entry
+(projects.{project_id}.*), increment _hlcCounter by 1, set __updatedAt
+to Date.now() for each changed field, then PUT the full document back.
 ```
+
+Injection logic additions for cloud agent access:
+- `{openclaw_url}` = `settings.openclaw_remote_url` or `http://127.0.0.1:18789`
+- `{bearer_token}` = from keychain; if public repo, use `[Contact project owner]`
+- Public repo detection: `git remote get-url origin` → call GitHub API → check `"private"` field
 
 The AGENTS.md section updates use exact string replacements (not broad content replacement):
 - `ROADMAP.md` → `.clawchestra/state.json` (all occurrences in "edit ROADMAP.md" / "read ROADMAP.md" contexts)
@@ -863,61 +926,336 @@ Update `scripts/sync-agent-compliance.sh` to:
 
 ---
 
-## Phase 5: Cleanup & Constants
+## Pre-Phase 5 Prerequisites (from Migration Review)
 
-**Goal:** Remove dead code, update all constants, update all templates. This is the "sweep" phase (per institutional learnings lesson #3).
+Before starting Phase 5, resolve these migration.rs gaps discovered during the deepen-plan review. Both are HIGH severity and affect the integrity of the Phase 3 → Phase 5 handoff.
 
-### 5.1 Update constants in lib.rs
+### P5-PRE-1: Add git commit operations to migration.rs
 
-- `METADATA_FILES` (currently `["PROJECT.md"]`): add `CLAWCHESTRA.md` (keep `PROJECT.md` during transition)
-- `DOCUMENT_FILES` (currently `["ROADMAP.md", "CHANGELOG.md"]`): remove `ROADMAP.md` and `CHANGELOG.md` post-migration (these files no longer exist). Note: also update the TypeScript mirror in `src/lib/git-sync-utils.ts` (`METADATA_FILES`, `DOCUMENT_FILES`, `DOCUMENT_DIR_PREFIXES`)
-- `DOCUMENT_DIR_PREFIXES`: no change
+**Issue:** migration.rs performs all filesystem changes (backup, state.json write, .gitignore update, ROADMAP.md deletion, PROJECT.md rename) but never commits them. Every migrated project will have uncommitted changes that confuse git status displays.
 
-### 5.2 Remove kanban auto-commit trigger
+**Location:** Not present in `src-tauri/src/migration.rs` — needs adding.
+
+**Fix:** Add git commit calls matching the pattern already used in `injection.rs` (shell out to git via `Command::new("git").args(...)`):
+- After gitignore + state.json write: `git commit -m "chore: add .clawchestra to gitignore and create state projection"`
+- After ROADMAP.md deletion + rename: `git commit -m "chore: migrate orchestration data to Clawchestra database"`
+- Include git stash safety protocol: check `git status --porcelain` for unrelated staged files, stash them first.
+
+### P5-PRE-2: Make field-level verification blocking in migration.rs
+
+**Issue:** At `migration.rs:1030-1035`, field-level mismatches produce warnings but do NOT block deletion. The plan explicitly requires all migrated fields to match before deletion proceeds.
+
+**Fix:** Change the verification logic to return `Err` if any field mismatches exist between backup and DB. The backup is the safety net — if verification fails, keep ROADMAP.md and surface an error: "Migration verification failed for {project}: {mismatched_fields}. Source files retained."
+
+### P5-PRE-3: Resolve injection content contradiction
+
+**Issue:** `injection.rs` lines 28-31 tell agents to include `_schemaVersion`, `_generatedAt`, `_generatedBy` as required fields. The plan's `AgentStateJsonInputSchema` (Phase 1.2) strips these via `.omit()`. These cannot both be correct.
+
+**Fix:** Update `injection.rs` `CLAUDE_MD_SECTION` to remove the "Required envelope fields" paragraph. Agents should NOT include metadata — Clawchestra sets these on ingest. Also remove the `last-rejection.json` reference (line 41) since Phase 7 replaces this with structured logging.
+
+---
+
+## Phase 5: Frontend Alignment & Cleanup
+
+**Goal:** Bring the entire frontend into alignment with the architecture direction. Update all constants, file references, UI components, and flows to use the new data layer (db.json → state.json → CLAWCHESTRA.md). Remove dead code. Wire up missing connections. This is the "sweep" phase (per institutional learnings lesson #3).
+
+**Audit reference:** `docs/plans/architecture-direction-audit.md` — line-by-line catalogue of ~35 updates and ~25 removals.
+
+### Research Insights (Phase 5)
+
+**Pattern Recognition findings:**
+- `loadProjects()` is called from 18+ locations across the codebase — this is a full-reload anti-pattern. Phase 5.17 must replace this with event-driven updates via `updateProjectFromEvent()`.
+- `updateProjectFromEvent()` pattern already exists in the Zustand store and should be generalized for all project mutations.
+- `tauri-events.ts` (`setupTauriEventListeners`) provides a clean handler pattern that should be the model for all new event subscriptions.
+- Roadmap data lives in App.tsx local state (not Zustand) — the `openRoadmapView()`, `persistRoadmapChanges()`, and `allSearchableRoadmapItems` functions all operate on ROADMAP.md directly. This MUST be migrated (see 5.16).
+
+**Agent-Native findings:**
+- 11/15 UI capabilities are agent-accessible post-Phase-5. The 2 critical gaps (inject guidance, add existing project) need agent paths added.
+- AGENTS.md "Adding Projects" section (lines 296-309) is stale — still describes catalog `.md` file creation. Must be rewritten in 5.10.
+- AGENTS.md "Rule Zero" (line 84) still says "Pipeline Dashboard" — fix in 5.10.
+- `DESIGN_PRINCIPLES.md` line 32 still references ROADMAP.md — update during 5.12 sweep.
+
+**Data Integrity findings (CRITICAL):**
+- **Dual-write path:** During Phase 5 implementation, kanban drags still write to ROADMAP.md (via `writeRoadmap()` in App.tsx:1128, useProjectModal.ts:158) while agents write to state.json. Both paths active simultaneously = data divergence. **Solution:** Implement a per-project `stateJsonMigrated: boolean` flag in the Zustand store (derived from whether db.json has the project entry). ALL write operations check this flag: `true` → Tauri command to state.json, `false` → existing `writeRoadmap()` path. Naturally transitions per-project as migration completes. Phase 5 cleanup removes the `false` branch after all projects are confirmed migrated.
+- **`useProjectModal.ts` not listed in Phase 5:** This hook is a PRIMARY ROADMAP.md read/write consumer (lines 65-108: `readRoadmap()` on every project change; lines 145-161: `writeRoadmap()` on reorder; lines 175-197: `migrateCompletedItem()` cross-file mutation). Added as Phase 5.18.
+- **`migrateCompletedItem()` has no new-architecture equivalent:** This function atomically moves an item from ROADMAP.md to CHANGELOG.md. In the new architecture, setting `status: complete` + `completedAt` on the item in state.json IS the equivalent — no cross-file migration needed. But `useProjectModal.updateRoadmapItemStatus` (lines 175-197) must be rewritten BEFORE `changelog.ts` is deleted.
+- **Non-atomic project creation:** Phase 5.3 adds 4 steps (mkdir, write state.json, append .gitignore, register in db.json). If Tauri IPC fails between file creation and db.json registration, state is inconsistent. **Solution:** Either register in db.json FIRST (compensating command on file failure) or create a single `create_project_with_state` Tauri command that does all 4 operations atomically on the Rust side.
+- **`updateProjectFromEvent` discards roadmap items:** store.ts lines 586-618 — the handler updates project-level fields but NOT `roadmapItems` data. Agent changes to items are merged into the Rust DB but never reach the frontend until full reload. Must be fixed in Phase 5.17.
+
+**Data Migration edge cases for Phase 5:**
+- Projects without ROADMAP.md skip migration and get status `Complete` but NO state.json (`migration.rs:172-173`). Phase 5.3/5.17 must handle missing state.json gracefully.
+- `run_all_migrations` (`lib.rs:1684-1698`) only processes projects already in db.json — projects discovered by `scan_projects` but not yet registered will be missed. The startup sequence needs: scan → register → migrate.
+- Migration history entries use `changed_fields: vec!["*"]` — Phase 7.3 UI must handle the wildcard.
+
+### 5.1 Update constants (Rust + TypeScript)
+
+**Already done in hardening sprint:**
+- `METADATA_FILES` in `src-tauri/src/commands/git.rs`: `["CLAWCHESTRA.md", "PROJECT.md"]` ✓
+- `DOCUMENT_FILES` in `src-tauri/src/commands/git.rs`: `[]` ✓
+- `METADATA_FILES` in `src/lib/git-sync-utils.ts`: `['CLAWCHESTRA.md', 'PROJECT.md']` ✓
+- `DOCUMENT_FILES` in `src/lib/git-sync-utils.ts`: `[]` ✓
+
+**Remaining (lib.rs):**
+- `METADATA_FILES` in `src-tauri/src/lib.rs` line 1444: verify matches git.rs constants
+- `DOCUMENT_FILES` in `src-tauri/src/lib.rs` line 1447: verify matches git.rs constants
+
+### 5.2 AddProjectDialog overhaul (`src/components/AddProjectDialog.tsx`)
+
+The Add Project dialog is entirely pre-architecture-direction. Update to align:
+
+**For new projects:**
+- Replace "Create PROJECT.md if missing" checkbox → "Create CLAWCHESTRA.md"
+- Remove "Create ROADMAP.md when missing" checkbox entirely (roadmap lives in db.json)
+- Remove "Add PROJECT.md frontmatter" checkbox → CLAWCHESTRA.md has no YAML frontmatter
+- Add: create `.clawchestra/` directory with state.json projection
+- Add: add `.clawchestra/` to `.gitignore`
+- Add: register project in db.json
+
+**For existing projects (Add Existing):**
+- Compatibility check: scan for `CLAWCHESTRA.md` first, fall back to `PROJECT.md`
+- Remove `ROADMAP.md` from compatibility scan
+- Add detection of `.clawchestra/state.json` (already set up vs needs migration)
+- If project has ROADMAP.md but no state.json: surface migration prompt
+
+**Agent-accessible project registration (from agent-native review — CRITICAL):**
+Phase 5.2 creates a significant new capability with no agent equivalent. Document in AGENTS.md (Phase 5.10) the steps an agent must take to register an existing project:
+1. Create `.clawchestra/` directory
+2. Write initial `state.json` (project metadata + empty roadmapItems)
+3. Append `.clawchestra/` to `.gitignore`
+This makes "Add Existing Project" achievable by both humans and agents.
+
+**Labels to update:**
+- Line 263: "Create ROADMAP.md" → remove
+- Line 364: "PROJECT.md:" → "CLAWCHESTRA.md:"
+- Line 365: "ROADMAP.md:" → remove
+- Line 418: "Create PROJECT.md if missing" → "Create CLAWCHESTRA.md"
+- Line 436: "Create ROADMAP.md when missing" → remove
+
+### 5.3 Project creation flow (`src/lib/project-flows.ts`)
+
+`createNewProjectFlow` creates the wrong files:
+
+- Line 134: `PROJECT.md` path → change to `CLAWCHESTRA.md`
+- Line 135: `ROADMAP.md` path → remove entirely
+- Lines 174-189: Compatibility checks for `PROJECT.md` → check `CLAWCHESTRA.md`
+- Line 341: Write `PROJECT.md` → write `CLAWCHESTRA.md`
+- Line 342: Push `'PROJECT.md'` to createdFiles → push `'CLAWCHESTRA.md'`
+- Lines 345-346: Write + push `ROADMAP.md` → remove
+- Line 395: Error message "PROJECT.md frontmatter is invalid" → update
+- Line 429: `PROJECT.md` path → `CLAWCHESTRA.md`
+- Line 455: Write `ROADMAP.md` → remove
+- Lines 463-464: Git add `'ROADMAP.md'` → remove
+
+**New steps to add to the creation flow:**
+
+**Preferred (from data integrity review):** Create a single Tauri command `create_project_with_state` that performs all 4 operations atomically on the Rust side (eliminates IPC boundary in the middle of the transaction):
+1. Create `.clawchestra/` directory
+2. Write initial `.clawchestra/state.json` (empty roadmap, project metadata)
+3. Append `.clawchestra/` to `.gitignore`
+4. Register project in db.json
+
+**Alternative (if single command is too large):** Register in db.json FIRST (in-memory, fast), then create files. If file creation fails, unregister via compensating Tauri command. The existing rollback mechanism in `createNewProjectFlow` (lines 323-374) only tracks files — it must also track the db.json registration for rollback.
+
+### 5.4 Inject agent guidance trigger
+
+`inject_agent_guidance` is fully implemented in Rust (`injection.rs`) but has NO frontend trigger. Wire it up:
+
+- Add a button in the project detail modal: "Inject Agent Guidance" (with explanation tooltip)
+- Automatically trigger injection after project creation (new projects)
+- Automatically trigger injection after migration completes (existing projects)
+- Show progress in a modal/toast (one line per branch processed)
+- Show results summary: "Injected 5/7 branches (2 already done)"
+
+**Agent-accessible injection path (from agent-native review — CRITICAL):**
+Agents (Claude Code, Cursor) cannot call Tauri commands. Without an agent path, agents on new branches have no way to ensure the Clawchestra Integration section exists in CLAUDE.md. Two mitigations:
+1. Add a `scripts/inject-current-branch.sh` script that applies single-branch injection (simpler than the all-branch Rust version). Agents can run this directly.
+2. Include the exact CLAUDE.md section template in AGENTS.md so agents can self-inject on branches where injection hasn't run.
+Both should be implemented. The script is the primary path; the template is the fallback.
+
+### 5.5 Auto-commit and store updates ✅ ALREADY COMPLETE
+
+> **Status:** Done in hardening sprint. Verify only — no implementation needed.
 
 In `src/lib/auto-commit.ts`:
 - Update `AUTO_COMMIT_ALLOWED` to `new Set(['CLAWCHESTRA.md'])`
-- Remove the code path that triggers auto-commit on kanban drag
-- Also update `store.ts` line 567 (hardcoded `['PROJECT.md']`)
+- Remove the code path that triggers auto-commit on kanban drag (kanban writes to state.json now, which is gitignored)
+- Update comment: "Only commits CLAWCHESTRA.md changes"
 
-### 5.3 Update lifecycle prompts
+In `src/lib/store.ts`:
+- Line 566: hardcoded `['PROJECT.md']` → `['CLAWCHESTRA.md']`
+
+In `src/lib/git.ts`:
+- Line 36: `files: string[] = ['PROJECT.md', 'ROADMAP.md']` → `['CLAWCHESTRA.md']`
+
+### 5.6 Project file paths (`src/lib/projects.ts`)
+
+- Line 57-59: `PROJECT.md` path construction → scan `CLAWCHESTRA.md` first, fall back to `PROJECT.md`
+- Line 76: Error `'Could not read PROJECT.md'` → update message
+- Line 107: `ROADMAP.md` file path → remove (state from DB)
+- Line 108: `CHANGELOG.md` file path → remove
+- Line 208: `PROJECT.md` write path → `CLAWCHESTRA.md`
+
+### 5.7 App.tsx auto-commit references
+
+- Line 1081: `'No ROADMAP.md found for ...'` → remove (dead code)
+- Line 1138: `autoCommitIfLocalOnly(..., ['ROADMAP.md'], ...)` → remove
+- Line 1140: `withOptimisticDirtyFile(..., 'ROADMAP.md', 'documents')` → remove
+- Line 1231: `autoCommitIfLocalOnly(..., ['PROJECT.md'], ...)` → `['CLAWCHESTRA.md']`
+- Line 1245: `withOptimisticDirtyFile(..., 'PROJECT.md', 'metadata')` → `'CLAWCHESTRA.md'`
+
+### 5.8 Template updates (`src/lib/templates.ts`)
+
+- Line 32: `readTemplate('docs/templates/PROJECT.md')` → `CLAWCHESTRA.md` template
+- Line 36: `readTemplate('docs/templates/ROADMAP.md')` → remove
+- Line 44: `writeIfMissing(..., projectTemplate)` for `PROJECT.md` → `CLAWCHESTRA.md`
+- Line 45: `writeIfMissing(resolvedRepoPath + '/ROADMAP.md', ...)` → remove
+
+Create or update `docs/templates/CLAWCHESTRA.md` template (human-readable, no YAML frontmatter, per D5 document format rules).
+
+### 5.9 Update lifecycle prompts ✅ ALREADY COMPLETE
+
+> **Status:** `deliverable-lifecycle.ts` already references `.clawchestra/state.json` in all five lifecycle action prompts (spec, plan, review, deliver, build). Verify only.
 
 In `src/lib/deliverable-lifecycle.ts`:
 - Replace all "update ROADMAP.md" references with "update .clawchestra/state.json"
 - Replace all "read PROJECT.md" references with "read .clawchestra/state.json"
 - Update prompt templates to reference the new schema
 
-### 5.4 Update AGENTS.md compliance block
+### 5.10 Update AGENTS.md compliance block
 
 In `AGENTS.md` (the Clawchestra project's own AGENTS.md):
 - File Structure section: add `.clawchestra/state.json` entry
 - Remove `ROADMAP.md` and `CHANGELOG.md` references (post-migration)
 - Update Roadmap Item YAML Shape to reference state.json JSON shape instead
 
-### 5.5 Remove old TypeScript watcher
+**Additional scope (from agent-native review):**
+- Rewrite "Adding Projects" section (lines 296-309) — currently describes catalog `.md` file creation, must describe state.json + db.json registration
+- Rewrite "Projects (Top-Level Board)" operations table — currently references a fundamentally different data model
+- Fix "Rule Zero" (line 84) — still says "Pipeline Dashboard", must say "Clawchestra"
+- Add "Registering an Existing Project" section documenting agent steps (create `.clawchestra/`, write state.json, update `.gitignore`)
+- Add Clawchestra Integration section template that agents can self-inject on branches where `inject_agent_guidance` hasn't run
+
+### 5.11 Remove old TypeScript watcher ✅ ALREADY COMPLETE
+
+> **Status:** `src/lib/watcher.ts` already deleted in hardening sprint. Verify no stale imports remain.
 
 Delete `src/lib/watcher.ts` (replaced by unified Rust watcher in Phase 2). Update all imports.
 
-### 5.6 Dead code sweep
+### 5.12 Dead code sweep
 
 ```bash
 npx tsc --noEmit      # Catch type errors from removals
 cargo clippy -- -W dead_code  # Catch unused Rust functions
 ```
 
+**ORDERING CONSTRAINT (from data integrity review):** Do NOT delete `roadmap.ts` or `changelog.ts` until ALL consumers are redirected (5.7, 5.16, 5.18) AND `npx tsc --noEmit` confirms zero imports remain.
+
 Specific targets:
-- `src/lib/roadmap.ts` — `readRoadmap()`, `writeRoadmap()` become dead code. Keep `enrichItemsWithDocs()` if state.json items still reference spec/plan docs.
-- `src/lib/changelog.ts` — entire module likely dead post-migration
+- `src/lib/roadmap.ts` — `readRoadmap()`, `writeRoadmap()` become dead code. **Before deletion:** move `resolveDocFiles()` and `enrichItemsWithDocs()` to `src/lib/doc-resolution.ts` — these resolve spec/plan doc file paths and are storage-format-independent.
+- `src/lib/changelog.ts` — entire module dead post-migration. `migrateCompletedItem()` must be replaced in useProjectModal FIRST (5.18) — in new architecture, completion is a status change, not a cross-file move.
 - `src/lib/auto-commit.ts` — kanban-drag trigger code path
 - `lib.rs` — any functions only called for ROADMAP.md/CHANGELOG.md parsing
 
-### 5.7 Test fixture updates
+### 5.13 Schema comments (`src/lib/schema.ts`)
 
-Update all test files:
+- Line 164: Comment "Absolute path to the PROJECT.md file" → update
+- Line 166: Comment "parent of PROJECT.md" → update
+
+### 5.14 Test fixture updates
+
+Update all test files (see audit for complete list):
 - Replace `PROJECT.md` fixtures with `CLAWCHESTRA.md`
 - Replace `ROADMAP.md` YAML fixtures with state.json JSON fixtures
 - Remove `CHANGELOG.md` fixtures
+- `src/lib/git-sync.test.ts`: update categorization assertions
+- `src/lib/hierarchy.test.ts`: update `filePath` template
+- `src/lib/project-flows.rollback.test.ts`: update file assertions
 - Add new tests for: state.json validation, migration, merge logic
+
+### 5.18 Rewrite useProjectModal.ts (NEW — from data integrity review)
+
+> **Source:** Data Integrity Guardian. `useProjectModal.ts` is a PRIMARY ROADMAP.md consumer not listed in any Phase 5 sub-step.
+
+`/src/hooks/useProjectModal.ts` directly calls `readRoadmap()`, `writeRoadmap()`, `resolveDocFiles()`, `enrichItemsWithDocs()`, and `migrateCompletedItem()`. All must be redirected:
+
+1. **Replace `readRoadmap()` (lines 65-108):** Read roadmap items from the Zustand store (already loaded via `get_all_projects`), not from ROADMAP.md on disk.
+2. **Replace `writeRoadmap()` (lines 145-161):** Call Tauri command (`update_roadmap_item` / `reorder_item`) which updates db.json and writes state.json projection.
+3. **Replace `migrateCompletedItem()` (lines 175-197):** Call Tauri command that sets `status: complete` + `completedAt` on the item. The ROADMAP→CHANGELOG cross-file migration is eliminated — in the new architecture, completion is a status change, not a file move.
+4. **Keep `resolveDocFiles()` and `enrichItemsWithDocs()`:** These resolve spec/plan doc file paths — independent of storage format. Move to `src/lib/doc-resolution.ts` before deleting `roadmap.ts` in Phase 5.12.
+
+**Atomic cutover (from Data Integrity Finding 1):**
+All write operations in useProjectModal must check `stateJsonMigrated` flag per project:
+- `true` → Tauri command path (state.json)
+- `false` → existing `writeRoadmap()` path (ROADMAP.md)
+
+This prevents partial cutover during the transition period.
+
+### 5.19 Dual-filename warning (NEW — from data integrity review)
+
+If BOTH `CLAWCHESTRA.md` AND `PROJECT.md` exist in the same project directory, surface a warning:
+- In `checkExistingProjectCompatibility` (project-flows.ts line 134): check for CLAWCHESTRA.md FIRST, fall back to PROJECT.md. If both exist, include a warning: "Both CLAWCHESTRA.md and PROJECT.md found. CLAWCHESTRA.md takes precedence. Delete PROJECT.md to resolve."
+- In `getProjects` (projects.ts): log warning if both exist during scan.
+- Do NOT create PROJECT.md if CLAWCHESTRA.md already exists (currently, `addExistingProjectFlow` line 172-177 would create PROJECT.md even when CLAWCHESTRA.md exists).
+
+### 5.15 Settings Dialog sync UI → DEFERRED TO PHASE 6
+
+> **Simplification:** Per simplicity review, sync UI is not needed for core frontend alignment. Defer to Phase 6 where it belongs alongside sync implementation. Phase 5 should focus on the data pipeline migration.
+
+### 5.16 Roadmap data pipeline migration (NEW — CRITICAL)
+
+> **Source:** Architecture Strategist + Pattern Recognition agents. This was the single most critical gap in the original plan.
+
+App.tsx contains three functions that read/write ROADMAP.md directly, bypassing the entire new data layer:
+
+**`openRoadmapView()` (App.tsx):**
+Currently reads ROADMAP.md YAML frontmatter to populate roadmap items in the UI. Must switch to reading from the Zustand store (which is fed by `get_all_projects` Tauri command → db.json).
+
+**`persistRoadmapChanges()` (App.tsx):**
+Currently writes changes back to ROADMAP.md YAML frontmatter. Must switch to calling Tauri mutation commands (`update_roadmap_item`, `reorder_item`) which write to db.json → project state.json.
+
+**`allSearchableRoadmapItems` (App.tsx):**
+Currently derives searchable items from ROADMAP.md parsing. Must derive from the Zustand store's project data.
+
+**Implementation:**
+1. Identify all callers of `openRoadmapView()` — trace the render path
+2. Replace ROADMAP.md reads with store selectors (projects already loaded via `get_all_projects`)
+3. Replace `persistRoadmapChanges()` writes with Tauri command calls
+4. Replace `allSearchableRoadmapItems` derivation with a computed selector from the store
+5. Remove the ROADMAP.md read/write code paths
+
+**Note:** Roadmap data currently lives in App.tsx local React state, NOT in the Zustand store. The migration must either: (a) move roadmap data into Zustand alongside project data, or (b) keep it in local state but source it from the Tauri backend instead of ROADMAP.md. Option (a) is preferred — it enables event-driven updates via `state-json-merged`.
+
+### 5.17 `loadProjects()` → event-driven updates (NEW — CRITICAL)
+
+> **Source:** Architecture Strategist + Pattern Recognition agents.
+
+`loadProjects()` is called from 18+ locations across the codebase. It's a full-reload anti-pattern that re-scans the filesystem every time. Post-migration, project data comes from db.json via Tauri commands.
+
+**Implementation:**
+1. `loadProjects()` switches to calling `get_all_projects` Tauri command (returns typed data from in-memory db.json)
+2. Generalize `updateProjectFromEvent()` pattern (already exists in store) for all project mutations
+3. Subscribe to `state-json-merged` and `clawchestra-ready` Tauri events using the `setupTauriEventListeners` pattern in `tauri-events.ts`
+4. Reduce `loadProjects()` call sites — most should be replaced with event listeners that call `updateProjectFromEvent()` for targeted updates instead of full reloads
+5. Keep `loadProjects()` as a "nuclear refresh" called only on initial load and manual refresh button click
+
+**`performSyncOnLaunch` / `performSyncOnClose` wiring:**
+These functions exist in sync.rs but have NO frontend wiring. Wire them:
+- `performSyncOnLaunch`: call after `clawchestra-ready` event if sync mode is not Disabled
+- `performSyncOnClose`: call in the Tauri `on_window_event` handler for `CloseRequested`
+
+**Race condition fixes (from race condition review):**
+
+**RACE 1 — `clawchestra-ready` fires before frontend subscribes (MEDIUM):**
+The Rust side uses a 100ms `tokio::time::sleep` before emitting `clawchestra-ready`. The frontend subscribes via `setupTauriEventListeners` inside an async `useEffect`. On cold launches or slow machines, 100ms may not be enough. **Fix:** Replace the timer with a request-response pattern. Frontend calls `signal_frontend_ready` Tauri command once listeners are attached. Backend emits `clawchestra-ready` in response. Alternatively (simpler): keep `loadProjects()` on mount unconditionally and treat `clawchestra-ready` as advisory (sync status only, not data trigger).
+
+**RACE 4 — `loadProjects()` called instead of `updateProjectFromEvent` (MEDIUM):**
+The `state-json-merged` event handler calls `void loadProjects()` (full rescan) instead of the purpose-built `updateProjectFromEvent()`. Two agent writes 200ms apart trigger two overlapping `loadProjects()` calls — the first can overwrite the second's results, causing UI flicker. **Fix:** Use `updateProjectFromEvent()` (already exists in store.ts line 586) for `state-json-merged` events. Reserve `loadProjects()` for initial mount and manual refresh only.
+
+**RACE 6 — Kanban drag on unmigrated project (MEDIUM):**
+If Phase 5 code deploys and migration hasn't completed for all projects, a drag on an unmigrated project hits the new code path expecting state.json which doesn't exist yet. The drag appears to succeed (optimistic update) but persistence fails. **Fix:** Check migration state before the drag write. If project is not `Complete` in migration state, either refuse with a toast ("Migrating project data, please wait") or fall back to the old write path. (See also: the `stateJsonMigrated` flag from Data Integrity Finding 1 — same mechanism.)
+
+**DATA INTEGRITY — Push history before write (MEDIUM, from data integrity review):**
+The merge logic pushes a history entry AFTER the merge completes (merge.rs line 396). If a UI drag writes state.json and an agent's stale write arrives in the same 100ms debounce window, the stale detection has no UI history entry to compare against. **Fix:** UI-initiated writes via Tauri commands must push a history entry with `source: Ui` BEFORE writing state.json, so stale detection has a reference point.
 
 ### Verification gate
 
@@ -926,12 +1264,34 @@ Update all test files:
 - `bun test` — all tests pass with updated fixtures
 - `pnpm build` success
 - `npx tauri build --no-bundle` success (full release build)
+- Manual test: Add a new project → verify CLAWCHESTRA.md created (not PROJECT.md), `.clawchestra/` created, state.json projected, injection triggered
+- Manual test: Add an existing project → verify compatibility check scans CLAWCHESTRA.md, migration prompted if needed
 
 ---
 
 ## Phase 6: OpenClaw Data Endpoint & Sync
 
 **Goal:** Create the OpenClaw plugin extension, implement client identity, and build sync triggers. Combines v1 Phases 7+8 — they are small and tightly coupled.
+
+**Now includes:** Settings Dialog sync UI (deferred from Phase 5.15) and extension auto-install (from cloud-agent-sync spec).
+
+### Research Insights (Phase 6)
+
+**Security Sentinel findings (2 CRITICAL, 3 HIGH):**
+
+1. **CRITICAL: `fs.mkdir` creates arbitrary directories.** The extension's `fs.mkdir(path.dirname(resolved), { recursive: true })` on PUT allows attackers to create directories anywhere under `DATA_ROOT`. Combined with a crafted path, this could write files outside the expected location. **Fix:** Restrict PUT to known filenames only (allowlist: `db.json`, `settings.json`). Reject any path that resolves to a non-allowlisted filename.
+
+2. **CRITICAL: Full-document PUT allows cross-project tampering.** Any client with a valid bearer token can modify ANY project's data via PUT. A compromised agent token could tamper with all projects. **Fix:** For v1, this is acceptable (single-user product, bearer token is the trust boundary). Document as a known limitation. For multi-user: add project-scoped tokens.
+
+3. **HIGH: Symlink bypass.** `path.resolve()` follows symlinks. If an attacker creates a symlink inside `DATA_ROOT` pointing outside, the path traversal check passes but the write targets an arbitrary location. **Fix:** After `path.resolve()`, call `fs.realpath()` and verify the result is still under `DATA_ROOT`.
+
+4. **HIGH: Bearer token in git history.** The CLAUDE.md injection includes the bearer token. Once committed, it lives in git history forever. **Fix:** For private repos, this is acceptable (standard practice, same as `.env` files). For public repos, the plan already uses a placeholder. Add to injection logic: check if repo is public before injecting token.
+
+5. **HIGH: Fail-open auth.** If `settings.json` is missing or unreadable, the catch block returns `'{}'` — no `bearerToken` → auth check is skipped → endpoint is open. **Fix:** Fail-closed: if settings.json is unreadable, return 500, not open access.
+
+**Agent-Native findings for Phase 6:**
+- `performSyncOnLaunch` / `performSyncOnClose` wiring belongs here (moved from Phase 5.17)
+- Settings Dialog sync UI (deferred from Phase 5.15) should be implemented alongside sync wiring
 
 ### 6.1 Extension file content
 
@@ -953,11 +1313,13 @@ export default function (api: any) {
       const settings = JSON.parse(
         await fs.readFile(path.join(DATA_ROOT, 'settings.json'), 'utf-8').catch(() => '{}')
       );
-      if (settings.bearerToken) {
-        const auth = req.headers.authorization;
-        if (!auth || auth !== `Bearer ${settings.bearerToken}`) {
-          return res.status(401).json({ error: 'Unauthorized' });
-        }
+      // Fail-closed auth (security finding: fail-open if settings.json missing)
+      if (!settings.bearerToken) {
+        return res.status(500).json({ error: 'Extension not configured — missing bearer token' });
+      }
+      const auth = req.headers.authorization;
+      if (!auth || auth !== `Bearer ${settings.bearerToken}`) {
+        return res.status(401).json({ error: 'Unauthorized' });
       }
 
       // Path validation — use path.sep suffix to prevent prefix confusion
@@ -979,9 +1341,21 @@ export default function (api: any) {
       }
 
       if (req.method === 'PUT') {
+        // Security: restrict PUT to allowlisted filenames only (prevents arbitrary file creation)
+        const ALLOWED_FILES = new Set(['db.json', 'settings.json']);
+        const basename = path.basename(resolved);
+        if (!ALLOWED_FILES.has(basename)) {
+          return res.status(403).json({ error: `Cannot write to '${basename}' — only ${[...ALLOWED_FILES].join(', ')} allowed` });
+        }
         const body = JSON.stringify(req.body);
         if (body.length > MAX_BODY_SIZE) {
           return res.status(413).json({ error: 'Payload too large' });
+        }
+        // Security: verify resolved path after realpath (symlink bypass prevention)
+        const realResolved = await fs.realpath(path.dirname(resolved)).catch(() => null);
+        const realDataRoot = await fs.realpath(DATA_ROOT).catch(() => DATA_ROOT);
+        if (!realResolved || !realResolved.startsWith(realDataRoot)) {
+          return res.status(403).json({ error: 'Path traversal blocked' });
         }
         await fs.mkdir(path.dirname(resolved), { recursive: true });
         await fs.writeFile(resolved, JSON.stringify(req.body, null, 2));
@@ -1001,6 +1375,7 @@ Changes from v1: bearer token authentication, async filesystem operations, reque
 New Tauri command: `install_openclaw_extension(openclaw_path: String) -> Result<(), String>`
 - Writes the extension file to `{openclaw_path}/extensions/clawchestra-data-endpoint.ts`
 - **Extension versioning:** embed a `const EXTENSION_VERSION = '1.0.0';` at the top of the extension file. On every app launch, read the installed extension's version. If stale (older than current Clawchestra's expected version), surface an update prompt: "Your OpenClaw extension is outdated. Update now?" Auto-update for local installs; manual instructions for remote.
+- **Auto-detection on launch:** on app launch, auto-detect if extension is missing or version-stale. Auto-install for local OpenClaw. Show a one-time "OpenClaw extension installed/updated" toast. Settings page shows current extension version + "Update" button.
 - **Module system:** the extension uses `require()` (CJS). Verify that OpenClaw's extension system uses CJS before shipping. If OpenClaw uses ESM, switch to `import()` syntax. Document this dependency in the extension file header.
 - For local OpenClaw: direct filesystem write
 - For remote OpenClaw: manual installation documented in 3 steps (v2 removes the "AI self-setup" flow — too fragile for a product)
@@ -1057,10 +1432,24 @@ Implement in `src/lib/sync.ts`:
 7. **Clock skew detection:** compare `Date.now()` between local and remote. If difference exceeds 5 seconds, surface a non-blocking warning: "Clock difference detected between devices. Sync results may be unexpected."
 
 **On close:**
-1. **Drain pending watcher events and complete any in-progress merges** before initiating the final sync flush — prevents race where a mid-merge state.json change is lost because sync reads the DB before the merge completes
-2. Flush current DB state to remote (no debounce). Use atomic write for remote db.json (write to `.tmp`, rename) to prevent partial-transfer corruption.
-3. 3-second timeout — do NOT block app shutdown on sync
-4. If sync fails: log warning, set a `_syncFailedOnClose: true` flag in local settings so that on next launch, sync is attempted with higher priority (before showing UI). Close anyway — data safe in local DB, will sync on next launch.
+
+**RACE 2 — Watcher shutdown required (HIGH, from race condition review):**
+The watcher thread (`watcher.rs` line 128) runs in a `loop {}` with no shutdown signal. It can spawn `handle_state_json_change` tasks that contend for the mutex during shutdown, causing the 3s timeout to be consumed by merge tasks instead of sync. **The plan asks for drain, the code does not implement it.**
+
+**Fix — add watcher shutdown signal:**
+1. Add `Arc<AtomicBool>` shutdown flag to the watcher. Check it at the top of each event loop iteration.
+2. Add an in-flight task counter (`Arc<AtomicUsize>` incremented on task spawn, decremented on completion, with `Notify` when it hits zero).
+3. Before the on-close handler begins:
+   a. Set the watcher shutdown flag (`shutdown.store(true, Ordering::SeqCst)`)
+   b. Wait for in-flight counter to reach zero (with 1s sub-timeout)
+   c. Only then proceed to flush and sync
+
+**On-close sequence (with watcher drain):**
+1. **Stop watcher** — set shutdown flag, wait for in-flight tasks to complete (1s sub-timeout)
+2. **Flush** — `flush_if_dirty(&state)` — acquires mutex, serializes, writes to disk
+3. **Sync** — write to OpenClaw location (local filesystem or HTTP)
+4. 3-second total timeout — do NOT block app shutdown. For local sync, flush completes in <10ms. For remote sync over LAN, 200-500ms. 3s provides adequate headroom.
+5. If sync fails: log warning, close anyway — data safe in local DB, will sync on next launch automatically.
 
 Deferred to v2 of the product (not this plan):
 - Continuous sync (debounced 2-second trigger on every state change)
@@ -1068,6 +1457,18 @@ Deferred to v2 of the product (not this plan):
 - Offline queue with reconnect retry
 
 **Known limitation:** without continuous sync, db.json on OpenClaw can be stale for the duration of a session. If a user asks OpenClaw "what's my roadmap status?" mid-session, OpenClaw reads stale data. The OpenClaw system prompt (6.5) should include: "Note: Data reflects the last time Clawchestra synced. For real-time status, check the Clawchestra app directly."
+
+**Simplification (from simplicity review):** Remove `_syncFailedOnClose` flag. If on-close sync fails, data is safe in local db.json and will sync on next launch automatically. The flag adds complexity for a recovery path that already works without it.
+
+### 6.7 Settings Dialog sync UI (moved from Phase 5.15)
+
+`SettingsDialog` needs sync configuration (belongs alongside sync implementation, not in Phase 5):
+- Add sync mode selector (Local / Remote / Disabled)
+- Add remote URL field (when sync mode is Remote)
+- Bearer token is now managed via OS keychain (show "Token: configured" / "Token: not set")
+- Show client UUID (read-only, copyable) in Advanced section
+- "Rotate bearer token" button in Advanced section (generate new UUID v4, store in keychain, re-inject)
+- Extension version display + "Update" button (from cloud-agent-sync spec)
 
 ### Verification gate (includes integration testing)
 
@@ -1105,12 +1506,21 @@ Grep for any remaining references to ROADMAP.md/CHANGELOG.md in source code (not
 
 **Goal:** Consolidate fragmented logging into a single structured log system. Provide user-facing debug export for support.
 
+### Research Insights (Phase 7)
+
+**Simplification recommendations applied:**
+- Single log file (`~/.clawchestra/app.log`) instead of per-project + global. Per-project logs add complexity without proportional debugging value — the global log already includes project IDs in each entry.
+- Validation rejection history viewer → simplified to badge-only with click-to-expand showing the last rejection. No scrollable history list — that's over-engineering for a rare event.
+
+**Data migration edge case:**
+- Migration history entries use `changed_fields: vec!["*"]` (wildcard). The validation UI must handle this — display as "Full import — all fields" rather than trying to parse it as a dot-path.
+
 ### 7.1 Structured logging (Rust)
 
 Attach the `tracing` subscriber (crate introduced in Phase 1.6, used throughout Phases 2–6):
 - JSON-structured log entries: `{ timestamp, level, event_type, details }`
 - Categories already defined in Phase 1.6: `migration`, `validation`, `sync`, `watcher`, `injection`
-- Log to `.clawchestra/activity.log` (per-project for project events) and `~/.clawchestra/app.log` (global for app events)
+- **Single log file:** `~/.clawchestra/app.log` (all events, includes `project_id` field for filtering)
 - Log rotation: cap at 1MB, rotate to `.log.1`
 
 ### 7.2 User-facing debug export
@@ -1127,8 +1537,9 @@ Settings > Advanced > "Copy debug info":
 
 When partial-apply rejects fields:
 - Small warning badge on the project card: "1 agent write was partially rejected"
-- Click to expand: shows which fields were rejected and why
-- **Validation rejection history:** keep the last 20 rejection events per project in a viewable list (accessible from the project detail modal). Do NOT auto-dismiss the current status after the next successful agent write — instead, mark it as resolved but keep it in the history. This way, if an agent misbehaves at 2 AM and then writes valid data before the user opens the app, the user can still see what happened.
+- Click to expand: shows which fields were rejected and why (last rejection only — no scrollable history list)
+- Badge persists until user dismisses it (do NOT auto-dismiss on next successful write)
+- **Agent feedback file:** Write validation rejections to `.clawchestra/last-rejection.json` so agents can detect their writes were partially rejected. Format: `{ "timestamp": ..., "rejectedFields": [...], "reasons": [...] }`. This gives agents a detection + retry path without relying on UI notifications. (Note: the existing reference in `injection.rs` line 41 already points to this file — keep it aligned.)
 
 ### Verification gate
 
@@ -1142,22 +1553,26 @@ When partial-apply rejects fields:
 ## Dependencies Between Phases
 
 ```
-Phase 1 (Audit, Types, Validation) ──┐
-                                      │
-                                      ├── Phase 2 (state.json Infrastructure)
-                                      │        │
-                                      │        ├── Phase 3 (Migration + Rename)
-                                      │        │
-                                      │        └── Phase 4 (Branch Injection)
-                                      │
-                                      └── Phase 5 (Cleanup) ── requires Phase 3 + 4
-                                               │
-                                               └── Phase 6 (OpenClaw + Sync)
-                                                        │
-                                                        └── Phase 7 (Logging & Error Reporting)
+Phases 1–4 ✅ COMPLETE (+ 17-fix hardening sprint)
+     │
+     ├── P5-PRE (Prerequisites: git commits in migration, verification blocking, injection fix)
+     │        │
+     │        └── Phase 5 (Frontend Alignment + 5.16/5.17 critical additions)
+     │                 │
+     │                 └── Phase 6 (OpenClaw + Sync + Settings UI from 5.15)
+     │                          │
+     │                          └── Phase 7 (Logging & Error Reporting)
 ```
 
-Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for both. Phase 6 requires Phase 5. Phase 7 (logging finalization) depends on Phase 6, but the `tracing` crate is introduced in Phase 1.6 and used throughout all subsequent phases — Phase 7 only adds the subscriber, log rotation, and debug export UI.
+**Phase 5 internal dependencies:**
+- Groups 1-2 (constants, file references) have no internal dependencies — can start immediately after P5-PRE
+- Group 3 (components: 5.2, 5.7, 5.16, 5.17) depends on Groups 1-2
+- Group 4 (agent guidance: 5.4, 5.10) depends on Group 3 (needs to know final data model)
+- Group 5 (cleanup: 5.12, 5.14) depends on all previous groups
+
+**IMPORTANT constraint (from agent-native review):** ROADMAP.md deletion (Phase 3.4 step 4) must NOT proceed on any branch until injection (Phase 4) has completed for that branch. The plan previously allowed Phases 3 and 4 to run in parallel — this is still true for most steps, but the deletion substep is now gated on injection completion for that specific branch.
+
+Phase 7 (logging finalization) depends on Phase 6, but the `tracing` crate is introduced in Phase 1.6 and used throughout all subsequent phases — Phase 7 only adds the subscriber, log rotation, and debug export UI.
 
 ---
 
@@ -1165,9 +1580,9 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|-----------|
-| Migration data loss | Low | Critical | Per-project transactional migration; pre-migration backup for all projects; verify before delete |
+| Migration data loss | Low | Critical | Per-project transactional migration; pre-migration backup for all projects; verify before delete; P5-PRE-2 makes verification blocking |
 | Agent writes invalid JSON | Medium | Low | Graceful parse failure; partial-apply; revert to last-known-good from state history buffer |
-| Agent ignores new guidance (old branch) | Medium | Low | Creates phantom ROADMAP.md; Clawchestra ignores it; auto-commit updated to not commit it |
+| Agent ignores new guidance (old branch) | Medium | Low | Creates phantom ROADMAP.md; Clawchestra ignores it; auto-commit updated to not commit it. **Risk:** silent failure window between ROADMAP.md deletion and injection — agent writes to ROADMAP.md with no error signal. Mitigate: constrain deletion to post-injection per branch. |
 | OpenClaw extension breaks after update | Low | Medium | Extension is simple; version-pinned; test on launch; bearer token auth |
 | File watcher misses changes | Very Low | Medium | FSEvents/inotify are kernel-level; manual refresh button as cheap fallback |
 | Sync conflict loses data | Low | Medium | Per-field timestamps with millisecond precision; fail-open to "show both"; no silent overwrites |
@@ -1177,6 +1592,18 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 | Stale agent write reverts recent changes | Medium | Medium | Stale write detection via state history buffer comparison (2.5); "read before write" guidance in CLAUDE.md |
 | Windows watcher misses events | Low | Low | Manual refresh button; on-launch integrity check; `ReadDirectoryChangesW` limitations documented |
 | Schema migration ships with bug | Low | High | Pre-migration backup; force re-migrate command; migration manifest for audit trail |
+| **NEW: Extension fail-open auth** | Medium | High | If settings.json missing, extension was open. **Fixed:** fail-closed auth in 6.1 (return 500 if no bearer token configured) |
+| **NEW: Symlink bypass in extension** | Low | High | `path.resolve()` follows symlinks. **Fixed:** add `fs.realpath()` check after resolve in 6.1 |
+| **NEW: Agent cannot trigger injection** | High | Medium | Agents on new/un-injected branches have no state.json guidance. **Fixed:** scripts/inject-current-branch.sh + AGENTS.md template (5.4) |
+| **NEW: Roadmap data pipeline not migrated** | — | Critical | `openRoadmapView()`, `persistRoadmapChanges()`, `allSearchableRoadmapItems` still read/write ROADMAP.md. **Fixed:** added 5.16 |
+| **NEW: Migration leaves dirty git state** | High | Medium | migration.rs has no git commits. **Fixed:** P5-PRE-1 adds git commit operations |
+| **NEW: Watcher contends with on-close handler** | High | Medium | No watcher shutdown signal — watcher tasks consume the 3s timeout budget. **Fixed:** add `AtomicBool` shutdown + in-flight counter in 6.6 |
+| **NEW: `clawchestra-ready` fires before listeners** | Medium | Medium | 100ms timer is a hope. **Fixed:** replace with request-response pattern or keep `loadProjects()` unconditional (5.17) |
+| **NEW: Overlapping `loadProjects()` from events** | Medium | Low | `state-json-merged` triggers full rescan instead of surgical update. **Fixed:** use `updateProjectFromEvent()` (5.17) |
+| **NEW: Dual-write path during transition** | High | Critical | ROADMAP.md and state.json writes active simultaneously during Phase 5. **Fixed:** per-project `stateJsonMigrated` flag gates all writes (Enhancement Summary) |
+| **NEW: useProjectModal.ts not in Phase 5** | — | High | Primary ROADMAP.md consumer not listed. **Fixed:** added 5.18 |
+| **NEW: Non-atomic project creation** | Medium | High | IPC boundary between file creation and db.json registration. **Fixed:** single `create_project_with_state` Tauri command (5.3) |
+| **NEW: Drag loss in debounce window** | Low | Medium | Stale agent write can revert UI drag if history entry not yet pushed. **Fixed:** push history with `source: Ui` before write (5.17) |
 
 ---
 
@@ -1187,16 +1614,22 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 | **New modules** | `src/lib/state-json.ts`, `src/lib/sync.ts`, `src/lib/db-json.ts` | Create |
 | **New Rust modules** | `src-tauri/src/state.rs`, `src-tauri/src/migration.rs`, `src-tauri/src/watcher.rs` | Create |
 | **Rust backend** | `src-tauri/src/lib.rs` | Moderate (delegate to new modules, settings) |
+| **Rust migration fix** | `src-tauri/src/migration.rs` | P5-PRE: add git commits, blocking verification |
+| **Rust injection fix** | `src-tauri/src/injection.rs` | P5-PRE: fix metadata contradiction, remove last-rejection ref |
 | **Schema/types** | `src/lib/schema.ts`, `src/lib/settings.ts`, `src/lib/tauri.ts` | Moderate |
-| **State management** | `src/lib/store.ts`, `src/lib/projects.ts` | Significant |
-| **Removed** | `src/lib/watcher.ts` | Delete (replaced by Rust watcher) |
+| **State management** | `src/lib/store.ts`, `src/lib/projects.ts` | Significant (5.17: event-driven updates) |
+| **App core** | `src/App.tsx` | **Significant** (5.16: roadmap data pipeline migration — openRoadmapView, persistRoadmapChanges, allSearchableRoadmapItems) |
+| **Removed** | `src/lib/watcher.ts` | Already deleted ✅ |
 | **Removed/reduced** | `src/lib/roadmap.ts`, `src/lib/changelog.ts`, `src/lib/auto-commit.ts` | Partial removal |
-| **Components** | `src/App.tsx`, `src/components/Header.tsx` | Moderate |
+| **Hooks** | `src/hooks/useProjectModal.ts` | **Significant** (5.18: full ROADMAP.md read/write rewrite) |
+| **New module** | `src/lib/doc-resolution.ts` | Create (extracted from roadmap.ts: resolveDocFiles, enrichItemsWithDocs) |
+| **Components** | `src/components/Header.tsx`, `src/components/AddProjectDialog.tsx` | Moderate |
 | **Git sync** | `src/lib/git-sync-utils.ts` | Moderate (constants) |
-| **Lifecycle** | `src/lib/deliverable-lifecycle.ts` | Moderate (prompt templates) |
-| **Agent guidance** | `AGENTS.md`, `CLAUDE.md`, `scripts/sync-agent-compliance.sh` | Significant |
+| **Lifecycle** | `src/lib/deliverable-lifecycle.ts` | Already done ✅ |
+| **Agent guidance** | `AGENTS.md`, `CLAUDE.md`, `scripts/sync-agent-compliance.sh` | Significant (5.10: full rewrite of Adding Projects + ops table) |
+| **New script** | `scripts/inject-current-branch.sh` | Create (5.4: agent-accessible injection) |
 | **Tests** | `*.test.ts` | Update fixtures + add new tests |
-| **OpenClaw** | New: `~/.openclaw/extensions/clawchestra-data-endpoint.ts` | Create |
+| **OpenClaw** | New: `~/.openclaw/extensions/clawchestra-data-endpoint.ts` | Create (with security hardening) |
 | **Dependencies** | `package.json` | Add `zod`, `zod-to-json-schema` |
 
 ---
@@ -1221,3 +1654,33 @@ Phases 3 and 4 can run in parallel after Phase 2 completes. Phase 5 waits for bo
 - Migration manifest generated for every migrated project
 - HLC timestamps prevent clock-skew-induced data loss during sync
 - db.json schema defined and versioned alongside state.json
+- **NEW:** `openRoadmapView()`, `persistRoadmapChanges()`, `allSearchableRoadmapItems` read/write via DB, not ROADMAP.md
+- **NEW:** `loadProjects()` calls Tauri `get_all_projects`, not filesystem scan
+- **NEW:** Agent on a new branch can self-inject Clawchestra guidance (via script or AGENTS.md template)
+- **NEW:** Agent can register an existing project via documented AGENTS.md steps
+- **NEW:** Migration commits its filesystem changes (no dirty git state post-migration)
+- **NEW:** OpenClaw extension uses fail-closed auth (500 if no bearer token, not open access)
+- **NEW:** Injection content matches plan schema (no metadata field contradiction)
+- **NEW:** `useProjectModal.ts` reads/writes via Tauri commands, not `readRoadmap()`/`writeRoadmap()`
+- **NEW:** No dual-write path — all write operations gated by `stateJsonMigrated` flag during transition
+- **NEW:** Project creation is atomic — single Tauri command or compensating rollback for db.json registration
+- **NEW:** `resolveDocFiles()` and `enrichItemsWithDocs()` preserved in `src/lib/doc-resolution.ts` after `roadmap.ts` deletion
+
+---
+
+## Performance Profile (from Performance Oracle review)
+
+Architecture scales linearly with project count. Single `Arc<tokio::sync::Mutex<AppState>>` is the contention point but merge times are sub-5ms per project.
+
+| Metric | 10 Projects | 50 Projects | 100 Projects |
+|--------|-------------|-------------|--------------|
+| Startup load (`get_all_projects`) | <5ms | <20ms | <50ms |
+| History buffer memory | ~1 MB | ~15 MB | ~30 MB |
+| db.json file size | ~20 KB | ~200 KB | ~400 KB |
+| db.json flush time | <1ms | <5ms | <10ms |
+| Merge cycle per project | <5ms | <5ms | <5ms |
+| Mutex contention (serial merge) | <10ms | <50ms | <100ms |
+
+**No performance changes needed.** All debounce intervals (100ms watcher, 200ms state.json write, 500ms db.json persistence) are appropriate. The 200ms state.json write does NOT affect UI responsiveness — UI updates are immediate via the in-memory DB; the 200ms only affects on-disk state visible to agents. The 500ms db.json data-loss window on process kill is acceptable for a desktop app — crash-safe flush on window close handles the common case.
+
+**HLC counter note:** `next_ts!()` macro pre-allocates `10 + N*15` timestamps per merge (where N = roadmap item count). Counter advances by hundreds per merge — expected behavior, no functional impact, but can look surprising during debugging.

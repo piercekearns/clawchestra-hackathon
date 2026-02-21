@@ -13,10 +13,31 @@ Moving project state from git-tracked files into a synced database backed by Ope
 - Programmatic sync (filesystem local, HTTP remote)
 
 ## Spec
-See `docs/specs/architecture-direction-spec.md` for full analysis (29 decisions, 5 resolved questions, trigger events table).
+See `docs/specs/architecture-direction-spec.md` for full analysis (46 decisions, 5 resolved questions, trigger events table, extended vision).
+
+## What's Built (Phases 1–4 + hardening)
+
+- Module extraction: state.rs, migration.rs, watcher.rs, validation.rs, sync.rs, locking.rs, db_persistence.rs
+- HLC field-level merge with content-based tie-breaking
+- CAS guard on sync operations
+- Atomic db.json persistence (500ms debounce + crash-safe flush)
+- Migration state machine (ROADMAP.md → db.json) with backup + manifest
+- Branch injection (inject_agent_guidance command — fully implemented)
+- OpenClaw extension generation + bearer token via OS keychain
+- File watcher unified in Rust (notify crate)
+- 17-fix hardening sprint: string limits, UUID tie-breaking, post-merge validation, HLC wall-clock fix, atomic write suffixes, path validation, startup lock sweep, dirty re-check loop
+
+## Remaining
+
+- Phase 5: Frontend alignment (see plan Phase 5) — next build
+- Phase 6: Extension installation UI, sync wiring, cloud agent injection — see `cloud-agent-sync` roadmap item
+- Phase 7: Structured logging, debug export, validation badges
 
 ## Status
-Spec finalized — all 5 open questions resolved, 29 decisions confirmed. Ready for implementation planning.
+Phases 1–4 complete + hardening sprint. Phase 5 frontend alignment is next.
+
+## nextAction
+Phase 5 frontend alignment — run deepen-plan against plan-v2.md then build
 
 ## Relationship to First-Friend-Readiness
 Phase 1 (Foundation) blocks first-friend-readiness onboarding (project discovery needs CLAWCHESTRA.md, branch injection happens during "add project"). Phase 2 (OpenClaw Integration) blocks first-friend-readiness if the friend uses a VPS. Cross-platform work in first-friend-readiness can start in parallel with both phases.
