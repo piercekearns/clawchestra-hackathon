@@ -157,6 +157,12 @@ This plan operationalizes the First Friend Readiness spec into a phased implemen
 
 ## Phase 3 — First-Run Onboarding Wizard
 
+> **IMPORTANT — Architecture Direction dependency:** The architecture-direction spec
+> (`docs/specs/architecture-direction-spec.md`) defines extensive onboarding requirements
+> that were descoped from the architecture-direction plan (v2) into this FFR deliverable.
+> This phase MUST be deepened to cover all of the following before implementation.
+> Source sections: spec Sections 6, 12, 15, Q1-Q3, and decisions #28, #30-#35.
+
 ### Goals
 
 1. Replace silent default setup with guided onboarding.
@@ -171,6 +177,43 @@ This plan operationalizes the First Friend Readiness spec into a phased implemen
    - Step 3: Tool detection + lifecycle action guidance
 3. Persist settings from onboarding and hand off to dashboard.
 4. Add “Re-run setup” action in settings.
+
+### Architecture Direction requirements to absorb when deepening this phase
+
+The following are fully specified in the architecture-direction spec and must be incorporated
+into this phase at deepening time. They are listed here to prevent scope loss.
+
+**OpenClaw setup wizard (spec Section 6, Q2, Q3):**
+- “Where is your OpenClaw?” branch: “On this machine” / “On a remote server”
+- 3-tier remote setup: (1) OpenClaw self-setup via AI — user sees “Setting up data sync... done”, (2) one-command fallback shown in wizard — not in a README, (3) local-mode via port forwarding explained in plain language
+- Local OpenClaw: Clawchestra writes `~/.openclaw/extensions/data-endpoint.ts` directly during onboarding — user does nothing
+- Remote OpenClaw: plain-language connection details (URL, token) with copy-paste commands
+- All setup instructions live in the wizard, never in a README (spec decision #33)
+
+**Access rights transparency (spec Section 6):**
+- Explicit “WILL do / WILL NOT do” screen during onboarding
+- WILL: chat with AI agent, read/write project orchestration data in `~/.openclaw/clawchestra/`
+- WILL NOT: access files outside that directory, send data to external services, modify OpenClaw core config, act without confirmation during setup
+
+**Branch injection during project add (spec Section 12, decisions #28, #34):**
+- When user adds a GitHub-connected project (during onboarding OR later), trigger branch injection
+- Front-load injection behind other wizard steps (decision #28): start in background, present next questions while injection runs, show subtle progress indicator
+- Injection uses git CLI only — does not require OpenClaw to be connected yet
+- Wizard order: Connect OpenClaw → Discover Projects → Inject Guidance (but injection works even without OpenClaw)
+- Progress must be visible, not silent (decision #34): “Setting up agent guidance... 8/15 branches”
+
+**Non-developer skill bar (spec decision #30):**
+- Bar: “someone who has OpenClaw running but has zero developer skills beyond that can get through onboarding”
+- No step should require understanding SSH, port forwarding, or filesystems
+- Every user action is a single copy-paste command at most
+- Wizard explains WHY each step is needed, not just WHAT to do
+
+**OpenClaw system prompt injection (spec Section 6):**
+- After connecting, inject `~/.openclaw/clawchestra/system-context.md` teaching OpenClaw about Clawchestra, the DB location, schema rules, and the connected client
+- This happens during onboarding so OpenClaw is immediately useful for project chat
+
+**Design principle (spec Section 15):**
+- By the time onboarding finishes, user has a working AI agent connection — so even if something needs debugging later, they can ask their AI for help
 
 ### Implementation Map
 
@@ -191,10 +234,17 @@ This plan operationalizes the First Friend Readiness spec into a phased implemen
 2. User can re-run setup post-install.
 3. Failed setup states provide clear recovery path.
 4. Existing installs bypass onboarding automatically.
+5. Non-developer user can complete onboarding without terminal knowledge.
+6. Access rights are explicitly communicated before OpenClaw connection is established.
+7. Branch injection runs and reports progress during project add flow.
 
 ---
 
 ## Phase 4 — Project Scaffolding
+
+> **Architecture Direction dependency:** Post-migration, projects use `CLAWCHESTRA.md`
+> (not `PROJECT.md`) and `.clawchestra/state.json` (not `ROADMAP.md`). Scaffolding
+> must reflect the new file structure. See architecture-direction plan v2, Phase 3.
 
 ### Goals
 
@@ -203,9 +253,10 @@ This plan operationalizes the First Friend Readiness spec into a phased implemen
 
 ### Work
 
-1. Detect git repos in scan paths without `PROJECT.md`.
-2. Offer scaffold flow for `PROJECT.md` (+ optional `ROADMAP.md` shell).
-3. Ensure generated files follow roadmap/project schema and priority rules.
+1. Detect git repos in scan paths without `CLAWCHESTRA.md` (or legacy `PROJECT.md`).
+2. Offer scaffold flow for `CLAWCHESTRA.md`. `.clawchestra/state.json` is auto-created by the state.json infrastructure (architecture-direction Phase 2) — no manual scaffolding needed.
+3. Ensure generated files follow schema and priority rules.
+4. Optionally scaffold `.clawchestra/schema.json` (JSON Schema for agent self-validation, from architecture-direction Phase 1.5).
 
 ### Implementation Map
 
@@ -222,6 +273,7 @@ This plan operationalizes the First Friend Readiness spec into a phased implemen
 1. Repos can be onboarded from UI without raw markdown hand-editing.
 2. Generated files are schema-compliant and recognized immediately.
 3. Priority uniqueness rules are preserved when scaffolding roadmap items.
+4. Scaffolding produces `CLAWCHESTRA.md` (not `PROJECT.md`).
 
 ---
 
