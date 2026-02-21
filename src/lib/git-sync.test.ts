@@ -194,20 +194,20 @@ describe('default commit message', () => {
     expect(
       buildCommitMessage([{
         name: 'ClawOS',
-        files: ['PROJECT.md'],
+        files: ['CLAWCHESTRA.md'],
         categories: new Set<DirtyFileCategory>(['metadata']),
       }]),
-    ).toBe('chore: sync project metadata (ClawOS) — PROJECT.md');
+    ).toBe('chore: sync project metadata (ClawOS) — CLAWCHESTRA.md');
   });
 
   it('generates docs-only message', () => {
     expect(
       buildCommitMessage([{
         name: 'ClawOS',
-        files: ['ROADMAP.md'],
+        files: ['docs/specs/feature-spec.md'],
         categories: new Set<DirtyFileCategory>(['documents']),
       }]),
-    ).toBe('docs: update project docs (ClawOS) — ROADMAP.md');
+    ).toBe('docs: update project docs (ClawOS) — docs/specs/feature-spec.md');
   });
 
   it('generates code-only message', () => {
@@ -224,31 +224,31 @@ describe('default commit message', () => {
     expect(
       buildCommitMessage([{
         name: 'ClawOS',
-        files: ['PROJECT.md', 'src/App.tsx'],
+        files: ['CLAWCHESTRA.md', 'src/App.tsx'],
         categories: new Set<DirtyFileCategory>(['metadata', 'code']),
       }]),
-    ).toBe('chore: sync project changes (ClawOS) — PROJECT.md, src/App.tsx');
+    ).toBe('chore: sync project changes (ClawOS) — CLAWCHESTRA.md, src/App.tsx');
   });
 
   it('generates message for multiple projects', () => {
     expect(
       buildCommitMessage([
-        { name: 'ClawOS', files: ['PROJECT.md'], categories: new Set<DirtyFileCategory>(['metadata']) },
-        { name: 'Memestr', files: ['ROADMAP.md'], categories: new Set<DirtyFileCategory>(['documents']) },
-        { name: 'Dashboard', files: ['PROJECT.md'], categories: new Set<DirtyFileCategory>(['metadata']) },
+        { name: 'ClawOS', files: ['CLAWCHESTRA.md'], categories: new Set<DirtyFileCategory>(['metadata']) },
+        { name: 'Memestr', files: ['roadmap/feature.md'], categories: new Set<DirtyFileCategory>(['documents']) },
+        { name: 'Dashboard', files: ['CLAWCHESTRA.md'], categories: new Set<DirtyFileCategory>(['metadata']) },
       ]),
-    ).toBe('chore: sync project changes (ClawOS, Memestr, Dashboard) — PROJECT.md, ROADMAP.md');
+    ).toBe('chore: sync project changes (ClawOS, Memestr, Dashboard) — CLAWCHESTRA.md, roadmap/feature.md');
   });
 
   it('truncates project names with ellipsis for more than three', () => {
     const cats = new Set<DirtyFileCategory>(['metadata']);
     const msg = buildCommitMessage([
-      { name: 'A', files: ['PROJECT.md'], categories: cats },
-      { name: 'B', files: ['PROJECT.md'], categories: cats },
+      { name: 'A', files: ['CLAWCHESTRA.md'], categories: cats },
+      { name: 'B', files: ['CLAWCHESTRA.md'], categories: cats },
       { name: 'C', files: [], categories: cats },
-      { name: 'D', files: ['PROJECT.md'], categories: cats },
+      { name: 'D', files: ['CLAWCHESTRA.md'], categories: cats },
     ]);
-    expect(msg).toBe('chore: sync project metadata (A, B, C, ...) — PROJECT.md');
+    expect(msg).toBe('chore: sync project metadata (A, B, C, ...) — CLAWCHESTRA.md');
   });
 
   it('generates message without files when none provided', () => {
@@ -275,12 +275,16 @@ describe('categorizeFile', () => {
     expect(categorizeFile('PROJECT.md')).toBe('metadata');
   });
 
-  it('classifies ROADMAP.md as documents', () => {
-    expect(categorizeFile('ROADMAP.md')).toBe('documents');
+  it('classifies CLAWCHESTRA.md as metadata', () => {
+    expect(categorizeFile('CLAWCHESTRA.md')).toBe('metadata');
   });
 
-  it('classifies CHANGELOG.md as documents', () => {
-    expect(categorizeFile('CHANGELOG.md')).toBe('documents');
+  it('classifies ROADMAP.md as code (removed from DOCUMENT_FILES post-migration)', () => {
+    expect(categorizeFile('ROADMAP.md')).toBe('code');
+  });
+
+  it('classifies CHANGELOG.md as code (removed from DOCUMENT_FILES post-migration)', () => {
+    expect(categorizeFile('CHANGELOG.md')).toBe('code');
   });
 
   it('classifies spec docs as documents', () => {
@@ -317,16 +321,15 @@ describe('categorizeFile', () => {
 describe('groupDirtyFiles', () => {
   it('groups mixed files into three categories', () => {
     const files = [
-      'PROJECT.md',
+      'CLAWCHESTRA.md',
       'docs/specs/new-spec.md',
-      'ROADMAP.md',
       'roadmap/item.md',
       'src/App.tsx',
       'package.json',
     ];
     const { metadata, documents, code } = groupDirtyFiles(files);
-    expect(metadata).toEqual(['PROJECT.md']);
-    expect(documents).toEqual(['docs/specs/new-spec.md', 'ROADMAP.md', 'roadmap/item.md']);
+    expect(metadata).toEqual(['CLAWCHESTRA.md']);
+    expect(documents).toEqual(['docs/specs/new-spec.md', 'roadmap/item.md']);
     expect(code).toEqual(['src/App.tsx', 'package.json']);
   });
 
@@ -337,11 +340,11 @@ describe('groupDirtyFiles', () => {
     expect(code).toEqual([]);
   });
 
-  it('handles documents-only list', () => {
+  it('handles code-only list (CHANGELOG.md is now code)', () => {
     const { metadata, documents, code } = groupDirtyFiles(['CHANGELOG.md']);
     expect(metadata).toEqual([]);
-    expect(documents).toEqual(['CHANGELOG.md']);
-    expect(code).toEqual([]);
+    expect(documents).toEqual([]);
+    expect(code).toEqual(['CHANGELOG.md']);
   });
 });
 
@@ -355,14 +358,14 @@ describe('getProjectDirtyCategories', () => {
       state: 'uncommitted',
       stashCount: 0,
       allDirtyFiles: {
-        metadata: [entry('PROJECT.md')],
-        documents: [entry('ROADMAP.md')],
+        metadata: [entry('CLAWCHESTRA.md')],
+        documents: [entry('roadmap/feature.md')],
         code: [entry('src/main.ts')],
       },
     };
     const cats = getProjectDirtyCategories(git);
-    expect(cats.metadata).toEqual([entry('PROJECT.md')]);
-    expect(cats.documents).toEqual([entry('ROADMAP.md')]);
+    expect(cats.metadata).toEqual([entry('CLAWCHESTRA.md')]);
+    expect(cats.documents).toEqual([entry('roadmap/feature.md')]);
     expect(cats.code).toEqual([entry('src/main.ts')]);
   });
 
@@ -397,16 +400,16 @@ describe('getProjectDirtyCategories', () => {
 
 describe('filesForSelectedCategories', () => {
   const cats = {
-    metadata: [entry('PROJECT.md')],
-    documents: [entry('ROADMAP.md'), entry('roadmap/item.md')],
+    metadata: [entry('CLAWCHESTRA.md')],
+    documents: [entry('docs/specs/feature-spec.md'), entry('roadmap/item.md')],
     code: [entry('src/App.tsx')],
   };
 
   it('returns file paths for selected categories only', () => {
     const selected = new Set<DirtyFileCategory>(['metadata', 'documents']);
     expect(filesForSelectedCategories(cats, selected)).toEqual([
-      'PROJECT.md',
-      'ROADMAP.md',
+      'CLAWCHESTRA.md',
+      'docs/specs/feature-spec.md',
       'roadmap/item.md',
     ]);
   });
@@ -418,8 +421,8 @@ describe('filesForSelectedCategories', () => {
   it('returns all file paths when all categories selected', () => {
     const selected = new Set<DirtyFileCategory>(['metadata', 'documents', 'code']);
     expect(filesForSelectedCategories(cats, selected)).toEqual([
-      'PROJECT.md',
-      'ROADMAP.md',
+      'CLAWCHESTRA.md',
+      'docs/specs/feature-spec.md',
       'roadmap/item.md',
       'src/App.tsx',
     ]);

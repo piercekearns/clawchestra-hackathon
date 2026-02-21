@@ -4,6 +4,7 @@ import type { ChatConnectionState } from '../components/chat/types';
 import type { DashboardError } from './errors';
 import type { ChatMessage, SystemBubbleKind, SystemBubbleMeta } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
+import type { StateJsonMergedPayload, ClawchestraReadyPayload } from './state-json';
 import { createProject, getProjects, removeProject, updateProject, type ProjectUpdate } from './projects';
 import { autoCommitIfLocalOnly } from './auto-commit';
 import { defaultView, type ViewContext } from './views';
@@ -89,6 +90,8 @@ interface DashboardState {
     content: string,
   ) => Promise<void>;
   deleteProjectAndReload: (filePath: string) => Promise<void>;
+  /** Update a single project from a state-json-merged Tauri event payload (Phase 2.8) */
+  updateProjectFromEvent: (payload: StateJsonMergedPayload) => void;
 }
 
 // Helper to generate unique message IDs
@@ -563,7 +566,7 @@ export const useDashboardStore = create<DashboardState>()(
           await autoCommitIfLocalOnly(
             project.dirPath,
             project.gitStatus,
-            ['PROJECT.md'],
+            ['CLAWCHESTRA.md'],
             { justWritten: true },
           );
         }
@@ -578,6 +581,41 @@ export const useDashboardStore = create<DashboardState>()(
       deleteProjectAndReload: async (filePath) => {
         await removeProject(filePath);
         await get().loadProjects();
+      },
+
+      updateProjectFromEvent: (payload) => {
+        if (!payload.projectId) return;
+        const { projects } = get();
+        const existingIdx = projects.findIndex(
+          (p) => p.id === payload.projectId || p.frontmatter?.id === payload.projectId,
+        );
+
+        if (existingIdx >= 0) {
+          // Update existing project — preserve UI-only fields (filePath, dirPath, git*, children, etc.)
+          const existing = projects[existingIdx];
+          const updated: ProjectViewModel = {
+            ...existing,
+            // Sync BoardItem-level fields
+            title: payload.project.title,
+            status: payload.project.status,
+            // Sync frontmatter
+            frontmatter: {
+              ...existing.frontmatter,
+              title: payload.project.title,
+              status: payload.project.status as ProjectViewModel['frontmatter']['status'],
+              tags: payload.project.tags,
+              parent: payload.project.parentId ?? undefined,
+            },
+            // Sync content (description maps to content)
+            content: payload.project.description,
+            // Update hasRoadmap based on incoming roadmapItems
+            hasRoadmap: existing.hasRoadmap || payload.roadmapItems.length > 0,
+          };
+          const next = [...projects];
+          next[existingIdx] = updated;
+          set({ projects: next });
+        }
+        // New project from watcher is deferred to Phase 3+ (requires full ProjectViewModel shape)
       },
     }),
     {

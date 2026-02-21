@@ -11,6 +11,14 @@ import type {
 } from './schema';
 import type { DashboardSettings } from './settings';
 
+export type SyncResult = {
+  success: boolean;
+  message: string;
+  warnings: string[];
+  fieldsFromRemote: number;
+  fieldsFromLocal: number;
+};
+
 type UpdateStatus = {
   update_available: boolean;
   build_commit: string;
@@ -183,6 +191,32 @@ type TauriCommands = {
   };
   chat_recovery_cursor_clear: {
     args: { sessionKey?: string };
+    return: void;
+  };
+  // Phase 3 migration commands
+  get_migration_status: { args: Record<string, never>; return: MigrationStatusEntry[] };
+  run_migration: {
+    args: { projectId: string; projectPath: string; projectTitle: string };
+    return: MigrationResultEntry;
+  };
+  run_all_migrations: { args: Record<string, never>; return: MigrationResultEntry[] };
+  rename_project_md: { args: { projectPath: string }; return: boolean };
+  get_project_migration_step: {
+    args: { projectId: string; projectPath: string };
+    return: string;
+  };
+  // Phase 6 sync commands
+  install_openclaw_extension: { args: { openclawPath: string }; return: void };
+  get_openclaw_extension_version: { args: { openclawPath: string }; return: string | null };
+  is_openclaw_extension_stale: { args: { openclawPath: string }; return: boolean };
+  get_extension_content: { args: Record<string, never>; return: string };
+  sync_local_launch: { args: Record<string, never>; return: SyncResult };
+  sync_merge_remote: { args: { remoteDbJson: string }; return: [string, SyncResult] };
+  sync_local_close: { args: Record<string, never>; return: SyncResult };
+  get_db_json_for_sync: { args: Record<string, never>; return: string };
+  ensure_sync_identity: { args: Record<string, never>; return: void };
+  write_openclaw_system_context: {
+    args: { clientUuid: string; hostname: string; platform: string };
     return: void;
   };
 };
@@ -463,4 +497,99 @@ export async function chatRecoveryCursorAdvance(
 
 export async function chatRecoveryCursorClear(sessionKey?: string): Promise<void> {
   return typedInvoke('chat_recovery_cursor_clear', { sessionKey });
+}
+
+// =============================================================================
+// Phase 3 Migration
+// =============================================================================
+
+export interface MigrationStatusEntry {
+  projectId: string;
+  projectPath: string;
+  step: string;
+  usesLegacyFilename: boolean;
+}
+
+export interface MigrationResultEntry {
+  projectPath: string;
+  stepBefore: string;
+  stepAfter: string;
+  itemsImported: number;
+  warnings: string[];
+  error: string | null;
+}
+
+export async function getMigrationStatus(): Promise<MigrationStatusEntry[]> {
+  return typedInvoke('get_migration_status');
+}
+
+export async function runMigration(
+  projectId: string,
+  projectPath: string,
+  projectTitle: string,
+): Promise<MigrationResultEntry> {
+  return typedInvoke('run_migration', { projectId, projectPath, projectTitle });
+}
+
+export async function runAllMigrations(): Promise<MigrationResultEntry[]> {
+  return typedInvoke('run_all_migrations');
+}
+
+export async function renameProjectMd(projectPath: string): Promise<boolean> {
+  return typedInvoke('rename_project_md', { projectPath });
+}
+
+export async function getProjectMigrationStep(
+  projectId: string,
+  projectPath: string,
+): Promise<string> {
+  return typedInvoke('get_project_migration_step', { projectId, projectPath });
+}
+
+// =============================================================================
+// Phase 6: OpenClaw Sync
+// =============================================================================
+
+export async function installOpenclawExtension(openclawPath: string): Promise<void> {
+  return typedInvoke('install_openclaw_extension', { openclawPath });
+}
+
+export async function getOpenclawExtensionVersion(openclawPath: string): Promise<string | null> {
+  return typedInvoke('get_openclaw_extension_version', { openclawPath });
+}
+
+export async function isOpenclawExtensionStale(openclawPath: string): Promise<boolean> {
+  return typedInvoke('is_openclaw_extension_stale', { openclawPath });
+}
+
+export async function getExtensionContent(): Promise<string> {
+  return typedInvoke('get_extension_content');
+}
+
+export async function syncLocalLaunch(): Promise<SyncResult> {
+  return typedInvoke('sync_local_launch');
+}
+
+export async function syncMergeRemote(remoteDbJson: string): Promise<[string, SyncResult]> {
+  return typedInvoke('sync_merge_remote', { remoteDbJson });
+}
+
+export async function syncLocalClose(): Promise<SyncResult> {
+  return typedInvoke('sync_local_close');
+}
+
+export async function getDbJsonForSync(): Promise<string> {
+  return typedInvoke('get_db_json_for_sync');
+}
+
+export async function ensureSyncIdentity(): Promise<void> {
+  return typedInvoke('ensure_sync_identity');
+}
+
+export async function writeOpenclawSystemContext(
+  clientUuid: string,
+  hostname: string,
+  platform: string,
+): Promise<void> {
+  return typedInvoke('write_openclaw_system_context', { clientUuid, hostname, platform });
 }

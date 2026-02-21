@@ -1,146 +1,63 @@
-use std::collections::hash_map::DefaultHasher;
+mod commands;
+mod db_persistence;
+mod injection;
+mod locking;
+mod merge;
+mod migration;
+mod state;
+mod sync;
+mod util;
+mod validation;
+mod watcher;
+
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::env;
 use std::fs::{self, OpenOptions};
-use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use once_cell::sync::Lazy;
+pub(crate) use locking::*;
+pub(crate) use state::*;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
+use tauri::Emitter;
+use tracing_subscriber::prelude::*;
+
+/// Type alias for the shared application state, used as Tauri managed state.
+type SharedAppState = Arc<tokio::sync::Mutex<AppState>>;
+/// Type alias for the DB flush handle, used as Tauri managed state.
+type SharedFlushHandle = Arc<db_persistence::DbFlushHandle>;
 
 // Embedded at compile time by build.rs
-const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
-const DEFAULT_SESSION_KEY: &str = "agent:main:clawchestra";
-#[derive(Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct DirtyFileEntry {
-    path: String,
-    /// Git status: "modified", "added", "deleted", "renamed", "untracked"
-    status: String,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct DirtyFileCategories {
-    metadata: Vec<DirtyFileEntry>,
-    documents: Vec<DirtyFileEntry>,
-    code: Vec<DirtyFileEntry>,
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct GitStatus {
-    state: String,
-    branch: Option<String>,
-    details: Option<String>,
-    remote: Option<String>,
-    // New fields for local git intelligence
-    last_commit_date: Option<String>,
-    last_commit_message: Option<String>,
-    last_commit_author: Option<String>,
-    commits_this_week: Option<u32>,
-    latest_tag: Option<String>,
-    stash_count: u32,
-    ahead_count: Option<u32>,
-    behind_count: Option<u32>,
-    /// True when any files in the repo have uncommitted changes
-    has_dirty_files: bool,
-    /// All dirty files categorized into metadata/documents/code
-    all_dirty_files: DirtyFileCategories,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct GitBranchState {
-    name: String,
-    is_current: bool,
-    has_upstream: bool,
-    ahead_count: u32,
-    behind_count: u32,
-    diverged: bool,
-    local_only: bool,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct GitStashResult {
-    stashed: bool,
-    stash_ref: Option<String>,
-    summary: String,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct GitCherryPickResult {
-    /// "applied" | "conflict" | "failed"
-    status: String,
-    message: String,
-    conflicting_files: Vec<String>,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct GitConflictFileContext {
-    path: String,
-    current_content: String,
-    ours_content: String,
-    theirs_content: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GitConflictResolutionInput {
-    path: String,
-    content: String,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct GitConflictApplyResult {
-    /// "applied" | "conflict" | "failed"
-    status: String,
-    message: String,
-    conflicting_files: Vec<String>,
-    hash: Option<String>,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct GitResumeValidation {
-    valid: bool,
-    reasons: Vec<String>,
-    current_branch: Option<String>,
-    missing_targets: Vec<String>,
-    cherry_pick_in_progress: bool,
-    unresolved_conflicts: bool,
-}
-
-static BRANCH_SYNC_LOCKS: Lazy<Mutex<HashMap<String, String>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-const BRANCH_SYNC_LOCK_STALE_SECS: u64 = 60 * 60 * 4;
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RepoProbe {
-    is_git_repo: bool,
-    git_branch: Option<String>,
-    git_remote: Option<String>,
-    is_working_tree_dirty: Option<bool>,
-    dirty_paths: Vec<String>,
-}
+pub(crate) const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
+pub(crate) const DEFAULT_SESSION_KEY: &str = "agent:main:clawchestra";
 
 #[derive(Serialize)]
 struct OpenClawGatewayConfig {
     ws_url: String,
     token: Option<String>,
     session_key: String,
+}
+
+/// OpenClaw sync mode — how Clawchestra communicates with OpenClaw for db.json sync.
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
+pub(crate) enum SyncMode {
+    /// Read/write directly to ~/.openclaw/clawchestra/db.json (same machine)
+    #[default]
+    Local,
+    /// Sync via HTTP endpoint on a remote OpenClaw instance
+    Remote,
+    /// Sync disabled entirely
+    Disabled,
+    /// Catch-all for future variants — prevents deserialization crash on downgrade
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -160,6 +77,23 @@ struct DashboardSettings {
     update_mode: String,
     #[serde(default = "default_openclaw_context_policy")]
     openclaw_context_policy: String,
+    /// Unique client identifier (UUID v4), generated on first launch
+    #[serde(default)]
+    client_uuid: Option<String>,
+    /// How Clawchestra syncs with OpenClaw (Local, Remote, Disabled)
+    #[serde(default)]
+    openclaw_sync_mode: SyncMode,
+    /// URL of the remote OpenClaw instance (when sync_mode is Remote)
+    #[serde(default)]
+    openclaw_remote_url: Option<String>,
+    /// Bearer token for authenticating with the remote OpenClaw instance.
+    /// Now stored in OS keychain; kept in struct for backwards-compat deserialization only.
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    openclaw_bearer_token: Option<String>,
+    /// Size of the per-project state history buffer (default: 20)
+    #[serde(default = "default_state_history_buffer_size")]
+    state_history_buffer_size: usize,
 }
 
 #[derive(Deserialize)]
@@ -219,6 +153,10 @@ fn default_openclaw_context_policy() -> String {
     "selected-project-first".to_string()
 }
 
+fn default_state_history_buffer_size() -> usize {
+    20
+}
+
 fn settings_file_path() -> Result<PathBuf, String> {
     if let Ok(path) = env::var("CLAWCHESTRA_SETTINGS_PATH") {
         return expand_tilde(&path);
@@ -237,10 +175,7 @@ fn settings_file_path() -> Result<PathBuf, String> {
     Ok(base.join("settings.json"))
 }
 
-const MUTATION_LOCK_TIMEOUT_MS: u64 = 5_000;
-const MUTATION_LOCK_STALE_SECS: u64 = 300;
-
-fn app_support_dir() -> Result<PathBuf, String> {
+pub(crate) fn app_support_dir() -> Result<PathBuf, String> {
     let settings_path = settings_file_path()?;
     settings_path
         .parent()
@@ -254,7 +189,7 @@ fn hardening_log_path() -> Result<PathBuf, String> {
     Ok(logs_dir.join("hardening.log"))
 }
 
-fn append_hardening_log(event: &str, details: &str) {
+pub(crate) fn append_hardening_log(event: &str, details: &str) {
     let Ok(path) = hardening_log_path() else {
         return;
     };
@@ -266,102 +201,8 @@ fn append_hardening_log(event: &str, details: &str) {
     }
 }
 
-#[derive(Debug)]
-struct MutationLockGuard {
-    path: PathBuf,
-}
-
-impl Drop for MutationLockGuard {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
-fn acquire_mutation_lock_at(
-    lock_path: &Path,
-    timeout: Duration,
-    stale_after: Duration,
-) -> Result<MutationLockGuard, String> {
-    if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-
-    let start = Instant::now();
-    loop {
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(lock_path)
-        {
-            Ok(mut file) => {
-                let _ = writeln!(
-                    file,
-                    "pid={} at={}",
-                    std::process::id(),
-                    unix_timestamp_secs()
-                );
-                return Ok(MutationLockGuard {
-                    path: lock_path.to_path_buf(),
-                });
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let stale = fs::metadata(lock_path)
-                    .and_then(|meta| meta.modified())
-                    .ok()
-                    .and_then(|modified| modified.elapsed().ok())
-                    .is_some_and(|elapsed| elapsed >= stale_after);
-
-                if stale {
-                    let _ = fs::remove_file(lock_path);
-                    append_hardening_log(
-                        "stale_mutation_lock_removed",
-                        &format!("lock_path={}", lock_path.to_string_lossy()),
-                    );
-                    continue;
-                }
-
-                if start.elapsed() >= timeout {
-                    return Err(
-                        "mutationLocked: another write operation is in progress. retry shortly"
-                            .to_string(),
-                    );
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
-            Err(error) => {
-                return Err(format!(
-                    "Failed to acquire mutation lock at `{}`: {}",
-                    lock_path.to_string_lossy(),
-                    error
-                ));
-            }
-        }
-    }
-}
-
-fn acquire_mutation_lock() -> Result<MutationLockGuard, String> {
-    let lock_path = app_support_dir()?.join("catalog-mutation.lock");
-    acquire_mutation_lock_at(
-        &lock_path,
-        Duration::from_millis(MUTATION_LOCK_TIMEOUT_MS),
-        Duration::from_secs(MUTATION_LOCK_STALE_SECS),
-    )
-}
-
-fn with_mutation_lock<T>(
-    operation: &str,
-    action: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
-    let _guard = acquire_mutation_lock()?;
-    let result = action();
-    if let Err(error) = &result {
-        append_hardening_log(
-            "mutation_failed",
-            &format!("operation={} error={}", operation, error),
-        );
-    }
-    result
-}
+// MutationLockGuard, acquire_mutation_lock_at, acquire_mutation_lock,
+// and with_mutation_lock are now in locking.rs (re-exported via `pub(crate) use locking::*`)
 
 fn normalize_lexical_path(path: &Path) -> PathBuf {
     use std::path::Component;
@@ -393,7 +234,7 @@ fn normalize_lexical_path(path: &Path) -> PathBuf {
     }
 }
 
-fn normalize_path(path: &str) -> Result<String, String> {
+pub(crate) fn normalize_path(path: &str) -> Result<String, String> {
     let expanded = expand_tilde(path)?;
     let absolute = if expanded.is_absolute() {
         expanded
@@ -471,7 +312,7 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
     Ok(settings)
 }
 
-fn default_settings() -> DashboardSettings {
+pub(crate) fn default_settings() -> DashboardSettings {
     let settings = DashboardSettings {
         settings_version: default_settings_version(),
         migration_version: 1,
@@ -480,6 +321,11 @@ fn default_settings() -> DashboardSettings {
         app_source_path: default_app_source_path(),
         update_mode: default_update_mode(),
         openclaw_context_policy: default_openclaw_context_policy(),
+        client_uuid: None,
+        openclaw_sync_mode: SyncMode::default(),
+        openclaw_remote_url: None,
+        openclaw_bearer_token: None,
+        state_history_buffer_size: default_state_history_buffer_size(),
     };
 
     sanitize_settings(settings).unwrap_or_else(|_| DashboardSettings {
@@ -490,25 +336,16 @@ fn default_settings() -> DashboardSettings {
         app_source_path: default_app_source_path(),
         update_mode: default_update_mode(),
         openclaw_context_policy: default_openclaw_context_policy(),
+        client_uuid: None,
+        openclaw_sync_mode: SyncMode::default(),
+        openclaw_remote_url: None,
+        openclaw_bearer_token: None,
+        state_history_buffer_size: default_state_history_buffer_size(),
     })
 }
 
 fn write_file_atomic(path: &Path, content: &str) -> Result<(), String> {
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| "Invalid settings path".to_string())?;
-    let temp_suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    let temp_path = path.with_file_name(format!("{file_name}.tmp-{temp_suffix}"));
-
-    fs::write(&temp_path, content).map_err(|error| error.to_string())?;
-    fs::rename(&temp_path, path).map_err(|error| {
-        let _ = fs::remove_file(&temp_path);
-        error.to_string()
-    })
+    crate::util::write_str_atomic(path, content)
 }
 
 fn write_dashboard_settings_file(settings: &DashboardSettings) -> Result<(), String> {
@@ -521,7 +358,7 @@ fn write_dashboard_settings_file(settings: &DashboardSettings) -> Result<(), Str
     write_file_atomic(&path, &payload)
 }
 
-fn load_dashboard_settings() -> Result<DashboardSettings, String> {
+pub(crate) fn load_dashboard_settings() -> Result<DashboardSettings, String> {
     let path = settings_file_path()?;
     if !path.exists() {
         let defaults = default_settings();
@@ -617,7 +454,7 @@ fn run_migrations() {
 
     if settings.migration_version < 1 {
         println!("[Migration] Clearing chat.db for session key migration (v0 → v1)");
-        match clear_chat_database() {
+        match commands::chat::clear_chat_database() {
             Ok(()) => {
                 settings.migration_version = 1;
                 if let Err(e) = write_dashboard_settings_file(&settings) {
@@ -706,9 +543,10 @@ fn scan_projects(scan_paths: Vec<String>) -> Result<ScanResult, String> {
                 continue;
             }
 
-            // A project directory must contain PROJECT.md
+            // A project directory must contain CLAWCHESTRA.md (preferred) or PROJECT.md (legacy)
+            let clawchestra_md = path.join("CLAWCHESTRA.md");
             let project_md = path.join("PROJECT.md");
-            if project_md.exists() {
+            if clawchestra_md.exists() || project_md.exists() {
                 projects.push(path.to_string_lossy().to_string());
             }
         }
@@ -718,13 +556,68 @@ fn scan_projects(scan_paths: Vec<String>) -> Result<ScanResult, String> {
     Ok(ScanResult { projects, skipped })
 }
 
+/// Validate that a path is within one of the allowed directories.
+/// Prevents arbitrary filesystem access via IPC commands.
+fn validate_allowed_path(path: &str) -> Result<(), String> {
+    let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
+    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+
+    // Build allowed prefixes: scan_paths + ~/.openclaw/ + /tmp + /private/tmp
+    let mut allowed: Vec<PathBuf> = settings
+        .scan_paths
+        .iter()
+        .filter_map(|p| fs::canonicalize(p).ok())
+        .collect();
+
+    if let Ok(openclaw) = fs::canonicalize(format!("{home}/.openclaw")) {
+        allowed.push(openclaw);
+    } else {
+        // If it doesn't exist yet, allow the lexical path
+        allowed.push(PathBuf::from(format!("{home}/.openclaw")));
+    }
+    allowed.push(PathBuf::from("/tmp"));
+    allowed.push(PathBuf::from("/private/tmp"));
+
+    if let Some(app_src) = &settings.app_source_path {
+        if let Ok(p) = fs::canonicalize(app_src) {
+            allowed.push(p);
+        }
+    }
+
+    // Resolve the target path: canonicalize if exists, else canonicalize parent
+    let target = Path::new(path);
+    let canonical = if target.exists() {
+        fs::canonicalize(target).map_err(|e| format!("Cannot resolve path: {e}"))?
+    } else if let Some(parent) = target.parent() {
+        if parent.exists() {
+            let canon_parent = fs::canonicalize(parent)
+                .map_err(|e| format!("Cannot resolve parent path: {e}"))?;
+            canon_parent.join(target.file_name().unwrap_or_default())
+        } else {
+            return Err(format!("Path not within allowed directories: {path}"));
+        }
+    } else {
+        return Err(format!("Path not within allowed directories: {path}"));
+    };
+
+    for prefix in &allowed {
+        if canonical.starts_with(prefix) {
+            return Ok(());
+        }
+    }
+
+    Err(format!("Path not within allowed directories: {path}"))
+}
+
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
+    validate_allowed_path(&path)?;
     fs::read_to_string(&path).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
+    validate_allowed_path(&path)?;
     with_mutation_lock("write_file", || {
         if let Some(parent) = Path::new(&path).parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -736,6 +629,7 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 
 #[tauri::command]
 fn delete_file(path: String) -> Result<(), String> {
+    validate_allowed_path(&path)?;
     with_mutation_lock("delete_file", || {
         fs::remove_file(path).map_err(|error| error.to_string())
     })
@@ -743,6 +637,7 @@ fn delete_file(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn remove_path(path: String) -> Result<(), String> {
+    validate_allowed_path(&path)?;
     with_mutation_lock("remove_path", || {
         let expanded = expand_tilde(&path)?;
         if expanded.is_file() {
@@ -832,25 +727,8 @@ fn get_openclaw_gateway_config() -> Result<OpenClawGatewayConfig, String> {
 }
 
 fn run_command_with_output(command: &str, args: &[&str]) -> Result<String, String> {
-    // Build full command string to run through login shell (to get PATH with node)
-    let full_cmd = if args.is_empty() {
-        command.to_string()
-    } else {
-        let escaped_args: Vec<String> = args
-            .iter()
-            .map(|arg| {
-                if arg.contains(' ') || arg.contains('"') {
-                    format!("\"{}\"", arg.replace('"', "\\\""))
-                } else {
-                    arg.to_string()
-                }
-            })
-            .collect();
-        format!("{} {}", command, escaped_args.join(" "))
-    };
-
-    let output = Command::new("/bin/sh")
-        .args(["-l", "-c", &full_cmd])
+    let output = Command::new(command)
+        .args(args)
         .output()
         .map_err(|error| format!("Failed to run `{command}`: {error}"))?;
 
@@ -906,6 +784,29 @@ fn find_openclaw_binary() -> Option<PathBuf> {
     }
 
     None
+}
+
+const KEYRING_SERVICE: &str = "com.clawdbot.clawchestra";
+const KEYRING_BEARER_KEY: &str = "openclaw-bearer-token";
+
+fn get_or_create_bearer_token() -> Result<String, String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_BEARER_KEY)
+        .map_err(|e| format!("Keyring init error: {e}"))?;
+    match entry.get_password() {
+        Ok(token) if !token.is_empty() => Ok(token),
+        _ => {
+            let token = uuid::Uuid::new_v4().to_string();
+            entry
+                .set_password(&token)
+                .map_err(|e| format!("Keyring store error: {e}"))?;
+            Ok(token)
+        }
+    }
+}
+
+#[tauri::command]
+fn get_openclaw_bearer_token() -> Result<String, String> {
+    get_or_create_bearer_token()
 }
 
 fn extension_for_mime(mime_type: &str) -> &'static str {
@@ -1064,6 +965,20 @@ async fn openclaw_chat(
     attachments: Vec<OpenClawChatAttachmentInput>,
     session_key: Option<String>,
 ) -> Result<String, String> {
+    // Run the entire chat polling loop on a blocking thread pool to avoid
+    // starving tokio workers (thread::sleep + sync Command::output inside async = bad).
+    tokio::task::spawn_blocking(move || {
+        openclaw_chat_blocking(message, attachments, session_key)
+    })
+    .await
+    .map_err(|e| format!("Chat task panicked: {}", e))?
+}
+
+fn openclaw_chat_blocking(
+    message: String,
+    attachments: Vec<OpenClawChatAttachmentInput>,
+    session_key: Option<String>,
+) -> Result<String, String> {
     let _ = find_openclaw_binary()
         .ok_or_else(|| "OpenClaw CLI not found. Install with: npm i -g openclaw".to_string())?;
 
@@ -1196,1099 +1111,7 @@ async fn openclaw_chat(
     Err("Timed out waiting for OpenClaw response.".to_string())
 }
 
-fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .args(args)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
-}
-
-/// Like `run_git` but only trims trailing whitespace, preserving leading
-/// spaces that are significant in column-formatted output (e.g. `git status --porcelain`).
-fn run_git_preserving_columns(repo_path: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .args(args)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .trim_end()
-            .to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
-}
-
-#[derive(Debug)]
-struct GitCommandOutput {
-    success: bool,
-    stdout: String,
-    stderr: String,
-}
-
-fn run_git_capture(repo_path: &str, args: &[&str]) -> Result<GitCommandOutput, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .args(args)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    Ok(GitCommandOutput {
-        success: output.status.success(),
-        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-    })
-}
-
-fn combine_git_output(output: &GitCommandOutput) -> String {
-    match (output.stdout.is_empty(), output.stderr.is_empty()) {
-        (true, true) => String::new(),
-        (false, true) => output.stdout.clone(),
-        (true, false) => output.stderr.clone(),
-        (false, false) => format!("{}\n{}", output.stdout, output.stderr),
-    }
-}
-
-fn branch_sync_lock_file_path(normalized_repo_path: &str) -> Result<PathBuf, String> {
-    let mut hasher = DefaultHasher::new();
-    normalized_repo_path.hash(&mut hasher);
-    let lock_id = format!("{:016x}", hasher.finish());
-    let lock_dir = app_support_dir()?.join("branch-sync-locks");
-    fs::create_dir_all(&lock_dir).map_err(|error| error.to_string())?;
-    Ok(lock_dir.join(format!("{lock_id}.lock")))
-}
-
-fn parse_lock_pid(lock_path: &Path) -> Option<i32> {
-    fs::read_to_string(lock_path).ok().and_then(|content| {
-        content.lines().find_map(|line| {
-            line.strip_prefix("pid=")
-                .and_then(|value| value.trim().parse::<i32>().ok())
-        })
-    })
-}
-
-fn parse_lock_token(lock_path: &Path) -> Option<String> {
-    fs::read_to_string(lock_path).ok().and_then(|content| {
-        content.lines().find_map(|line| {
-            line.strip_prefix("token=")
-                .map(|value| value.trim().to_string())
-        })
-    })
-}
-
-fn new_branch_sync_lock_token() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    format!("bsl-{}-{}", std::process::id(), nanos)
-}
-
-fn is_pid_alive(pid: i32) -> bool {
-    #[cfg(unix)]
-    {
-        Command::new("kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        false
-    }
-}
-
-fn is_branch_sync_file_lock_stale(lock_path: &Path) -> bool {
-    let elapsed = fs::metadata(lock_path)
-        .ok()
-        .and_then(|meta| meta.modified().ok())
-        .and_then(|modified| modified.elapsed().ok())
-        .map(|duration| duration.as_secs())
-        .unwrap_or(BRANCH_SYNC_LOCK_STALE_SECS + 1);
-
-    if elapsed >= BRANCH_SYNC_LOCK_STALE_SECS {
-        return true;
-    }
-
-    #[cfg(unix)]
-    {
-        parse_lock_pid(lock_path)
-            .map(|pid| !is_pid_alive(pid))
-            .unwrap_or(true)
-    }
-    #[cfg(not(unix))]
-    {
-        // Non-unix: treat recent lock as active and rely on age for staleness.
-        false
-    }
-}
-
-/// Parse porcelain status into (path, status_label) pairs.
-fn parse_dirty_entries(status_porcelain: &str) -> Vec<(String, &'static str)> {
-    let mut seen = HashSet::new();
-    let mut entries = Vec::new();
-
-    for line in status_porcelain.lines() {
-        if line.len() < 4 {
-            continue;
-        }
-        let xy = &line[..2];
-        let trimmed = line[3..].trim();
-        let path = trimmed
-            .split(" -> ")
-            .last()
-            .unwrap_or(trimmed)
-            .trim()
-            .to_string();
-        if path.is_empty() || !seen.insert(path.clone()) {
-            continue;
-        }
-        let status = match xy.trim() {
-            "M" | "MM" | "AM" => "modified",
-            "A" => "added",
-            "D" => "deleted",
-            "R" | "RM" => "renamed",
-            "??" => "untracked",
-            "C" => "copied",
-            _ => "modified", // safe default for uncommon statuses
-        };
-        entries.push((path, status));
-    }
-
-    entries
-}
-
-fn parse_dirty_paths(status_porcelain: &str) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut paths = Vec::new();
-
-    for line in status_porcelain.lines() {
-        if line.len() < 4 {
-            continue;
-        }
-        let trimmed = line[3..].trim();
-        let path = trimmed
-            .split(" -> ")
-            .last()
-            .unwrap_or(trimmed)
-            .trim()
-            .to_string();
-        if !path.is_empty() && seen.insert(path.clone()) {
-            paths.push(path);
-        }
-    }
-
-    paths
-}
-
-#[tauri::command]
-fn probe_repo(repo_path: String) -> Result<RepoProbe, String> {
-    let repo = expand_tilde(&repo_path)?;
-    if !repo.is_dir() {
-        return Err("Selected path is not a directory".to_string());
-    }
-    let repo_str = repo.to_string_lossy().to_string();
-
-    let is_git_repo = run_git(&repo_str, &["rev-parse", "--is-inside-work-tree"]).is_ok();
-    if !is_git_repo {
-        return Ok(RepoProbe {
-            is_git_repo: false,
-            git_branch: None,
-            git_remote: None,
-            is_working_tree_dirty: None,
-            dirty_paths: vec![],
-        });
-    }
-
-    let git_branch = run_git(&repo_str, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
-    let git_remote = run_git(&repo_str, &["config", "--get", "remote.origin.url"]).ok();
-    let status_porcelain =
-        run_git_preserving_columns(&repo_str, &["status", "--porcelain"]).unwrap_or_default();
-    let dirty_paths = parse_dirty_paths(&status_porcelain);
-
-    Ok(RepoProbe {
-        is_git_repo: true,
-        git_branch,
-        git_remote,
-        is_working_tree_dirty: Some(!status_porcelain.trim().is_empty()),
-        dirty_paths,
-    })
-}
-
-/// File category for dirty-file classification.
-/// CROSS-REFERENCE: The TypeScript mirror lives in src/lib/git-sync-utils.ts
-/// (METADATA_FILES, DOCUMENT_FILES, DOCUMENT_DIR_PREFIXES). Keep in sync.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FileCategory {
-    Metadata,
-    Documents,
-    Code,
-}
-
-/// Metadata files: Clawchestra-exclusive structural state
-const METADATA_FILES: &[&str] = &["PROJECT.md"];
-
-/// Document file names (exact match) — planning artifacts with external relevance
-const DOCUMENT_FILES: &[&str] = &["ROADMAP.md", "CHANGELOG.md"];
-/// Document directory prefixes (recursive match)
-const DOCUMENT_DIR_PREFIXES: &[&str] = &["roadmap/", "docs/specs/", "docs/plans/"];
-
-/// Categorize a dirty file path into metadata, documents, or code.
-///
-/// NOTE: Also used by check_for_update() to decide whether commits warrant
-/// an update prompt. Adding paths to DOCUMENT_FILES or DOCUMENT_DIR_PREFIXES
-/// will suppress update notifications for changes limited to those paths.
-fn categorize_dirty_file(path: &str) -> FileCategory {
-    if METADATA_FILES.contains(&path) {
-        return FileCategory::Metadata;
-    }
-    if DOCUMENT_FILES.contains(&path)
-        || DOCUMENT_DIR_PREFIXES
-            .iter()
-            .any(|prefix| path.starts_with(prefix))
-    {
-        return FileCategory::Documents;
-    }
-    FileCategory::Code
-}
-
-/// Categorize all dirty entries into the three-category struct.
-/// Takes ownership to avoid cloning each path.
-fn categorize_all_dirty_files(entries: Vec<(String, &str)>) -> DirtyFileCategories {
-    let mut metadata = Vec::new();
-    let mut documents = Vec::new();
-    let mut code = Vec::new();
-
-    for (path, status) in entries {
-        let entry = DirtyFileEntry {
-            status: status.to_string(),
-            path: path.clone(),
-        };
-        match categorize_dirty_file(&path) {
-            FileCategory::Metadata => metadata.push(entry),
-            FileCategory::Documents => documents.push(entry),
-            FileCategory::Code => code.push(entry),
-        }
-    }
-
-    DirtyFileCategories {
-        metadata,
-        documents,
-        code,
-    }
-}
-
-#[tauri::command]
-fn get_git_status(repo_path: String) -> Result<GitStatus, String> {
-    let branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
-    let remote = run_git(&repo_path, &["config", "--get", "remote.origin.url"]).ok();
-    let status_porcelain =
-        run_git_preserving_columns(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
-
-    // Collect enriched git data (combined log query: date, subject, author)
-    let (last_commit_date, last_commit_message, last_commit_author) =
-        match run_git(&repo_path, &["log", "-1", "--format=%aI%n%s%n%an"]) {
-            Ok(output) => {
-                let lines: Vec<&str> = output.splitn(3, '\n').collect();
-                (
-                    lines.first().map(|s| s.to_string()),
-                    lines.get(1).map(|s| s.to_string()),
-                    lines.get(2).map(|s| s.to_string()),
-                )
-            }
-            Err(_) => (None, None, None),
-        };
-
-    let commits_this_week = run_git(
-        &repo_path,
-        &["rev-list", "--count", "--since=7 days ago", "HEAD"],
-    )
-    .ok()
-    .and_then(|s| s.parse::<u32>().ok());
-
-    let latest_tag = run_git(&repo_path, &["describe", "--tags", "--abbrev=0"]).ok();
-
-    let stash_count = run_git(&repo_path, &["stash", "list"])
-        .map(|s| {
-            if s.is_empty() {
-                0
-            } else {
-                s.lines().count() as u32
-            }
-        })
-        .unwrap_or(0);
-
-    // Always compute ahead/behind when upstream exists (needed for Sync Dialog branch awareness)
-    let has_upstream = run_git(
-        &repo_path,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    )
-    .is_ok();
-
-    let (ahead_count, behind_count) = if has_upstream {
-        let behind = run_git(&repo_path, &["rev-list", "--count", "HEAD..@{u}"])
-            .unwrap_or_else(|_| "0".to_string())
-            .parse::<u32>()
-            .unwrap_or(0);
-        let ahead = run_git(&repo_path, &["rev-list", "--count", "@{u}..HEAD"])
-            .unwrap_or_else(|_| "0".to_string())
-            .parse::<u32>()
-            .unwrap_or(0);
-        (Some(ahead), Some(behind))
-    } else {
-        (None, None)
-    };
-
-    // Determine state
-    let (state, details) = if !status_porcelain.is_empty() {
-        (
-            "uncommitted".to_string(),
-            Some("Repository has uncommitted changes".to_string()),
-        )
-    } else if !has_upstream {
-        (
-            "clean".to_string(),
-            Some("No upstream configured".to_string()),
-        )
-    } else {
-        let behind = behind_count.unwrap_or(0);
-        let ahead = ahead_count.unwrap_or(0);
-        if behind > 0 {
-            (
-                "behind".to_string(),
-                Some(format!("Behind upstream by {} commit(s)", behind)),
-            )
-        } else if ahead > 0 {
-            (
-                "unpushed".to_string(),
-                Some(format!("Ahead of upstream by {} commit(s)", ahead)),
-            )
-        } else {
-            ("clean".to_string(), Some("Working tree clean".to_string()))
-        }
-    };
-
-    // Parse all dirty files once, then categorize (takes ownership to avoid cloning)
-    let all_entries = parse_dirty_entries(&status_porcelain);
-    let has_dirty_files = !all_entries.is_empty();
-    let all_dirty_files = categorize_all_dirty_files(all_entries);
-
-    Ok(GitStatus {
-        state,
-        branch,
-        details,
-        remote,
-        last_commit_date,
-        last_commit_message,
-        last_commit_author,
-        commits_this_week,
-        latest_tag,
-        stash_count,
-        ahead_count,
-        behind_count,
-        has_dirty_files,
-        all_dirty_files,
-    })
-}
-
-#[tauri::command]
-fn git_fetch(repo_path: String) -> Result<String, String> {
-    run_git(&repo_path, &["fetch", "origin"])
-}
-
-fn validate_branch_name(repo_path: &str, branch: &str) -> Result<(), String> {
-    if branch.trim().is_empty() {
-        return Err("Branch name cannot be empty".to_string());
-    }
-    run_git(repo_path, &["check-ref-format", "--branch", branch])
-        .map(|_| ())
-        .map_err(|error| format!("Invalid branch name `{}`: {}", branch, error))
-}
-
-fn branch_upstream(repo_path: &str, branch: &str) -> Option<String> {
-    run_git(
-        repo_path,
-        &[
-            "rev-parse",
-            "--abbrev-ref",
-            "--symbolic-full-name",
-            &format!("{branch}@{{upstream}}"),
-        ],
-    )
-    .ok()
-}
-
-fn rev_count(repo_path: &str, range: &str) -> u32 {
-    run_git(repo_path, &["rev-list", "--count", range])
-        .ok()
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(0)
-}
-
-#[tauri::command]
-fn git_get_branch_states(repo_path: String) -> Result<Vec<GitBranchState>, String> {
-    let current_branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
-    let all_branches = run_git(
-        &repo_path,
-        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-    )?;
-
-    let mut states: Vec<GitBranchState> = all_branches
-        .lines()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .map(|name| {
-            let upstream = branch_upstream(&repo_path, name);
-            let (ahead_count, behind_count) = if let Some(upstream_ref) = upstream.as_deref() {
-                (
-                    rev_count(&repo_path, &format!("{upstream_ref}..{name}")),
-                    rev_count(&repo_path, &format!("{name}..{upstream_ref}")),
-                )
-            } else {
-                (0, 0)
-            };
-            let has_upstream = upstream.is_some();
-            GitBranchState {
-                name: name.to_string(),
-                is_current: current_branch
-                    .as_deref()
-                    .map(|current| current == name)
-                    .unwrap_or(false),
-                has_upstream,
-                ahead_count,
-                behind_count,
-                diverged: ahead_count > 0 && behind_count > 0,
-                local_only: !has_upstream,
-            }
-        })
-        .collect();
-
-    states.sort_by(|left, right| {
-        right
-            .is_current
-            .cmp(&left.is_current)
-            .then_with(|| left.name.cmp(&right.name))
-    });
-
-    Ok(states)
-}
-
-#[tauri::command]
-fn git_sync_lock_acquire(repo_path: String) -> Result<String, String> {
-    let normalized = normalize_path(&repo_path)?;
-    let lock_path = branch_sync_lock_file_path(&normalized)?;
-    let token = new_branch_sync_lock_token();
-
-    if lock_path.exists() && is_branch_sync_file_lock_stale(&lock_path) {
-        let _ = fs::remove_file(&lock_path);
-        append_hardening_log(
-            "stale_branch_sync_lock_removed",
-            &format!("repo={} lock={}", normalized, lock_path.to_string_lossy()),
-        );
-    }
-
-    {
-        let guard = BRANCH_SYNC_LOCKS
-            .lock()
-            .map_err(|_| "branchSyncLockPoisoned".to_string())?;
-        if guard.contains_key(&normalized) {
-            return Err("branchSyncLocked: another branch sync is already running".to_string());
-        }
-    }
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock_path)
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                "branchSyncLocked: another branch sync is already running".to_string()
-            } else {
-                format!(
-                    "branchSyncLockFailed: could not create lock `{}`: {}",
-                    lock_path.to_string_lossy(),
-                    error
-                )
-            }
-        })?;
-    let _ = writeln!(file, "pid={}", std::process::id());
-    let _ = writeln!(file, "token={}", token);
-    let _ = writeln!(file, "repo={}", normalized);
-    let _ = writeln!(file, "at={}", unix_timestamp_secs());
-
-    let mut guard = BRANCH_SYNC_LOCKS
-        .lock()
-        .map_err(|_| "branchSyncLockPoisoned".to_string())?;
-    if guard.contains_key(&normalized) {
-        let _ = fs::remove_file(&lock_path);
-        return Err("branchSyncLocked: another branch sync is already running".to_string());
-    }
-    guard.insert(normalized, token.clone());
-    Ok(token)
-}
-
-#[tauri::command]
-fn git_sync_lock_release(repo_path: String, token: String) -> Result<(), String> {
-    let normalized = normalize_path(&repo_path)?;
-    let lock_path = branch_sync_lock_file_path(&normalized)?;
-    let mut guard = BRANCH_SYNC_LOCKS
-        .lock()
-        .map_err(|_| "branchSyncLockPoisoned".to_string())?;
-
-    if token.trim().is_empty() {
-        return Err("branchSyncLockTokenMissing".to_string());
-    }
-
-    if let Some(in_memory_token) = guard.get(&normalized) {
-        if in_memory_token != &token {
-            return Err("branchSyncLockTokenMismatch".to_string());
-        }
-    } else if lock_path.exists() {
-        let on_disk_token = parse_lock_token(&lock_path);
-        if on_disk_token.as_deref() != Some(token.as_str()) {
-            return Err("branchSyncLockTokenMismatch".to_string());
-        }
-    } else {
-        return Ok(());
-    }
-
-    guard.remove(&normalized);
-    if lock_path.exists() {
-        let on_disk_token = parse_lock_token(&lock_path);
-        if on_disk_token.as_deref() == Some(token.as_str()) {
-            let _ = fs::remove_file(&lock_path);
-        } else {
-            return Err("branchSyncLockTokenMismatch".to_string());
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn git_checkout_branch(repo_path: String, branch: String) -> Result<(), String> {
-    validate_branch_name(&repo_path, &branch)?;
-    run_git(&repo_path, &["checkout", &branch])
-        .map(|_| ())
-        .map_err(|error| format!("git checkout failed for `{}`: {}", branch, error))
-}
-
-#[tauri::command]
-fn git_stash_push(
-    repo_path: String,
-    include_untracked: bool,
-    message: Option<String>,
-) -> Result<GitStashResult, String> {
-    let mut args: Vec<String> = vec!["stash".to_string(), "push".to_string()];
-    if include_untracked {
-        args.push("--include-untracked".to_string());
-    }
-    if let Some(value) = message
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        args.push("-m".to_string());
-        args.push(value.to_string());
-    }
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = run_git_capture(&repo_path, &arg_refs)?;
-    let summary = combine_git_output(&output);
-    if !output.success {
-        return Err(format!("git stash push failed: {}", summary));
-    }
-    let stashed = !summary.contains("No local changes to save");
-    Ok(GitStashResult {
-        stashed,
-        stash_ref: if stashed {
-            Some("stash@{0}".to_string())
-        } else {
-            None
-        },
-        summary: if summary.is_empty() {
-            "Stash completed".to_string()
-        } else {
-            summary
-        },
-    })
-}
-
-#[tauri::command]
-fn git_pop_stash(repo_path: String, stash_ref: Option<String>) -> Result<(), String> {
-    let reference = stash_ref
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("stash@{0}")
-        .to_string();
-    // Validate stash ref format to prevent command injection — must be stash@{N}
-    if !reference.starts_with("stash@{") || !reference.ends_with('}') {
-        return Err(format!("Invalid stash reference: `{}`", reference));
-    }
-    let output = run_git_capture(&repo_path, &["stash", "pop", &reference])?;
-    if output.success {
-        Ok(())
-    } else {
-        Err(format!(
-            "git stash pop failed for `{}`: {}",
-            reference,
-            combine_git_output(&output)
-        ))
-    }
-}
-
-fn validate_commit_hash(repo_path: &str, commit_hash: &str) -> Result<(), String> {
-    let candidate = commit_hash.trim();
-    if candidate.is_empty() {
-        return Err("Commit hash cannot be empty".to_string());
-    }
-    run_git(
-        repo_path,
-        &["rev-parse", "--verify", &format!("{candidate}^{{commit}}")],
-    )
-    .map(|_| ())
-    .map_err(|error| format!("Invalid commit hash `{}`: {}", candidate, error))
-}
-
-#[tauri::command]
-fn git_cherry_pick_commit(
-    repo_path: String,
-    commit_hash: String,
-) -> Result<GitCherryPickResult, String> {
-    validate_commit_hash(&repo_path, &commit_hash)?;
-    let output = run_git_capture(&repo_path, &["cherry-pick", "--no-edit", &commit_hash])?;
-    let message = combine_git_output(&output);
-    if output.success {
-        return Ok(GitCherryPickResult {
-            status: "applied".to_string(),
-            message,
-            conflicting_files: vec![],
-        });
-    }
-
-    let cherry_pick_head_exists = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
-    let conflicting_files = unresolved_conflict_files(&repo_path);
-
-    if cherry_pick_head_exists || !conflicting_files.is_empty() {
-        Ok(GitCherryPickResult {
-            status: "conflict".to_string(),
-            message,
-            conflicting_files,
-        })
-    } else {
-        Ok(GitCherryPickResult {
-            status: "failed".to_string(),
-            message,
-            conflicting_files: vec![],
-        })
-    }
-}
-
-#[tauri::command]
-fn git_abort_cherry_pick(repo_path: String) -> Result<(), String> {
-    let cherry_pick_head_exists = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
-    if !cherry_pick_head_exists {
-        return Ok(());
-    }
-    run_git(&repo_path, &["cherry-pick", "--abort"])
-        .map(|_| ())
-        .map_err(|error| format!("git cherry-pick --abort failed: {}", error))
-}
-
-#[tauri::command]
-fn git_pull_current(repo_path: String) -> Result<(), String> {
-    let has_upstream = run_git(
-        &repo_path,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    )
-    .is_ok();
-    if !has_upstream {
-        return Err("Current branch has no upstream configured".to_string());
-    }
-    let output = run_git_capture(&repo_path, &["pull", "--ff-only"])?;
-    if output.success {
-        Ok(())
-    } else {
-        Err(format!("git pull failed: {}", combine_git_output(&output)))
-    }
-}
-
-fn unresolved_conflict_files(repo_path: &str) -> Vec<String> {
-    run_git(repo_path, &["diff", "--name-only", "--diff-filter=U"])
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-}
-
-fn git_show_stage_content(repo_path: &str, stage: u8, path: &str) -> String {
-    run_git_capture(repo_path, &["show", &format!(":{stage}:{path}")])
-        .map(|output| output.stdout)
-        .unwrap_or_default()
-}
-
-#[tauri::command]
-fn git_get_conflict_context(repo_path: String) -> Result<Vec<GitConflictFileContext>, String> {
-    let files = unresolved_conflict_files(&repo_path);
-    let contexts = files
-        .iter()
-        .map(|path| {
-            let absolute_path = Path::new(&repo_path).join(path);
-            let current_content = fs::read_to_string(&absolute_path).unwrap_or_default();
-            GitConflictFileContext {
-                path: path.to_string(),
-                current_content,
-                ours_content: git_show_stage_content(&repo_path, 2, path),
-                theirs_content: git_show_stage_content(&repo_path, 3, path),
-            }
-        })
-        .collect::<Vec<_>>();
-    Ok(contexts)
-}
-
-#[tauri::command]
-fn git_apply_conflict_resolution(
-    repo_path: String,
-    resolutions: Vec<GitConflictResolutionInput>,
-) -> Result<GitConflictApplyResult, String> {
-    if resolutions.is_empty() {
-        return Err("No conflict resolutions supplied".to_string());
-    }
-
-    let mut staged_paths: Vec<String> = Vec::with_capacity(resolutions.len());
-    for resolution in resolutions {
-        validate_commit_path(&resolution.path)?;
-        let absolute = Path::new(&repo_path).join(&resolution.path);
-        if let Some(parent) = absolute.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-        fs::write(&absolute, resolution.content).map_err(|error| {
-            format!(
-                "Failed writing resolved file `{}`: {}",
-                absolute.to_string_lossy(),
-                error
-            )
-        })?;
-        staged_paths.push(resolution.path);
-    }
-
-    let mut add_command = Command::new("git");
-    add_command
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("add")
-        .arg("--")
-        .args(staged_paths.iter());
-    let add_output = add_command.output().map_err(|error| error.to_string())?;
-    if !add_output.status.success() {
-        return Err(format!(
-            "git add failed during conflict apply: {}",
-            String::from_utf8_lossy(&add_output.stderr).trim()
-        ));
-    }
-
-    // GIT_EDITOR=true prevents the editor from opening when user's .gitconfig
-    // has commit.verbose=true or similar — without this, cherry-pick --continue
-    // would hang waiting for an interactive editor.
-    let continue_raw = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .args(["cherry-pick", "--continue"])
-        .env("GIT_EDITOR", "true")
-        .output()
-        .map_err(|error| error.to_string())?;
-    let continue_output = GitCommandOutput {
-        success: continue_raw.status.success(),
-        stdout: String::from_utf8_lossy(&continue_raw.stdout).trim().to_string(),
-        stderr: String::from_utf8_lossy(&continue_raw.stderr).trim().to_string(),
-    };
-    if continue_output.success {
-        let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"]).ok();
-        return Ok(GitConflictApplyResult {
-            status: "applied".to_string(),
-            message: combine_git_output(&continue_output),
-            conflicting_files: vec![],
-            hash,
-        });
-    }
-
-    let conflicts = unresolved_conflict_files(&repo_path);
-    let still_in_cherry_pick = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
-    if still_in_cherry_pick || !conflicts.is_empty() {
-        Ok(GitConflictApplyResult {
-            status: "conflict".to_string(),
-            message: combine_git_output(&continue_output),
-            conflicting_files: conflicts,
-            hash: None,
-        })
-    } else {
-        Ok(GitConflictApplyResult {
-            status: "failed".to_string(),
-            message: combine_git_output(&continue_output),
-            conflicting_files: vec![],
-            hash: None,
-        })
-    }
-}
-
-#[tauri::command]
-fn git_validate_branch_sync_resume(
-    repo_path: String,
-    source_branch: String,
-    commit_hash: String,
-    remaining_targets: Vec<String>,
-) -> Result<GitResumeValidation, String> {
-    // Validate inputs before using them in git commands
-    validate_branch_name(&repo_path, &source_branch)?;
-    for target in &remaining_targets {
-        validate_branch_name(&repo_path, target)?;
-    }
-
-    let mut reasons: Vec<String> = vec![];
-    let current_branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).ok();
-
-    if current_branch
-        .as_deref()
-        .map(|branch| branch != source_branch)
-        .unwrap_or(true)
-    {
-        reasons.push(format!(
-            "Current branch does not match source branch `{}`",
-            source_branch
-        ));
-    }
-
-    if run_git(
-        &repo_path,
-        &[
-            "rev-parse",
-            "--verify",
-            &format!("{}^{{commit}}", commit_hash),
-        ],
-    )
-    .is_err()
-    {
-        reasons.push(format!("Commit `{}` is no longer available", commit_hash));
-    }
-
-    let missing_targets = remaining_targets
-        .iter()
-        .filter_map(|target| {
-            run_git(
-                &repo_path,
-                &["show-ref", "--verify", &format!("refs/heads/{target}")],
-            )
-            .err()
-            .map(|_| target.to_string())
-        })
-        .collect::<Vec<_>>();
-    if !missing_targets.is_empty() {
-        reasons.push(format!(
-            "Some target branches are missing: {}",
-            missing_targets.join(", ")
-        ));
-    }
-
-    let cherry_pick_in_progress = Path::new(&repo_path).join(".git/CHERRY_PICK_HEAD").exists();
-    if cherry_pick_in_progress {
-        reasons.push("A cherry-pick is already in progress".to_string());
-    }
-
-    let unresolved_conflicts = !unresolved_conflict_files(&repo_path).is_empty();
-    if unresolved_conflicts {
-        reasons.push("Repository has unresolved conflicts".to_string());
-    }
-
-    Ok(GitResumeValidation {
-        valid: reasons.is_empty(),
-        reasons,
-        current_branch,
-        missing_targets,
-        cherry_pick_in_progress,
-        unresolved_conflicts,
-    })
-}
-
-/// Validate a repo-relative file path for safety.
-/// Rejects absolute paths, directory traversal, and empty strings.
-fn validate_commit_path(path: &str) -> Result<(), String> {
-    if path.is_empty() {
-        return Err("Empty file path".to_string());
-    }
-    if path.starts_with('/') || path.starts_with('\\') {
-        return Err(format!("Absolute path not allowed: {}", path));
-    }
-    if path.contains("..") {
-        return Err(format!("Path traversal not allowed: {}", path));
-    }
-    // Reject paths with null bytes
-    if path.contains('\0') {
-        return Err(format!("Invalid characters in path: {}", path));
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn git_commit(repo_path: String, message: String, files: Vec<String>) -> Result<String, String> {
-    if files.is_empty() {
-        return Err("No files supplied for commit".to_string());
-    }
-
-    // Validate repo_path is a directory containing a git repo
-    let repo = std::path::Path::new(&repo_path);
-    if !repo.is_dir() {
-        return Err("repo_path is not a directory".to_string());
-    }
-    if !repo.join(".git").exists() {
-        return Err("repo_path is not a git repository".to_string());
-    }
-
-    // Path safety: reject absolute paths, traversal, empty, null bytes
-    for file in &files {
-        validate_commit_path(file)?;
-    }
-
-    // Snapshot validation: only commit files that are actually dirty right now.
-    // This prevents committing arbitrary files that weren't in the dirty snapshot.
-    let status_porcelain =
-        run_git_preserving_columns(&repo_path, &["status", "--porcelain"]).unwrap_or_default();
-    let currently_dirty: HashSet<String> =
-        parse_dirty_paths(&status_porcelain).into_iter().collect();
-    for file in &files {
-        if !currently_dirty.contains(file.as_str()) {
-            return Err(format!(
-                "File is not in the current dirty snapshot: {}",
-                file
-            ));
-        }
-    }
-
-    let mut add_cmd = Command::new("git");
-    add_cmd
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("add")
-        .arg("--")
-        .args(files.iter());
-    let add_output = add_cmd.output().map_err(|error| error.to_string())?;
-
-    if !add_output.status.success() {
-        return Err(format!(
-            "git add failed: {}",
-            String::from_utf8_lossy(&add_output.stderr).trim()
-        ));
-    }
-
-    let commit_output = run_git(&repo_path, &["commit", "-m", &message]);
-    match commit_output {
-        Ok(_) => {
-            // Return the short commit hash
-            let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"])
-                .unwrap_or_else(|_| "unknown".to_string());
-            Ok(hash)
-        }
-        Err(error) => {
-            if error.contains("nothing to commit") {
-                let hash = run_git(&repo_path, &["rev-parse", "--short", "HEAD"])
-                    .unwrap_or_else(|_| "unchanged".to_string());
-                Ok(hash)
-            } else {
-                Err(format!("git commit failed: {}", error))
-            }
-        }
-    }
-}
-
-#[tauri::command]
-fn git_push(repo_path: String) -> Result<(), String> {
-    run_git(&repo_path, &["push"])
-        .map(|_| ())
-        .map_err(|error| format!("git push failed: {}", error))
-}
-
-#[tauri::command]
-fn git_init_repo(
-    repo_path: String,
-    initial_commit: bool,
-    files: Vec<String>,
-) -> Result<(), String> {
-    let resolved_repo = expand_tilde(&repo_path)?;
-    if !resolved_repo.exists() {
-        return Err("Repository path does not exist".to_string());
-    }
-    if !resolved_repo.is_dir() {
-        return Err("Repository path is not a directory".to_string());
-    }
-    let repo = resolved_repo.to_string_lossy().to_string();
-
-    let has_git = run_git(&repo, &["rev-parse", "--is-inside-work-tree"]).is_ok();
-    if !has_git {
-        run_git(&repo, &["init"])?;
-    }
-
-    if !initial_commit {
-        return Ok(());
-    }
-
-    let has_commits = run_git(&repo, &["rev-parse", "--verify", "HEAD"]).is_ok();
-    if has_commits {
-        return Ok(());
-    }
-
-    let candidate_files: Vec<String> = files
-        .into_iter()
-        .filter(|file| !file.trim().is_empty())
-        .filter(|file| resolved_repo.join(file).exists())
-        .collect();
-
-    if candidate_files.is_empty() {
-        return Ok(());
-    }
-
-    let add_output = Command::new("git")
-        .arg("-C")
-        .arg(&repo)
-        .arg("add")
-        .args(candidate_files.iter())
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !add_output.status.success() {
-        return Err(format!(
-            "git add failed: {}",
-            String::from_utf8_lossy(&add_output.stderr).trim()
-        ));
-    }
-
-    let commit_output = run_git(&repo, &["commit", "-m", "Initial project setup"]);
-    match commit_output {
-        Ok(_) => Ok(()),
-        Err(error) => {
-            if error.contains("nothing to commit") {
-                Ok(())
-            } else {
-                Err(format!("git commit failed: {}", error))
-            }
-        }
-    }
-}
-
-fn expand_tilde(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn expand_tilde(path: &str) -> Result<PathBuf, String> {
     if let Some(rest) = path.strip_prefix("~/") {
         let home = std::env::var("HOME").map_err(|error| error.to_string())?;
         return Ok(Path::new(&home).join(rest));
@@ -2297,212 +1120,7 @@ fn expand_tilde(path: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(path))
 }
 
-fn get_current_git_head(repo_root: &str) -> Option<String> {
-    Command::new("git")
-        .args(["-C", &repo_root, "rev-parse", "HEAD"])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                String::from_utf8(o.stdout)
-                    .ok()
-                    .map(|s| s.trim().to_string())
-            } else {
-                None
-            }
-        })
-}
-
-#[derive(Serialize)]
-struct UpdateStatus {
-    update_available: bool,
-    build_commit: String,
-    current_commit: Option<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateLockState {
-    lock_present: bool,
-    process_alive: bool,
-    stale: bool,
-    age_secs: Option<u64>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateGuardInput {
-    active_turn_count: i64,
-    enforce_flush_guard: bool,
-    allow_force: bool,
-}
-
-fn read_update_lock_state() -> UpdateLockState {
-    let lock_dir = Path::new("/tmp/clawchestra-update.lock");
-    if !lock_dir.exists() {
-        return UpdateLockState {
-            lock_present: false,
-            process_alive: false,
-            stale: false,
-            age_secs: None,
-        };
-    }
-
-    let age_secs = fs::metadata(lock_dir)
-        .ok()
-        .and_then(|meta| meta.modified().ok())
-        .and_then(|modified| modified.elapsed().ok())
-        .map(|elapsed| elapsed.as_secs());
-
-    let pid_path = lock_dir.join("pid");
-    let pid = fs::read_to_string(pid_path)
-        .ok()
-        .and_then(|value| value.trim().parse::<i32>().ok());
-
-    let process_alive = {
-        #[cfg(unix)]
-        {
-            if let Some(pid) = pid {
-                Command::new("kill")
-                    .arg("-0")
-                    .arg(pid.to_string())
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false)
-            } else {
-                false
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            false
-        }
-    };
-
-    let stale = !process_alive;
-
-    UpdateLockState {
-        lock_present: true,
-        process_alive,
-        stale,
-        age_secs,
-    }
-}
-
-#[tauri::command]
-fn get_app_update_lock_state() -> Result<UpdateLockState, String> {
-    Ok(read_update_lock_state())
-}
-
-#[tauri::command]
-fn check_for_update() -> Result<UpdateStatus, String> {
-    let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
-    if settings.update_mode != "source-rebuild" {
-        return Ok(UpdateStatus {
-            update_available: false,
-            build_commit: BUILD_COMMIT.to_string(),
-            current_commit: None,
-        });
-    }
-
-    let repo_path = settings.app_source_path.as_deref();
-    let current_commit = repo_path.and_then(get_current_git_head);
-    let update_available = match (&current_commit, repo_path) {
-        (Some(current), Some(repo)) if current != BUILD_COMMIT && BUILD_COMMIT != "unknown" => {
-            run_git(repo, &["diff", "--name-only", &format!("{BUILD_COMMIT}..{current}")])
-                .map(|output| {
-                    output
-                        .lines()
-                        .filter(|line| !line.is_empty())
-                        .any(|line| categorize_dirty_file(line) == FileCategory::Code)
-                })
-                .unwrap_or(true) // If diff fails, assume update needed (safe default)
-        }
-        _ => false,
-    };
-
-    Ok(UpdateStatus {
-        update_available,
-        build_commit: BUILD_COMMIT.to_string(),
-        current_commit,
-    })
-}
-
-#[tauri::command]
-async fn run_app_update(update_guard: Option<UpdateGuardInput>) -> Result<String, String> {
-    #[cfg(not(target_os = "macos"))]
-    {
-        return Err(
-            "updateSourceUnavailable: source-rebuild update flow currently supports macOS only"
-                .to_string(),
-        );
-    }
-
-    let settings = load_dashboard_settings()?;
-    if settings.update_mode != "source-rebuild" {
-        return Err("updateSourceUnavailable: updateMode is set to none".to_string());
-    }
-
-    if let Some(guard) = update_guard {
-        if guard.enforce_flush_guard && guard.active_turn_count > 0 && !guard.allow_force {
-            return Err(format!(
-                "updateBlocked: {} active chat turn(s). Wait for completion before updating.",
-                guard.active_turn_count
-            ));
-        }
-    }
-
-    let project_dir = settings
-        .app_source_path
-        .ok_or_else(|| "updateSourceUnavailable: appSourcePath is not configured".to_string())?;
-    let update_script = Path::new(&project_dir).join("update.sh");
-
-    if !update_script.exists() {
-        return Err("updateSourceUnavailable: update.sh not found in appSourcePath".to_string());
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = fs::metadata(&update_script)
-            .map_err(|error| error.to_string())?
-            .permissions()
-            .mode();
-        if mode & 0o111 == 0 {
-            return Err("updateSourceUnavailable: update.sh is not executable".to_string());
-        }
-    }
-
-    let install_path = std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            let mut current = exe.as_path();
-            loop {
-                if current
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| ext.eq_ignore_ascii_case("app"))
-                    .unwrap_or(false)
-                {
-                    return Some(current.to_string_lossy().to_string());
-                }
-                current = current.parent()?;
-            }
-        })
-        .unwrap_or_else(|| "/Applications/Clawchestra.app".to_string());
-
-    let _ = Command::new("/bin/sh")
-        .current_dir(&project_dir)
-        .env("CLAWCHESTRA_INSTALL_PATH", install_path)
-        .env("CLAWCHESTRA_RESTART_AFTER_BUILD", "1")
-        .args(["-c", "./update.sh > /tmp/clawchestra-update.log 2>&1"])
-        .spawn()
-        .map_err(|error| error.to_string())?;
-
-    Ok("Update started - app will restart after build completes".to_string())
-}
-
-fn unix_timestamp_secs() -> u64 {
+pub(crate) fn unix_timestamp_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
@@ -2795,513 +1413,956 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
 }
 
 // =============================================================================
-// Chat Persistence (SQLite)
+// Phase 2 Tauri commands
 // =============================================================================
 
-use rusqlite::{params, Connection, OptionalExtension};
-
-// Global database connection (thread-safe)
-static CHAT_DB: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| Mutex::new(None));
-
-fn get_chat_db_path() -> Result<PathBuf, String> {
-    let data_dir =
-        dirs::data_dir().ok_or_else(|| "Could not find app data directory".to_string())?;
-    let app_dir = data_dir.join("clawchestra");
-    fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
-    Ok(app_dir.join("chat.db"))
-}
-
-fn init_chat_db() -> Result<Connection, String> {
-    let db_path = get_chat_db_path()?;
-    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-
-    // Enable WAL mode for better concurrent read performance
-    conn.execute_batch("PRAGMA journal_mode=WAL;")
-        .map_err(|e| e.to_string())?;
-
-    // Create messages table
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            metadata TEXT,
-            created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
-        )",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-
-    // Create index for timestamp queries
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_messages_timestamp_id ON messages(timestamp DESC, id DESC)",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS pending_turns (
-            turn_token TEXT PRIMARY KEY,
-            session_key TEXT NOT NULL,
-            run_id TEXT,
-            status TEXT NOT NULL,
-            submitted_at INTEGER NOT NULL,
-            last_signal_at INTEGER NOT NULL,
-            completed_at INTEGER,
-            has_assistant_output INTEGER NOT NULL DEFAULT 0,
-            completion_reason TEXT,
-            updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
-        )",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_pending_turns_session_status
-         ON pending_turns(session_key, status)",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS chat_recovery_cursor (
-            session_key TEXT PRIMARY KEY,
-            last_message_id TEXT,
-            last_timestamp INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-        )",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-
-    Ok(conn)
-}
-
-fn get_or_init_chat_db() -> Result<std::sync::MutexGuard<'static, Option<Connection>>, String> {
-    let mut guard = CHAT_DB.lock().map_err(|e| e.to_string())?;
-    if guard.is_none() {
-        *guard = Some(init_chat_db()?);
-    }
-    Ok(guard)
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatMessage {
-    id: String,
-    role: String,
-    content: String,
-    timestamp: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PendingTurn {
-    turn_token: String,
-    session_key: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    run_id: Option<String>,
-    status: String,
-    submitted_at: i64,
-    last_signal_at: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    completed_at: Option<i64>,
-    has_assistant_output: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    completion_reason: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatRecoveryCursor {
-    session_key: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    last_message_id: Option<String>,
-    last_timestamp: i64,
-    updated_at: i64,
-}
-
+/// Ensure `.clawchestra/` directory exists in the given project path.
+/// Returns the full path to the directory.
 #[tauri::command]
-fn chat_messages_load(
-    before_timestamp: Option<i64>,
-    before_id: Option<String>,
-    limit: Option<i64>,
-) -> Result<Vec<ChatMessage>, String> {
-    let limit = limit.unwrap_or(50);
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-
-    let mut messages: Vec<ChatMessage> = Vec::new();
-
-    match before_timestamp {
-        Some(ts) => {
-            if let Some(cursor_id) = before_id {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT id, role, content, timestamp, metadata FROM messages
-                         WHERE (timestamp < ?1) OR (timestamp = ?1 AND id < ?2)
-                         ORDER BY timestamp DESC, id DESC LIMIT ?3",
-                    )
-                    .map_err(|e| e.to_string())?;
-
-                let rows = stmt
-                    .query_map(params![ts, cursor_id, limit], |row| {
-                        Ok(ChatMessage {
-                            id: row.get(0)?,
-                            role: row.get(1)?,
-                            content: row.get(2)?,
-                            timestamp: row.get(3)?,
-                            metadata: row.get(4)?,
-                        })
-                    })
-                    .map_err(|e| e.to_string())?;
-
-                for row in rows {
-                    messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
-                }
-            } else {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT id, role, content, timestamp, metadata FROM messages
-                         WHERE timestamp < ?1
-                         ORDER BY timestamp DESC, id DESC LIMIT ?2",
-                    )
-                    .map_err(|e| e.to_string())?;
-
-                let rows = stmt
-                    .query_map(params![ts, limit], |row| {
-                        Ok(ChatMessage {
-                            id: row.get(0)?,
-                            role: row.get(1)?,
-                            content: row.get(2)?,
-                            timestamp: row.get(3)?,
-                            metadata: row.get(4)?,
-                        })
-                    })
-                    .map_err(|e| e.to_string())?;
-
-                for row in rows {
-                    messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
-                }
-            }
-        }
-        None => {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, role, content, timestamp, metadata FROM messages
-                     ORDER BY timestamp DESC, id DESC LIMIT ?1",
-                )
-                .map_err(|e| e.to_string())?;
-
-            let rows = stmt
-                .query_map(params![limit], |row| {
-                    Ok(ChatMessage {
-                        id: row.get(0)?,
-                        role: row.get(1)?,
-                        content: row.get(2)?,
-                        timestamp: row.get(3)?,
-                        metadata: row.get(4)?,
-                    })
-                })
-                .map_err(|e| e.to_string())?;
-
-            for row in rows {
-                messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
-            }
-        }
-    }
-
-    // Reverse to get chronological order (oldest first)
-    messages.reverse();
-
-    Ok(messages)
-}
-
-#[tauri::command]
-fn chat_message_save(message: ChatMessage) -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-
-    conn.execute(
-        "INSERT OR IGNORE INTO messages (id, role, content, timestamp, metadata)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            message.id,
-            message.role,
-            message.content,
-            message.timestamp,
-            message.metadata,
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-/// Low-level DB clear that returns errors (unlike the Tauri command which is fire-and-forget).
-/// Used by migrations and the `chat_messages_clear` Tauri command.
-fn clear_chat_database() -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    conn.execute("DELETE FROM messages", [])
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn chat_messages_clear() -> Result<(), String> {
-    clear_chat_database()
-}
-
-#[tauri::command]
-fn chat_messages_count() -> Result<i64, String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-
-    Ok(count)
-}
-
-#[tauri::command]
-fn chat_pending_turn_save(turn: PendingTurn) -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-
-    conn.execute(
-        "INSERT OR REPLACE INTO pending_turns (
-            turn_token,
-            session_key,
-            run_id,
-            status,
-            submitted_at,
-            last_signal_at,
-            completed_at,
-            has_assistant_output,
-            completion_reason,
-            updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, (strftime('%s', 'now') * 1000))",
-        params![
-            turn.turn_token,
-            turn.session_key,
-            turn.run_id,
-            turn.status,
-            turn.submitted_at,
-            turn.last_signal_at,
-            turn.completed_at,
-            if turn.has_assistant_output { 1 } else { 0 },
-            turn.completion_reason,
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-#[tauri::command]
-fn chat_pending_turn_remove(turn_token: String) -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    conn.execute(
-        "DELETE FROM pending_turns WHERE turn_token = ?1",
-        params![turn_token],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn chat_pending_turns_load(session_key: Option<String>) -> Result<Vec<PendingTurn>, String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    let mut turns: Vec<PendingTurn> = Vec::new();
-
-    let active_statuses = ["queued", "running", "awaiting_output"];
-
-    if let Some(session) = session_key {
-        let mut stmt = conn
-            .prepare(
-                "SELECT turn_token, session_key, run_id, status, submitted_at, last_signal_at,
-                        completed_at, has_assistant_output, completion_reason
-                 FROM pending_turns
-                 WHERE session_key = ?1 AND status IN (?2, ?3, ?4)
-                 ORDER BY submitted_at ASC",
-            )
-            .map_err(|e| e.to_string())?;
-
-        let rows = stmt
-            .query_map(
-                params![
-                    session,
-                    active_statuses[0],
-                    active_statuses[1],
-                    active_statuses[2]
-                ],
-                |row| {
-                    Ok(PendingTurn {
-                        turn_token: row.get(0)?,
-                        session_key: row.get(1)?,
-                        run_id: row.get(2)?,
-                        status: row.get(3)?,
-                        submitted_at: row.get(4)?,
-                        last_signal_at: row.get(5)?,
-                        completed_at: row.get(6)?,
-                        has_assistant_output: row.get::<_, i64>(7)? != 0,
-                        completion_reason: row.get(8)?,
-                    })
-                },
-            )
-            .map_err(|e| e.to_string())?;
-
-        for row in rows {
-            turns.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
-        }
-    } else {
-        let mut stmt = conn
-            .prepare(
-                "SELECT turn_token, session_key, run_id, status, submitted_at, last_signal_at,
-                        completed_at, has_assistant_output, completion_reason
-                 FROM pending_turns
-                 WHERE status IN (?1, ?2, ?3)
-                 ORDER BY submitted_at ASC",
-            )
-            .map_err(|e| e.to_string())?;
-
-        let rows = stmt
-            .query_map(
-                params![active_statuses[0], active_statuses[1], active_statuses[2]],
-                |row| {
-                    Ok(PendingTurn {
-                        turn_token: row.get(0)?,
-                        session_key: row.get(1)?,
-                        run_id: row.get(2)?,
-                        status: row.get(3)?,
-                        submitted_at: row.get(4)?,
-                        last_signal_at: row.get(5)?,
-                        completed_at: row.get(6)?,
-                        has_assistant_output: row.get::<_, i64>(7)? != 0,
-                        completion_reason: row.get(8)?,
-                    })
-                },
-            )
-            .map_err(|e| e.to_string())?;
-
-        for row in rows {
-            turns.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
-        }
-    }
-
-    Ok(turns)
-}
-
-#[tauri::command]
-fn chat_flush() -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    conn.execute_batch("PRAGMA wal_checkpoint(FULL); PRAGMA optimize;")
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn chat_recovery_cursor_get(
-    session_key: Option<String>,
-) -> Result<Option<ChatRecoveryCursor>, String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    let key = session_key.unwrap_or_else(|| DEFAULT_SESSION_KEY.to_string());
-    let mut stmt = conn
-        .prepare(
-            "SELECT session_key, last_message_id, last_timestamp, updated_at
-             FROM chat_recovery_cursor
-             WHERE session_key = ?1",
+fn ensure_clawchestra_dir(project_path: String) -> Result<String, String> {
+    let dir = Path::new(&project_path).join(".clawchestra");
+    fs::create_dir_all(&dir).map_err(|e| {
+        format!(
+            "Failed to create .clawchestra directory at {}: {}",
+            dir.display(),
+            e
         )
-        .map_err(|e| e.to_string())?;
-
-    let cursor = stmt
-        .query_row(params![key], |row| {
-            Ok(ChatRecoveryCursor {
-                session_key: row.get(0)?,
-                last_message_id: row.get(1)?,
-                last_timestamp: row.get(2)?,
-                updated_at: row.get(3)?,
-            })
-        })
-        .optional()
-        .map_err(|e| e.to_string())?;
-
-    Ok(cursor)
+    })?;
+    Ok(dir.to_string_lossy().to_string())
 }
 
+/// Write state.json atomically for a project.
+///
+/// 1. Acquires file lock on `.clawchestra/state.json.lock`
+/// 2. Serializes to pretty-printed JSON
+/// 3. Writes atomically (`.tmp` + rename)
+/// 4. Computes and stores SHA-256 hash BEFORE releasing lock
+/// 5. Read-verify: parses file back to ensure correctness
 #[tauri::command]
-fn chat_recovery_cursor_advance(
-    session_key: String,
-    last_timestamp: i64,
-    last_message_id: Option<String>,
+async fn write_state_json(
+    project_path: String,
+    state_data: state::StateJson,
+    app_state: tauri::State<'_, SharedAppState>,
 ) -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    let now = (unix_timestamp_secs() as i64) * 1000;
-    conn.execute(
-        "INSERT INTO chat_recovery_cursor (session_key, last_message_id, last_timestamp, updated_at)
-         VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(session_key) DO UPDATE SET
-           last_message_id = CASE
-             WHEN excluded.last_timestamp >= chat_recovery_cursor.last_timestamp
-               THEN excluded.last_message_id
-             ELSE chat_recovery_cursor.last_message_id
-           END,
-           last_timestamp = CASE
-             WHEN excluded.last_timestamp >= chat_recovery_cursor.last_timestamp
-               THEN excluded.last_timestamp
-             ELSE chat_recovery_cursor.last_timestamp
-           END,
-           updated_at = excluded.updated_at",
-        params![session_key, last_message_id, last_timestamp, now],
-    )
-    .map_err(|e| e.to_string())?;
+    let clawchestra_dir = Path::new(&project_path).join(".clawchestra");
+    fs::create_dir_all(&clawchestra_dir).map_err(|e| {
+        format!(
+            "Failed to create .clawchestra directory at {}: {}",
+            clawchestra_dir.display(),
+            e
+        )
+    })?;
+
+    let state_json_path = clawchestra_dir.join("state.json");
+    let lock_path = clawchestra_dir.join("state.json.lock");
+
+    // Acquire lock
+    let _guard = acquire_mutation_lock_at(
+        &lock_path,
+        Duration::from_millis(locking::MUTATION_LOCK_TIMEOUT_MS),
+        Duration::from_secs(60),
+    )?;
+
+    // Serialize to pretty JSON
+    let content = serde_json::to_string_pretty(&state_data)
+        .map_err(|e| format!("Failed to serialize state.json: {}", e))?;
+
+    // Compute SHA-256 BEFORE writing (so we store the expected hash)
+    let hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        format!("{:x}", hasher.finalize())
+    };
+
+    // Pre-register hash BEFORE file becomes visible to watcher (closes TOCTOU gap)
+    let project_id = state_data.project.id.clone();
+    let pid = ProjectId(project_id.clone());
+    {
+        let mut guard = app_state.lock().await;
+        guard.content_hashes.insert(pid.clone(), hash.clone());
+    }
+
+    // Atomic write: .tmp + rename
+    let temp_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_path = state_json_path.with_file_name(format!("state.json.tmp-{}", temp_suffix));
+    if let Err(e) = fs::write(&temp_path, &content) {
+        // Remove pre-registered hash on failure
+        let mut guard = app_state.lock().await;
+        guard.content_hashes.remove(&pid);
+        return Err(format!(
+            "Failed to write temp state.json at {}: {}",
+            temp_path.display(),
+            e
+        ));
+    }
+    if let Err(e) = fs::rename(&temp_path, &state_json_path) {
+        let _ = fs::remove_file(&temp_path);
+        // Remove pre-registered hash on failure
+        let mut guard = app_state.lock().await;
+        guard.content_hashes.remove(&pid);
+        return Err(format!(
+            "Failed to rename temp state.json to {}: {}",
+            state_json_path.display(),
+            e
+        ));
+    }
+
+    // Read-verify: parse back to ensure correctness
+    let verify_content = fs::read_to_string(&state_json_path).map_err(|e| {
+        format!(
+            "Read-verify failed for {}: {}",
+            state_json_path.display(),
+            e
+        )
+    })?;
+    let _: state::StateJson = serde_json::from_str(&verify_content).map_err(|e| {
+        format!(
+            "Read-verify parse failed for {}: {}. File may be corrupt.",
+            state_json_path.display(),
+            e
+        )
+    })?;
+
+    tracing::info!(
+        "Wrote state.json for project '{}' (hash: {})",
+        project_id,
+        &hash[..12]
+    );
+
+    Ok(())
+    // Lock is released here when _guard drops
+}
+
+/// Response type for get_all_projects.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectSummary {
+    id: String,
+    project_path: String,
+    title: String,
+    status: String,
+    description: String,
+    parent_id: Option<String>,
+    tags: Vec<String>,
+    roadmap_item_count: usize,
+}
+
+/// Get all projects from the in-memory DB.
+#[tauri::command]
+async fn get_all_projects(
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<Vec<ProjectSummary>, String> {
+    let guard = app_state.lock().await;
+    let projects: Vec<ProjectSummary> = guard
+        .db
+        .projects
+        .iter()
+        .map(|(id, entry)| ProjectSummary {
+            id: id.clone(),
+            project_path: entry.project_path.clone(),
+            title: entry.project.title.clone(),
+            status: entry.project.status.clone(),
+            description: entry.project.description.clone(),
+            parent_id: entry.project.parent_id.clone(),
+            tags: entry.project.tags.clone(),
+            roadmap_item_count: entry.roadmap_items.len(),
+        })
+        .collect();
+    Ok(projects)
+}
+
+/// Response type for get_project — full project data with roadmap items.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectDetail {
+    id: String,
+    project_path: String,
+    project: state::DbProjectData,
+    roadmap_items: Vec<state::DbRoadmapItem>,
+}
+
+/// Get a single project's full data from the in-memory DB.
+#[tauri::command]
+async fn get_project(
+    project_id: String,
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<ProjectDetail, String> {
+    let guard = app_state.lock().await;
+    let entry = guard
+        .db
+        .projects
+        .get(&project_id)
+        .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+
+    let mut items: Vec<state::DbRoadmapItem> = entry.roadmap_items.values().cloned().collect();
+    items.sort_by_key(|item| item.priority);
+
+    Ok(ProjectDetail {
+        id: project_id,
+        project_path: entry.project_path.clone(),
+        project: entry.project.clone(),
+        roadmap_items: items,
+    })
+}
+
+// =============================================================================
+// Phase 3 Migration commands
+// =============================================================================
+
+/// Response type for migration status of a single project.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationStatus {
+    project_id: String,
+    project_path: String,
+    step: String,
+    uses_legacy_filename: bool,
+}
+
+/// Get the derived migration status for all known projects.
+#[tauri::command]
+async fn get_migration_status(
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<Vec<MigrationStatus>, String> {
+    let guard = app_state.lock().await;
+    let mut statuses = Vec::new();
+
+    for (id, entry) in &guard.db.projects {
+        let project_dir = Path::new(&entry.project_path);
+        let step = migration::derive_migration_step(project_dir, id, &guard);
+        statuses.push(MigrationStatus {
+            project_id: id.clone(),
+            project_path: entry.project_path.clone(),
+            step: format!("{:?}", step),
+            uses_legacy_filename: migration::uses_legacy_filename(project_dir),
+        });
+    }
+
+    Ok(statuses)
+}
+
+/// Run migration for a single project. Returns the migration result.
+#[tauri::command]
+async fn run_migration(
+    project_id: String,
+    project_path: String,
+    project_title: String,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+) -> Result<migration::MigrationResult, String> {
+    let project_dir = PathBuf::from(&project_path);
+    if !project_dir.is_absolute() {
+        return Err("project_path must be absolute".to_string());
+    }
+    let result = {
+        let mut guard = app_state.lock().await;
+        migration::run_project_migration(
+            &mut guard,
+            &project_id,
+            &project_dir,
+            &project_title,
+        )
+    };
+
+    // Schedule DB flush after migration
+    flush_handle.schedule_flush();
+
+    Ok(result)
+}
+
+/// Run migration for all tracked projects.
+#[tauri::command]
+async fn run_all_migrations(
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<migration::MigrationResult>, String> {
+    // Gather projects that need migration
+    let projects_to_migrate: Vec<(String, String, String)> = {
+        let guard = app_state.lock().await;
+        guard
+            .db
+            .projects
+            .iter()
+            .map(|(id, entry)| {
+                (
+                    id.clone(),
+                    entry.project_path.clone(),
+                    entry.project.title.clone(),
+                )
+            })
+            .collect()
+    };
+
+    let total = projects_to_migrate.len();
+    let mut results = Vec::new();
+
+    for (i, (project_id, project_path, project_title)) in
+        projects_to_migrate.into_iter().enumerate()
+    {
+        let project_dir = PathBuf::from(&project_path);
+        let result = {
+            let mut guard = app_state.lock().await;
+            migration::run_project_migration(
+                &mut guard,
+                &project_id,
+                &project_dir,
+                &project_title,
+            )
+        };
+
+        // Emit progress event
+        let _ = app_handle.emit(
+            "migration-progress",
+            serde_json::json!({
+                "projectId": project_id,
+                "completed": i + 1,
+                "total": total,
+                "error": result.error,
+            }),
+        );
+
+        results.push(result);
+    }
+
+    // Schedule DB flush after all migrations
+    flush_handle.schedule_flush();
+
+    Ok(results)
+}
+
+/// Rename PROJECT.md -> CLAWCHESTRA.md for a single project (3.8 auto-rename offer).
+#[tauri::command]
+fn rename_project_md(project_path: String) -> Result<bool, String> {
+    let project_dir = PathBuf::from(&project_path);
+    if !project_dir.is_absolute() {
+        return Err("project_path must be absolute".to_string());
+    }
+    migration::rename_project_file(&project_dir)
+}
+
+/// Get the derived migration step for a single project directory.
+/// Used for projects not yet in the DB (e.g., newly scanned).
+#[tauri::command]
+async fn get_project_migration_step(
+    project_id: String,
+    project_path: String,
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<String, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let guard = app_state.lock().await;
+    let step = migration::derive_migration_step(&project_dir, &project_id, &guard);
+    Ok(format!("{:?}", step))
+}
+
+// =============================================================================
+// Phase 6: OpenClaw Data Endpoint & Sync
+// =============================================================================
+
+/// Install the Clawchestra data endpoint extension into an OpenClaw installation.
+#[tauri::command]
+fn install_openclaw_extension(openclaw_path: String) -> Result<(), String> {
+    sync::install_extension(&openclaw_path)
+}
+
+/// Get the installed extension version (or null if not installed).
+#[tauri::command]
+fn get_openclaw_extension_version(openclaw_path: String) -> Option<String> {
+    sync::get_installed_extension_version(&openclaw_path)
+}
+
+/// Check if the installed extension is stale and needs updating.
+#[tauri::command]
+fn is_openclaw_extension_stale(openclaw_path: String) -> bool {
+    sync::is_extension_stale(&openclaw_path)
+}
+
+/// Generate the extension file content (for display/manual install).
+#[tauri::command]
+fn get_extension_content() -> String {
+    sync::generate_extension_content()
+}
+
+/// Perform local sync on launch. Returns the SyncResult.
+/// Updates the in-memory AppState with the merged DB.
+#[tauri::command]
+async fn sync_local_launch(
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+) -> Result<sync::SyncResult, String> {
+    // Clone data under lock, capture HLC for CAS check
+    let (db_snapshot, client_uuid, snapshot_hlc) = {
+        let guard = app_state.lock().await;
+        (guard.db.clone(), guard.client_uuid.clone(), guard.db.hlc_counter)
+    };
+
+    // sync_local_on_launch reads/writes files — runs outside the lock
+    let (merged, result) = sync::sync_local_on_launch(&db_snapshot, &client_uuid);
+
+    // Re-acquire lock; CAS check for concurrent writes
+    let mut guard = app_state.lock().await;
+    if guard.db.hlc_counter > snapshot_hlc {
+        // Watcher applied changes while we were syncing — merge rather than overwrite
+        let (mut reconciled, _, _) = sync::merge_db_json(&guard.db, &merged, &guard.client_uuid);
+        sync::fix_post_merge_invariants_pub(&mut reconciled);
+        guard.db = reconciled;
+    } else {
+        guard.db = merged;
+    }
+    guard.hlc_counter = guard.db.hlc_counter;
+    guard.dirty = true;
+    drop(guard);
+    flush_handle.schedule_flush();
+
+    Ok(result)
+}
+
+/// Merge a remote DB (fetched by TypeScript via HTTP) with the local DB.
+/// Returns the merged DB as JSON (for TypeScript to PUT back to remote) and a SyncResult.
+#[tauri::command]
+async fn sync_merge_remote(
+    remote_db_json: String,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+) -> Result<(String, sync::SyncResult), String> {
+    let remote_db: state::DbJson =
+        serde_json::from_str(&remote_db_json).map_err(|e| format!("Invalid remote DB JSON: {}", e))?;
+
+    // Clone data under lock, capture HLC for CAS check
+    let (db_snapshot, client_uuid, snapshot_hlc) = {
+        let guard = app_state.lock().await;
+        (guard.db.clone(), guard.client_uuid.clone(), guard.db.hlc_counter)
+    };
+
+    // merge_remote_db does merge + flush_db_json — runs outside the lock
+    let (merged, result) = sync::merge_remote_db(&db_snapshot, &remote_db, &client_uuid);
+
+    // Re-acquire lock; CAS check for concurrent writes
+    let mut guard = app_state.lock().await;
+    if guard.db.hlc_counter > snapshot_hlc {
+        let (mut reconciled, _, _) = sync::merge_db_json(&guard.db, &merged, &guard.client_uuid);
+        sync::fix_post_merge_invariants_pub(&mut reconciled);
+        guard.db = reconciled;
+    } else {
+        guard.db = merged;
+    }
+    guard.hlc_counter = guard.db.hlc_counter;
+    guard.dirty = true;
+
+    // Serialize the final DB for TypeScript to PUT back
+    let merged_json = serde_json::to_string(&guard.db)
+        .map_err(|e| format!("Failed to serialize merged DB: {}", e))?;
+    drop(guard);
+    flush_handle.schedule_flush();
+
+    Ok((merged_json, result))
+}
+
+/// Flush DB state to the local OpenClaw data directory.
+/// Used for sync-on-close in local mode.
+#[tauri::command]
+async fn sync_local_close(
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<sync::SyncResult, String> {
+    let guard = app_state.lock().await;
+    Ok(sync::sync_local_on_close(&guard.db))
+}
+
+/// Get the current DB as a JSON string (for TypeScript to push to remote on close).
+#[tauri::command]
+async fn get_db_json_for_sync(
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<String, String> {
+    let guard = app_state.lock().await;
+    serde_json::to_string(&guard.db).map_err(|e| format!("Failed to serialize DB: {}", e))
+}
+
+/// Initialize client identity and write system context.
+/// Called once during app startup after settings are loaded.
+#[tauri::command]
+async fn ensure_sync_identity(
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+) -> Result<(), String> {
+    let mut guard = app_state.lock().await;
+
+    // Check if we already have a client registered
+    let needs_identity = guard.db.clients.is_empty();
+
+    if needs_identity {
+        let (uuid, hostname) = sync::ensure_client_identity();
+        let platform = sync::get_platform();
+
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        guard.db.clients.insert(
+            uuid.clone(),
+            state::DbClient {
+                hostname: hostname.clone(),
+                platform: platform.clone(),
+                last_seen_at: now_ms,
+            },
+        );
+        guard.client_uuid = uuid.clone();
+        guard.mark_dirty();
+
+        // Write system context (drop lock before I/O)
+        let uuid_clone = uuid;
+        let hostname_clone = hostname;
+        let platform_clone = platform;
+        drop(guard);
+        flush_handle.schedule_flush();
+
+        sync::write_system_context(&uuid_clone, &hostname_clone, &platform_clone)?;
+    } else {
+        // Update last_seen_at for existing client
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        // Update all known clients' last_seen_at (we are the local client, pick first)
+        if let Some(client) = guard.db.clients.values_mut().next() {
+            client.last_seen_at = now_ms;
+        }
+        guard.mark_dirty();
+
+        // Rewrite system context with current info
+        let (uuid, client) = guard
+            .db
+            .clients
+            .iter()
+            .next()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .ok_or_else(|| "No client identity found".to_string())?;
+        drop(guard);
+        flush_handle.schedule_flush();
+
+        sync::write_system_context(&uuid, &client.hostname, &client.platform)?;
+    }
+
     Ok(())
 }
 
+/// Write the system-context.md file for OpenClaw.
 #[tauri::command]
-fn chat_recovery_cursor_clear(session_key: Option<String>) -> Result<(), String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
-    if let Some(key) = session_key {
-        conn.execute(
-            "DELETE FROM chat_recovery_cursor WHERE session_key = ?1",
-            params![key],
-        )
-        .map_err(|e| e.to_string())?;
-    } else {
-        conn.execute("DELETE FROM chat_recovery_cursor", [])
-            .map_err(|e| e.to_string())?;
+async fn write_openclaw_system_context(
+    client_uuid: String,
+    hostname: String,
+    platform: String,
+) -> Result<(), String> {
+    sync::write_system_context(&client_uuid, &hostname, &platform)
+}
+
+// =============================================================================
+// Phase 7: Structured Logging & Error Reporting
+// =============================================================================
+
+/// Initialize the tracing subscriber with JSON file output + stdout (Phase 7.1).
+///
+/// Writes structured JSON log entries to `~/.clawchestra/app.log`.
+/// Rotates to `app.log.1` when the file exceeds 1MB.
+/// Also outputs human-readable logs to stdout for development.
+fn init_tracing() {
+    let log_dir = dirs::home_dir()
+        .map(|h| h.join(".clawchestra"))
+        .unwrap_or_else(|| PathBuf::from(".clawchestra"));
+
+    // Ensure log directory exists
+    let _ = fs::create_dir_all(&log_dir);
+
+    // Rotate if existing log exceeds 1MB
+    let log_file_path = log_dir.join("app.log");
+    if log_file_path.exists() {
+        if let Ok(meta) = fs::metadata(&log_file_path) {
+            if meta.len() > 1_048_576 {
+                let rotated = log_dir.join("app.log.1");
+                let _ = fs::rename(&log_file_path, &rotated);
+            }
+        }
     }
-    Ok(())
+
+    // File layer: JSON-structured output to app.log
+    let log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file_path);
+
+    match log_file {
+        Ok(file) => {
+            let file_layer = tracing_subscriber::fmt::layer()
+                .json()
+                .with_writer(std::sync::Mutex::new(file))
+                .with_target(true)
+                .with_thread_ids(false)
+                .with_file(false)
+                .with_line_number(false);
+
+            // Stdout layer: human-readable for development
+            let stdout_layer = tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .compact();
+
+            let subscriber = tracing_subscriber::registry()
+                .with(
+                    tracing_subscriber::EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                )
+                .with(file_layer)
+                .with(stdout_layer);
+
+            // If another subscriber is already set (e.g. in tests), this is a no-op
+            let _ = tracing::subscriber::set_global_default(subscriber);
+        }
+        Err(e) => {
+            // Fallback: stdout only if file cannot be opened
+            let stdout_layer = tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .compact();
+
+            let subscriber = tracing_subscriber::registry()
+                .with(
+                    tracing_subscriber::EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                )
+                .with(stdout_layer);
+
+            let _ = tracing::subscriber::set_global_default(subscriber);
+            tracing::warn!("Could not open log file at {}: {}", log_file_path.display(), e);
+        }
+    }
+
+    tracing::info!("Clawchestra logging initialized (log file: {})", log_file_path.display());
+}
+
+/// Export debug info for troubleshooting (Phase 7.2).
+///
+/// Collects migration state, recent validation results, sync config,
+/// app version, OS, and client UUID into a formatted string.
+#[tauri::command]
+async fn export_debug_info(
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<String, String> {
+    let guard = app_state.lock().await;
+    let mut lines: Vec<String> = Vec::new();
+
+    // Header
+    lines.push("=== Clawchestra Debug Export ===".to_string());
+    lines.push(format!("Timestamp: {}", chrono::Local::now().to_rfc3339()));
+    lines.push(format!("App Version: {} (commit: {})", env!("CARGO_PKG_VERSION"), BUILD_COMMIT));
+    lines.push(format!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH));
+    lines.push(format!("Client UUID: {}", guard.client_uuid));
+    lines.push(String::new());
+
+    // Migration state for all projects
+    lines.push("--- Migration State ---".to_string());
+    if guard.db.projects.is_empty() {
+        lines.push("  (no projects)".to_string());
+    } else {
+        for (id, entry) in &guard.db.projects {
+            let project_dir = Path::new(&entry.project_path);
+            let step = migration::derive_migration_step(project_dir, id, &guard);
+            lines.push(format!("  {} ({}): {:?}", id, entry.project_path, step));
+        }
+    }
+    lines.push(String::new());
+
+    // Last 20 state history entries (validation results)
+    lines.push("--- Recent State History (last 20 per project) ---".to_string());
+    if guard.state_history.is_empty() {
+        lines.push("  (no history)".to_string());
+    } else {
+        for (project_id, history) in &guard.state_history {
+            lines.push(format!("  Project: {}", project_id));
+            let start = if history.len() > 20 { history.len() - 20 } else { 0 };
+            for entry in history.iter().skip(start) {
+                lines.push(format!(
+                    "    [{}] source={:?} fields={:?}",
+                    entry.timestamp, entry.source, entry.changed_fields
+                ));
+            }
+        }
+    }
+    lines.push(String::new());
+
+    // Validation rejections (Phase 7.3)
+    lines.push("--- Validation Rejections (last 20 per project) ---".to_string());
+    if guard.validation_rejections.is_empty() {
+        lines.push("  (no rejections)".to_string());
+    } else {
+        for (project_id, rejections) in &guard.validation_rejections {
+            lines.push(format!("  Project: {}", project_id));
+            for rejection in rejections.iter() {
+                lines.push(format!(
+                    "    [{}] fields={:?} reason={} resolved={}",
+                    rejection.timestamp,
+                    rejection.rejected_fields,
+                    rejection.reason,
+                    rejection.resolved
+                ));
+            }
+        }
+    }
+    lines.push(String::new());
+
+    // Sync config
+    lines.push("--- Sync Config ---".to_string());
+    lines.push(format!("  HLC counter: {}", guard.hlc_counter));
+    lines.push(format!("  DB dirty: {}", guard.dirty));
+    lines.push(format!("  Clients registered: {}", guard.db.clients.len()));
+    for (uuid, client) in &guard.db.clients {
+        lines.push(format!(
+            "    {} hostname={} platform={} last_seen={}",
+            uuid, client.hostname, client.platform, client.last_seen_at
+        ));
+    }
+    lines.push(String::new());
+
+    // File watcher status
+    lines.push("--- File Watcher ---".to_string());
+    lines.push("  (event tracking not yet implemented — watcher is active if started at boot)".to_string());
+    lines.push(String::new());
+
+    lines.push("=== End Debug Export ===".to_string());
+
+    Ok(lines.join("\n"))
+}
+
+/// Get the last 20 validation rejection events per project (Phase 7.3).
+#[tauri::command]
+async fn get_validation_history(
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<HashMap<String, Vec<ValidationRejection>>, String> {
+    let guard = app_state.lock().await;
+    let mut result: HashMap<String, Vec<ValidationRejection>> = HashMap::new();
+
+    for (project_id, rejections) in &guard.validation_rejections {
+        result.insert(
+            project_id.as_str().to_string(),
+            rejections.iter().cloned().collect(),
+        );
+    }
+
+    Ok(result)
+}
+
+/// Mark a validation rejection event as resolved (Phase 7.3).
+///
+/// Finds the rejection at the given timestamp for the given project and marks it resolved.
+/// The rejection remains in history but is flagged as acknowledged.
+#[tauri::command]
+async fn mark_rejection_resolved(
+    project_id: String,
+    timestamp: u64,
+    app_state: tauri::State<'_, SharedAppState>,
+) -> Result<bool, String> {
+    let mut guard = app_state.lock().await;
+    let pid = ProjectId(project_id);
+
+    if let Some(rejections) = guard.validation_rejections.get_mut(&pid) {
+        for rejection in rejections.iter_mut() {
+            if rejection.timestamp == timestamp {
+                rejection.resolved = true;
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false) // No matching rejection found
 }
 
 // =============================================================================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // --- Phase 7.1: Structured logging setup ---
+    init_tracing();
+
+    // --- Startup sequence (Phase 2.0) ---
+    // 1. Load settings
+    let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
+
+    // 2. Load db.json into AppState
+    let db = db_persistence::load_db_json();
+    let mut app_state = AppState::default();
+    app_state.db = db;
+    app_state.hlc_counter = app_state.db.hlc_counter;
+    app_state.history_buffer_size = settings.state_history_buffer_size;
+
+    // 2.1 Ensure client identity (Phase 6.4)
+    if app_state.db.clients.is_empty() {
+        let (uuid, hostname) = sync::ensure_client_identity();
+        let platform = sync::get_platform();
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        app_state.client_uuid = uuid.clone();
+        app_state.db.clients.insert(
+            uuid.clone(),
+            state::DbClient {
+                hostname: hostname.clone(),
+                platform: platform.clone(),
+                last_seen_at: now_ms,
+            },
+        );
+        app_state.dirty = true;
+        // Write system context (best-effort)
+        let _ = sync::write_system_context(&uuid, &hostname, &platform);
+    } else {
+        // Client already registered — load existing UUID
+        app_state.client_uuid = app_state
+            .db
+            .clients
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or_default();
+    }
+
+    // Note: Launch sync is handled by the sync_local_launch Tauri command,
+    // invoked by TypeScript after the app is ready. Not duplicated here.
+
+    let shared_state: SharedAppState = Arc::new(tokio::sync::Mutex::new(app_state));
+
+    // 3. Start debounced DB flush
+    let flush_handle: SharedFlushHandle = Arc::new(
+        db_persistence::DbFlushHandle::start(shared_state.clone()),
+    );
+
+    // Create clones for the closures that need them
+    let state_for_setup = shared_state.clone();
+    let state_for_events = shared_state.clone();
+    let shared_state_for_ready = shared_state.clone();
+    let flush_for_setup = flush_handle.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_fs::init())
-        .setup(|_app| {
+        .manage(shared_state.clone())
+        .manage(flush_handle.clone())
+        .setup(move |app| {
             migrate_data_directories();
             run_migrations();
+
+            // 4. Start file watcher (Phase 2.3)
+            let scan_paths = settings.scan_paths.clone();
+            let watcher_state = state_for_setup.clone();
+            let watcher_flush = flush_for_setup.clone();
+            let app_handle = app.handle().clone();
+
+            // Start watcher in a thread so setup doesn't block
+            std::thread::spawn(move || {
+                match watcher::start_watching(
+                    app_handle.clone(),
+                    watcher_state,
+                    watcher_flush,
+                    scan_paths,
+                ) {
+                    Ok(_watcher) => {
+                        tracing::info!("File watcher started");
+                        // Keep the watcher alive — it will be dropped when this thread exits
+                        // We park the thread to keep the watcher alive for the app lifetime
+                        std::thread::park();
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to start file watcher: {}", e);
+                        let _ = app_handle.emit(
+                            "watcher-error",
+                            serde_json::json!({
+                                "error": format!("File watcher failed to start: {}. Changes to state.json files will not be detected automatically.", e)
+                            }),
+                        );
+                    }
+                }
+            });
+
+            // 5. Emit clawchestra-ready event
+            let ready_handle = app.handle().clone();
+            let ready_state = shared_state_for_ready.clone();
+            tauri::async_runtime::spawn(async move {
+                // Small delay to let frontend mount event listeners
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                let project_count = {
+                    let guard = ready_state.lock().await;
+                    guard.db.projects.len()
+                };
+                let _ = ready_handle.emit(
+                    "clawchestra-ready",
+                    serde_json::json!({
+                        "projectCount": project_count,
+                        "migratedCount": 0,
+                        "syncStatus": "ok"
+                    }),
+                );
+            });
+
             Ok(())
+        })
+        .on_window_event(move |_window, event| {
+            // Crash-safe flush: flush db.json on window close/destroy + sync-on-close (Phase 6.6)
+            match event {
+                tauri::WindowEvent::CloseRequested { .. }
+                | tauri::WindowEvent::Destroyed => {
+                    // Synchronous flush — block with timeout to prevent deadlock
+                    // if another async task holds the mutex
+                    let state_for_flush = state_for_events.clone();
+                    let flush_result = tauri::async_runtime::block_on(async {
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(3),
+                            db_persistence::flush_if_dirty(&state_for_flush),
+                        )
+                        .await
+                        {
+                            Ok(result) => result,
+                            Err(_) => {
+                                tracing::warn!("Crash-safe flush timed out after 3s — data may not be persisted");
+                                Err("Flush timed out".to_string())
+                            }
+                        }
+                    });
+                    match flush_result {
+                        Ok(()) => tracing::info!("Crash-safe db.json flush completed on window close"),
+                        Err(e) => tracing::warn!("Crash-safe flush failed on window close: {}", e),
+                    }
+
+                    // Sync-on-close: write to OpenClaw data directory (local mode only,
+                    // remote mode is handled by TypeScript with a 3s timeout)
+                    let state_for_sync = state_for_flush;
+                    let sync_result = tauri::async_runtime::block_on(async {
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(3),
+                            async {
+                                let guard = state_for_sync.lock().await;
+                                sync::sync_local_on_close(&guard.db)
+                            },
+                        )
+                        .await
+                        {
+                            Ok(result) => result,
+                            Err(_) => sync::SyncResult {
+                                success: false,
+                                message: "Sync-on-close timed out after 3s".to_string(),
+                                warnings: vec![],
+                                fields_from_remote: 0,
+                                fields_from_local: 0,
+                            },
+                        }
+                    });
+                    if sync_result.success {
+                        tracing::info!("Sync-on-close: {}", sync_result.message);
+                    } else {
+                        tracing::warn!("Sync-on-close failed: {}", sync_result.message);
+                    }
+                }
+                _ => {}
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_dashboard_settings,
@@ -3318,39 +2379,72 @@ pub fn run() {
             get_openclaw_gateway_config,
             openclaw_ping,
             openclaw_chat,
-            probe_repo,
-            get_git_status,
-            git_fetch,
-            git_get_branch_states,
-            git_commit,
-            git_push,
-            git_sync_lock_acquire,
-            git_sync_lock_release,
-            git_checkout_branch,
-            git_stash_push,
-            git_pop_stash,
-            git_cherry_pick_commit,
-            git_abort_cherry_pick,
-            git_pull_current,
-            git_get_conflict_context,
-            git_apply_conflict_resolution,
-            git_validate_branch_sync_resume,
-            git_init_repo,
-            check_for_update,
-            get_app_update_lock_state,
-            run_app_update,
+            // Git commands (commands/git.rs)
+            commands::git::probe_repo,
+            commands::git::get_git_status,
+            commands::git::git_fetch,
+            commands::git::git_get_branch_states,
+            commands::git::git_commit,
+            commands::git::git_push,
+            commands::git::git_sync_lock_acquire,
+            commands::git::git_sync_lock_release,
+            commands::git::git_checkout_branch,
+            commands::git::git_stash_push,
+            commands::git::git_pop_stash,
+            commands::git::git_cherry_pick_commit,
+            commands::git::git_abort_cherry_pick,
+            commands::git::git_pull_current,
+            commands::git::git_get_conflict_context,
+            commands::git::git_apply_conflict_resolution,
+            commands::git::git_validate_branch_sync_resume,
+            commands::git::git_init_repo,
+            // Update commands (commands/update.rs)
+            commands::update::check_for_update,
+            commands::update::get_app_update_lock_state,
+            commands::update::run_app_update,
+            // Slash commands
             list_slash_commands,
-            chat_messages_load,
-            chat_message_save,
-            chat_messages_clear,
-            chat_messages_count,
-            chat_pending_turn_save,
-            chat_pending_turn_remove,
-            chat_pending_turns_load,
-            chat_flush,
-            chat_recovery_cursor_get,
-            chat_recovery_cursor_advance,
-            chat_recovery_cursor_clear,
+            // Chat commands (commands/chat.rs)
+            commands::chat::chat_messages_load,
+            commands::chat::chat_message_save,
+            commands::chat::chat_messages_clear,
+            commands::chat::chat_messages_count,
+            commands::chat::chat_pending_turn_save,
+            commands::chat::chat_pending_turn_remove,
+            commands::chat::chat_pending_turns_load,
+            commands::chat::chat_flush,
+            commands::chat::chat_recovery_cursor_get,
+            commands::chat::chat_recovery_cursor_advance,
+            commands::chat::chat_recovery_cursor_clear,
+            // Phase 2 commands
+            ensure_clawchestra_dir,
+            write_state_json,
+            get_all_projects,
+            get_project,
+            // Phase 3 migration commands
+            get_migration_status,
+            run_migration,
+            run_all_migrations,
+            rename_project_md,
+            get_project_migration_step,
+            // Phase 4 injection commands
+            injection::inject_agent_guidance,
+            // Phase 6 sync commands
+            install_openclaw_extension,
+            get_openclaw_extension_version,
+            is_openclaw_extension_stale,
+            get_extension_content,
+            sync_local_launch,
+            sync_merge_remote,
+            sync_local_close,
+            get_db_json_for_sync,
+            ensure_sync_identity,
+            write_openclaw_system_context,
+            get_openclaw_bearer_token,
+            // Phase 7 logging & debug commands
+            export_debug_info,
+            get_validation_history,
+            mark_rejection_resolved,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -3359,6 +2453,7 @@ pub fn run() {
 #[cfg(test)]
 mod hardening_tests {
     use super::*;
+    use crate::commands::git::*;
 
     fn test_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -3427,11 +2522,12 @@ mod hardening_tests {
     }
 
     #[test]
-    fn categorize_roadmap_changelog_as_documents() {
-        assert_eq!(categorize_dirty_file("ROADMAP.md"), FileCategory::Documents);
+    fn categorize_roadmap_changelog_as_code() {
+        // Post-migration: ROADMAP.md and CHANGELOG.md are no longer in DOCUMENT_FILES
+        assert_eq!(categorize_dirty_file("ROADMAP.md"), FileCategory::Code);
         assert_eq!(
             categorize_dirty_file("CHANGELOG.md"),
-            FileCategory::Documents
+            FileCategory::Code
         );
     }
 
@@ -3479,14 +2575,14 @@ mod hardening_tests {
     fn init_git_repo_with_commit(name: &str) -> (PathBuf, String) {
         let dir = test_dir(name);
         let repo_path = dir.to_string_lossy().to_string();
-        run_git(&repo_path, &["init"]).expect("git init");
-        run_git(&repo_path, &["config", "user.email", "test@example.com"]).expect("set email");
-        run_git(&repo_path, &["config", "user.name", "Test User"]).expect("set name");
+        run_git_capture(&repo_path, &["init"]).expect("git init");
+        run_git_capture(&repo_path, &["config", "user.email", "test@example.com"]).expect("set email");
+        run_git_capture(&repo_path, &["config", "user.name", "Test User"]).expect("set name");
         fs::write(dir.join("README.md"), "seed\n").expect("write file");
-        run_git(&repo_path, &["add", "README.md"]).expect("git add");
-        run_git(&repo_path, &["commit", "-m", "seed"]).expect("git commit");
-        let head = run_git(&repo_path, &["rev-parse", "--short", "HEAD"]).expect("head hash");
-        (dir, head)
+        run_git_capture(&repo_path, &["add", "README.md"]).expect("git add");
+        run_git_capture(&repo_path, &["commit", "-m", "seed"]).expect("git commit");
+        let head_output = run_git_capture(&repo_path, &["rev-parse", "--short", "HEAD"]).expect("head hash");
+        (dir, head_output.stdout)
     }
 
     #[test]
@@ -3502,9 +2598,10 @@ mod hardening_tests {
         assert_eq!(cats.metadata, vec![e("PROJECT.md")]);
         assert_eq!(
             cats.documents,
-            vec![e("ROADMAP.md"), e("docs/specs/new-spec.md")]
+            vec![e("docs/specs/new-spec.md")]
         );
-        assert_eq!(cats.code, vec![e("src/App.tsx"), e("package.json")]);
+        // ROADMAP.md is now categorized as code post-migration
+        assert_eq!(cats.code, vec![e("ROADMAP.md"), e("src/App.tsx"), e("package.json")]);
     }
 
     #[test]
@@ -3601,9 +2698,9 @@ mod hardening_tests {
     fn resume_validation_succeeds_for_matching_repo_state() {
         let (repo, head) = init_git_repo_with_commit("resume-valid");
         let repo_path = repo.to_string_lossy().to_string();
-        let source_branch =
-            run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).expect("source branch");
-        run_git(&repo_path, &["branch", "staging"]).expect("create staging branch");
+        let source_output = run_git_capture(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).expect("source branch");
+        let source_branch = source_output.stdout;
+        run_git_capture(&repo_path, &["branch", "staging"]).expect("create staging branch");
 
         let validation = git_validate_branch_sync_resume(
             repo_path.clone(),
@@ -3623,8 +2720,8 @@ mod hardening_tests {
     fn resume_validation_flags_missing_target_branch() {
         let (repo, head) = init_git_repo_with_commit("resume-missing-target");
         let repo_path = repo.to_string_lossy().to_string();
-        let source_branch =
-            run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).expect("source branch");
+        let source_output = run_git_capture(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).expect("source branch");
+        let source_branch = source_output.stdout;
 
         let validation = git_validate_branch_sync_resume(
             repo_path.clone(),

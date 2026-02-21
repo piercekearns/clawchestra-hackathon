@@ -2,11 +2,11 @@ import { gitCommit } from './tauri';
 import type { GitStatus } from './schema';
 
 /** Allowed files for auto-commit — only structural Kanban paths. Never broaden this. */
-const AUTO_COMMIT_ALLOWED = new Set(['PROJECT.md', 'ROADMAP.md']);
+const AUTO_COMMIT_ALLOWED = new Set(['CLAWCHESTRA.md']);
 
 /**
  * Auto-commit structural Kanban changes for local-only projects (no remote).
- * Only commits PROJECT.md/ROADMAP.md status/priority moves.
+ * Only commits CLAWCHESTRA.md/PROJECT.md status/priority moves.
  *
  * The backend git_commit enforces snapshot validation authoritatively —
  * the frontend dirty check is a fast-path skip to avoid unnecessary IPC.

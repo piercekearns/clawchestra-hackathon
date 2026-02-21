@@ -68,7 +68,7 @@ import {
   updateDashboardSettings,
 } from './lib/tauri';
 import { defaultView, projectRoadmapView } from './lib/views';
-import { watchProjects } from './lib/watcher';
+import { setupTauriEventListeners } from './lib/tauri-events';
 import { messageIdentitySignature } from './lib/chat-message-identity';
 import { CHAT_RELIABILITY_FLAGS } from './lib/chat-reliability-flags';
 import {
@@ -904,49 +904,46 @@ export default function App() {
     };
   }, [activeBackgroundSessions.size, gatewayActiveTurns, reconcileRecentHistory, wsConnectionState]);
 
+  // Unified Rust watcher event listeners (Phase 5: replaces old TS watcher)
   useEffect(() => {
     let disposed = false;
-    let dispose: () => void = () => undefined;
-    let fallbackPoll: number | undefined;
+    let cleanup: (() => void) | undefined;
 
-    const startWatching = async () => {
-      if (!isTauriRuntime() || !dashboardSettings) return;
+    const setup = async () => {
+      if (!isTauriRuntime()) return;
 
-      try {
-        const unwatch = await watchProjects(dashboardSettings.scanPaths, async () => {
-          await loadProjects();
-          void refreshRoadmapDocsRef.current();
-          void addSystemBubble(
-            'info',
-            'File watcher refresh',
-            { Time: new Date().toLocaleTimeString() },
-          );
-        });
-
-        if (disposed) {
-          unwatch();
-          return;
-        }
-
-        dispose = unwatch;
-      } catch (error) {
-        console.warn('Project watcher unavailable, using polling fallback:', error);
-        fallbackPoll = window.setInterval(() => {
+      const unsubscribe = await setupTauriEventListeners({
+        onStateJsonMerged: () => {
           void loadProjects();
-        }, 15000);
+          void refreshRoadmapDocsRef.current();
+        },
+        onClawchestraReady: () => {
+          void loadProjects();
+        },
+        onProjectFileChanged: () => {
+          void loadProjects();
+          void refreshRoadmapDocsRef.current();
+        },
+        onGitStatusChanged: () => {
+          void loadProjects();
+        },
+      });
+
+      if (disposed) {
+        unsubscribe();
+        return;
       }
+
+      cleanup = unsubscribe;
     };
 
-    void startWatching();
+    void setup();
 
     return () => {
       disposed = true;
-      dispose();
-      if (fallbackPoll !== undefined) {
-        window.clearInterval(fallbackPoll);
-      }
+      cleanup?.();
     };
-  }, [addSystemBubble, loadProjects, dashboardSettings]);
+  }, [loadProjects]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -1130,15 +1127,8 @@ export default function App() {
     try {
       await writeRoadmap(nextDocument);
       setRoadmapDocument(nextDocument);
-      // Auto-commit roadmap status/priority edits for local-only repos.
-      // Use the active roadmap project context instead of selectedProjectId,
-      // which is intentionally cleared in roadmap view.
-      const roadmapProject = activeRoadmapProject;
-      if (roadmapProject?.hasGit && !roadmapProject.gitStatus?.remote) {
-        await autoCommitIfLocalOnly(roadmapProject.dirPath, roadmapProject.gitStatus, ['ROADMAP.md'], { justWritten: true });
-      } else if (roadmapProject?.hasGit) {
-        setProjects(withOptimisticDirtyFile(allProjects, new Set([roadmapProject.id]), 'ROADMAP.md', 'documents'));
-      }
+      // NOTE: ROADMAP.md auto-commit removed post-migration (data now in .clawchestra/state.json).
+      // writeRoadmap() still exists for legacy compat but kanban drag no longer auto-commits it.
       pushToast('success', 'Roadmap saved');
     } catch (error) {
       setRoadmapItems(previousItems);
@@ -1228,7 +1218,7 @@ export default function App() {
       );
       await Promise.all(
         localOnlyChanged.map((item) =>
-          autoCommitIfLocalOnly(item.dirPath, item.gitStatus, ['PROJECT.md'], { justWritten: true }),
+          autoCommitIfLocalOnly(item.dirPath, item.gitStatus, ['CLAWCHESTRA.md'], { justWritten: true }),
         ),
       );
 
@@ -1242,7 +1232,7 @@ export default function App() {
       );
       if (remoteChanged.length > 0) {
         const dirtyIds = new Set(remoteChanged.map((p) => p.id));
-        setProjects(withOptimisticDirtyFile(nextItems, dirtyIds, 'PROJECT.md', 'metadata'));
+        setProjects(withOptimisticDirtyFile(nextItems, dirtyIds, 'CLAWCHESTRA.md', 'metadata'));
       }
 
       await loadProjects();

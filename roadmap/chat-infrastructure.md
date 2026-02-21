@@ -351,6 +351,45 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+### FINDING-001: `gateway_call` has no subprocess timeout — can block indefinitely
+**Surfaced:** 2026-02-21 (architecture-direction-v2 hardening sprint, round 4 review)
+**Severity:** P2 — Important (not a bug per se, but a reliability gap)
+**Status:** Open — candidate for pre-ship chat fix pass
+**Review agents:** Architecture Strategist, Performance Oracle
+
+**What it is:**
+`gateway_call` in `lib.rs` (lines 851-898) uses `Command::new(&openclaw).output()` which
+blocks until the child process exits. There is no per-call timeout. If the `openclaw` CLI
+hangs (network issue, deadlock, unresponsive API), the call blocks forever.
+
+The 90-second polling loop timeout in `openclaw_chat` does NOT help — it only checks
+between iterations. A single blocked `Command::output()` call sits forever because the
+timeout check never runs while the subprocess is hung.
+
+**What it does NOT affect (mitigated):**
+- Tokio thread starvation: already fixed — `openclaw_chat` is wrapped in
+  `tokio::task::spawn_blocking`, so a hung call only blocks that spawned thread, not the
+  tokio worker pool. Other commands (project reads, sync, flush) continue to work.
+- App freezes: the UI remains responsive even if a chat call is stuck.
+
+**What it DOES affect:**
+- A stuck chat call never resolves — the user sees "Working..." forever with no way to
+  cancel except restarting the app.
+- The spawned blocking thread is leaked (held by the hung subprocess).
+- No error message or timeout feedback reaches the user.
+
+**Recommended fix:**
+Switch `gateway_call` from `std::process::Command::output()` to
+`tokio::process::Command::output()` with `tokio::time::timeout(Duration::from_secs(30), ...)`
+per call. This requires making `gateway_call` async and updating its callers. Alternatively,
+use `std::process::Command::spawn()` + polling with a wall-clock timeout check.
+
+**Context:** This is a good candidate for the planned pre-ship chat reliability fix pass.
+It's not urgent (the `spawn_blocking` wrapper prevents app-wide impact) but it's the kind
+of thing that causes a bad UX during a demo if the OpenClaw gateway has a hiccup.
+
+---
+
 ## Audit Baseline
 
 The Codex chat audit (commit `605f056`) delivered:

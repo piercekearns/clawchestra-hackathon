@@ -11,7 +11,7 @@ function project(
     id,
     title: id,
     status: 'up-next',
-    filePath: `/tmp/${id}/PROJECT.md`,
+    filePath: `/tmp/${id}/CLAWCHESTRA.md`,
     dirPath: `/tmp/${id}`,
     frontmatter: {
       title: id,

@@ -54,11 +54,20 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
     }
   }
 
-  // Read all PROJECT.md files in parallel
+  // Read project metadata files: CLAWCHESTRA.md (preferred) or PROJECT.md (legacy)
+  // Single pathExists check per project to avoid duplicate IPC calls
   const dirPaths = scanResult.projects;
-  const projectMdPaths = dirPaths.map((dir) => `${dir}/PROJECT.md`);
-  const rawFiles = await Promise.all(
-    projectMdPaths.map((path) => readFile(path).catch(() => null)),
+  const projectFiles = await Promise.all(
+    dirPaths.map(async (dir) => {
+      const clawchestraExists = await pathExists(`${dir}/CLAWCHESTRA.md`);
+      const filePath = clawchestraExists ? `${dir}/CLAWCHESTRA.md` : `${dir}/PROJECT.md`;
+      try {
+        const content = await readFile(filePath);
+        return { filePath, content };
+      } catch {
+        return { filePath, content: null };
+      }
+    }),
   );
 
   // Track IDs for duplicate detection
@@ -66,8 +75,7 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
 
   for (let index = 0; index < dirPaths.length; index += 1) {
     const dirPath = dirPaths[index];
-    const filePath = projectMdPaths[index];
-    const raw = rawFiles[index];
+    const { filePath, content: raw } = projectFiles[index];
 
     if (raw === null) {
       errors.push({
@@ -205,7 +213,8 @@ export async function createProject(
   frontmatter: ProjectFrontmatter,
   content: string,
 ): Promise<void> {
-  const filePath = `${dirPath}/PROJECT.md`;
+  // New projects use CLAWCHESTRA.md (preferred filename)
+  const filePath = `${dirPath}/CLAWCHESTRA.md`;
   const result = validateProject(frontmatter);
   if (!result.valid) {
     throw new Error(`Invalid project: ${result.errors.join(', ')}`);

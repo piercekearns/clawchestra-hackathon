@@ -38,7 +38,8 @@ Instructions for agents interacting with Clawchestra (formerly Pipeline Dashboar
 ### File Structure
 
 ```
-ROADMAP.md                    — YAML frontmatter `items:` array (source of truth for roadmap)
+.clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
+CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
 CHANGELOG.md                  — YAML frontmatter `entries:` array (completed items)
 roadmap/{item-id}.md          — Detail file per roadmap item
 docs/specs/{item-id}-spec.md  — Spec documents
@@ -57,17 +58,19 @@ npx tauri build --no-bundle     # Full release build (ALWAYS --no-bundle)
 ### Title Length Guideline
 Aim for ~40 characters or fewer for roadmap item and project titles — this fits on one line at minimum card width. Two lines is acceptable. Avoid long titles that wrap to 3+ lines.
 
-### Roadmap Item YAML Shape
+### Roadmap Item JSON Shape
 
-```yaml
-- id: kebab-case-id
-  title: "Human-readable title"
-  status: pending              # pending | up-next | in-progress | complete
-  priority: 1                  # unique within status column
-  specDoc: docs/specs/id-spec.md    # optional, relative to project root
-  planDoc: docs/plans/id-plan.md    # optional, relative to project root
-  nextAction: "What happens next"   # shown in UI, keep current
-  tags: [bug, feature]              # optional
+```json
+{
+  "id": "kebab-case-id",
+  "title": "Human-readable title",
+  "status": "pending",
+  "priority": 1,
+  "specDoc": "docs/specs/id-spec.md",
+  "planDoc": "docs/plans/id-plan.md",
+  "nextAction": "What happens next",
+  "tags": ["bug", "feature"]
+}
 ```
 
 <!-- COMPLIANCE:END -->
@@ -153,11 +156,11 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 
 | Operation | How Agent Does It |
 |-----------|-------------------|
-| **View roadmap** | Parse `ROADMAP.md` frontmatter `items:` array |
-| **Add item** | Append to `items:` array in ROADMAP.md frontmatter |
+| **View roadmap** | Read `.clawchestra/state.json` `roadmapItems` array |
+| **Add item** | Add to `roadmapItems` array in `.clawchestra/state.json` |
 | **Mark complete** | Set item `status: complete` (NOT `done`) — auto-migrates to CHANGELOG.md |
-| **Remove** | Delete from `items:` array (not a file deletion) |
-| **Reprioritize** | Change `priority:` values in ROADMAP.md frontmatter |
+| **Remove** | Remove from `roadmapItems` array (not a file deletion) |
+| **Reprioritize** | Change `priority` values in `.clawchestra/state.json` |
 
 **Roadmap status values (ONLY these — app rejects others):** `pending` | `up-next` | `in-progress` | `complete`
 
@@ -177,7 +180,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Update paths** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings` |
 | **Trigger update** | Commit code changes; user clicks Update button |
 | **Run multi-branch Git Sync** | Use Sync dialog: select file categories, optional `Pull first` when behind, optional `Also sync to` branches, then commit on source and cherry-pick to targets. Push/pull controls are hidden for `(local)` branches without upstream. On conflicts, generate/edit an AI proposal in-dialog, explicitly approve apply, then continue sync; manual fallback prompts remain available. |
-| **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`PROJECT.md` / `ROADMAP.md`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
+| **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`CLAWCHESTRA.md` / `.clawchestra/state.json`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
 | **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
 | **Search/filter** | Not available via agent — UI only |
 
@@ -221,7 +224,7 @@ These documents appear in the UI when users click roadmap items. If the first th
 ## Project Structure
 
 ```
-ROADMAP.md     — Frontmatter items: array of roadmap items
+.clawchestra/state.json — JSON: project + roadmapItems (source of truth)
 CHANGELOG.md   — Frontmatter entries: array of completed items
 docs/          — Spec and plan documents for roadmap items
 src/           — React frontend (TypeScript, Tailwind, shadcn/ui)
@@ -249,22 +252,24 @@ Example: If Up Next has P1, P2, P3 and user says "add X to Up Next":
 
 ## Roadmap Workflow
 
-Roadmap items live in `ROADMAP.md` as a YAML frontmatter `items:` array.
+Roadmap items live in `.clawchestra/state.json` as a JSON `roadmapItems` array.
 
 When the user says **"add X to the roadmap"**:
-1. Add to `items:` array in ROADMAP.md frontmatter:
-   ```yaml
-   - id: item-id
-     title: X
-     status: pending
-     priority: N
+1. Add to `roadmapItems` array in `.clawchestra/state.json`:
+   ```json
+   {
+     "id": "item-id",
+     "title": "X",
+     "status": "pending",
+     "priority": 1
+   }
    ```
 2. If it has a spec, create `docs/specs/{item-id}-spec.md`
 3. If it has a plan, create `docs/plans/{item-id}-plan.md`
 
 ### Keep `nextAction` in sync (CRITICAL)
 
-When you create or update an artifact for a roadmap item (spec, plan, etc.), **always update the item's `nextAction` field** in ROADMAP.md to reflect the new state. Examples:
+When you create or update an artifact for a roadmap item (spec, plan, etc.), **always update the item's `nextAction` field** in `.clawchestra/state.json` to reflect the new state. Examples:
 - Wrote a spec → `nextAction: Spec written — ready for plan/build`
 - Wrote a plan → `nextAction: Plan written — ready for build`
 - Started building → `nextAction: Build in progress`
@@ -272,13 +277,13 @@ When you create or update an artifact for a roadmap item (spec, plan, etc.), **a
 The `nextAction` is what humans see in the UI. If you write a spec but leave `nextAction` saying "Spec needed", the user sees stale/contradictory info.
 
 When the user says **"mark X as done"** or **"X is complete"**:
-1. Change item `status: complete` in ROADMAP.md — this triggers auto-migration:
+1. Change item `status: complete` in `.clawchestra/state.json` — this triggers auto-migration:
    - Item is appended to CHANGELOG.md `entries:` array (with `completedAt` date)
-   - Item is removed from ROADMAP.md `items:` array
+   - Item is removed from `.clawchestra/state.json` `roadmapItems` array
    - Migration is idempotent
 
 When the user says **"remove X from the roadmap"** (without completing):
-1. Remove the item from the `items:` array in ROADMAP.md
+1. Remove the item from the `roadmapItems` array in `.clawchestra/state.json`
 2. Do NOT add to CHANGELOG.md (it wasn't completed)
 
 ---

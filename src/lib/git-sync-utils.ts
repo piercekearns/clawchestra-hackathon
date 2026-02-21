@@ -20,8 +20,9 @@ import type {
 // path here, update the Rust constants too.
 // ---------------------------------------------------------------------------
 
-const METADATA_FILES = new Set(['PROJECT.md']);
-const DOCUMENT_FILES = new Set(['ROADMAP.md', 'CHANGELOG.md']);
+const METADATA_FILES = new Set(['CLAWCHESTRA.md', 'PROJECT.md']);
+// NOTE: ROADMAP.md and CHANGELOG.md removed post-migration (data lives in .clawchestra/state.json and db.json now)
+const DOCUMENT_FILES = new Set<string>([]);
 const DOCUMENT_DIR_PREFIXES = ['roadmap/', 'docs/specs/', 'docs/plans/'];
 
 // ---------------------------------------------------------------------------

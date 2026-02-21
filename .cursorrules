@@ -35,7 +35,8 @@
 ### File Structure
 
 ```
-ROADMAP.md                    — YAML frontmatter `items:` array (source of truth for roadmap)
+.clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
+CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
 CHANGELOG.md                  — YAML frontmatter `entries:` array (completed items)
 roadmap/{item-id}.md          — Detail file per roadmap item
 docs/specs/{item-id}-spec.md  — Spec documents
@@ -54,17 +55,19 @@ npx tauri build --no-bundle     # Full release build (ALWAYS --no-bundle)
 ### Title Length Guideline
 Aim for ~40 characters or fewer for roadmap item and project titles — this fits on one line at minimum card width. Two lines is acceptable. Avoid long titles that wrap to 3+ lines.
 
-### Roadmap Item YAML Shape
+### Roadmap Item JSON Shape
 
-```yaml
-- id: kebab-case-id
-  title: "Human-readable title"
-  status: pending              # pending | up-next | in-progress | complete
-  priority: 1                  # unique within status column
-  specDoc: docs/specs/id-spec.md    # optional, relative to project root
-  planDoc: docs/plans/id-plan.md    # optional, relative to project root
-  nextAction: "What happens next"   # shown in UI, keep current
-  tags: [bug, feature]              # optional
+```json
+{
+  "id": "kebab-case-id",
+  "title": "Human-readable title",
+  "status": "pending",
+  "priority": 1,
+  "specDoc": "docs/specs/id-spec.md",
+  "planDoc": "docs/plans/id-plan.md",
+  "nextAction": "What happens next",
+  "tags": ["bug", "feature"]
+}
 ```
 
 <!-- COMPLIANCE:END -->

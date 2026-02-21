@@ -33,7 +33,7 @@ export async function fetchGitStatus(localPath?: string): Promise<GitStatus | un
 export async function commitPlanningDocs(
   localPath: string,
   message: string,
-  files: string[] = ['PROJECT.md', 'ROADMAP.md'],
+  files: string[] = ['CLAWCHESTRA.md'],
 ): Promise<void> {
   await gitCommit(localPath, message, files);
 }

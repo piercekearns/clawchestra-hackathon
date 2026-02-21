@@ -85,7 +85,7 @@ export function buildLifecyclePrompt(
 
       return [
         ...header,
-        `Requested action: Create a new spec for this roadmap item at docs/specs/${context.item.id}-spec.md. Keep it concise and aligned with AGENTS.md document formatting rules. You can write this directly (no Claude Code needed for specs). Set ROADMAP nextAction to "Spec written — ready for plan/build" when done.`,
+        `Requested action: Create a new spec for this roadmap item at docs/specs/${context.item.id}-spec.md. Keep it concise and aligned with AGENTS.md document formatting rules. You can write this directly (no Claude Code needed for specs). Update nextAction in .clawchestra/state.json to "Spec written — ready for plan/build" when done.`,
       ].join('\n');
     }
 
@@ -123,7 +123,7 @@ export function buildLifecyclePrompt(
         `   tmux send-keys -t <session> '/plan' Tab; sleep 1; tmux send-keys -t <session> ' docs/plans/${context.item.id}-plan.md' Enter`,
         '5. Monitor via capture-pane; surface FULL output for any decisions',
         `6. ${specReference}`,
-        '7. Set ROADMAP nextAction to "Plan written — ready for build" when done',
+        '7. Update nextAction in .clawchestra/state.json to "Plan written — ready for build" when done',
         '8. Kill tmux session when complete',
       ].join('\n');
     }
@@ -148,7 +148,7 @@ export function buildLifecyclePrompt(
 
       return [
         ...header,
-        `Requested action: Deliver directly. Implement this roadmap item in this repository now.${sourceRef} Follow AGENTS.md rules, run relevant tests, and update ROADMAP nextAction to "Code shipped — awaiting verification" when code is shipped.`,
+        `Requested action: Deliver directly. Implement this roadmap item in this repository now.${sourceRef} Follow AGENTS.md rules, run relevant tests, and update nextAction in .clawchestra/state.json to "Code shipped — awaiting verification" when code is shipped.`,
       ].join('\n');
     }
 
@@ -178,7 +178,7 @@ export function buildLifecyclePrompt(
         `   tmux send-keys -t <session> ' ${planPath ?? '<path-to-plan>'}' Enter`,
         '5. Monitor via capture-pane; surface FULL output for any decisions/errors/recommendations',
         '   /build chains /workflows:work → /workflows:review per phase. Expect sub-agents.',
-        '6. Keep ROADMAP nextAction in sync throughout the build',
+        '6. Keep .clawchestra/state.json nextAction in sync throughout the build',
         '7. Surface non-critical recommendations for user to decide next steps',
         '8. Kill tmux session when complete',
         sourceRef,
