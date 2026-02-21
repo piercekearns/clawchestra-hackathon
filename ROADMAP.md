@@ -98,10 +98,32 @@ items:
       - ai-surfaces
     icon: ➕
     specDoc: docs/specs/roadmap-item-quick-add-spec.md
+  - id: app-aware-ai-context
+    title: App-Aware AI Context
+    status: pending
+    priority: 2
+    nextAction: >-
+      Spec written (directional, not deterministic) — make OpenClaw a
+      contextually informed guide within Clawchestra. Five layers: (1) Default
+      capability map of what the app can do, (2) Behavioural guidelines for
+      proactive, subtle feature guidance, (3) Dynamic state awareness (current
+      view, selected project/item), (4) Guided workflow patterns (new project
+      creation, roadmap progression, stuck user), (5) Injection mechanism
+      (Clawchestra-specific skill or enhanced session preamble). Dovetails
+      with distributed-ai-surfaces — foundational to how every AI surface
+      in the app works. Depends on architecture-direction.
+    tags:
+      - ai
+      - context
+      - openclaw
+      - ux
+      - onboarding
+    icon: "\U0001F9E0"
+    specDoc: docs/specs/app-aware-ai-context-spec.md
   - id: distributed-ai-surfaces
     title: Distributed AI Surfaces
     status: pending
-    priority: 2
+    priority: 3
     nextAction: >-
       Spec needed — architectural redesign to support context-aware AI chat
       components embedded throughout the app, replacing the single chat drawer
@@ -123,7 +145,7 @@ items:
   - id: project-conversation-hub
     title: Project Conversation Hub
     status: pending
-    priority: 3
+    priority: 4
     nextAction: >-
       Spec needed — Conductor/Codex-inspired threaded conversation management
       organized by project. Projects become conversation containers with
@@ -145,7 +167,7 @@ items:
   - id: embedded-agent-terminals
     title: Embedded Agent Terminals
     status: pending
-    priority: 4
+    priority: 5
     nextAction: >-
       Comprehensive spec written — Model D (Parallel Tracks) chosen. Three-phase
       progression: (1) Embedded terminals via tauri-plugin-pty + xterm.js —
@@ -169,7 +191,7 @@ items:
   - id: ai-commit-messages
     title: AI-Generated Commit Messages
     status: pending
-    priority: 5
+    priority: 6
     nextAction: >-
       Spec written — needs model routing decision (which model for cheap AI
       calls) and implementation. Depends on rate-limit-resilience for smart
@@ -183,7 +205,7 @@ items:
   - id: rate-limit-resilience
     title: Rate Limit Resilience & Provider Failover
     status: pending
-    priority: 6
+    priority: 7
     nextAction: >-
       Exploratory spec written — needs research phase to validate OpenClaw
       failover behaviour (bug #19249), event stream signals, and auth profile
@@ -199,7 +221,7 @@ items:
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
-    priority: 7
+    priority: 8
     nextAction: >-
       Spec needed — define font theme packages (Standard, Terminal, Geist) and
       colour theme system. Geist fonts available locally including Pixel
@@ -212,7 +234,7 @@ items:
   - id: clawchestra-apps
     title: Clawchestra Apps (Mobile & Web)
     status: pending
-    priority: 8
+    priority: 9
     nextAction: >-
       Blue sky — spec needed once architecture direction + FFR are complete.
       Covers: iOS app (first), Android app, web app, "Login with OpenClaw"
