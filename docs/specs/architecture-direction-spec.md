@@ -763,6 +763,7 @@ Architecture Direction runs to completion first, then First Friend Readiness. No
 | 37 | CHANGELOG.md absorbed into database | **Confirmed** | Completed items in DB enables cross-project queries; same migration as ROADMAP.md |
 | 38 | Migration preserves Revival Fightwear files as backup | **Confirmed** | Safety net for critical project in case new system needs rollback |
 | 39 | Database JSON is AI-readable for cross-project queries | **Confirmed** | OpenClaw reads db.json directly; "what are my P1s?" works from any interface |
+| 40 | Completed items stay in DB (no file overflow) | **Confirmed** | No one-in-one-out; "changelog" is a query, not a file; revert = status change |
 
 ---
 
@@ -949,20 +950,38 @@ This section captures the cascading impacts of the architecture direction on exi
 **Audit needed:**
 - `bun test` passes today — identify which tests reference these files and flag them for update during implementation
 
-### 19.8 CHANGELOG.md → database
+### 19.8 CHANGELOG.md → database (completed item lifecycle)
 
-**Direct impact:**
-- `CHANGELOG.md` (YAML frontmatter `entries:` array) stores completed items. Same treatment as ROADMAP.md — import into database, then remove.
-- Completed items in the database have `completedAt` dates and are queryable by OpenClaw.
-- This means "what did I ship last week?" is answered from the database, not by parsing a git-tracked file.
+**Current approach (file-based):**
+- Items marked `status: complete` live in ROADMAP.md's complete column
+- When the complete column reaches ~10 items, the oldest get moved to CHANGELOG.md (one-in-one-out)
+- Reverting a completed item means manually moving it from CHANGELOG.md back to ROADMAP.md
+- This is tedious, error-prone, and creates YAML formatting issues
 
-**Migration path:**
-- Same as ROADMAP.md: on first open, import `CHANGELOG.md` entries into DB, then delete the file (except Revival Fightwear backup).
-- Completed items are append-only, so no branch fragmentation issues — but keeping them in the database is cleaner and enables cross-project queries.
+**New approach (database):**
+- ALL items — active and completed — live in the same database
+- A completed item has `status: complete` and `completedAt: YYYY-MM-DD`. That's it.
+- There is no physical separation between "active" and "archived." No file migration.
+- The one-in-one-out pattern disappears entirely.
 
-**Second-order:**
-- `CHANGELOG.md` is in `METADATA_FILES` constant — remove after migration.
-- The CLAUDE.md compliance block references `CHANGELOG.md` as the completed items file — update to reference the database.
+**Display:** The kanban UI shows the N most recent completed items (display limit, not data limit). Older completed items are still in the DB — accessible via "show all completed" or by querying OpenClaw.
+
+**Reverting a completed item:** Change `status` from `complete` to `up-next` / `in-progress` / etc., clear `completedAt`. One field change. Works by dragging on the kanban or asking OpenClaw: "reopen the auth item." No file surgery.
+
+**"Changelog" becomes a query, not a file:** "What did I ship last week?" = query completed items by `completedAt` date. "Show me everything I completed on Revival Fightwear" = filter by project + status. Cross-project changelog queries become trivial — impossible with the current file-per-repo approach.
+
+**Migration:**
+- On first open post-architecture: import `CHANGELOG.md` entries into DB as completed items (preserving `completedAt` dates)
+- Delete `CHANGELOG.md` from all projects (except Revival Fightwear backup)
+- `CHANGELOG.md` is in `METADATA_FILES` constant — remove after migration
+- The CLAUDE.md compliance block references `CHANGELOG.md` as the completed items file — update to reference the database
+
+**Why this is better:**
+- No data physically moves when items complete — just a status field change
+- No overflow logic (one-in-one-out) to maintain
+- Reverting is instant — no cut/paste between files
+- Cross-project completed item queries work natively
+- OpenClaw can answer "what did I ship across all projects this month?" from one DB read
 
 ### Summary: implementation plan must include
 
