@@ -764,6 +764,7 @@ Architecture Direction runs to completion first, then First Friend Readiness. No
 | 38 | Migration preserves Revival Fightwear files as backup | **Confirmed** | Safety net for critical project in case new system needs rollback |
 | 39 | Database JSON is AI-readable for cross-project queries | **Confirmed** | OpenClaw reads db.json directly; "what are my P1s?" works from any interface |
 | 40 | Completed items stay in DB (no file overflow) | **Confirmed** | No one-in-one-out; "changelog" is a query, not a file; revert = status change |
+| 41 | GitSync survives — config changes, not rethink | **Confirmed** | Core commit/push/branch intact; kanban auto-commits removed; constants updated |
 
 ---
 
@@ -916,8 +917,42 @@ This section captures the cascading impacts of the architecture direction on exi
 
 **Second-order:**
 - `CLAWCHESTRA.md` should be categorized as Metadata (replacing `PROJECT.md`).
-- If `ROADMAP.md` is removed entirely, remove it from `METADATA_FILES`.
-- If `ROADMAP.md` becomes a read-only export, it should probably be categorized as Documents (not Metadata).
+- Remove `ROADMAP.md` and `CHANGELOG.md` from `METADATA_FILES` (files no longer exist post-migration).
+
+### 19.4a GitSync behavioral changes (kanban auto-commits, badge, overall model)
+
+**The 3-phase GitSync feature (commit + scope + branch management) survives the architecture change.** It does NOT need a complete rethink. The core value — "commit and push your code changes from within the app" — is unchanged. What changes is configuration and trigger behavior.
+
+**Kanban auto-commits go away:**
+- Currently: dragging a kanban item → dirty `ROADMAP.md` → auto-commit or manual sync → badge appears
+- After: dragging a kanban item → DB write + state.json update (gitignored) → NO git changes
+- The structural auto-commit logic for board moves becomes dead code — remove it
+- This is a simplification: GitSync only fires for real file changes, not kanban noise
+
+**Badge behavior changes:**
+- Currently: badge appears frequently because every kanban drag dirties `ROADMAP.md`
+- After: badge only appears when actual code/docs/metadata files change
+- The red badge (unresolved sync) and orange badge (dirty files) logic stays — just triggers less often
+- The `scanUnresolvedSyncState` and `check_for_update` logic is unaffected (still checks git HEAD)
+
+**Metadata category shrinks:**
+- Before: `ROADMAP.md`, `CHANGELOG.md`, `PROJECT.md`, `AGENTS.md` (4 files)
+- After: `CLAWCHESTRA.md`, `AGENTS.md` (2 files)
+- The 3-category model (Metadata/Documents/Code) still works, just thinner Metadata
+
+**What stays unchanged in GitSync:**
+- Commit + push flow
+- Branch management (cherry-pick to other branches)
+- Code category (unchecked by default)
+- Documents category (specs, plans, roadmap detail files)
+- Sync lifecycle state (localStorage persistence, BranchSyncStep tracking)
+- The sync dialog UI and UX
+
+**Implementation: all changes are constant/config updates, not architectural:**
+1. Update `METADATA_FILES` in `lib.rs` (remove ROADMAP.md, CHANGELOG.md, rename PROJECT.md → CLAWCHESTRA.md)
+2. Remove kanban auto-commit trigger logic (dead code after migration)
+3. Update `check_for_update` if it references ROADMAP.md for data-only commit suppression
+4. Review badge trigger — ensure it handles the reduced change frequency gracefully
 
 ### 19.5 Lifecycle prompts
 
@@ -990,9 +1025,10 @@ This section captures the cascading impacts of the architecture direction on exi
 3. One-time migration tool: `ROADMAP.md` YAML + `CHANGELOG.md` YAML → Clawchestra DB → `state.json`
 4. Delete `ROADMAP.md` and `CHANGELOG.md` from all projects post-migration (except Revival Fightwear as backup)
 5. AGENTS.md content migration (in addition to CLAUDE.md injection)
-6. Git sync dialog categorization constant updates (remove ROADMAP.md and CHANGELOG.md from METADATA_FILES)
+6. Git sync dialog: update `METADATA_FILES` constants, remove kanban auto-commit trigger, review badge behavior
 7. Lifecycle prompt template updates
 8. Test fixture updates
+9. Remove dead kanban-auto-commit code paths after migration
 
 ---
 
