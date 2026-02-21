@@ -120,53 +120,10 @@ items:
       - openclaw
     icon: "\U0001F4AC"
     specDoc: docs/specs/distributed-ai-surfaces-spec.md
-  - id: ai-commit-messages
-    title: AI-Generated Commit Messages
-    status: pending
-    priority: 3
-    nextAction: >-
-      Spec written — needs model routing decision (which model for cheap AI
-      calls) and implementation. Depends on rate-limit-resilience for smart
-      model routing.
-    tags:
-      - git
-      - ai
-      - ux
-    icon: ✨
-    specDoc: docs/specs/ai-commit-messages-spec.md
-  - id: rate-limit-resilience
-    title: Rate Limit Resilience & Provider Failover
-    status: pending
-    priority: 4
-    nextAction: >-
-      Exploratory spec written — needs research phase to validate OpenClaw
-      failover behaviour (bug #19249), event stream signals, and auth profile
-      detection. Then plan Layer 1 (detection/display), Layer 2 (failover
-      guidance), Layer 3 (smart model routing).
-    tags:
-      - chat
-      - resilience
-      - failover
-      - onboarding
-    icon: "\U0001F6E1️"
-    specDoc: docs/specs/rate-limit-resilience-spec.md
-  - id: app-customisation
-    title: App Customisation (Themes & Fonts)
-    status: pending
-    priority: 5
-    nextAction: >-
-      Spec needed — define font theme packages (Standard, Terminal, Geist) and
-      colour theme system. Geist fonts available locally including Pixel
-      variants.
-    tags:
-      - ui
-      - ux
-      - theming
-    icon: "\U0001F3A8"
   - id: project-conversation-hub
     title: Project Conversation Hub
     status: pending
-    priority: 6
+    priority: 3
     nextAction: >-
       Spec needed — Conductor/Codex-inspired threaded conversation management
       organized by project. Projects become conversation containers with
@@ -185,6 +142,49 @@ items:
       - navigation
     icon: "\U0001F5C2️"
     specDoc: docs/specs/project-conversation-hub-spec.md
+  - id: ai-commit-messages
+    title: AI-Generated Commit Messages
+    status: pending
+    priority: 4
+    nextAction: >-
+      Spec written — needs model routing decision (which model for cheap AI
+      calls) and implementation. Depends on rate-limit-resilience for smart
+      model routing.
+    tags:
+      - git
+      - ai
+      - ux
+    icon: ✨
+    specDoc: docs/specs/ai-commit-messages-spec.md
+  - id: rate-limit-resilience
+    title: Rate Limit Resilience & Provider Failover
+    status: pending
+    priority: 5
+    nextAction: >-
+      Exploratory spec written — needs research phase to validate OpenClaw
+      failover behaviour (bug #19249), event stream signals, and auth profile
+      detection. Then plan Layer 1 (detection/display), Layer 2 (failover
+      guidance), Layer 3 (smart model routing).
+    tags:
+      - chat
+      - resilience
+      - failover
+      - onboarding
+    icon: "\U0001F6E1️"
+    specDoc: docs/specs/rate-limit-resilience-spec.md
+  - id: app-customisation
+    title: App Customisation (Themes & Fonts)
+    status: pending
+    priority: 6
+    nextAction: >-
+      Spec needed — define font theme packages (Standard, Terminal, Geist) and
+      colour theme system. Geist fonts available locally including Pixel
+      variants.
+    tags:
+      - ui
+      - ux
+      - theming
+    icon: "\U0001F3A8"
   - id: embedded-agent-terminals
     title: Embedded Agent Terminals
     status: pending
