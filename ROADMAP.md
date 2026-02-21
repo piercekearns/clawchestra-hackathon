@@ -109,9 +109,9 @@ items:
       proactive, subtle feature guidance, (3) Dynamic state awareness (current
       view, selected project/item), (4) Guided workflow patterns (new project
       creation, roadmap progression, stuck user), (5) Injection mechanism
-      (Clawchestra-specific skill or enhanced session preamble). Dovetails
-      with distributed-ai-surfaces — foundational to how every AI surface
-      in the app works. Depends on architecture-direction.
+      (Clawchestra-specific skill or enhanced session preamble). Dovetails with
+      distributed-ai-surfaces — foundational to how every AI surface in the app
+      works. Depends on architecture-direction.
     tags:
       - ai
       - context
@@ -188,24 +188,10 @@ items:
       - projects
     icon: "\U0001F4BB"
     specDoc: docs/specs/embedded-agent-terminals-spec.md
-  - id: ai-commit-messages
-    title: AI-Generated Commit Messages
-    status: pending
-    priority: 6
-    nextAction: >-
-      Spec written — needs model routing decision (which model for cheap AI
-      calls) and implementation. Depends on rate-limit-resilience for smart
-      model routing.
-    tags:
-      - git
-      - ai
-      - ux
-    icon: ✨
-    specDoc: docs/specs/ai-commit-messages-spec.md
   - id: rate-limit-resilience
     title: Rate Limit Resilience & Provider Failover
     status: pending
-    priority: 7
+    priority: 6
     nextAction: >-
       Exploratory spec written — needs research phase to validate OpenClaw
       failover behaviour (bug #19249), event stream signals, and auth profile
@@ -218,6 +204,20 @@ items:
       - onboarding
     icon: "\U0001F6E1️"
     specDoc: docs/specs/rate-limit-resilience-spec.md
+  - id: ai-commit-messages
+    title: AI-Generated Commit Messages
+    status: pending
+    priority: 7
+    nextAction: >-
+      Spec written — needs model routing decision (which model for cheap AI
+      calls) and implementation. Depends on rate-limit-resilience for smart
+      model routing.
+    tags:
+      - git
+      - ai
+      - ux
+    icon: ✨
+    specDoc: docs/specs/ai-commit-messages-spec.md
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
