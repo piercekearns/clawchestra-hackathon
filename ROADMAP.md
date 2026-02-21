@@ -50,11 +50,11 @@ items:
     status: up-next
     priority: 2
     nextAction: >-
-      Spec exists — needs revision against finalized architecture-direction
-      spec (PROJECT.md → CLAWCHESTRA.md references, branch injection in
-      onboarding Stage 3, state.json in project discovery). Cross-platform
-      foundation (Phase 1) can start NOW in parallel with architecture
-      direction. Onboarding wizard (Phase 3) blocked on architecture Phase 1.
+      Spec exists — needs revision against finalized architecture-direction spec
+      (PROJECT.md → CLAWCHESTRA.md references, branch injection in onboarding
+      Stage 3, state.json in project discovery). Cross-platform foundation
+      (Phase 1) can start NOW in parallel with architecture direction.
+      Onboarding wizard (Phase 3) blocked on architecture Phase 1.
     tags:
       - onboarding
       - cross-platform
@@ -79,10 +79,29 @@ items:
       - openclaw
     icon: "\U0001F310"
     specDoc: docs/specs/clawchestra-ai-website-spec.md
+  - id: roadmap-item-quick-add
+    title: Roadmap Item Quick-Add (AI Chat-First)
+    status: pending
+    priority: 1
+    nextAction: >-
+      Spec written — reimagined as the first distributed AI surface. Primary
+      creation method: AI chat box embedded in the new card UI where users
+      describe what they want in natural language and OpenClaw structures it
+      into a schema-compliant roadmap item. Optional manual input fields exposed
+      for users who prefer direct editing. First proof-of-concept for the
+      distributed AI surfaces pattern. Depends on architecture-direction
+      completion.
+    tags:
+      - roadmap
+      - ux
+      - workflow
+      - ai-surfaces
+    icon: ➕
+    specDoc: docs/specs/roadmap-item-quick-add-spec.md
   - id: ai-commit-messages
     title: AI-Generated Commit Messages
     status: pending
-    priority: 1
+    priority: 2
     nextAction: >-
       Spec written — needs model routing decision (which model for cheap AI
       calls) and implementation. Depends on rate-limit-resilience for smart
@@ -96,7 +115,7 @@ items:
   - id: rate-limit-resilience
     title: Rate Limit Resilience & Provider Failover
     status: pending
-    priority: 2
+    priority: 3
     nextAction: >-
       Exploratory spec written — needs research phase to validate OpenClaw
       failover behaviour (bug #19249), event stream signals, and auth profile
@@ -109,25 +128,6 @@ items:
       - onboarding
     icon: "\U0001F6E1️"
     specDoc: docs/specs/rate-limit-resilience-spec.md
-  - id: roadmap-item-quick-add
-    title: Roadmap Item Quick-Add (AI Chat-First)
-    status: pending
-    priority: 3
-    nextAction: >-
-      Spec written — reimagined as the first distributed AI surface. Primary
-      creation method: AI chat box embedded in the new card UI where users
-      describe what they want in natural language and OpenClaw structures it
-      into a schema-compliant roadmap item. Optional manual input fields
-      exposed for users who prefer direct editing. First proof-of-concept
-      for the distributed AI surfaces pattern. Depends on
-      architecture-direction completion.
-    tags:
-      - roadmap
-      - ux
-      - workflow
-      - ai-surfaces
-    icon: "➕"
-    specDoc: docs/specs/roadmap-item-quick-add-spec.md
   - id: app-customisation
     title: App Customisation (Themes & Fonts)
     status: pending
@@ -148,13 +148,13 @@ items:
     nextAction: >-
       Spec needed — architectural redesign to support context-aware AI chat
       components embedded throughout the app, replacing the single chat drawer
-      as the sole interaction point. Each surface auto-injects context based
-      on its UI location (git sync dialog, roadmap item form, project card,
-      etc.) so the user never has to state what they're working on — the UI
-      location IS the instruction. Depends on architecture-direction
-      completion. Roadmap-item-quick-add serves as P3 proof-of-concept for
-      this pattern. Spec must account for app-layer redesign sufficient to
-      absorb this class of feature, not bolt-on additions.
+      as the sole interaction point. Each surface auto-injects context based on
+      its UI location (git sync dialog, roadmap item form, project card, etc.)
+      so the user never has to state what they're working on — the UI location
+      IS the instruction. Depends on architecture-direction completion.
+      Roadmap-item-quick-add serves as P3 proof-of-concept for this pattern.
+      Spec must account for app-layer redesign sufficient to absorb this class
+      of feature, not bolt-on additions.
     tags:
       - architecture
       - ai
@@ -171,12 +171,12 @@ items:
       Spec needed — Conductor/Codex-inspired threaded conversation management
       organized by project. Projects become conversation containers with
       multiple concurrent sub-conversations (per roadmap item, general
-      project-level, etc.). Conversations accessible directly from project
-      cards and roadmap item cards via visual indicators — click a card to
-      surface its active threads and open the sidebar to that conversation,
-      or create a new thread from that location. No hierarchy navigation
-      needed. History persisted per-project, per-item. Depends on
-      distributed-ai-surfaces for the multi-surface foundation.
+      project-level, etc.). Conversations accessible directly from project cards
+      and roadmap item cards via visual indicators — click a card to surface its
+      active threads and open the sidebar to that conversation, or create a new
+      thread from that location. No hierarchy navigation needed. History
+      persisted per-project, per-item. Depends on distributed-ai-surfaces for
+      the multi-surface foundation.
     tags:
       - chat
       - projects
@@ -190,18 +190,17 @@ items:
     status: pending
     priority: 7
     nextAction: >-
-      Comprehensive spec written — Model D (Parallel Tracks) chosen.
-      Three-phase progression: (1) Embedded terminals via tauri-plugin-pty
-      + xterm.js — direct agent access tied to projects/items, Conductor-
-      style multiplexing. (2) Enhanced session management — dashboard,
-      status indicators, notifications, output parsing, named sessions,
-      scrollback persistence. (3) Optional protocol integration (ACP/
-      JSON-RPC) for native UI when agents support it, terminal stays as
-      option. Non-destructive: OpenClaw retains all capabilities, direct
-      agent sessions are a parallel lane. Landscape research covers
-      Conductor, Codex, OpenCode, Kilo Code, ACP. Phase 1 needs spike:
-      xterm.js + Tauri v2 performance validation.
-      Depends on project-conversation-hub for the container model.
+      Comprehensive spec written — Model D (Parallel Tracks) chosen. Three-phase
+      progression: (1) Embedded terminals via tauri-plugin-pty + xterm.js —
+      direct agent access tied to projects/items, Conductor- style multiplexing.
+      (2) Enhanced session management — dashboard, status indicators,
+      notifications, output parsing, named sessions, scrollback persistence. (3)
+      Optional protocol integration (ACP/ JSON-RPC) for native UI when agents
+      support it, terminal stays as option. Non-destructive: OpenClaw retains
+      all capabilities, direct agent sessions are a parallel lane. Landscape
+      research covers Conductor, Codex, OpenCode, Kilo Code, ACP. Phase 1 needs
+      spike: xterm.js + Tauri v2 performance validation. Depends on
+      project-conversation-hub for the container model.
     tags:
       - agents
       - terminals
