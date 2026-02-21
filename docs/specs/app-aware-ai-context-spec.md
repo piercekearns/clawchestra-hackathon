@@ -4,7 +4,10 @@
 
 **Status:** Draft (directional — ideas and ethos, not a fixed plan)
 **Created:** 2026-02-21
+**Last Updated:** 2026-02-21 (incorporated agent-native principles + design principles doc)
 **Roadmap Item:** `app-aware-ai-context`
+**Design Principles:** `docs/DESIGN_PRINCIPLES.md` (dual surface, discoverability, stakes/reversibility, parity)
+**Foundational Reading:** [Agent-Native Architectures](https://every.to/guides/agent-native), [Lessons From Four Apps](https://every.to/source-code/how-to-build-agent-native-lessons-from-four-apps)
 
 ---
 
@@ -54,51 +57,33 @@ This creates interesting questions:
 
 For now: the capability map is what Clawchestra ships with. It's the starting point, not the ceiling.
 
-### What It Contains (Indicative, Not Exhaustive)
+### Dual-Surface Parity Matrix (Indicative, Not Exhaustive)
+
+The capability map tracks not just "what can the user do" but also whether each capability has both a UI surface and an AI surface, and which is primary. See `docs/DESIGN_PRINCIPLES.md` Principle 1 (Dual Surface) and Principle 6 (Capability Parity).
 
 ```
-Clawchestra Capability Map (v1 — draft)
-
-Views:
-- Kanban board (projects across columns: in-progress, up-next, pending, dormant, archived)
-- Project detail (kanban of roadmap items for a specific project)
-- Settings
-- Chat drawer (OpenClaw conversation)
-
-Project Actions:
-- View project kanban board
-- View project details (roadmap items, git state, scan status)
-- [Future] Add new project
-- [Future] Edit project metadata (name, icon, description)
-- [Future] Archive/delete project
-
-Roadmap Item Actions:
-- View roadmap item detail (spec, plan, status, next action)
-- Run lifecycle commands (deepen-spec, write-plan, build, review)
-- [Future] Add new roadmap item (via AI chat-first quick-add)
-- [Future] Edit roadmap item metadata
-- [Future] Reorder priorities
-- [Future] Move between columns
-
-Git Actions:
-- View git sync status (dirty files, categories)
-- Commit changes (with category selection)
-- [Future] Branch management
-- [Future] AI-generated commit messages
-
-Chat:
-- Talk to OpenClaw (general purpose)
-- [Future] Project-scoped conversations
-- [Future] Roadmap-item-scoped conversations
-- [Future] Coding agent sessions
-
-Settings:
-- OpenClaw connection configuration
-- Theme preferences
-- Scan path configuration
+| Capability                    | UI Surface          | AI Surface              | Primary | Parity |
+|-------------------------------|---------------------|-------------------------|---------|--------|
+| View project kanban           | Kanban board        | "Show me project X"     | UI      | ✅     |
+| View roadmap item detail      | Item detail panel   | "What's the status of Y"| UI      | ✅     |
+| Run lifecycle command         | Action bar buttons  | "Deepen the spec for Y" | Both    | ✅     |
+| Commit git changes            | Git sync dialog     | "Commit my work"        | UI      | ✅     |
+| Add new project               | [not built]         | "Set up a project"      | AI      | ⚠️ UI  |
+| Add new roadmap item          | [not built]         | "Add an item for..."    | AI      | ⚠️ UI  |
+| Edit project metadata         | [not built]         | "Rename project to..."  | UI      | ⚠️ UI  |
+| Edit roadmap item metadata    | [not built]         | "Change priority to 2"  | UI      | ⚠️ UI  |
+| Change colour theme           | [not built]         | "Make it darker"        | UI      | ⚠️ UI  |
+| Reorder roadmap priorities    | [not built]         | "Move X above Y"        | UI      | ⚠️ Both|
+| Branch management             | [not built]         | [not built]             | UI      | ❌     |
+| Project-scoped conversations  | [not built]         | [not built]             | Both    | ❌     |
+| Open coding agent session     | [not built]         | [not built]             | UI      | ❌     |
 ```
 
-This is illustrative. The actual map would be maintained as a living document (or structured data) that evolves with each release. Items marked `[Future]` are planned but not yet built — OpenClaw should know they're coming but not suggest them prematurely.
+This is illustrative. The actual matrix would be maintained as a living document that evolves with each release. Items marked `[not built]` are planned — OpenClaw should know they're coming but not suggest them prematurely.
+
+**The parity discipline:** When shipping any feature, update this matrix. Verify both surfaces exist. Identify the primary. If one surface is missing, flag it.
+
+**The dual-surface question for every feature:** Is it faster/better to do this manually or via AI? The answer determines the primary surface. The other surface still exists.
 
 ### How It's Maintained
 
@@ -157,6 +142,31 @@ OpenClaw might notice this (via dynamic state awareness) and gently suggest:
 - **They don't replace OpenClaw's personality.** The user's SOUL.md, MEMORY.md, and existing relationship with OpenClaw take precedence. The guidelines add app-awareness on top.
 - **They don't restrict OpenClaw.** If the user wants to do something outside the capability map (even modify the app itself), the guidelines don't block it. They just ensure OpenClaw naturally gravitates toward the designed experience first.
 - **They don't create a rigid flow.** There's no "step 1, step 2, step 3" that every user must follow. Different users will use the app differently, and OpenClaw should adapt.
+
+---
+
+## Layer 2b: Early Discoverability (Onboarding)
+
+Users should be primed from their first interaction to understand Clawchestra's dual nature: UI for structured actions, AI for everything else, both always available.
+
+### Mechanisms (Ideas, Not Commitments)
+
+- **First-run capability hints** — On first launch (or first launch after OpenClaw is connected), subtle cues that communicate: "You can do things with the UI. You can also ask AI to do anything the UI can do. And AI can do things beyond the UI too." Not a rigid step-by-step tutorial — something that sets expectations without patronising.
+
+- **Loading/splash capability rotation** — Brief, rotating hints on the loading screen: "Did you know? You can change the colour scheme just by asking." / "Type /? to see what OpenClaw can help with." / "Talk to me and we'll set up a new project together." These cycle through different capabilities, seeding awareness over time.
+
+- **Discovery commands** — `/help`, `/?`, or similar in the chat that surfaces capability categories conversationally. Not a docs page — a starting point for exploration. OpenClaw responds with grouped capabilities: "Here's what I can help with in Clawchestra: **Projects** (create, edit, archive), **Roadmap** (add items, write specs, plan work), **Git** (commit, sync, resolve conflicts), **Customisation** (themes, layouts), **or just ask me anything.**"
+
+- **Contextual AI hints on UI elements** — When a user interacts with a UI element for the first time, a subtle indicator shows the AI alternative: "You can also ask OpenClaw to do this." Shown once per element, not repeatedly. Teaches the user that every UI action has an AI equivalent.
+
+- **In-chat progressive revelation** — When a user asks OpenClaw for something simple, OpenClaw occasionally reveals depth: "Done — I've added the roadmap item. By the way, I can also write a spec for it if you describe what the feature should do." This surfaces capability at the moment it's relevant.
+
+### The Goal
+
+By the end of the first session, the user should understand three things:
+1. The UI does what they expect — click things, see results
+2. OpenClaw can do everything the UI can do, plus more
+3. They can explore freely — things are safe to try, easy to undo
 
 ---
 
@@ -303,6 +313,51 @@ This is aspirational territory — significant trust, safety, and responsibility
 - **`distributed-ai-surfaces-spec.md`** — Distributed surfaces provide the UI locations where context is auto-injected. This spec defines *what* gets injected (capability map, guidelines, state) and *how OpenClaw should behave* with that context.
 - **`roadmap-item-quick-add-spec.md`** — Quick-add is one of the first features where this spec's ideas materialise: OpenClaw knows the user is adding a roadmap item, knows the schema, knows the project, and guides the user through it.
 - **`embedded-agent-terminals-spec.md`** — When coding agent sessions exist, the capability map and guidelines need to cover them (when to suggest opening one, how to help the user set up context, etc.).
+
+## Agent-Native Principles (From Industry Research)
+
+This spec is informed by the emerging "agent-native" architecture pattern, particularly as described in Every.to's [Agent-Native Architectures guide](https://every.to/guides/agent-native) and [Lessons From Four Apps](https://every.to/source-code/how-to-build-agent-native-lessons-from-four-apps).
+
+### Key Principles Applied to Clawchestra
+
+1. **Parity** — Whatever the user can do through UI, the agent should be able to achieve. The dual-surface parity matrix above is the mechanism for ensuring this.
+
+2. **Granularity** — OpenClaw's tools are atomic primitives (read, write, exec). Features are outcomes achieved by composing those tools. The "logic" lives in prompts/skills, not hardcoded functions.
+
+3. **Composability** — With atomic tools and parity, new features can be created by writing new prompts or skills. Users could bring their own workflow descriptions.
+
+4. **Emergent capability** — The agent can accomplish things we didn't explicitly design for. If a user asks "cross-reference my two most active projects and suggest which roadmap items might conflict," we didn't build that feature — but OpenClaw can compose tools to achieve it.
+
+5. **Improvement over time** — Context accumulates (MEMORY.md), prompts/skills refine, the capability map evolves based on what users actually do.
+
+### The Agent-Native Balance
+
+Clawchestra is NOT purely agent-native. The dual-surface principle means we consciously choose when to build deterministic UI and when to rely on agent-driven outcomes. Pure agent-native (everything goes through the AI) creates problems:
+
+- **Speed:** Clicking a colour picker is faster than typing "change background to white" and waiting for AI processing.
+- **Cost:** Every AI interaction burns tokens. Manual UI interactions are free.
+- **Determinism:** UI actions always produce the same result. AI actions have non-zero error rates.
+- **Discovery:** A blank chat box says "you can do anything" — which often means users do nothing. UI affordances teach what's possible.
+
+The balance: build the minimum deterministic UI needed for common, simple, speed-sensitive interactions. Put the intelligence in skills/prompts for complex, creative, judgment-requiring interactions. Both paths always available. See `docs/DESIGN_PRINCIPLES.md` for the full framework.
+
+### Skills as the Feature Layer
+
+Behaviours that would traditionally be coded logic can instead be **skills** — text files that describe how to handle specific tasks (inspired by Cora's approach). For Clawchestra:
+
+- "How to add a roadmap item" → a skill describing the schema, the workflow, the validation
+- "How to set up a new project from an idea" → a guided workflow as a skill
+- "How the user likes their specs structured" → a user-customisable skill
+
+Skills are inspectable, versionable, editable by developers AND users, and don't require code changes to update. They bridge the behavioural guidelines (Layer 2) and the injection mechanism (Layer 5).
+
+### Latent Demand Discovery (With Discoverability Caveat)
+
+Observe what users ask OpenClaw to do within Clawchestra. Patterns reveal what to build next. But: latent demand only reveals itself if users know what's possible. Discoverability (Layer 2b) is a prerequisite for demand discovery. You can't observe demand for capabilities users don't know they can ask for.
+
+**The cycle:** Discoverability → Users try things → Demand revealed → Features formalised → More discoverability.
+
+---
 
 ## Open Questions
 

@@ -4,6 +4,8 @@ Instructions for agents interacting with Clawchestra (formerly Pipeline Dashboar
 
 **This document is the source of truth** for what operations are possible. If something can be done in the UI, it should be documented here so agents can replicate it.
 
+> **📐 Design Principles:** Before building or modifying any feature, read [`docs/DESIGN_PRINCIPLES.md`](docs/DESIGN_PRINCIPLES.md). It defines the dual-surface principle (UI + AI for every feature), discoverability requirements, the stakes/reversibility matrix for agent actions, and the agent-native ethos. All feature work must conform to these principles.
+
 ---
 
 <!-- COMPLIANCE:START — Auto-extracted to tool-specific files. Edit here, run scripts/sync-agent-compliance.sh -->
