@@ -42,7 +42,7 @@ import {
   getBranchIndicator,
   getProjectDirtyCategories,
   getTargetBranchIndicator,
-  isUnresolvedSyncStep,
+  isFailedSyncStep,
   parseGitError,
   readExecutionState,
   writeExecutionState,
@@ -514,7 +514,7 @@ export function SyncDialog({
       if (dirtyIds.has(p.id)) return false;
       if (!p.gitStatus) return false;
       const state = executionStateByProject.get(p.id);
-      return state != null && isUnresolvedSyncStep(state.currentStep);
+      return state != null && isFailedSyncStep(state.currentStep);
     });
     return [...dirtyProjects, ...unresolvedExtras];
   }, [dirtyProjects, executionStateByProject, projects]);
@@ -823,7 +823,6 @@ export function SyncDialog({
         ?? (pushEnabled.has(project.id) && Boolean(project.gitStatus.remote));
       let commitHash = resumedState?.commitHash;
       let sourcePushed = resumedState?.sourcePushed ?? false;
-      let pausedOnConflict = false;
       let branchSyncLockToken: string | null = null;
 
       const updateExecutionState = (
@@ -960,20 +959,25 @@ export function SyncDialog({
                 sourcePushed,
               });
             } else if (cherryPick.status === 'conflict') {
-              pausedOnConflict = true;
-              restoreStash = false;
+              // Auto-abort: capture metadata, then clean up git state
+              const conflictInfo = {
+                files: cherryPick.conflictingFiles,
+                message: cherryPick.message,
+              };
+              await gitAbortCherryPick(project.dirPath).catch(() => undefined);
+
               const conflict: ConflictContext = {
                 sourceBranch,
                 targetBranch,
                 commitHash,
-                files: cherryPick.conflictingFiles,
-                details: cherryPick.message,
+                files: conflictInfo.files,
+                details: conflictInfo.message,
               };
               perBranchResults.push({
                 branch: targetBranch,
                 status: 'conflict',
                 hash: commitHash,
-                reason: cherryPick.message,
+                reason: conflictInfo.message,
               });
               updateExecutionState({
                 sourceBranch,
@@ -986,9 +990,10 @@ export function SyncDialog({
                 sourcePushEnabled: sourcePushSelected,
                 sourcePushed,
                 pendingStashRef: stash.stashed ? stash.stashRef : undefined,
-                errorMessage: cherryPick.message,
-                conflictFiles: cherryPick.conflictingFiles,
+                errorMessage: conflictInfo.message,
+                conflictFiles: conflictInfo.files,
               });
+              // Cherry-pick aborted above — finally blocks will restore source branch + stash
               return {
                 projectId: project.id,
                 success: false,
@@ -996,7 +1001,7 @@ export function SyncDialog({
                 pushed: sourcePushed,
                 branchResults: perBranchResults,
                 conflict,
-                error: `Conflict while cherry-picking to ${targetBranch}`,
+                error: `Cherry-pick to ${targetBranch} had conflicts — aborted automatically`,
               };
             } else {
               await gitAbortCherryPick(project.dirPath).catch(() => undefined);
@@ -1028,7 +1033,7 @@ export function SyncDialog({
               };
             }
           } finally {
-            if (checkoutTargetSucceeded && !pausedOnConflict) {
+            if (checkoutTargetSucceeded) {
               await gitCheckoutBranch(project.dirPath, sourceBranch).catch(() => undefined);
             }
             if (restoreStash && stash.stashed) {
@@ -1055,9 +1060,7 @@ export function SyncDialog({
           error: String(error),
         };
       } finally {
-        if (!pausedOnConflict) {
-          await gitCheckoutBranch(project.dirPath, sourceBranch).catch(() => undefined);
-        }
+        await gitCheckoutBranch(project.dirPath, sourceBranch).catch(() => undefined);
         if (branchSyncLockToken) {
           await gitSyncLockRelease(project.dirPath, branchSyncLockToken).catch(() => undefined);
         }
@@ -1091,12 +1094,75 @@ export function SyncDialog({
   const generateConflictDrafts = useCallback(
     async (project: DirtyProject, conflict: ConflictContext) => {
       setLoadingConflictDraftIds((prev) => new Set(prev).add(project.id));
-      try {
-        const conflictContext = await gitGetConflictContext(project.dirPath);
-        if (conflictContext.length === 0) {
-          throw new Error('No unresolved conflict files found in repository state.');
-        }
 
+      // Phase 1: Re-create conflict to capture fresh context, then clean up.
+      // Git is clean after Phase 1 completes (auto-abort was already applied).
+      let capturedContext: Awaited<ReturnType<typeof gitGetConflictContext>> = [];
+      let lockToken: string | null = null;
+      let checkedOutTarget = false;
+
+      const execution = executionStateByProject.get(project.id);
+      const sourceBranch = execution?.sourceBranch ?? conflict.sourceBranch;
+
+      try {
+        lockToken = await gitSyncLockAcquire(project.dirPath);
+        const stash = await gitStashPush(project.dirPath, true, `clawchestra-conflict-resolve:${project.id}`);
+
+        try {
+          await gitCheckoutBranch(project.dirPath, conflict.targetBranch);
+          checkedOutTarget = true;
+
+          const cherryPick = await gitCherryPickCommit(project.dirPath, conflict.commitHash);
+          if (cherryPick.status === 'applied') {
+            // Conflict resolved externally — treat as success
+            clearExecutionState(project.id);
+            setExecutionStateByProject((prev) => { const next = new Map(prev); next.delete(project.id); return next; });
+            return;
+          }
+          if (cherryPick.status === 'conflict') {
+            capturedContext = await gitGetConflictContext(project.dirPath);
+          }
+          // Abort cherry-pick regardless — return to clean state
+          await gitAbortCherryPick(project.dirPath).catch(() => undefined);
+          checkedOutTarget = false;
+        } finally {
+          // Always restore: checkout source + pop stash
+          if (checkedOutTarget) {
+            await gitAbortCherryPick(project.dirPath).catch(() => undefined);
+          }
+          await gitCheckoutBranch(project.dirPath, sourceBranch).catch(() => undefined);
+          if (stash.stashed) {
+            await gitPopStash(project.dirPath, stash.stashRef ?? null).catch(() => undefined);
+          }
+        }
+      } catch (error) {
+        setResults((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(project.id);
+          if (!existing) return prev;
+          next.set(project.id, { ...existing, error: `Failed to re-create conflict context: ${String(error)}` });
+          return next;
+        });
+        return;
+      } finally {
+        if (lockToken) {
+          await gitSyncLockRelease(project.dirPath, lockToken).catch(() => undefined);
+        }
+      }
+
+      // Phase 2: Git is clean. Send captured context to OpenClaw for AI proposal.
+      if (capturedContext.length === 0) {
+        setResults((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(project.id);
+          if (!existing) return prev;
+          next.set(project.id, { ...existing, error: 'Conflict detected but no files could be extracted for AI resolution.' });
+          return next;
+        });
+        return;
+      }
+
+      try {
         const prompt = [
           'You are resolving git cherry-pick conflicts.',
           'Return only strict JSON with this shape:',
@@ -1113,7 +1179,7 @@ export function SyncDialog({
           '',
           'Conflict payload:',
           JSON.stringify(
-            conflictContext.map((file) => ({
+            capturedContext.map((file) => ({
               path: file.path,
               ours: truncateForPrompt(file.oursContent),
               theirs: truncateForPrompt(file.theirsContent),
@@ -1138,7 +1204,7 @@ export function SyncDialog({
           }>;
         };
 
-        const mappedDrafts = conflictContext.map((contextFile) => {
+        const mappedDrafts = capturedContext.map((contextFile) => {
           const matched = (parsed.files ?? []).find((candidate) => candidate.path === contextFile.path);
           return {
             path: contextFile.path,
@@ -1151,8 +1217,8 @@ export function SyncDialog({
 
         setConflictDraftsByProject((prev) => new Map(prev).set(project.id, mappedDrafts));
       } catch (error) {
-        const conflictContext = await gitGetConflictContext(project.dirPath).catch(() => []);
-        const fallbackDrafts: ConflictResolutionDraft[] = conflictContext.map((contextFile) => ({
+        // AI failed — provide fallback drafts from captured context
+        const fallbackDrafts: ConflictResolutionDraft[] = capturedContext.map((contextFile) => ({
           path: contextFile.path,
           strategy: 'fallback-ours',
           summary: 'AI proposal unavailable; defaulted to source/ours version.',
@@ -1166,10 +1232,7 @@ export function SyncDialog({
           const next = new Map(prev);
           const existing = next.get(project.id);
           if (!existing) return prev;
-          next.set(project.id, {
-            ...existing,
-            error: `AI proposal generation failed: ${String(error)}`,
-          });
+          next.set(project.id, { ...existing, error: `AI proposal generation failed: ${String(error)}` });
           return next;
         });
       } finally {
@@ -1180,7 +1243,7 @@ export function SyncDialog({
         });
       }
     },
-    [],
+    [executionStateByProject],
   );
 
   const applyConflictDrafts = useCallback(
@@ -1206,13 +1269,78 @@ export function SyncDialog({
         }
 
         branchSyncLockToken = await gitSyncLockAcquire(project.dirPath);
+
+        // Re-create conflict state: stash → checkout target → cherry-pick
+        const stash = await gitStashPush(project.dirPath, true, `clawchestra-conflict-apply:${project.id}`);
+        let checkedOutTarget = false;
+
         try {
+          await gitCheckoutBranch(project.dirPath, execution.currentTarget);
+          checkedOutTarget = true;
+
+          const cherryPick = await gitCherryPickCommit(project.dirPath, execution.commitHash);
+          if (cherryPick.status === 'applied') {
+            // Conflict resolved externally — treat as success on this target
+            checkedOutTarget = false; // Will checkout source in finally
+
+            let targetPushed = false;
+            if ((execution.targetPushBranches ?? []).includes(execution.currentTarget)) {
+              const targetStatus = await getGitStatus(project.dirPath);
+              if (targetStatus.remote) {
+                await gitPush(project.dirPath);
+                targetPushed = true;
+              }
+            }
+
+            const completedTargets = [...execution.completedTargets, execution.currentTarget];
+            const remainingTargets = execution.remainingTargets.filter((target) => target !== execution.currentTarget);
+
+            priorBranchResults = (results.get(project.id)?.branchResults ?? []).filter(
+              (item) => item.branch !== execution.currentTarget,
+            );
+            resolvedBranchResult = {
+              branch: execution.currentTarget,
+              status: 'success',
+              hash: execution.commitHash,
+              pushed: targetPushed,
+            };
+
+            if (remainingTargets.length === 0) {
+              clearExecutionState(project.id);
+              setExecutionStateByProject((prev) => { const next = new Map(prev); next.delete(project.id); return next; });
+              setResults((prev) => new Map(prev).set(project.id, {
+                projectId: project.id, success: true, hash: execution.commitHash,
+                pushed: execution.sourcePushed, branchResults: [...priorBranchResults, resolvedBranchResult!],
+              }));
+            } else {
+              const nextExecution: BranchSyncExecutionState = {
+                ...execution, completedTargets, remainingTargets,
+                currentTarget: undefined, currentStep: 'resume-after-conflict',
+                pendingStashRef: undefined, updatedAt: Date.now(),
+              };
+              writeExecutionState(project.id, nextExecution);
+              setExecutionStateByProject((prev) => new Map(prev).set(project.id, nextExecution));
+              setResults((prev) => { const next = new Map(prev); next.delete(project.id); return next; });
+              shouldContinue = true;
+            }
+            setConflictDraftsByProject((prev) => { const next = new Map(prev); next.delete(project.id); return next; });
+            return;
+          }
+
+          if (cherryPick.status !== 'conflict') {
+            throw new Error(cherryPick.message || `Cherry-pick failed on ${execution.currentTarget}`);
+          }
+
+          // Now mid-cherry-pick with conflicts — apply stored resolutions
           const applyResult = await gitApplyConflictResolution(
             project.dirPath,
             drafts.map((draft) => ({ path: draft.path, content: draft.proposedContent })),
           );
 
           if (applyResult.status !== 'applied') {
+            // Resolution didn't fully apply — abort and surface error
+            await gitAbortCherryPick(project.dirPath).catch(() => undefined);
+            checkedOutTarget = false;
             setResults((prev) => {
               const next = new Map(prev);
               const existing = next.get(project.id);
@@ -1231,6 +1359,8 @@ export function SyncDialog({
             return;
           }
 
+          // Cherry-pick continued successfully — push if enabled
+          checkedOutTarget = false; // Will checkout source in finally
           let targetPushed = false;
           if ((execution.targetPushBranches ?? []).includes(execution.currentTarget)) {
             const targetStatus = await getGitStatus(project.dirPath);
@@ -1238,11 +1368,6 @@ export function SyncDialog({
               await gitPush(project.dirPath);
               targetPushed = true;
             }
-          }
-
-          await gitCheckoutBranch(project.dirPath, execution.sourceBranch);
-          if (execution.pendingStashRef) {
-            await gitPopStash(project.dirPath, execution.pendingStashRef);
           }
 
           const completedTargets = [...execution.completedTargets, execution.currentTarget];
@@ -1299,6 +1424,14 @@ export function SyncDialog({
             return next;
           });
         } finally {
+          // Always clean up: abort any in-flight cherry-pick, restore source, pop stash
+          if (checkedOutTarget) {
+            await gitAbortCherryPick(project.dirPath).catch(() => undefined);
+          }
+          await gitCheckoutBranch(project.dirPath, execution.sourceBranch).catch(() => undefined);
+          if (stash.stashed) {
+            await gitPopStash(project.dirPath, stash.stashRef ?? null).catch(() => undefined);
+          }
           if (branchSyncLockToken) {
             await gitSyncLockRelease(project.dirPath, branchSyncLockToken).catch(() => undefined);
           }
@@ -1603,7 +1736,7 @@ export function SyncDialog({
                         );
                       })}
 
-                      {executionState && isUnresolvedSyncStep(executionState.currentStep) && (
+                      {executionState && isFailedSyncStep(executionState.currentStep) && (
                         <div className={`rounded border px-2 py-1.5 ${
                           executionState.currentStep === 'conflict'
                             ? 'border-amber-300/70 bg-amber-50/60 text-amber-700 dark:border-amber-700/80 dark:bg-amber-950/30 dark:text-amber-300'

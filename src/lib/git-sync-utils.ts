@@ -175,7 +175,7 @@ export function clearExecutionState(projectId: string): void {
   }
 }
 
-export function isUnresolvedSyncStep(step: BranchSyncStep): boolean {
+export function isFailedSyncStep(step: BranchSyncStep): boolean {
   return step === 'conflict' || step === 'failed';
 }
 

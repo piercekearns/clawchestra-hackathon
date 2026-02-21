@@ -76,7 +76,7 @@ import {
   classifyUpstreamFailure,
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
-import { readExecutionState, isUnresolvedSyncStep } from './lib/git-sync-utils';
+import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
 
 interface Toast {
   id: number;
@@ -334,7 +334,7 @@ export default function App() {
     for (const p of allProjects) {
       if (!p.gitStatus) continue;
       const state = readExecutionState(p.id);
-      if (state && isUnresolvedSyncStep(state.currentStep)) count++;
+      if (state && isFailedSyncStep(state.currentStep)) count++;
     }
     setUnresolvedSyncCount(count);
   }, [allProjects]);

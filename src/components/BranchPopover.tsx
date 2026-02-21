@@ -3,7 +3,7 @@ import { Check, Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { GitBranchState, ProjectViewModel } from '../lib/schema';
 import { gitCheckoutBranch, gitGetBranchStates } from '../lib/tauri';
-import { getTargetBranchIndicator, isUnresolvedSyncStep, readExecutionState } from '../lib/git-sync-utils';
+import { getTargetBranchIndicator } from '../lib/git-sync-utils';
 import { GitHubStatusBadge } from './GitHubStatusBadge';
 
 interface BranchPopoverProps {
@@ -112,12 +112,6 @@ export function BranchPopover({
   );
 
   const handleCheckout = useCallback(async (branchName: string) => {
-    // Re-check sync state at checkout time (may have changed since popover opened)
-    const currentSync = readExecutionState(project.id);
-    if (currentSync != null && isUnresolvedSyncStep(currentSync.currentStep)) {
-      setError('A branch sync is in progress — complete or cancel it first');
-      return;
-    }
     setCheckingOut(branchName);
     try {
       await gitCheckoutBranch(project.dirPath, branchName);
@@ -128,13 +122,7 @@ export function BranchPopover({
     } finally {
       setCheckingOut(null);
     }
-  }, [project.id, project.dirPath, onCheckoutComplete]);
-
-  // Check for active sync — only when popover is open (avoid localStorage reads on every render)
-  const hasSyncInProgress = open && (() => {
-    const s = readExecutionState(project.id);
-    return s != null && isUnresolvedSyncStep(s.currentStep);
-  })();
+  }, [project.dirPath, onCheckoutComplete]);
 
   return (
     <div ref={triggerRef} className="relative shrink-0">
@@ -166,17 +154,11 @@ export function BranchPopover({
             <div className="px-3 py-2 text-xs text-red-500">{error}</div>
           )}
 
-          {hasSyncInProgress && !loading && !error && (
-            <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-              Branch sync in progress — complete or cancel it first
-            </div>
-          )}
-
-          {!loading && !error && !hasSyncInProgress && sorted.length <= 1 && (
+          {!loading && !error && sorted.length <= 1 && (
             <div className="px-3 py-2 text-xs text-neutral-500">No other local branches</div>
           )}
 
-          {!loading && !error && !hasSyncInProgress && sorted.length > 1 && sorted.map((branch) => {
+          {!loading && !error && sorted.length > 1 && sorted.map((branch) => {
             const indicator = getTargetBranchIndicator(branch);
             const isCurrent = branch.isCurrent;
             const isDefault = branch.name === defaultBranch;
