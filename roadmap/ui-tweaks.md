@@ -171,14 +171,14 @@ When a Git Sync **commit/push succeeds**, the modal uses a dark green success co
 
 ## Priority Order (suggested)
 
-1. Pending column card clipping — one-liner fix, pure visual bug
-2. Live state.json watcher — small lift, high leverage (agent writes instantly visible)
+1. Pending column card clipping — one‑liner fix, pure visual bug
+2. Git Sync success styling — tiny polish, low risk
 3. Divider notch — small lift, high discoverability gain
-4. Git Sync success styling — tiny polish, consistency win
-5. Active model indicator (read-only) — high value, likely low effort
-6. Modal scoping — functional, affects everyday use
-7. Right sidebar toggle — medium effort (mirrored icon + state logic)
+4. Live state.json watcher — small lift, but touches infra/state sync
+5. Active model indicator (read‑only) — low risk once data is available
+6. Modal scoping — medium risk (portal/container changes)
+7. Right sidebar toggle — medium risk (state + layout)
 8. Theme colour relocation — depends on item 7
-9. Settings as page — most effort, revisit when settings content grows
-10. Model selector (if/when) — depends on item 5 proving out the data pipeline
-11. Context window usage — alongside or after item 5
+9. Settings as page — larger UI change
+10. Model selector (if/when) — higher risk, depends on item 5
+11. Context window usage — higher risk, depends on item 5
