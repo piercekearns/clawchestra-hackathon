@@ -356,11 +356,15 @@ export const useDashboardStore = create<DashboardState>()(
                 }
                 migrationMap.set(p.id, p.stateJsonMigrated);
               }
-              // Merge stateJsonMigrated flag into ProjectViewModel
+              // Merge stateJsonMigrated flag and hasRoadmap into ProjectViewModel
               for (const proj of result.projects) {
                 const migrated = migrationMap.get(proj.id);
                 if (migrated !== undefined) {
                   proj.stateJsonMigrated = migrated;
+                }
+                // Migrated projects: roadmap items live in db.json, not ROADMAP.md
+                if (roadmapItems[proj.id]?.length > 0) {
+                  proj.hasRoadmap = true;
                 }
               }
             } catch {
