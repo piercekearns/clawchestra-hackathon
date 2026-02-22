@@ -323,6 +323,16 @@ pub fn merge_state_json(
                 if !is_stale_item_field!(spec_doc) {
                     db_item.spec_doc = incoming_item.spec_doc.clone();
                     db_item.spec_doc_updated_at = Some(ts);
+                    // Auto-detect branch when specDoc changes
+                    if incoming_item.spec_doc.is_some() {
+                        let branch = crate::commands::git::run_git(
+                            project_dir,
+                            &["rev-parse", "--abbrev-ref", "HEAD"],
+                        )
+                        .ok();
+                        db_item.spec_doc_branch = branch;
+                        db_item.spec_doc_branch_updated_at = Some(ts);
+                    }
                 }
             }
 
@@ -330,6 +340,16 @@ pub fn merge_state_json(
                 if !is_stale_item_field!(plan_doc) {
                     db_item.plan_doc = incoming_item.plan_doc.clone();
                     db_item.plan_doc_updated_at = Some(ts);
+                    // Auto-detect branch when planDoc changes
+                    if incoming_item.plan_doc.is_some() {
+                        let branch = crate::commands::git::run_git(
+                            project_dir,
+                            &["rev-parse", "--abbrev-ref", "HEAD"],
+                        )
+                        .ok();
+                        db_item.plan_doc_branch = branch;
+                        db_item.plan_doc_branch_updated_at = Some(ts);
+                    }
                 }
             }
 
@@ -364,6 +384,26 @@ pub fn merge_state_json(
                 spec_doc_updated_at: incoming_item.spec_doc.as_ref().map(|_| ts),
                 plan_doc: incoming_item.plan_doc.clone(),
                 plan_doc_updated_at: incoming_item.plan_doc.as_ref().map(|_| ts),
+                spec_doc_branch: if incoming_item.spec_doc.is_some() {
+                    crate::commands::git::run_git(
+                        project_dir,
+                        &["rev-parse", "--abbrev-ref", "HEAD"],
+                    )
+                    .ok()
+                } else {
+                    None
+                },
+                spec_doc_branch_updated_at: incoming_item.spec_doc.as_ref().map(|_| ts),
+                plan_doc_branch: if incoming_item.plan_doc.is_some() {
+                    crate::commands::git::run_git(
+                        project_dir,
+                        &["rev-parse", "--abbrev-ref", "HEAD"],
+                    )
+                    .ok()
+                } else {
+                    None
+                },
+                plan_doc_branch_updated_at: incoming_item.plan_doc.as_ref().map(|_| ts),
                 completed_at: incoming_item.completed_at.clone(),
                 completed_at_updated_at: incoming_item.completed_at.as_ref().map(|_| ts),
             };

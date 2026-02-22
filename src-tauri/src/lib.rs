@@ -2398,6 +2398,7 @@ pub fn run() {
             commands::git::git_apply_conflict_resolution,
             commands::git::git_validate_branch_sync_resume,
             commands::git::git_init_repo,
+            commands::git::git_read_file_at_ref,
             // Update commands (commands/update.rs)
             commands::update::check_for_update,
             commands::update::get_app_update_lock_state,

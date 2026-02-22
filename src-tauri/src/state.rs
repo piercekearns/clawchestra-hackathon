@@ -159,6 +159,14 @@ pub struct DbRoadmapItem {
     pub plan_doc: Option<String>,
     #[serde(default, rename = "planDoc__updatedAt")]
     pub plan_doc_updated_at: Option<u64>,
+    #[serde(default, rename = "specDocBranch")]
+    pub spec_doc_branch: Option<String>,
+    #[serde(default, rename = "specDocBranch__updatedAt")]
+    pub spec_doc_branch_updated_at: Option<u64>,
+    #[serde(default, rename = "planDocBranch")]
+    pub plan_doc_branch: Option<String>,
+    #[serde(default, rename = "planDocBranch__updatedAt")]
+    pub plan_doc_branch_updated_at: Option<u64>,
     #[serde(default, rename = "completedAt")]
     pub completed_at: Option<String>,
     #[serde(default, rename = "completedAt__updatedAt")]

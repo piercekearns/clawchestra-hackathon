@@ -129,6 +129,10 @@ type TauriCommands = {
     args: { repoPath: string; initialCommit: boolean; files: string[] };
     return: void;
   };
+  git_read_file_at_ref: {
+    args: { repoPath: string; gitRef: string; filePath: string };
+    return: string;
+  };
   check_for_update: { args: Record<string, never>; return: UpdateStatus };
   get_app_update_lock_state: { args: Record<string, never>; return: UpdateLockState };
   run_app_update: { args: { updateGuard?: UpdateGuardInput | null }; return: string };
@@ -398,6 +402,14 @@ export async function gitInitRepo(
   files: string[],
 ): Promise<void> {
   return typedInvoke('git_init_repo', { repoPath, initialCommit, files });
+}
+
+export async function gitReadFileAtRef(
+  repoPath: string,
+  gitRef: string,
+  filePath: string,
+): Promise<string> {
+  return typedInvoke('git_read_file_at_ref', { repoPath, gitRef, filePath });
 }
 
 export async function checkForUpdate(): Promise<UpdateStatus> {

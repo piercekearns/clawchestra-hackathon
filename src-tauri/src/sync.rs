@@ -520,6 +520,8 @@ fn merge_roadmap_item(
     merge_optional_field!(blocked_by, blocked_by_updated_at);
     merge_optional_field!(spec_doc, spec_doc_updated_at);
     merge_optional_field!(plan_doc, plan_doc_updated_at);
+    merge_optional_field!(spec_doc_branch, spec_doc_branch_updated_at);
+    merge_optional_field!(plan_doc_branch, plan_doc_branch_updated_at);
     merge_optional_field!(completed_at, completed_at_updated_at);
 
     (from_remote, from_local)
@@ -894,6 +896,10 @@ mod tests {
                 spec_doc_updated_at: None,
                 plan_doc: None,
                 plan_doc_updated_at: None,
+                spec_doc_branch: None,
+                spec_doc_branch_updated_at: None,
+                plan_doc_branch: None,
+                plan_doc_branch_updated_at: None,
                 completed_at: None,
                 completed_at_updated_at: None,
             },
@@ -922,6 +928,10 @@ mod tests {
                 spec_doc_updated_at: None,
                 plan_doc: None,
                 plan_doc_updated_at: None,
+                spec_doc_branch: None,
+                spec_doc_branch_updated_at: None,
+                plan_doc_branch: None,
+                plan_doc_branch_updated_at: None,
                 completed_at: None,
                 completed_at_updated_at: None,
             },
@@ -1257,6 +1267,10 @@ mod tests {
                                     spec_doc_updated_at: None,
                                     plan_doc: None,
                                     plan_doc_updated_at: None,
+                                    spec_doc_branch: None,
+                                    spec_doc_branch_updated_at: None,
+                                    plan_doc_branch: None,
+                                    plan_doc_branch_updated_at: None,
                                     completed_at: None,
                                     completed_at_updated_at: None,
                                 },

@@ -1187,6 +1187,26 @@ pub(crate) fn git_push(repo_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub(crate) fn git_read_file_at_ref(
+    repo_path: String,
+    git_ref: String,
+    file_path: String,
+) -> Result<String, String> {
+    validate_commit_path(&file_path)?;
+    validate_branch_name(&repo_path, &git_ref)?;
+    let spec = format!("{}:{}", git_ref, file_path);
+    let output = run_git_capture(&repo_path, &["show", &spec])?;
+    if output.success {
+        Ok(output.stdout)
+    } else {
+        Err(format!(
+            "File not found on ref '{}': {}",
+            git_ref, output.stderr
+        ))
+    }
+}
+
+#[tauri::command]
 pub(crate) fn git_init_repo(
     repo_path: String,
     initial_commit: bool,

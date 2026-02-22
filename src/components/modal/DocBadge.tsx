@@ -5,6 +5,7 @@ type DocType = 'spec' | 'plan';
 
 interface DocBadgeProps {
   type: DocType;
+  sourceBranch?: string;
   onClick?: () => void;
 }
 
@@ -13,7 +14,7 @@ const CONFIG: Record<DocType, { icon: typeof FileText; label: string }> = {
   plan: { icon: ClipboardList, label: 'plan' },
 };
 
-export function DocBadge({ type, onClick }: DocBadgeProps) {
+export function DocBadge({ type, sourceBranch, onClick }: DocBadgeProps) {
   const { icon: Icon, label } = CONFIG[type];
 
   return (
@@ -31,6 +32,11 @@ export function DocBadge({ type, onClick }: DocBadgeProps) {
     >
       <Icon className="h-3 w-3" />
       {label}
+      {sourceBranch && (
+        <span className="ml-0.5 text-neutral-400 dark:text-neutral-500">
+          ({sourceBranch})
+        </span>
+      )}
     </button>
   );
 }

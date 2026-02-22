@@ -33,6 +33,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     backToList,
     fetchDocContent,
     getDocContent,
+    getSourceBranch,
     docLoading,
   } = useProjectModal(project, actions);
 
@@ -106,6 +107,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
                 onStatusChange={updateRoadmapItemStatus}
                 fetchDocContent={fetchDocContent}
                 getDocContent={getDocContent}
+                getSourceBranch={getSourceBranch}
                 docLoading={docLoading}
               />
             ) : (

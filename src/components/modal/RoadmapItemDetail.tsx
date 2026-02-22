@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, GitBranch } from 'lucide-react';
 import type { RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import type { BadgeProps } from '../ui/badge';
 import { StatusBadge } from './StatusBadge';
@@ -43,6 +43,7 @@ interface RoadmapItemDetailProps {
   onStatusChange: (itemId: string, status: RoadmapStatus) => void;
   fetchDocContent: (path: string) => Promise<string>;
   getDocContent: (path: string) => string | undefined;
+  getSourceBranch?: (path: string) => string | undefined;
   docLoading: boolean;
 }
 
@@ -54,6 +55,7 @@ export function RoadmapItemDetail({
   onStatusChange,
   fetchDocContent,
   getDocContent,
+  getSourceBranch,
   docLoading,
 }: RoadmapItemDetailProps) {
   const availableTabs: DocTab[] = [];
@@ -78,6 +80,7 @@ export function RoadmapItemDetail({
 
   const activeDocPath = activeTab === 'spec' ? item.docs.spec : item.docs.plan;
   const activeDocContent = activeDocPath ? getDocContent(activeDocPath) : undefined;
+  const activeSourceBranch = activeDocPath ? getSourceBranch?.(activeDocPath) : undefined;
 
   return (
     <div>
@@ -129,6 +132,13 @@ export function RoadmapItemDetail({
               </button>
             ))}
           </div>
+
+          {activeSourceBranch && (
+            <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              <GitBranch className="h-3 w-3" />
+              Viewing from branch: {activeSourceBranch}
+            </div>
+          )}
 
           <div className="prose max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
             {docLoading && activeDocContent === undefined ? (

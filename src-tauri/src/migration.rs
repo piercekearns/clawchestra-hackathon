@@ -591,6 +591,10 @@ fn migration_sanitize_item(
         spec_doc_updated_at: spec_doc.as_ref().map(|_| now_ms),
         plan_doc: plan_doc.clone(),
         plan_doc_updated_at: plan_doc.as_ref().map(|_| now_ms),
+        spec_doc_branch: None,
+        spec_doc_branch_updated_at: None,
+        plan_doc_branch: None,
+        plan_doc_branch_updated_at: None,
         completed_at: completed_at.clone(),
         completed_at_updated_at: completed_at.as_ref().map(|_| now_ms),
     };

@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { ModalDragZone } from '../ui/ModalDragZone';
 import type { ProjectFrontmatter, RoadmapItem, RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/roadmap';
-import { readFile } from '../../lib/tauri';
+import { readFile, gitReadFileAtRef, gitGetBranchStates } from '../../lib/tauri';
 import { RoadmapItemDetail } from './RoadmapItemDetail';
 
 interface RoadmapItemDialogProps {
@@ -29,6 +29,7 @@ export function RoadmapItemDialog({
 }: RoadmapItemDialogProps) {
   const [enrichedItem, setEnrichedItem] = useState<RoadmapItemWithDocs | null>(null);
   const [docCache, setDocCache] = useState<Record<string, string>>({});
+  const [docSourceBranch, setDocSourceBranch] = useState<Record<string, string>>({});
   const [docLoading, setDocLoading] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -80,14 +81,45 @@ export function RoadmapItemDialog({
       const content = await readFile(path);
       setDocCache((prev) => ({ ...prev, [path]: content }));
       return content;
+    } catch {
+      // File not on current branch — try git show fallback
+      const relPath = path.startsWith(projectDir)
+        ? path.slice(projectDir.length).replace(/^\//, '')
+        : path;
+
+      try {
+        const branches = await gitGetBranchStates(projectDir);
+        for (const branch of branches) {
+          if (branch.isCurrent) continue;
+          try {
+            const content = await gitReadFileAtRef(projectDir, branch.name, relPath);
+            setDocCache((prev) => ({ ...prev, [path]: content }));
+            setDocSourceBranch((prev) => ({ ...prev, [path]: branch.name }));
+            return content;
+          } catch {
+            // Not on this branch
+          }
+        }
+      } catch {
+        // Branch scanning failed
+      }
+
+      const fallback = '_Document not found on any branch_';
+      setDocCache((prev) => ({ ...prev, [path]: fallback }));
+      return fallback;
     } finally {
       setDocLoading(false);
     }
-  }, []);
+  }, [projectDir]);
 
   const getDocContent = useCallback(
     (path: string): string | undefined => docCache[path],
     [docCache],
+  );
+
+  const getSourceBranch = useCallback(
+    (path: string): string | undefined => docSourceBranch[path],
+    [docSourceBranch],
   );
 
   if (!item || !enrichedItem) return null;
@@ -125,6 +157,7 @@ export function RoadmapItemDialog({
           onStatusChange={onStatusChange}
           fetchDocContent={fetchDocContent}
           getDocContent={getDocContent}
+          getSourceBranch={getSourceBranch}
           docLoading={docLoading}
         />
       </div>

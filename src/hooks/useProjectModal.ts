@@ -9,7 +9,7 @@ import type {
 import { readRoadmap, writeRoadmap, resolveDocFiles, enrichItemsWithDocs } from '../lib/roadmap';
 import { migrateCompletedItem } from '../lib/changelog';
 import { parseChangelog } from '../lib/changelog';
-import { readFile } from '../lib/tauri';
+import { readFile, gitReadFileAtRef, gitGetBranchStates } from '../lib/tauri';
 import type { ProjectModalActions } from '../components/modal/types';
 
 type ModalView =
@@ -29,8 +29,9 @@ interface UseProjectModalReturn {
   selectedItem: RoadmapItemWithDocs | undefined;
   openItemDetail: (itemId: string, initialDocTab?: 'spec' | 'plan') => void;
   backToList: () => void;
-  fetchDocContent: (path: string) => Promise<string>;
+  fetchDocContent: (path: string, branchHint?: string) => Promise<string>;
   getDocContent: (path: string) => string | undefined;
+  getSourceBranch: (path: string) => string | undefined;
   docLoading: boolean;
 }
 
@@ -46,6 +47,7 @@ export function useProjectModal(
   const [roadmapError, setRoadmapError] = useState<string | null>(null);
   const [modalView, setModalView] = useState<ModalView>({ kind: 'list' });
   const [docContentCache, setDocContentCache] = useState<Record<string, string>>({});
+  const [docSourceBranch, setDocSourceBranch] = useState<Record<string, string>>({});
   const [docLoading, setDocLoading] = useState(false);
   const [changelogEntries, setChangelogEntries] = useState<ChangelogEntry[]>([]);
 
@@ -59,6 +61,7 @@ export function useProjectModal(
   useEffect(() => {
     setModalView({ kind: 'list' });
     setDocContentCache({});
+    setDocSourceBranch({});
   }, [project?.id]);
 
   // Load roadmap when project changes
@@ -227,30 +230,80 @@ export function useProjectModal(
     return roadmapItems.find((item) => item.id === modalView.itemId);
   }, [modalView, roadmapItems]);
 
-  // Doc content fetching with cache
+  // Doc content fetching with cache + git show fallback for cross-branch documents
   const fetchDocContent = useCallback(
-    async (path: string): Promise<string> => {
+    async (path: string, branchHint?: string): Promise<string> => {
       if (docContentCache[path] !== undefined) return docContentCache[path];
 
+      const repoPath = project?.dirPath;
       setDocLoading(true);
       try {
+        // Step 1: Try reading from the working tree (happy path)
         const content = await readFile(path);
         setDocContentCache((prev) => ({ ...prev, [path]: content }));
         return content;
       } catch {
-        const fallback = '_Could not load document_';
+        // Step 2: File not on current branch — try git show fallback
+        if (!repoPath) {
+          const fallback = '_Could not load document_';
+          setDocContentCache((prev) => ({ ...prev, [path]: fallback }));
+          return fallback;
+        }
+
+        // Extract repo-relative path from the full path
+        const relPath = path.startsWith(repoPath)
+          ? path.slice(repoPath.length).replace(/^\//, '')
+          : path;
+
+        try {
+          // Step 2a: Try the branch hint (specDocBranch/planDocBranch from db.json)
+          if (branchHint) {
+            try {
+              const content = await gitReadFileAtRef(repoPath, branchHint, relPath);
+              setDocContentCache((prev) => ({ ...prev, [path]: content }));
+              setDocSourceBranch((prev) => ({ ...prev, [path]: branchHint }));
+              return content;
+            } catch {
+              // Branch hint failed, continue to scan
+            }
+          }
+
+          // Step 2b: Scan all local branches
+          const branches = await gitGetBranchStates(repoPath);
+          for (const branch of branches) {
+            if (branch.isCurrent) continue; // Already failed on working tree
+            try {
+              const content = await gitReadFileAtRef(repoPath, branch.name, relPath);
+              setDocContentCache((prev) => ({ ...prev, [path]: content }));
+              setDocSourceBranch((prev) => ({ ...prev, [path]: branch.name }));
+              return content;
+            } catch {
+              // Not on this branch, try next
+            }
+          }
+        } catch {
+          // Branch scanning failed entirely
+        }
+
+        // Step 3: Not found anywhere
+        const fallback = '_Document not found on any branch_';
         setDocContentCache((prev) => ({ ...prev, [path]: fallback }));
         return fallback;
       } finally {
         setDocLoading(false);
       }
     },
-    [docContentCache],
+    [docContentCache, project?.dirPath],
   );
 
   const getDocContent = useCallback(
     (path: string): string | undefined => docContentCache[path],
     [docContentCache],
+  );
+
+  const getSourceBranch = useCallback(
+    (path: string): string | undefined => docSourceBranch[path],
+    [docSourceBranch],
   );
 
   return {
@@ -268,6 +321,7 @@ export function useProjectModal(
     backToList,
     fetchDocContent,
     getDocContent,
+    getSourceBranch,
     docLoading,
   };
 }

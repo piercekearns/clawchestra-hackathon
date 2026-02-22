@@ -54,6 +54,10 @@ export const DbRoadmapItemSchema = z.object({
   specDoc__updatedAt: z.number().optional(),
   planDoc: z.string().optional(),
   planDoc__updatedAt: z.number().optional(),
+  specDocBranch: z.string().optional(),
+  specDocBranch__updatedAt: z.number().optional(),
+  planDocBranch: z.string().optional(),
+  planDocBranch__updatedAt: z.number().optional(),
   completedAt: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
