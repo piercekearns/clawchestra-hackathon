@@ -109,11 +109,45 @@ Kanban cards in the Pending column have their right border/stroke clipped at cer
 
 ---
 
+## 7 — Active Model Indicator (+ Context Window Usage)
+
+Surface the currently active OpenClaw model somewhere in the Clawchestra UI, with optional context usage visibility.
+
+**What to show:**
+- Active model name (e.g. `claude-sonnet-4-6`, or a friendly alias)
+- Optionally: context window usage — tokens used / total (e.g. `42k / 200k`) or a progress bar
+
+**Placement — TBD, candidates:**
+- Title bar (compact — model name only, maybe with a small usage bar on hover)
+- Sidebar footer / status area (more room for both model + usage)
+- Chat drawer (contextually relevant when in a session)
+
+**Interaction — TBD:**
+- Read-only indicator to start (just shows what's active)
+- Potentially evolves into a model selector (click to change primary model) if feasible via the OpenClaw API
+- If it becomes a selector: should respect the fallback chain (show primary + fallback)
+
+**Data source:**
+- OpenClaw exposes current model via `session_status` tool and gateway config
+- Context window usage may need polling or a WebSocket event — check what the gateway surfaces
+- Fallback: derive from `openclaw.json` `agents.defaults.model.primary` if live session data isn't available
+
+**Open questions:**
+- Where exactly does it live? (Decide at implementation time — Pierce to call)
+- Model selector or read-only first?
+- Show context usage as a number, a bar, or both?
+- Should it show the *session-pinned* model or the *configured default*? (Could differ if a session override is active)
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — one-liner fix, pure visual bug
 2. Divider notch — smallest lift, highest discoverability gain
-3. Modal scoping — functional, affects everyday use
-4. Right sidebar toggle — medium effort (needs mirrored icon + state logic)
-5. Theme colour relocation — depends on item 4
-6. Settings as page — most effort, revisit when settings content grows
+3. Active model indicator (read-only) — high value, likely low effort if gateway already exposes it
+4. Modal scoping — functional, affects everyday use
+5. Right sidebar toggle — medium effort (needs mirrored icon + state logic)
+6. Theme colour relocation — depends on item 5
+7. Settings as page — most effort, revisit when settings content grows
+8. Model selector (if/when) — depends on item 3 proving out the data pipeline
+9. Context window usage — depends on what gateway surfaces; add alongside or after item 3
