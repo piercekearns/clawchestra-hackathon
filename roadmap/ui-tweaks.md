@@ -18,6 +18,8 @@ A holding item for UI/UX improvements that are too small for their own roadmap i
 
 Add a visual notch/handle in the middle of the divider bar between the sidebar and the board.
 
+**Status:** ✅ Fixed (2026‑02‑22)
+
 - **Style reference:** Claude Code's drag handle — a visible affordance that makes the resizeable bar discoverable without requiring a hover
 - Currently the drag affordance is only visible on hover, which isn't obvious enough
 - The notch should be static (always visible, not just on hover)
@@ -177,6 +179,8 @@ When a Git Sync **commit/push succeeds**, the modal uses a dark green success co
 
 In the Git Sync modal, file names can wrap horizontally on a single line, which makes it hard to scan when multiple files are listed.
 
+**Status:** ✅ Fixed (2026‑02‑22)
+
 **Change:**
 - Render each file on its **own line** (vertical stack)
 - Avoid horizontal wrapping or inline lists
@@ -188,8 +192,8 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 
 1. Pending column card clipping — ✅ done (1px gutter)
 2. Git Sync success styling — ✅ done (match user bubble)
-3. Git Sync file lists stack — tiny polish, low risk
-4. Divider notch — small lift, high discoverability gain
+3. Git Sync file lists stack — ✅ done (stacked rows)
+4. Divider notch — ✅ done (visible handle)
 5. Live state.json watcher — small lift, but touches infra/state sync
 6. Active model indicator (read‑only) — low risk once data is available
 7. Modal scoping — medium risk (portal/container changes)
