@@ -38,6 +38,37 @@ Candidate enhancement to track as second-wave reliability work:
 
 ---
 
+## Latest Fix Round Baseline (2026-02-22)
+
+Use this section as the canonical marker for post-fix triage.
+
+- **Baseline timestamp:** 2026-02-22 (local)
+- **Intent:** Any bug report observed after this timestamp should be treated as either:
+  - a regression of an item marked "Fixed in code (pending verification)", or
+  - a new issue not covered by this round.
+- **Scope:** This baseline covers Clawchestra app + Tauri bridge changes only (not OpenClaw upstream runtime behavior changes).
+
+### Fixed in code (pending verification)
+- **BUG-008** — App-side suppression for post-compaction internal memory-flush narration (`NO_REPLY` run suppression in recovery path).
+- **BUG-009** — Distinct activity semantics for compaction (`Compacting...` label + `compacting` activity state).
+- **FINDING-001** — `gateway_call` now has a hard subprocess timeout (30s) with process kill and explicit timeout error.
+
+### Partially addressed
+- **BUG-010** — User-facing error classification/message improved for aborted long monitoring turns; upstream timeout behavior itself is unchanged.
+
+### Not addressed in this round
+- **BUG-001**
+- **BUG-002**
+- **BUG-003**
+- **BUG-004**
+- **BUG-005**
+- **BUG-006**
+- **BUG-007**
+
+When appending future bug updates, include: `Post-fix baseline: 2026-02-22` so we can quickly separate pre-existing context from new regressions.
+
+---
+
 ## Bug Log
 
 ### BUG-001: Assistant messages not appearing after app update
@@ -239,7 +270,7 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 ### BUG-008: Post-compaction memory flush narration leaks to user
 **Reported:** 2026-02-19 ~21:37
 **Severity:** Medium
-**Status:** Open
+**Status:** In progress — app-side recovery suppression landed (2026-02-22), runtime verification pending
 
 **Symptoms:**
 - After compaction, the first message the user sees is NOT the direct reply to their message
@@ -265,6 +296,11 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 - **OpenClaw-side:** The memory flush turn could emit with a "silent" or "internal" flag so downstream clients know to suppress narration
 - **Hybrid:** Tag memory flush turns distinctly in the event stream; app filters them from display
 
+**Update (2026-02-22):**
+- Clawchestra now suppresses recovered assistant messages from runs that end with `NO_REPLY` (same runId), and suppresses standalone `NO_REPLY` assistant payloads during history reconciliation.
+- This targets the post-compaction memory-flush narration leak path in `recoverRecentSessionMessages`.
+- Still requires live verification against compaction-heavy sessions (gateway dashboard may still show raw narration; this fix is app-side).
+
 **Scenario links:** recovery-cursoring, compaction-mid-run
 
 ---
@@ -272,7 +308,7 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 ### BUG-009: Typing animation persists during compaction — no distinct UX state
 **Reported:** 2026-02-19 ~21:37
 **Severity:** Medium
-**Status:** Open — research complete, fix ready for implementation
+**Status:** In progress — fix landed in code (2026-02-22), UX verification pending
 
 **Symptoms:**
 - After the agent sends its last pre-compaction message, the `typing…` animation persists for a long time
@@ -315,6 +351,13 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 - `src/components/chat/ChatBar.tsx` — optionally different animation for compacting
 - `src/components/chat/MessageList.tsx` — optionally different reading indicator for compacting
 
+**Update (2026-02-22):**
+- Implemented in Clawchestra app code:
+  - `agentActivity` now includes `'compacting'`
+  - compaction events set activity to `'compacting'` (then back to `'working'` on completion events)
+  - chat activity label now renders `Compacting...` during compaction
+- Added regression coverage to keep compaction semantics and recovery behavior stable.
+
 **Scenario links:** compaction-mid-run
 
 ---
@@ -322,7 +365,7 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 ### BUG-010: "Background task failed — OpenClaw chat aborted" during long tmux monitoring
 **Reported:** 2026-02-19 ~22:08
 **Severity:** Medium
-**Status:** Open
+**Status:** In progress — messaging improved (2026-02-22), upstream timeout policy still pending
 
 **Symptoms:**
 - During a Claude Code `/build` session monitored via tmux capture-pane polling, user received a "Background task failed — Error: OpenClaw chat aborted — Check logs for details" system bubble in the chat drawer at 22:08
@@ -347,6 +390,10 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 - For long tmux monitoring tasks, the agent could set a longer timeout or use a different monitoring pattern (e.g., cron-based polling instead of a single long turn)
 - Consider a "check tmux session" recovery action after timeout
 
+**Update (2026-02-22):**
+- Clawchestra failure classification now recognizes `OpenClaw chat aborted` as a monitoring-timeout class and shows a clearer recovery action: check the tmux/background session because work may still be running.
+- Root-cause mitigation (longer upstream timeout / split monitoring strategy) still needs OpenClaw-side configuration or behavior change.
+
 **Scenario links:** none yet (new category — agent timeout during tmux monitoring)
 
 ---
@@ -354,7 +401,7 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 ### FINDING-001: `gateway_call` has no subprocess timeout — can block indefinitely
 **Surfaced:** 2026-02-21 (architecture-direction-v2 hardening sprint, round 4 review)
 **Severity:** P2 — Important (not a bug per se, but a reliability gap)
-**Status:** Open — candidate for pre-ship chat fix pass
+**Status:** Fixed in code (2026-02-22) — awaiting runtime soak verification
 **Review agents:** Architecture Strategist, Performance Oracle
 
 **What it is:**
@@ -378,11 +425,8 @@ timeout check never runs while the subprocess is hung.
 - The spawned blocking thread is leaked (held by the hung subprocess).
 - No error message or timeout feedback reaches the user.
 
-**Recommended fix:**
-Switch `gateway_call` from `std::process::Command::output()` to
-`tokio::process::Command::output()` with `tokio::time::timeout(Duration::from_secs(30), ...)`
-per call. This requires making `gateway_call` async and updating its callers. Alternatively,
-use `std::process::Command::spawn()` + polling with a wall-clock timeout check.
+**Implemented fix (2026-02-22):**
+`gateway_call` now uses `Command::spawn()` + `try_wait()` polling with a hard 30-second wall-clock timeout. If the subprocess exceeds timeout, it is killed and the user sees an explicit timeout error (`Gateway call timed out after 30s`), preventing indefinite blocked chat turns.
 
 **Context:** This is a good candidate for the planned pre-ship chat reliability fix pass.
 It's not urgent (the `spawn_blocking` wrapper prevents app-wide impact) but it's the kind

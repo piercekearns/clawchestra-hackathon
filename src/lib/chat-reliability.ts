@@ -1,5 +1,5 @@
 export type UpstreamFailureClassification = {
-  type: 'rate_limit' | 'upstream_failure';
+  type: 'rate_limit' | 'monitor_timeout' | 'upstream_failure';
   title: string;
   action: string;
 };
@@ -17,6 +17,20 @@ export function classifyUpstreamFailure(message: string): UpstreamFailureClassif
       action: 'Wait briefly, then retry',
     };
   }
+
+  const isMonitoringTimeout =
+    normalized.includes('openclaw chat aborted') ||
+    normalized.includes('chat aborted') ||
+    normalized.includes('monitoring turn timed out') ||
+    (normalized.includes('timed out') && normalized.includes('background'));
+  if (isMonitoringTimeout) {
+    return {
+      type: 'monitor_timeout',
+      title: 'Background monitoring timed out',
+      action: 'Check the tmux/background session; work may still be running',
+    };
+  }
+
   return {
     type: 'upstream_failure',
     title: 'Background task failed',

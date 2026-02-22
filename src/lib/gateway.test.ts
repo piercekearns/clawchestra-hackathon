@@ -647,6 +647,41 @@ describe('gateway client', () => {
     expect(filtered.map((message) => message.id)).toEqual(['m-2']);
   });
 
+  it('detects internal no-reply runs from assistant history', () => {
+    const runIds = __gatewayTestUtils.collectInternalNoReplyRunIds([
+      { role: 'assistant', runId: 'run-1', content: 'NO_REPLY', timestamp: 1000 },
+      { role: 'assistant', runId: 'run-2', content: 'Normal reply', timestamp: 1001 },
+      { role: 'assistant', runId: 'run-3', content: 'NO REPLY', timestamp: 1002 },
+    ]);
+
+    expect([...runIds].sort()).toEqual(['run-1', 'run-3']);
+  });
+
+  it('suppresses assistant messages for internal no-reply runs', () => {
+    const noReplyRunIds = new Set(['run-1']);
+
+    expect(
+      __gatewayTestUtils.shouldSuppressNoReplyRunAssistantMessage(
+        { role: 'assistant', runId: 'run-1', content: 'File exists, appending note', timestamp: 1000 },
+        noReplyRunIds,
+      ),
+    ).toBe(true);
+
+    expect(
+      __gatewayTestUtils.shouldSuppressNoReplyRunAssistantMessage(
+        { role: 'assistant', runId: 'run-2', content: 'Normal reply', timestamp: 1001 },
+        noReplyRunIds,
+      ),
+    ).toBe(false);
+
+    expect(
+      __gatewayTestUtils.shouldSuppressNoReplyRunAssistantMessage(
+        { role: 'assistant', content: 'NO_REPLY', timestamp: 1002 },
+        noReplyRunIds,
+      ),
+    ).toBe(true);
+  });
+
   it('maps compaction state semantics to distinct progress/completion metadata', () => {
     expect(__gatewayTestUtils.resolveCompactionPresentation('compacting', true)).toEqual({
       title: 'Compacting conversation...',

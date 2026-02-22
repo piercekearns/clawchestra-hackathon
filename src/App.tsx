@@ -440,6 +440,7 @@ export default function App() {
 
   const chatActivityLabel = useMemo(() => {
     // Event-driven labels take priority when they're more specific
+    if (agentActivity === 'compacting') return 'Compacting...';
     if (agentActivity === 'typing') return 'Typing...';
     if (agentActivity === 'working') return 'Working...';
     // Fallback: if a send is in-flight, always show activity
@@ -630,6 +631,7 @@ export default function App() {
       if (event.kind === 'compaction') {
         const semanticStatesEnabled = CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states;
         const isCompacting = semanticStatesEnabled && event.compactionState === 'compacting';
+        setAgentActivity(isCompacting ? 'compacting' : 'working');
         void addSystemBubble(
           'compaction',
           isCompacting ? 'Compacting conversation...' : 'Conversation compacted',

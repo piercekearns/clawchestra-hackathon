@@ -15,9 +15,9 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) use locking::*;
 pub(crate) use state::*;
@@ -842,6 +842,9 @@ fn normalize_session_key(session_key: Option<String>) -> String {
 }
 
 fn gateway_call(method: &str, params: &Value) -> Result<Value, String> {
+    const GATEWAY_CALL_TIMEOUT: Duration = Duration::from_secs(30);
+    const GATEWAY_CALL_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
     let openclaw = find_openclaw_binary().ok_or_else(|| "OpenClaw CLI not found".to_string())?;
 
     let params_json = serde_json::to_string(params)
@@ -860,8 +863,9 @@ fn gateway_call(method: &str, params: &Value) -> Result<Value, String> {
         return Err("Payload too large. Please use smaller images (they are auto-resized, but this may indicate an issue).".to_string());
     }
 
-    // Normal payloads use direct command
-    let output = Command::new(&openclaw)
+    // Normal payloads use direct command, with a hard timeout to avoid hanging
+    // forever when the underlying CLI process stalls.
+    let mut child = Command::new(&openclaw)
         .args([
             "gateway",
             "call",
@@ -871,8 +875,35 @@ fn gateway_call(method: &str, params: &Value) -> Result<Value, String> {
             "--json",
         ])
         .env("PATH", &node_paths)
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("Failed to run gateway call: {e}"))?;
+
+    let deadline = Instant::now() + GATEWAY_CALL_TIMEOUT;
+    let output = loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => break child
+                .wait_with_output()
+                .map_err(|error| format!("Failed to collect gateway output: {error}"))?,
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "Gateway call timed out after {}s (method: {method})",
+                        GATEWAY_CALL_TIMEOUT.as_secs()
+                    ));
+                }
+                thread::sleep(GATEWAY_CALL_POLL_INTERVAL);
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("Failed to poll gateway process status: {error}"));
+            }
+        }
+    };
 
     if output.status.success() {
         let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();

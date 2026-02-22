@@ -57,7 +57,7 @@ interface GatewayOptions {
   attachments?: GatewayImageAttachment[];
   transport?: GatewayTransport;
   onStreamDelta?: (content: string) => void;
-  onActivityChange?: (state: 'idle' | 'typing' | 'working') => void;
+  onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
 }
 
 interface ChatCompletionMessagePartText {
@@ -790,6 +790,36 @@ function getHistoryMessageRunId(message: GatewayHistoryMessage): string | undefi
     : undefined;
 }
 
+function isNoReplySentinel(content: string): boolean {
+  const compact = content.replace(/[\s_-]+/g, '').trim().toUpperCase();
+  return compact === 'NOREPLY';
+}
+
+function collectInternalNoReplyRunIds(messages: GatewayHistoryMessage[]): Set<string> {
+  const runIds = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    const runId = getHistoryMessageRunId(message);
+    if (!runId) continue;
+    const content = extractText(message.content).trim();
+    if (!content) continue;
+    if (!isNoReplySentinel(content)) continue;
+    runIds.add(runId);
+  }
+  return runIds;
+}
+
+function shouldSuppressNoReplyRunAssistantMessage(
+  message: GatewayHistoryMessage,
+  noReplyRunIds: Set<string>,
+): boolean {
+  if (message.role !== 'assistant') return false;
+  const content = extractText(message.content).trim();
+  if (content && isNoReplySentinel(content)) return true;
+  const runId = getHistoryMessageRunId(message);
+  return Boolean(runId && noReplyRunIds.has(runId));
+}
+
 type RecoveryCursorSnapshot = {
   sessionKey: string;
   lastMessageId?: string;
@@ -1245,6 +1275,7 @@ export async function recoverRecentSessionMessages(options?: {
   const rawMessages = Array.isArray(history.messages)
     ? history.messages.filter(isHistoryMessage)
     : [];
+  const noReplyRunIds = collectInternalNoReplyRunIds(rawMessages);
 
   const chronological = applyRecoveryCursorFilter(rawMessages, recoveryCursor);
   const seen = new Set<string>();
@@ -1253,6 +1284,10 @@ export async function recoverRecentSessionMessages(options?: {
   for (const message of chronological) {
     const role = normalizeHistoryRole(message.role);
     if (!role) continue;
+
+    if (shouldSuppressNoReplyRunAssistantMessage(message, noReplyRunIds)) {
+      continue;
+    }
 
     if (role === 'user' && isSyntheticSystemExecUserMessage(message)) {
       continue;
@@ -1919,8 +1954,8 @@ async function sendViaTauriOpenClaw(
 }
 
 function setAgentActivity(
-  next: 'idle' | 'typing' | 'working',
-  onActivityChange?: (state: 'idle' | 'typing' | 'working') => void,
+  next: 'idle' | 'typing' | 'working' | 'compacting',
+  onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void,
 ): void {
   useDashboardStore.getState().setAgentActivity(next);
   if (onActivityChange) onActivityChange(next);
@@ -1931,7 +1966,7 @@ async function sendViaTauriWs(
   attachments: GatewayImageAttachment[],
   transport: GatewayTransport,
   onStreamDelta?: (content: string) => void,
-  onActivityChange?: (state: 'idle' | 'typing' | 'working') => void,
+  onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void,
 ): Promise<SendResult> {
   if (transport.mode !== 'tauri-ws') {
     throw new Error('Tauri WebSocket transport is not configured');
@@ -2568,7 +2603,7 @@ async function sendViaTauriWs(
         }
 
         if (state && (state as CompactionState) in stateLabels) {
-          setAgentActivity('working', onActivityChange);
+          setAgentActivity(state === 'compacting' ? 'compacting' : 'working', onActivityChange);
         }
 
         if (TYPING_ACTIVITY_STATES.has(state)) {
@@ -3175,6 +3210,8 @@ export const __gatewayTestUtils = {
   parseProcessPollSnapshot,
   classifyProcessPollCapability,
   applyRecoveryCursorFilter,
+  collectInternalNoReplyRunIds,
+  shouldSuppressNoReplyRunAssistantMessage,
   resolveCompactionPresentation,
   hasMatchingUserTurnInHistory,
   estimateChatSendFrameBytes,

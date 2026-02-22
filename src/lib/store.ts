@@ -44,7 +44,7 @@ interface DashboardState {
   errors: DashboardError[];
   gatewayConnected: boolean;
   wsConnectionState: ChatConnectionState;
-  agentActivity: 'idle' | 'typing' | 'working';
+  agentActivity: 'idle' | 'typing' | 'working' | 'compacting';
   viewContext: ViewContext;
   chatMessages: ChatMessage[];
   chatHasMore: boolean;
@@ -68,7 +68,7 @@ interface DashboardState {
   clearErrorsByType: (type: DashboardError['type']) => void;
   setGatewayConnected: (connected: boolean) => void;
   setWsConnectionState: (state: ChatConnectionState) => void;
-  setAgentActivity: (state: 'idle' | 'typing' | 'working') => void;
+  setAgentActivity: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
   setViewContext: (view: ViewContext) => void;
   setThemePreference: (pref: ThemePreference) => void;
   addChatMessage: (message: ChatMessage) => Promise<void>;
