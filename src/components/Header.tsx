@@ -43,21 +43,13 @@ export function Header({
           </kbd>
         </div>
 
-        {syncStatus && syncStatus.status !== 'disabled' && (
+        {syncStatus && syncStatus.status === 'error' && (
           <div
-            className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400"
-            title={`${syncStatus.label}${syncStatus.lastSyncTime ? ` (${syncStatus.lastSyncTime})` : ''}`}
+            className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+            title={syncStatus.label}
           >
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                syncStatus.status === 'synced'
-                  ? 'bg-green-500'
-                  : syncStatus.status === 'error'
-                    ? 'bg-amber-500'
-                    : 'bg-neutral-400'
-              }`}
-            />
-            {syncStatus.lastSyncTime ?? syncStatus.label}
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+            Sync issue
           </div>
         )}
 

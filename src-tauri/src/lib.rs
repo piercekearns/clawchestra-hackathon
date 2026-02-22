@@ -2380,6 +2380,60 @@ async fn write_openclaw_system_context(
 /// Writes structured JSON log entries to `~/.clawchestra/app.log`.
 /// Rotates to `app.log.1` when the file exceeds 1MB.
 /// Also outputs human-readable logs to stdout for development.
+/// A file writer that rotates when the file exceeds `max_bytes`.
+/// Used by tracing-subscriber via `Mutex<RotatingFile>`.
+struct RotatingFile {
+    path: PathBuf,
+    file: fs::File,
+    written: u64,
+    max_bytes: u64,
+}
+
+impl RotatingFile {
+    fn new(path: PathBuf, max_bytes: u64) -> std::io::Result<Self> {
+        let existing_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        Ok(Self {
+            path,
+            file,
+            written: existing_size,
+            max_bytes,
+        })
+    }
+
+    fn rotate(&mut self) {
+        let _ = self.file.flush();
+        let rotated = self.path.with_extension("log.1");
+        let _ = fs::rename(&self.path, &rotated);
+        if let Ok(new_file) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+        {
+            self.file = new_file;
+            self.written = 0;
+        }
+    }
+}
+
+impl std::io::Write for RotatingFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.file.write(buf)?;
+        self.written += n as u64;
+        if self.written > self.max_bytes {
+            self.rotate();
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
 fn init_tracing() {
     let log_dir = dirs::home_dir()
         .map(|h| h.join(".clawchestra"))
@@ -2388,8 +2442,9 @@ fn init_tracing() {
     // Ensure log directory exists
     let _ = fs::create_dir_all(&log_dir);
 
-    // Rotate if existing log exceeds 1MB
     let log_file_path = log_dir.join("app.log");
+
+    // Rotate if existing log exceeds 1MB (startup rotation)
     if log_file_path.exists() {
         if let Ok(meta) = fs::metadata(&log_file_path) {
             if meta.len() > 1_048_576 {
@@ -2399,17 +2454,14 @@ fn init_tracing() {
         }
     }
 
-    // File layer: JSON-structured output to app.log
-    let log_file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_file_path);
+    // File layer: JSON-structured output to app.log with inline rotation at 1MB
+    let rotating_file = RotatingFile::new(log_file_path.clone(), 1_048_576);
 
-    match log_file {
-        Ok(file) => {
+    match rotating_file {
+        Ok(writer) => {
             let file_layer = tracing_subscriber::fmt::layer()
                 .json()
-                .with_writer(std::sync::Mutex::new(file))
+                .with_writer(std::sync::Mutex::new(writer))
                 .with_target(true)
                 .with_thread_ids(false)
                 .with_file(false)

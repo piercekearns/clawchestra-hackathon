@@ -25,6 +25,7 @@ use crate::validation::{validate_state_json, CURRENT_SCHEMA_VERSION};
 /// 4. Applies valid changes with HLC timestamps
 /// 5. Pushes a history entry
 /// 6. Returns the validation result
+#[allow(clippy::collapsible_if)]
 pub fn merge_state_json(
     app_state: &mut AppState,
     project_id: &str,

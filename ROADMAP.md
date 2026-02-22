@@ -5,8 +5,10 @@ items:
     status: in-progress
     priority: 1
     nextAction: >-
-      Phase 5 frontend alignment — run deepen-plan against plan-v2.md then build.
-      Phases 1-4 + hardening complete (all Rust modules built).
+      Phases 1-7 built — awaiting verification. Covers: HLC merge engine,
+      validation, migration, branch injection, frontend alignment, continuous
+      sync (Local mode), graceful shutdown, structured logging, debug export,
+      validation badges. See architecture-direction-part-two for deferred items.
     tags:
       - architecture
       - openclaw
@@ -15,6 +17,35 @@ items:
     icon: "\U0001F3D7️"
     specDoc: docs/specs/architecture-direction-spec.md
     planDoc: docs/plans/architecture-direction-plan-v2.md
+  - id: architecture-direction-part-two
+    title: Architecture Direction Part Two
+    status: pending
+    priority: 3
+    nextAction: >-
+      Spec needed — document and build all deferred items from Phases 1-7.
+      Major gaps: (1) Remote sync mode — SyncHandle only handles Local,
+      performSyncOnLaunch/performSyncOnClose never called, lastSyncedAt not
+      wired to frontend, bearer token management UI not built (keyring crate
+      ready but no Settings UI). (2) Migration auto-trigger — run_all_migrations
+      exists in Rust but never called on app launch (Phase 3.4), migration UI
+      toast/banner not built (Phase 3.5), auto-rename PROJECT.md to
+      CLAWCHESTRA.md not wired on startup (Phase 3.8 function exists). (3)
+      Debug export missing sync/watcher event ring buffers (shows placeholders).
+      (4) get_migration_status omits NotStarted projects. (5) Sync interval not
+      configurable (hardcoded 2s, fine for Local, may need tuning for Remote).
+      (6) PROJECT.md in AUTO_COMMIT_ALLOWED set is dead code once dual-filename
+      transition complete. (7) hasRoadmap/hasChangelog/roadmapFilePath/
+      changelogFilePath fields in ProjectViewModel are legacy dead code from
+      pre-migration era. Remote sync is the priority — needed for friend's VPS
+      setup and future mobile client.
+    tags:
+      - architecture
+      - openclaw
+      - sync
+      - remote
+      - migration
+    icon: "\U0001F3D7️"
+    blockedBy: architecture-direction
   - id: chat-infrastructure
     title: 'Chat Reliability: Persistent Bugs'
     status: in-progress
