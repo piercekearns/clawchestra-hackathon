@@ -162,6 +162,8 @@ Currently, external writes to `.clawchestra/state.json` (by agents, the CLI, or 
 
 When a Git Sync **commit/push succeeds**, the modal uses a dark green success color. Match that treatment to the style of **user chat messages** in the chat drawer (background + outline), for visual consistency.
 
+**Status:** ✅ Fixed (2026‑02‑22)
+
 **Goal:** Success confirmations should feel like they belong to the same design language as the user message bubbles.
 
 **Notes:**
@@ -185,7 +187,7 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
-2. Git Sync success styling — tiny polish, low risk
+2. Git Sync success styling — ✅ done (match user bubble)
 3. Git Sync file lists stack — tiny polish, low risk
 4. Divider notch — small lift, high discoverability gain
 5. Live state.json watcher — small lift, but touches infra/state sync
