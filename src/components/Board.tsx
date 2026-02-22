@@ -383,7 +383,7 @@ export function Board<T extends BoardItem>({
         <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
           <div
             ref={gridRef}
-            className="grid h-full min-h-[24rem] w-full gap-4"
+            className="grid h-full min-h-[24rem] w-full gap-4 pr-2"
             style={{
               gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
               gridTemplateRows: 'minmax(0, 1fr)',

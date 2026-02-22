@@ -50,7 +50,7 @@ export function Column<T extends BoardItem>({
       }`}
     >
       <header
-        className="mb-3 flex cursor-grab items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 transition-colors hover:bg-neutral-200/80 active:cursor-grabbing dark:bg-neutral-800 dark:hover:bg-neutral-700/80"
+        className="mb-3 mr-[1px] flex cursor-grab items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 transition-colors hover:bg-neutral-200/80 active:cursor-grabbing dark:bg-neutral-800 dark:hover:bg-neutral-700/80"
         role="button"
         aria-label={collapsed ? `Expand ${column.label} cards` : `Collapse ${column.label} cards`}
         tabIndex={0}
@@ -90,7 +90,7 @@ export function Column<T extends BoardItem>({
 
       {!collapsed && (
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-          <div className="scrollbar-hidden flex min-h-0 grow flex-col gap-2 overflow-y-auto pr-0">
+          <div className="scrollbar-hidden flex min-h-0 grow flex-col gap-2 overflow-y-auto pr-[1px]">
             {items.map((item) => (
               <Card
                 key={item.id}
