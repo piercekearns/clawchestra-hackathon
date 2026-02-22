@@ -1620,7 +1620,7 @@ export function SyncDialog({
                   key={project.id}
                   className={`rounded-lg border px-3 py-2.5 ${
                     result?.success
-                      ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/30'
+                      ? 'border-revival-accent-400/40 bg-revival-accent-100 dark:bg-revival-accent-900/30'
                       : result && !result.success
                         ? 'border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30'
                         : 'border-neutral-200 dark:border-neutral-700'
