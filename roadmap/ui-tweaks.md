@@ -156,15 +156,29 @@ Currently, external writes to `.clawchestra/state.json` (by agents, the CLI, or 
 
 ---
 
+## 9 — Git Sync Success Styling Match
+
+When a Git Sync **commit/push succeeds**, the modal uses a dark green success color. Match that treatment to the style of **user chat messages** in the chat drawer (background + outline), for visual consistency.
+
+**Goal:** Success confirmations should feel like they belong to the same design language as the user message bubbles.
+
+**Notes:**
+- Only apply to the **success state** (not errors or in-progress states)
+- Use the **same background + border/outline color** as *user* messages (not assistant responses)
+- If the Git Sync modal uses a banner or toast, mirror the same style tokens
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — one-liner fix, pure visual bug
 2. Live state.json watcher — small lift, high leverage (agent writes instantly visible)
 3. Divider notch — small lift, high discoverability gain
-4. Active model indicator (read-only) — high value, likely low effort
-5. Modal scoping — functional, affects everyday use
-6. Right sidebar toggle — medium effort (mirrored icon + state logic)
-7. Theme colour relocation — depends on item 6
-8. Settings as page — most effort, revisit when settings content grows
-9. Model selector (if/when) — depends on item 4 proving out the data pipeline
-10. Context window usage — alongside or after item 4
+4. Git Sync success styling — tiny polish, consistency win
+5. Active model indicator (read-only) — high value, likely low effort
+6. Modal scoping — functional, affects everyday use
+7. Right sidebar toggle — medium effort (mirrored icon + state logic)
+8. Theme colour relocation — depends on item 7
+9. Settings as page — most effort, revisit when settings content grows
+10. Model selector (if/when) — depends on item 5 proving out the data pipeline
+11. Context window usage — alongside or after item 5
