@@ -89,10 +89,31 @@ When the sidebar is open, modals triggered from the board section should be cons
 
 ---
 
+## 6 — Pending Column: Card Right Edge Clipping
+
+Kanban cards in the Pending column have their right border/stroke clipped at certain app widths.
+
+**Symptoms:**
+- The rightmost edge of Pending column cards is cut off — the border line is partially or fully invisible
+- Dragging the app window wider/narrower makes the edge flicker in and out of view
+- Only affects the Pending column (rightmost column, or at least the one most likely to overflow)
+
+**Likely cause:**
+- A missing or insufficient `padding-right` / `overflow: hidden` on the column container, or the column width calculation doesn't account for card border width
+- Could also be a scrollbar appearing/disappearing at certain widths causing a reflow that clips the last column
+
+**Fix approach:**
+- Inspect `.column` / `.kanban-column` container padding — ensure there's enough room for the card's full border box
+- Check for `overflow: hidden` on any ancestor that might be cutting the painted border
+- Test at multiple app widths (min 960px through ~1800px) to confirm edge stays visible throughout
+
+---
+
 ## Priority Order (suggested)
 
-1. Divider notch — smallest lift, highest discoverability gain
-2. Modal scoping — functional, affects everyday use
-3. Right sidebar toggle — medium effort (needs mirrored icon + state logic)
-4. Theme colour relocation — depends on item 3
-5. Settings as page — most effort, revisit when settings content grows
+1. Pending column card clipping — one-liner fix, pure visual bug
+2. Divider notch — smallest lift, highest discoverability gain
+3. Modal scoping — functional, affects everyday use
+4. Right sidebar toggle — medium effort (needs mirrored icon + state logic)
+5. Theme colour relocation — depends on item 4
+6. Settings as page — most effort, revisit when settings content grows
