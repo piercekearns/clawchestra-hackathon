@@ -19,6 +19,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const isDragging = useRef(false);
   const rafHandle = useRef(0);
   const [isResizing, setIsResizing] = useState(false);
+  const [isHandleHover, setIsHandleHover] = useState(false);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -64,7 +65,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative z-20 flex shrink-0 flex-col overflow-hidden border-r border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative z-20 flex shrink-0 flex-col overflow-hidden border-r bg-neutral-50 dark:bg-neutral-900 ${isResizing || isHandleHover ? 'border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       {/* Main content area — empty for Phase 1 */}
@@ -93,17 +94,14 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           aria-valuemin={SIDEBAR_MIN_WIDTH}
           aria-valuemax={SIDEBAR_MAX_WIDTH}
           onMouseDown={handleDragStart}
+          onMouseEnter={() => setIsHandleHover(true)}
+          onMouseLeave={() => setIsHandleHover(false)}
           onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
           className="group absolute right-0 top-0 h-full w-3 cursor-col-resize"
         >
-          <div className="pointer-events-none absolute right-0 top-0 h-full w-1">
-            <div
-              className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors group-hover:bg-neutral-300 dark:group-hover:bg-neutral-600 ${isResizing ? 'bg-revival-accent-400/40' : ''}`}
-            />
-            <div
-              className={`absolute left-1/2 top-1/2 h-6 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400/60 dark:bg-revival-accent-400/40'}`}
-            />
-          </div>
+          <div
+            className={`pointer-events-none absolute right-0 top-1/2 h-6 w-1.5 -translate-y-1/2 translate-x-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400/60 dark:bg-revival-accent-400/40'}`}
+          />
         </div>
       )}
     </div>
