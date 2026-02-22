@@ -140,14 +140,31 @@ Surface the currently active OpenClaw model somewhere in the Clawchestra UI, wit
 
 ---
 
+## 8 — Live Reload: File Watcher on state.json
+
+Currently, external writes to `.clawchestra/state.json` (by agents, the CLI, or tools like this one) aren't reflected in the board until the user navigates away and back. The app reads `state.json` on mount/route change only — no live watching.
+
+**Fix:** Add a Tauri file watcher on `.clawchestra/state.json`. When a write is detected, re-read the file and sync the store — no navigation required.
+
+**Implementation notes:**
+- Tauri supports this natively via `tauri-plugin-fs-watch` (or `@tauri-apps/plugin-fs` watch API in v2)
+- Watch `.clawchestra/state.json` specifically (not the whole dir, to avoid noise from git operations)
+- Debounce the re-read slightly (e.g. 200–300ms) to avoid thrashing during rapid sequential writes
+- The watcher should be set up once on app init and torn down on unmount
+
+**Why it matters:** As agents take on more of the roadmap management (adding items, updating nextAction, marking progress), the board needs to reflect those changes without user intervention. Without a watcher, the human has to manually refresh to see what the agent just did — breaks the flow.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — one-liner fix, pure visual bug
-2. Divider notch — smallest lift, highest discoverability gain
-3. Active model indicator (read-only) — high value, likely low effort if gateway already exposes it
-4. Modal scoping — functional, affects everyday use
-5. Right sidebar toggle — medium effort (needs mirrored icon + state logic)
-6. Theme colour relocation — depends on item 5
-7. Settings as page — most effort, revisit when settings content grows
-8. Model selector (if/when) — depends on item 3 proving out the data pipeline
-9. Context window usage — depends on what gateway surfaces; add alongside or after item 3
+2. Live state.json watcher — small lift, high leverage (agent writes instantly visible)
+3. Divider notch — small lift, high discoverability gain
+4. Active model indicator (read-only) — high value, likely low effort
+5. Modal scoping — functional, affects everyday use
+6. Right sidebar toggle — medium effort (mirrored icon + state logic)
+7. Theme colour relocation — depends on item 6
+8. Settings as page — most effort, revisit when settings content grows
+9. Model selector (if/when) — depends on item 4 proving out the data pipeline
+10. Context window usage — alongside or after item 4
