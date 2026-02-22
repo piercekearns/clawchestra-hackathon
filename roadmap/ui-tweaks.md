@@ -93,6 +93,8 @@ When the sidebar is open, modals triggered from the board section should be cons
 
 Kanban cards in the Pending column have their right border/stroke clipped at certain app widths.
 
+**Status:** ✅ Fixed (1px gutter, 2026‑02‑22)
+
 **Symptoms:**
 - The rightmost edge of Pending column cards is cut off — the border line is partially or fully invisible
 - Dragging the app window wider/narrower makes the edge flicker in and out of view
@@ -169,16 +171,28 @@ When a Git Sync **commit/push succeeds**, the modal uses a dark green success co
 
 ---
 
+## 10 — Git Sync File Lists: Stack Vertically
+
+In the Git Sync modal, file names can wrap horizontally on a single line, which makes it hard to scan when multiple files are listed.
+
+**Change:**
+- Render each file on its **own line** (vertical stack)
+- Avoid horizontal wrapping or inline lists
+- Keep indentation consistent so categories remain easy to read
+
+---
+
 ## Priority Order (suggested)
 
-1. Pending column card clipping — one‑liner fix, pure visual bug
+1. Pending column card clipping — ✅ done (1px gutter)
 2. Git Sync success styling — tiny polish, low risk
-3. Divider notch — small lift, high discoverability gain
-4. Live state.json watcher — small lift, but touches infra/state sync
-5. Active model indicator (read‑only) — low risk once data is available
-6. Modal scoping — medium risk (portal/container changes)
-7. Right sidebar toggle — medium risk (state + layout)
-8. Theme colour relocation — depends on item 7
-9. Settings as page — larger UI change
-10. Model selector (if/when) — higher risk, depends on item 5
-11. Context window usage — higher risk, depends on item 5
+3. Git Sync file lists stack — tiny polish, low risk
+4. Divider notch — small lift, high discoverability gain
+5. Live state.json watcher — small lift, but touches infra/state sync
+6. Active model indicator (read‑only) — low risk once data is available
+7. Modal scoping — medium risk (portal/container changes)
+8. Right sidebar toggle — medium risk (state + layout)
+9. Theme colour relocation — depends on item 8
+10. Settings as page — larger UI change
+11. Model selector (if/when) — higher risk, depends on item 6
+12. Context window usage — higher risk, depends on item 6
