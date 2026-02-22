@@ -25,11 +25,6 @@ Project orchestration state lives in `.clawchestra/state.json` (gitignored, alwa
 **Read:** Open `.clawchestra/state.json` to see project status, roadmap items, priorities. Always read immediately before writing — do not cache contents across operations.
 **Write:** Edit `.clawchestra/state.json` to update status, add items, change priorities. Include BOTH `project` and `roadmapItems` in every write. Clawchestra validates and syncs automatically.
 
-**Required envelope fields:** Every write to state.json MUST include these top-level fields:
-- `_schemaVersion`: integer (current: 1)
-- `_generatedAt`: ISO 8601 timestamp (e.g. "2026-01-15T12:00:00Z")
-- `_generatedBy`: string identifying the writer (e.g. "claude-code")
-
 **Schema rules:**
 - Project statuses: in-progress | up-next | pending | dormant | archived
 - Roadmap item statuses: pending | up-next | in-progress | complete

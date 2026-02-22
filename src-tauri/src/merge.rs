@@ -85,6 +85,7 @@ pub fn merge_state_json(
         let ts = next_ts!();
         let new_entry = DbProjectEntry {
             project_path: project_dir.to_string(),
+            state_json_migrated: false,
             project: DbProjectData {
                 id: project_id.to_string(),
                 title: incoming.project.title.clone(),
@@ -121,6 +122,11 @@ pub fn merge_state_json(
         .iter()
         .map(|r| r.field.clone())
         .collect();
+
+    // Take write-back hashes for echo prevention (Phase 6.6).
+    // Temporarily extracted so we can access them while db_entry borrows app_state.db.
+    // Restored after the merge loop with unconsumed entries preserved.
+    let mut wb_hashes = std::mem::take(&mut app_state.writeback_hashes);
 
     // --- Merge project-level fields ---
     {
@@ -333,6 +339,27 @@ pub fn merge_state_json(
                         db_item.spec_doc_branch = branch;
                         db_item.spec_doc_branch_updated_at = Some(ts);
                     }
+                    // Capture content snapshot for cross-device access (5.21.2)
+                    const MAX_CONTENT_SIZE: usize = 500 * 1024; // 500KB limit
+                    if let Some(ref spec_path) = incoming_item.spec_doc {
+                        let full_path = std::path::Path::new(project_dir).join(spec_path);
+                        if let Ok(content) = std::fs::read_to_string(&full_path) {
+                            if content.len() <= MAX_CONTENT_SIZE {
+                                // Echo prevention (Phase 6.6): skip re-capture if content
+                                // matches a recent write-back hash
+                                let path_key = full_path.to_string_lossy().to_string();
+                                let is_echo = wb_hashes.get(&path_key).is_some_and(|h| {
+                                    *h == crate::watcher::sha256_hex(content.as_bytes())
+                                });
+                                if is_echo {
+                                    wb_hashes.remove(&path_key);
+                                } else {
+                                    db_item.spec_doc_content = Some(content);
+                                    db_item.spec_doc_content_updated_at = Some(ts);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -349,6 +376,26 @@ pub fn merge_state_json(
                         .ok();
                         db_item.plan_doc_branch = branch;
                         db_item.plan_doc_branch_updated_at = Some(ts);
+                    }
+                    // Capture content snapshot for cross-device access (5.21.2)
+                    const MAX_CONTENT_SIZE: usize = 500 * 1024; // 500KB limit
+                    if let Some(ref plan_path) = incoming_item.plan_doc {
+                        let full_path = std::path::Path::new(project_dir).join(plan_path);
+                        if let Ok(content) = std::fs::read_to_string(&full_path) {
+                            if content.len() <= MAX_CONTENT_SIZE {
+                                // Echo prevention (Phase 6.6)
+                                let path_key = full_path.to_string_lossy().to_string();
+                                let is_echo = wb_hashes.get(&path_key).is_some_and(|h| {
+                                    *h == crate::watcher::sha256_hex(content.as_bytes())
+                                });
+                                if is_echo {
+                                    wb_hashes.remove(&path_key);
+                                } else {
+                                    db_item.plan_doc_content = Some(content);
+                                    db_item.plan_doc_content_updated_at = Some(ts);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -404,6 +451,16 @@ pub fn merge_state_json(
                     None
                 },
                 plan_doc_branch_updated_at: incoming_item.plan_doc.as_ref().map(|_| ts),
+                spec_doc_content: incoming_item.spec_doc.as_ref().and_then(|spec_path| {
+                    let full = std::path::Path::new(project_dir).join(spec_path);
+                    std::fs::read_to_string(&full).ok().filter(|c| c.len() <= 500 * 1024)
+                }),
+                spec_doc_content_updated_at: incoming_item.spec_doc.as_ref().map(|_| ts),
+                plan_doc_content: incoming_item.plan_doc.as_ref().and_then(|plan_path| {
+                    let full = std::path::Path::new(project_dir).join(plan_path);
+                    std::fs::read_to_string(&full).ok().filter(|c| c.len() <= 500 * 1024)
+                }),
+                plan_doc_content_updated_at: incoming_item.plan_doc.as_ref().map(|_| ts),
                 completed_at: incoming_item.completed_at.clone(),
                 completed_at_updated_at: incoming_item.completed_at.as_ref().map(|_| ts),
             };
@@ -417,6 +474,9 @@ pub fn merge_state_json(
             });
         }
     }
+
+    // Restore unconsumed write-back hashes (Phase 6.6 echo prevention)
+    app_state.writeback_hashes = wb_hashes;
 
     // Sync HLC counter if extra timestamps were generated beyond the initial batch
     // (the grow path extends from the last value without calling next_hlc)

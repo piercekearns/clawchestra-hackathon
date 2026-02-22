@@ -61,6 +61,16 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
     dirPaths.map(async (dir) => {
       const clawchestraExists = await pathExists(`${dir}/CLAWCHESTRA.md`);
       const filePath = clawchestraExists ? `${dir}/CLAWCHESTRA.md` : `${dir}/PROJECT.md`;
+      // 5.19: Warn if both filenames exist in same directory
+      if (clawchestraExists) {
+        const legacyExists = await pathExists(`${dir}/PROJECT.md`);
+        if (legacyExists) {
+          console.warn(
+            `[clawchestra] Both CLAWCHESTRA.md and PROJECT.md found in ${dir}. ` +
+            'CLAWCHESTRA.md takes precedence. Delete PROJECT.md to resolve.'
+          );
+        }
+      }
       try {
         const content = await readFile(filePath);
         return { filePath, content };
@@ -81,7 +91,7 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
       errors.push({
         type: 'parse_failure',
         file: filePath,
-        error: 'Could not read PROJECT.md',
+        error: 'Could not read CLAWCHESTRA.md (or PROJECT.md)',
       });
       continue;
     }
@@ -148,6 +158,7 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
         isStale: isStale(lastActivity),
         needsReview: needsReview(frontmatter.lastReviewed),
         hasRepo,
+        stateJsonMigrated: false, // Default — overridden from db.json during loadProjects merge
         title: frontmatter.title,
         status: frontmatter.status ?? 'pending',
         priority: frontmatter.priority,

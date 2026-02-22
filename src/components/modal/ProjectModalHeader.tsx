@@ -1,17 +1,10 @@
 import { AlertTriangle, X } from 'lucide-react';
-import type { ProjectStatus, ProjectViewModel } from '../../lib/schema';
+import type { ProjectViewModel } from '../../lib/schema';
+import { PROJECT_STATUSES, type ProjectStatus } from '../../lib/constants';
 import type { BadgeProps } from '../ui/badge';
 import { StatusBadge } from './StatusBadge';
 
 type BadgeVariant = NonNullable<BadgeProps['variant']>;
-
-const PROJECT_STATUSES: readonly ProjectStatus[] = [
-  'in-progress',
-  'up-next',
-  'pending',
-  'dormant',
-  'archived',
-] as const;
 
 const PROJECT_STATUS_LABELS: Partial<Record<ProjectStatus, string>> = {
   'in-progress': 'In Progress',

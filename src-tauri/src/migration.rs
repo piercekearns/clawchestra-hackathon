@@ -595,6 +595,10 @@ fn migration_sanitize_item(
         spec_doc_branch_updated_at: None,
         plan_doc_branch: None,
         plan_doc_branch_updated_at: None,
+        spec_doc_content: None,
+        spec_doc_content_updated_at: None,
+        plan_doc_content: None,
+        plan_doc_content_updated_at: None,
         completed_at: completed_at.clone(),
         completed_at_updated_at: completed_at.as_ref().map(|_| now_ms),
     };
@@ -756,6 +760,7 @@ pub fn import_roadmap_into_db(
 
         let entry = DbProjectEntry {
             project_path: project_dir.to_string_lossy().to_string(),
+            state_json_migrated: false,
             project: project_data,
             roadmap_items: roadmap_items_map,
         };
@@ -1033,12 +1038,59 @@ pub fn verify_against_backup(
 
     if !mismatches.is_empty() {
         for m in &mismatches {
-            tracing::warn!("Migration verification warning: {}", m);
+            tracing::warn!("Migration verification: {}", m);
         }
-        // Warnings logged but don't block — only item count mismatch is a hard failure
+        return Err(format!(
+            "Verification failed — {} field mismatch(es) detected",
+            mismatches.len()
+        ));
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Git commit migration artifacts (5.0.1)
+// ---------------------------------------------------------------------------
+
+/// Stage and commit migration-generated files (.clawchestra/, .gitignore changes).
+/// Non-fatal — logs a warning and continues if the commit fails (e.g., not a git repo).
+fn git_commit_migration_files(project_dir: &Path, message: &str) {
+    let run = |args: &[&str]| -> Result<(), String> {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .current_dir(project_dir)
+            .output()
+            .map_err(|e| format!("git spawn failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(stderr.to_string());
+        }
+        Ok(())
+    };
+
+    // Stage .clawchestra/ and .gitignore
+    if let Err(e) = run(&["add", ".clawchestra/", ".gitignore"]) {
+        tracing::warn!("Migration git add failed (non-fatal): {}", e);
+        return;
+    }
+
+    // Check if there's anything to commit
+    let status = std::process::Command::new("git")
+        .args(["diff", "--cached", "--quiet"])
+        .current_dir(project_dir)
+        .status();
+    match status {
+        Ok(s) if s.success() => {
+            // Exit code 0 = no staged changes, nothing to commit
+            return;
+        }
+        _ => {}
+    }
+
+    if let Err(e) = run(&["commit", "-m", message]) {
+        tracing::warn!("Migration git commit failed (non-fatal): {}", e);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1142,6 +1194,10 @@ pub fn run_project_migration(
                 if let Err(e) = write_migration_manifest(&backup_dir, &manifest) {
                     warnings.push(format!("Failed to write migration manifest: {}", e));
                 }
+                // Set stateJsonMigrated forward path (5.0.7)
+                if let Some(entry) = app_state.db.projects.get_mut(project_id) {
+                    entry.state_json_migrated = true;
+                }
             }
             Err(e) => {
                 return MigrationResult {
@@ -1201,6 +1257,12 @@ pub fn run_project_migration(
         if let Err(e) = update_gitignore(project_dir) {
             warnings.push(format!("Failed to update .gitignore: {}", e));
         }
+
+        // Commit .clawchestra/ and .gitignore (5.0.1)
+        git_commit_migration_files(
+            project_dir,
+            "chore: add .clawchestra/state.json and update .gitignore [migration]",
+        );
     }
 
     // Re-derive state after projection + gitignore
@@ -1234,6 +1296,12 @@ pub fn run_project_migration(
                         warnings.push(format!("Rename failed (non-fatal): {}", e));
                     }
                 }
+
+                // Commit deletion + rename (5.0.1)
+                git_commit_migration_files(
+                    project_dir,
+                    "chore: remove ROADMAP.md/CHANGELOG.md, rename PROJECT.md [migration]",
+                );
             }
             Err(e) => {
                 warnings.push(format!("Verification failed — skipping deletion: {}", e));
@@ -1355,6 +1423,7 @@ mod tests {
             "test-project".to_string(),
             DbProjectEntry {
                 project_path: dir.to_string_lossy().to_string(),
+                state_json_migrated: false,
                 project: DbProjectData {
                     id: "test-project".to_string(),
                     title: "Test".to_string(),

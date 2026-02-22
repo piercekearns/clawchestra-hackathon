@@ -33,6 +33,8 @@ use tracing_subscriber::prelude::*;
 type SharedAppState = Arc<tokio::sync::Mutex<AppState>>;
 /// Type alias for the DB flush handle, used as Tauri managed state.
 type SharedFlushHandle = Arc<db_persistence::DbFlushHandle>;
+/// Type alias for the continuous sync handle, used as Tauri managed state.
+type SharedSyncHandle = Arc<sync::SyncHandle>;
 
 // Embedded at compile time by build.rs
 pub(crate) const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
@@ -91,9 +93,6 @@ struct DashboardSettings {
     #[serde(default, skip_serializing)]
     #[allow(dead_code)]
     openclaw_bearer_token: Option<String>,
-    /// Size of the per-project state history buffer (default: 20)
-    #[serde(default = "default_state_history_buffer_size")]
-    state_history_buffer_size: usize,
 }
 
 #[derive(Deserialize)]
@@ -151,10 +150,6 @@ fn default_update_mode() -> String {
 
 fn default_openclaw_context_policy() -> String {
     "selected-project-first".to_string()
-}
-
-fn default_state_history_buffer_size() -> usize {
-    20
 }
 
 fn settings_file_path() -> Result<PathBuf, String> {
@@ -325,7 +320,6 @@ pub(crate) fn default_settings() -> DashboardSettings {
         openclaw_sync_mode: SyncMode::default(),
         openclaw_remote_url: None,
         openclaw_bearer_token: None,
-        state_history_buffer_size: default_state_history_buffer_size(),
     };
 
     sanitize_settings(settings).unwrap_or_else(|_| DashboardSettings {
@@ -340,7 +334,6 @@ pub(crate) fn default_settings() -> DashboardSettings {
         openclaw_sync_mode: SyncMode::default(),
         openclaw_remote_url: None,
         openclaw_bearer_token: None,
-        state_history_buffer_size: default_state_history_buffer_size(),
     })
 }
 
@@ -1548,6 +1541,9 @@ struct ProjectSummary {
     parent_id: Option<String>,
     tags: Vec<String>,
     roadmap_item_count: usize,
+    state_json_migrated: bool,
+    /// Full roadmap items (metadata only — content fields excluded).
+    roadmap_items: Vec<state::StateJsonRoadmapItem>,
 }
 
 /// Get all projects from the in-memory DB.
@@ -1560,15 +1556,37 @@ async fn get_all_projects(
         .db
         .projects
         .iter()
-        .map(|(id, entry)| ProjectSummary {
-            id: id.clone(),
-            project_path: entry.project_path.clone(),
-            title: entry.project.title.clone(),
-            status: entry.project.status.clone(),
-            description: entry.project.description.clone(),
-            parent_id: entry.project.parent_id.clone(),
-            tags: entry.project.tags.clone(),
-            roadmap_item_count: entry.roadmap_items.len(),
+        .map(|(id, entry)| {
+            let mut items: Vec<state::StateJsonRoadmapItem> = entry
+                .roadmap_items
+                .values()
+                .map(|db_item| state::StateJsonRoadmapItem {
+                    id: db_item.id.clone(),
+                    title: db_item.title.clone(),
+                    status: db_item.status.clone(),
+                    priority: Some(db_item.priority),
+                    next_action: db_item.next_action.clone(),
+                    tags: db_item.tags.clone(),
+                    icon: db_item.icon.clone(),
+                    blocked_by: db_item.blocked_by.clone(),
+                    spec_doc: db_item.spec_doc.clone(),
+                    plan_doc: db_item.plan_doc.clone(),
+                    completed_at: db_item.completed_at.clone(),
+                })
+                .collect();
+            items.sort_by_key(|item| item.priority.unwrap_or(i64::MAX));
+            ProjectSummary {
+                id: id.clone(),
+                project_path: entry.project_path.clone(),
+                title: entry.project.title.clone(),
+                status: entry.project.status.clone(),
+                description: entry.project.description.clone(),
+                parent_id: entry.project.parent_id.clone(),
+                tags: entry.project.tags.clone(),
+                roadmap_item_count: entry.roadmap_items.len(),
+                state_json_migrated: entry.state_json_migrated,
+                roadmap_items: items,
+            }
         })
         .collect();
     Ok(projects)
@@ -1580,6 +1598,7 @@ async fn get_all_projects(
 struct ProjectDetail {
     id: String,
     project_path: String,
+    state_json_migrated: bool,
     project: state::DbProjectData,
     roadmap_items: Vec<state::DbRoadmapItem>,
 }
@@ -1603,9 +1622,413 @@ async fn get_project(
     Ok(ProjectDetail {
         id: project_id,
         project_path: entry.project_path.clone(),
+        state_json_migrated: entry.state_json_migrated,
         project: entry.project.clone(),
         roadmap_items: items,
     })
+}
+
+// =============================================================================
+// Phase 5.3 — Create project with state.json (atomic registration)
+// =============================================================================
+
+/// Create a new project: register in db.json, create .clawchestra/state.json,
+/// update .gitignore, and optionally create CLAWCHESTRA.md.
+#[tauri::command]
+async fn create_project_with_state(
+    project_id: String,
+    project_path: String,
+    title: String,
+    status: String,
+    description: String,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+) -> Result<(), String> {
+    use std::path::Path;
+
+    let project_dir = Path::new(&project_path);
+    if !project_dir.is_absolute() {
+        return Err("project_path must be absolute".to_string());
+    }
+
+    // Validate status
+    if !state::PROJECT_STATUSES.contains(&status.as_str()) {
+        return Err(format!(
+            "Invalid project status '{}'. Valid: {:?}",
+            status, state::PROJECT_STATUSES
+        ));
+    }
+
+    let mut guard = app_state.lock().await;
+
+    // Check for duplicate project ID
+    if guard.db.projects.contains_key(&project_id) {
+        return Err(format!("Project '{}' already exists", project_id));
+    }
+
+    let ts = guard.next_hlc();
+
+    // 1. Register in db.json (in-memory)
+    let project_data = state::DbProjectData {
+        id: project_id.clone(),
+        title: title.clone(),
+        title_updated_at: ts,
+        status: status.clone(),
+        status_updated_at: ts,
+        description: description.clone(),
+        description_updated_at: ts,
+        parent_id: None,
+        parent_id_updated_at: ts,
+        tags: vec![],
+        tags_updated_at: ts,
+    };
+
+    let entry = state::DbProjectEntry {
+        project_path: project_path.clone(),
+        state_json_migrated: true, // New projects start fully migrated
+        project: project_data,
+        roadmap_items: std::collections::HashMap::new(),
+    };
+
+    guard.db.projects.insert(project_id.clone(), entry);
+    guard.mark_dirty();
+
+    // 2. Create .clawchestra/ directory
+    let clawchestra_dir = project_dir.join(".clawchestra");
+    if let Err(e) = std::fs::create_dir_all(&clawchestra_dir) {
+        // Rollback: remove from db
+        guard.db.projects.remove(&project_id);
+        return Err(format!("Failed to create .clawchestra/: {}", e));
+    }
+
+    // 3. Write state.json projection
+    if let Some(state_json) = guard.project_state_json(&project_id) {
+        let state_json_path = clawchestra_dir.join("state.json");
+        match serde_json::to_string_pretty(&state_json) {
+            Ok(content) => {
+                if let Err(e) = std::fs::write(&state_json_path, &content) {
+                    guard.db.projects.remove(&project_id);
+                    return Err(format!("Failed to write state.json: {}", e));
+                }
+                // Store content hash
+                let hash = crate::watcher::sha256_hex(content.as_bytes());
+                guard
+                    .content_hashes
+                    .insert(state::ProjectId(project_id.clone()), hash);
+            }
+            Err(e) => {
+                guard.db.projects.remove(&project_id);
+                return Err(format!("Failed to serialize state.json: {}", e));
+            }
+        }
+    }
+
+    // 4. Update .gitignore
+    if let Err(e) = migration::update_gitignore(project_dir) {
+        tracing::warn!("Failed to update .gitignore for new project: {}", e);
+        // Non-fatal — project is still registered
+    }
+
+    // Push initial history entry
+    if let Some(state_json) = guard.project_state_json(&project_id) {
+        let entry = state::HistoryEntry {
+            timestamp: guard.hlc_counter,
+            source: state::HistorySource::Ui,
+            changed_fields: vec!["*".to_string()],
+            state: state_json,
+        };
+        guard.push_history(&state::ProjectId(project_id.clone()), entry);
+    }
+
+    // Trigger persistence
+    drop(guard);
+    flush_handle.schedule_flush();
+
+    Ok(())
+}
+
+// =============================================================================
+// Phase 5.16 Mutation commands (update_roadmap_item, reorder_item)
+// =============================================================================
+
+/// Helper: build `StateJsonMergedEventPayload` from current AppState for a project.
+fn build_merged_payload(
+    guard: &state::AppState,
+    project_id: &str,
+    changed_fields: Vec<String>,
+) -> Option<watcher::StateJsonMergedEventPayload> {
+    let state_json = guard.project_state_json(project_id)?;
+    Some(watcher::StateJsonMergedEventPayload {
+        project_id: project_id.to_string(),
+        project: watcher::StateJsonProjectPayload {
+            id: state_json.project.id.clone(),
+            title: state_json.project.title.clone(),
+            status: state_json.project.status.clone(),
+            description: state_json.project.description.clone(),
+            parent_id: state_json.project.parent_id.clone(),
+            tags: state_json.project.tags.clone(),
+        },
+        roadmap_items: state_json
+            .roadmap_items
+            .iter()
+            .map(|item| watcher::StateJsonRoadmapItemPayload {
+                id: item.id.clone(),
+                title: item.title.clone(),
+                status: item.status.clone(),
+                priority: item.priority,
+                next_action: item.next_action.clone(),
+                tags: item.tags.clone(),
+                icon: item.icon.clone(),
+                blocked_by: item.blocked_by.clone(),
+                spec_doc: item.spec_doc.clone(),
+                plan_doc: item.plan_doc.clone(),
+                completed_at: item.completed_at.clone(),
+            })
+            .collect(),
+        applied_changes: changed_fields,
+        rejected_fields: vec![],
+    })
+}
+
+/// Helper: write state.json for a project using the in-memory DB state.
+/// Performs atomic write (.tmp + rename) and stores the content hash.
+fn write_state_json_for_project(
+    guard: &mut state::AppState,
+    project_id: &str,
+    project_path: &Path,
+) -> Result<(), String> {
+    let state_json = guard
+        .project_state_json(project_id)
+        .ok_or_else(|| format!("No project state for '{}'", project_id))?;
+
+    let clawchestra_dir = project_path.join(".clawchestra");
+    let state_json_path = clawchestra_dir.join("state.json");
+
+    let content = serde_json::to_string_pretty(&state_json)
+        .map_err(|e| format!("Failed to serialize state.json: {}", e))?;
+
+    let hash = watcher::sha256_hex(content.as_bytes());
+
+    // Pre-register hash before file write (watcher ignores own writes)
+    guard
+        .content_hashes
+        .insert(state::ProjectId(project_id.to_string()), hash);
+
+    // Atomic write
+    let temp_suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_path = state_json_path.with_file_name(format!("state.json.tmp-{}", temp_suffix));
+    std::fs::write(&temp_path, &content)
+        .map_err(|e| format!("Failed to write temp state.json: {}", e))?;
+    std::fs::rename(&temp_path, &state_json_path)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename temp state.json: {}", e)
+        })?;
+
+    Ok(())
+}
+
+/// Partial update for a roadmap item — only fields that are `Some` are applied.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RoadmapItemChanges {
+    title: Option<String>,
+    status: Option<String>,
+    priority: Option<i64>,
+    next_action: Option<String>,
+    tags: Option<Vec<String>>,
+    icon: Option<String>,
+    blocked_by: Option<String>,
+    spec_doc: Option<String>,
+    plan_doc: Option<String>,
+    completed_at: Option<String>,
+}
+
+/// Update individual fields on a roadmap item in db.json, write state.json, emit event.
+#[tauri::command]
+async fn update_roadmap_item(
+    project_id: String,
+    item_id: String,
+    changes: RoadmapItemChanges,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let payload = {
+        let mut guard = app_state.lock().await;
+        let ts = guard.next_hlc();
+
+        // Scoped mutable borrow: apply field changes and extract project_path
+        let (changed, project_path) = {
+            let entry = guard
+                .db
+                .projects
+                .get_mut(&project_id)
+                .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+            let item = entry
+                .roadmap_items
+                .get_mut(&item_id)
+                .ok_or_else(|| format!("Roadmap item '{}' not found in project '{}'", item_id, project_id))?;
+
+            let mut changed = Vec::new();
+
+            if let Some(title) = changes.title {
+                item.title = title;
+                item.title_updated_at = ts;
+                changed.push("title".to_string());
+            }
+            if let Some(status) = changes.status {
+                item.status = status;
+                item.status_updated_at = ts;
+                changed.push("status".to_string());
+            }
+            if let Some(priority) = changes.priority {
+                item.priority = priority;
+                item.priority_updated_at = ts;
+                changed.push("priority".to_string());
+            }
+            if let Some(next_action) = changes.next_action {
+                item.next_action = Some(next_action);
+                item.next_action_updated_at = Some(ts);
+                changed.push("nextAction".to_string());
+            }
+            if let Some(tags) = changes.tags {
+                item.tags = Some(tags);
+                item.tags_updated_at = Some(ts);
+                changed.push("tags".to_string());
+            }
+            if let Some(icon) = changes.icon {
+                item.icon = Some(icon);
+                item.icon_updated_at = Some(ts);
+                changed.push("icon".to_string());
+            }
+            if let Some(blocked_by) = changes.blocked_by {
+                item.blocked_by = Some(blocked_by);
+                item.blocked_by_updated_at = Some(ts);
+                changed.push("blockedBy".to_string());
+            }
+            if let Some(spec_doc) = changes.spec_doc {
+                item.spec_doc = Some(spec_doc);
+                item.spec_doc_updated_at = Some(ts);
+                changed.push("specDoc".to_string());
+            }
+            if let Some(plan_doc) = changes.plan_doc {
+                item.plan_doc = Some(plan_doc);
+                item.plan_doc_updated_at = Some(ts);
+                changed.push("planDoc".to_string());
+            }
+            if let Some(completed_at) = changes.completed_at {
+                item.completed_at = Some(completed_at);
+                item.completed_at_updated_at = Some(ts);
+                changed.push("completedAt".to_string());
+            }
+
+            let path = PathBuf::from(&entry.project_path);
+            (changed, path)
+        }; // entry/item borrows released here
+
+        guard.mark_dirty();
+
+        // Push history entry with source: Ui BEFORE write (per DATA INTEGRITY fix)
+        let pid = state::ProjectId(project_id.clone());
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let history = state::HistoryEntry {
+                timestamp: ts,
+                source: state::HistorySource::Ui,
+                changed_fields: changed.clone(),
+                state: state_json,
+            };
+            guard.push_history(&pid, history);
+        }
+
+        // Write state.json projection
+        write_state_json_for_project(&mut guard, &project_id, &project_path)?;
+
+        // Build event payload
+        build_merged_payload(&guard, &project_id, changed)
+    };
+
+    flush_handle.schedule_flush();
+
+    if let Some(payload) = payload {
+        let _ = app_handle.emit(watcher::EVENT_STATE_JSON_MERGED, payload);
+    }
+
+    Ok(())
+}
+
+/// Atomically update priority + status for a kanban drag operation.
+#[tauri::command]
+async fn reorder_item(
+    project_id: String,
+    item_id: String,
+    new_priority: i64,
+    new_status: Option<String>,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let payload = {
+        let mut guard = app_state.lock().await;
+        let ts = guard.next_hlc();
+
+        // Scoped mutable borrow: apply changes and extract project_path
+        let (changed, project_path) = {
+            let entry = guard
+                .db
+                .projects
+                .get_mut(&project_id)
+                .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+            let item = entry
+                .roadmap_items
+                .get_mut(&item_id)
+                .ok_or_else(|| format!("Roadmap item '{}' not found in project '{}'", item_id, project_id))?;
+
+            let mut changed = vec!["priority".to_string()];
+            item.priority = new_priority;
+            item.priority_updated_at = ts;
+
+            if let Some(status) = new_status {
+                item.status = status;
+                item.status_updated_at = ts;
+                changed.push("status".to_string());
+            }
+
+            let path = PathBuf::from(&entry.project_path);
+            (changed, path)
+        }; // entry/item borrows released here
+
+        guard.mark_dirty();
+
+        // Push history entry with source: Ui BEFORE write
+        let pid = state::ProjectId(project_id.clone());
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let history = state::HistoryEntry {
+                timestamp: ts,
+                source: state::HistorySource::Ui,
+                changed_fields: changed.clone(),
+                state: state_json,
+            };
+            guard.push_history(&pid, history);
+        }
+
+        // Write state.json projection
+        write_state_json_for_project(&mut guard, &project_id, &project_path)?;
+
+        // Build event payload
+        build_merged_payload(&guard, &project_id, changed)
+    };
+
+    flush_handle.schedule_flush();
+
+    if let Some(payload) = payload {
+        let _ = app_handle.emit(watcher::EVENT_STATE_JSON_MERGED, payload);
+    }
+
+    Ok(())
 }
 
 // =============================================================================
@@ -1766,18 +2189,6 @@ async fn get_project_migration_step(
 #[tauri::command]
 fn install_openclaw_extension(openclaw_path: String) -> Result<(), String> {
     sync::install_extension(&openclaw_path)
-}
-
-/// Get the installed extension version (or null if not installed).
-#[tauri::command]
-fn get_openclaw_extension_version(openclaw_path: String) -> Option<String> {
-    sync::get_installed_extension_version(&openclaw_path)
-}
-
-/// Check if the installed extension is stale and needs updating.
-#[tauri::command]
-fn is_openclaw_extension_stale(openclaw_path: String) -> bool {
-    sync::is_extension_stale(&openclaw_path)
 }
 
 /// Generate the extension file content (for display/manual install).
@@ -2193,7 +2604,24 @@ pub fn run() {
     let mut app_state = AppState::default();
     app_state.db = db;
     app_state.hlc_counter = app_state.db.hlc_counter;
-    app_state.history_buffer_size = settings.state_history_buffer_size;
+
+    // 2.5 Backfill stateJsonMigrated for pre-flag projects (5.0.7)
+    // Idempotent — runs every launch. O(N) over projects, ~1ms total.
+    for (project_id, entry) in app_state.db.projects.iter_mut() {
+        if !entry.state_json_migrated && !entry.roadmap_items.is_empty() {
+            // Check if state.json exists on disk (confirms migration happened)
+            let state_json_path = std::path::Path::new(&entry.project_path)
+                .join(".clawchestra")
+                .join("state.json");
+            if state_json_path.exists() {
+                entry.state_json_migrated = true;
+                tracing::info!(
+                    "Backfilled stateJsonMigrated=true for project '{}' (pre-flag migration)",
+                    project_id
+                );
+            }
+        }
+    }
 
     // 2.1 Ensure client identity (Phase 6.4)
     if app_state.db.clients.is_empty() {
@@ -2226,8 +2654,22 @@ pub fn run() {
             .unwrap_or_default();
     }
 
-    // Note: Launch sync is handled by the sync_local_launch Tauri command,
-    // invoked by TypeScript after the app is ready. Not duplicated here.
+    // 2.2 Sync-on-launch (Phase 6.6.0) — inline Rust execution, not TS-invoked
+    if settings.openclaw_sync_mode == SyncMode::Local {
+        let (merged, launch_sync_result) =
+            sync::sync_local_on_launch(&app_state.db, &app_state.client_uuid);
+        app_state.db = merged;
+        app_state.hlc_counter = app_state.db.hlc_counter;
+        if launch_sync_result.success {
+            tracing::info!("Sync-on-launch: {}", launch_sync_result.message);
+        } else {
+            tracing::warn!("Sync-on-launch failed: {}", launch_sync_result.message);
+        }
+        for warning in &launch_sync_result.warnings {
+            tracing::warn!("Sync warning: {}", warning);
+        }
+    }
+    // Remote mode launch sync is handled by TypeScript (has fetch built in).
 
     let shared_state: SharedAppState = Arc::new(tokio::sync::Mutex::new(app_state));
 
@@ -2236,26 +2678,46 @@ pub fn run() {
         db_persistence::DbFlushHandle::start(shared_state.clone()),
     );
 
+    // 3.1 Start continuous sync (Phase 6.6) — debounced 2s after mutations
+    let sync_handle: SharedSyncHandle = Arc::new(
+        sync::SyncHandle::start(shared_state.clone()),
+    );
+
+    // Watcher shutdown infrastructure (Phase 6.6 — graceful watcher drain on close)
+    let watcher_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let watcher_in_flight = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let watcher_in_flight_notify = Arc::new(tokio::sync::Notify::new());
+
     // Create clones for the closures that need them
     let state_for_setup = shared_state.clone();
     let state_for_events = shared_state.clone();
     let shared_state_for_ready = shared_state.clone();
     let flush_for_setup = flush_handle.clone();
+    let sync_for_events = sync_handle.clone();
+
+    // Clones for the on_window_event closure (watcher drain + sync shutdown)
+    let watcher_shutdown_for_close = watcher_shutdown.clone();
+    let watcher_in_flight_for_close = watcher_in_flight.clone();
+    let watcher_in_flight_notify_for_close = watcher_in_flight_notify.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_fs::init())
         .manage(shared_state.clone())
         .manage(flush_handle.clone())
+        .manage(sync_handle.clone())
         .setup(move |app| {
             migrate_data_directories();
             run_migrations();
 
-            // 4. Start file watcher (Phase 2.3)
+            // 4. Start file watcher (Phase 2.3) with shutdown support (Phase 6.6)
             let scan_paths = settings.scan_paths.clone();
             let watcher_state = state_for_setup.clone();
             let watcher_flush = flush_for_setup.clone();
             let app_handle = app.handle().clone();
+            let ws = watcher_shutdown;
+            let wif = watcher_in_flight;
+            let wifn = watcher_in_flight_notify;
 
             // Start watcher in a thread so setup doesn't block
             std::thread::spawn(move || {
@@ -2264,6 +2726,9 @@ pub fn run() {
                     watcher_state,
                     watcher_flush,
                     scan_paths,
+                    ws,
+                    wif,
+                    wifn,
                 ) {
                     Ok(_watcher) => {
                         tracing::info!("File watcher started");
@@ -2306,12 +2771,41 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |_window, event| {
-            // Crash-safe flush: flush db.json on window close/destroy + sync-on-close (Phase 6.6)
+            // On-close sequence (Phase 6.6): watcher drain → stop sync → flush → final sync
+            // Total budget: 4s (1s watcher drain + 3s flush+sync envelope)
             match event {
                 tauri::WindowEvent::CloseRequested { .. }
                 | tauri::WindowEvent::Destroyed => {
-                    // Synchronous flush — block with timeout to prevent deadlock
-                    // if another async task holds the mutex
+                    // Step 1: Stop watcher — set shutdown flag, wait for in-flight tasks (1s sub-timeout)
+                    watcher_shutdown_for_close.store(true, std::sync::atomic::Ordering::SeqCst);
+                    let in_flight_count = watcher_in_flight_for_close.load(std::sync::atomic::Ordering::SeqCst);
+                    if in_flight_count > 0 {
+                        tracing::info!("Waiting for {} in-flight watcher tasks to complete...", in_flight_count);
+                        let wif = watcher_in_flight_for_close.clone();
+                        let wifn = watcher_in_flight_notify_for_close.clone();
+                        let _ = tauri::async_runtime::block_on(async {
+                            tokio::time::timeout(
+                                std::time::Duration::from_secs(1),
+                                async {
+                                    while wif.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+                                        wifn.notified().await;
+                                    }
+                                },
+                            )
+                            .await
+                        });
+                        let remaining = watcher_in_flight_for_close.load(std::sync::atomic::Ordering::SeqCst);
+                        if remaining > 0 {
+                            tracing::warn!("Watcher drain timed out, {} tasks still in-flight", remaining);
+                        } else {
+                            tracing::info!("All watcher tasks drained");
+                        }
+                    }
+
+                    // Step 2: Stop continuous sync — cancel pending debounce timer
+                    sync_for_events.shutdown();
+
+                    // Step 3: Flush db.json — within remaining 3s envelope
                     let state_for_flush = state_for_events.clone();
                     let flush_result = tauri::async_runtime::block_on(async {
                         match tokio::time::timeout(
@@ -2332,8 +2826,7 @@ pub fn run() {
                         Err(e) => tracing::warn!("Crash-safe flush failed on window close: {}", e),
                     }
 
-                    // Sync-on-close: write to OpenClaw data directory (local mode only,
-                    // remote mode is handled by TypeScript with a 3s timeout)
+                    // Step 4: Final sync — write to OpenClaw data directory
                     let state_for_sync = state_for_flush;
                     let sync_result = tauri::async_runtime::block_on(async {
                         match tokio::time::timeout(
@@ -2422,6 +2915,11 @@ pub fn run() {
             write_state_json,
             get_all_projects,
             get_project,
+            // Phase 5.3 project creation
+            create_project_with_state,
+            // Phase 5.16 mutation commands
+            update_roadmap_item,
+            reorder_item,
             // Phase 3 migration commands
             get_migration_status,
             run_migration,
@@ -2432,8 +2930,6 @@ pub fn run() {
             injection::inject_agent_guidance,
             // Phase 6 sync commands
             install_openclaw_extension,
-            get_openclaw_extension_version,
-            is_openclaw_extension_stale,
             get_extension_content,
             sync_local_launch,
             sync_merge_remote,

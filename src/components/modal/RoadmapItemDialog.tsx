@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { ModalDragZone } from '../ui/ModalDragZone';
 import type { ProjectFrontmatter, RoadmapItem, RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
-import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/roadmap';
-import { readFile, gitReadFileAtRef, gitGetBranchStates } from '../../lib/tauri';
+import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/doc-resolution';
+import { readFile, gitReadFileAtRef, gitGetBranchStates, getProject } from '../../lib/tauri';
 import { RoadmapItemDetail } from './RoadmapItemDetail';
 
 interface RoadmapItemDialogProps {
@@ -11,6 +11,8 @@ interface RoadmapItemDialogProps {
   projectTitle: string;
   projectDir: string;
   projectFrontmatter?: ProjectFrontmatter;
+  projectId?: string;
+  isMigrated?: boolean;
   onClose: () => void;
   onStatusChange: (itemId: string, status: RoadmapStatus) => void;
 }
@@ -24,12 +26,15 @@ export function RoadmapItemDialog({
   projectTitle,
   projectDir,
   projectFrontmatter,
+  projectId,
+  isMigrated,
   onClose,
   onStatusChange,
 }: RoadmapItemDialogProps) {
   const [enrichedItem, setEnrichedItem] = useState<RoadmapItemWithDocs | null>(null);
   const [docCache, setDocCache] = useState<Record<string, string>>({});
   const [docSourceBranch, setDocSourceBranch] = useState<Record<string, string>>({});
+  const [docContentSource, setDocContentSource] = useState<Record<string, 'local' | 'synced-snapshot' | 'git-show'>>({});
   const [docLoading, setDocLoading] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -75,19 +80,66 @@ export function RoadmapItemDialog({
     return () => window.removeEventListener('keydown', handler);
   }, [item, onClose]);
 
-  const fetchDocContent = useCallback(async (path: string): Promise<string> => {
+  const fetchDocContent = useCallback(async (path: string, opts?: { itemId?: string; docType?: 'spec' | 'plan' }): Promise<string> => {
     setDocLoading(true);
     try {
+      // Step 1: Try local file (authoritative when present)
       const content = await readFile(path);
       setDocCache((prev) => ({ ...prev, [path]: content }));
+      setDocContentSource((prev) => ({ ...prev, [path]: 'local' }));
       return content;
     } catch {
-      // File not on current branch — try git show fallback
+      // Step 2: Try db.json content field (synced snapshot)
+      if (projectId && isMigrated && opts?.itemId && opts?.docType) {
+        try {
+          const detail = await getProject(projectId);
+          const dbItem = detail.roadmapItems.find((ri) => ri.id === opts.itemId);
+          const contentField = opts.docType === 'spec' ? dbItem?.specDocContent : dbItem?.planDocContent;
+          if (contentField) {
+            setDocCache((prev) => ({ ...prev, [path]: contentField }));
+            setDocContentSource((prev) => ({ ...prev, [path]: 'synced-snapshot' }));
+            const branchField = opts.docType === 'spec' ? dbItem?.specDocBranch : dbItem?.planDocBranch;
+            if (branchField) setDocSourceBranch((prev) => ({ ...prev, [path]: branchField }));
+            return contentField;
+          }
+        } catch {
+          // get_project failed, continue
+        }
+      }
+
+      // Step 3+4: git show fallback
+      if (!projectDir) {
+        const fallback = '_Document not available_';
+        setDocCache((prev) => ({ ...prev, [path]: fallback }));
+        return fallback;
+      }
+
       const relPath = path.startsWith(projectDir)
         ? path.slice(projectDir.length).replace(/^\//, '')
         : path;
 
       try {
+        // Step 3: Try branch hint from db.json
+        let branchHint: string | undefined;
+        if (projectId && isMigrated && opts?.itemId && opts?.docType) {
+          try {
+            const detail = await getProject(projectId);
+            const dbItem = detail.roadmapItems.find((ri) => ri.id === opts.itemId);
+            branchHint = opts.docType === 'spec' ? dbItem?.specDocBranch : dbItem?.planDocBranch;
+          } catch { /* continue */ }
+        }
+
+        if (branchHint) {
+          try {
+            const content = await gitReadFileAtRef(projectDir, branchHint, relPath);
+            setDocCache((prev) => ({ ...prev, [path]: content }));
+            setDocSourceBranch((prev) => ({ ...prev, [path]: branchHint! }));
+            setDocContentSource((prev) => ({ ...prev, [path]: 'git-show' }));
+            return content;
+          } catch { /* continue */ }
+        }
+
+        // Step 4: Scan all local branches
         const branches = await gitGetBranchStates(projectDir);
         for (const branch of branches) {
           if (branch.isCurrent) continue;
@@ -95,22 +147,20 @@ export function RoadmapItemDialog({
             const content = await gitReadFileAtRef(projectDir, branch.name, relPath);
             setDocCache((prev) => ({ ...prev, [path]: content }));
             setDocSourceBranch((prev) => ({ ...prev, [path]: branch.name }));
+            setDocContentSource((prev) => ({ ...prev, [path]: 'git-show' }));
             return content;
-          } catch {
-            // Not on this branch
-          }
+          } catch { /* not on this branch */ }
         }
-      } catch {
-        // Branch scanning failed
-      }
+      } catch { /* branch scanning failed */ }
 
-      const fallback = '_Document not found on any branch_';
+      // Step 5: Not found anywhere
+      const fallback = '_Document not available_';
       setDocCache((prev) => ({ ...prev, [path]: fallback }));
       return fallback;
     } finally {
       setDocLoading(false);
     }
-  }, [projectDir]);
+  }, [projectDir, projectId, isMigrated]);
 
   const getDocContent = useCallback(
     (path: string): string | undefined => docCache[path],
@@ -120,6 +170,11 @@ export function RoadmapItemDialog({
   const getSourceBranch = useCallback(
     (path: string): string | undefined => docSourceBranch[path],
     [docSourceBranch],
+  );
+
+  const getContentSource = useCallback(
+    (path: string): 'local' | 'synced-snapshot' | 'git-show' | undefined => docContentSource[path],
+    [docContentSource],
   );
 
   if (!item || !enrichedItem) return null;
@@ -158,6 +213,7 @@ export function RoadmapItemDialog({
           fetchDocContent={fetchDocContent}
           getDocContent={getDocContent}
           getSourceBranch={getSourceBranch}
+          getContentSource={getContentSource}
           docLoading={docLoading}
         />
       </div>

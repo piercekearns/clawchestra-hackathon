@@ -4,7 +4,7 @@ import type { ChatConnectionState } from '../components/chat/types';
 import type { DashboardError } from './errors';
 import type { ChatMessage, SystemBubbleKind, SystemBubbleMeta } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
-import type { StateJsonMergedPayload, ClawchestraReadyPayload } from './state-json';
+import type { StateJsonMergedPayload, ClawchestraReadyPayload, RoadmapItemState } from './state-json';
 import { createProject, getProjects, removeProject, updateProject, type ProjectUpdate } from './projects';
 import { autoCommitIfLocalOnly } from './auto-commit';
 import { defaultView, type ViewContext } from './views';
@@ -13,8 +13,11 @@ import {
   chatMessageSave,
   chatMessagesClear,
   chatMessagesCount,
+  getAllProjects,
   getDashboardSettings,
+  injectAgentGuidance,
   isTauriRuntime,
+  pathExists,
   type PersistedChatMessage,
 } from './tauri';
 import {
@@ -36,6 +39,8 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 interface DashboardState {
   projects: ProjectViewModel[];
+  /** Roadmap items per project (keyed by project ID). Populated from db.json via get_all_projects. */
+  roadmapItems: Record<string, RoadmapItemState[]>;
   errors: DashboardError[];
   gatewayConnected: boolean;
   wsConnectionState: ChatConnectionState;
@@ -314,6 +319,7 @@ export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
       projects: [],
+      roadmapItems: {},
       errors: [],
       gatewayConnected: false,
       wsConnectionState: 'disconnected' as ChatConnectionState,
@@ -337,7 +343,32 @@ export const useDashboardStore = create<DashboardState>()(
         try {
           const settings = await getDashboardSettings();
           const result = await getProjects(settings.scanPaths);
-          set({ projects: result.projects, errors: result.errors, loading: false });
+
+          // Also fetch roadmap items and migration status from db.json (Phase 5.17)
+          let roadmapItems: Record<string, RoadmapItemState[]> = {};
+          if (isTauriRuntime()) {
+            try {
+              const dbProjects = await getAllProjects();
+              const migrationMap = new Map<string, boolean>();
+              for (const p of dbProjects) {
+                if (p.roadmapItems.length > 0) {
+                  roadmapItems[p.id] = p.roadmapItems;
+                }
+                migrationMap.set(p.id, p.stateJsonMigrated);
+              }
+              // Merge stateJsonMigrated flag into ProjectViewModel
+              for (const proj of result.projects) {
+                const migrated = migrationMap.get(proj.id);
+                if (migrated !== undefined) {
+                  proj.stateJsonMigrated = migrated;
+                }
+              }
+            } catch {
+              // Non-fatal: roadmap items will be loaded on next event
+            }
+          }
+
+          set({ projects: result.projects, roadmapItems, errors: result.errors, loading: false });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed loading projects';
           set((state) => ({
@@ -576,6 +607,11 @@ export const useDashboardStore = create<DashboardState>()(
       createProjectAndReload: async (dirPath, frontmatter, content) => {
         await createProject(dirPath, frontmatter, content);
         await get().loadProjects();
+
+        // Fire-and-forget: inject agent guidance on git projects
+        void pathExists(`${dirPath}/.git`).then((hasGit) => {
+          if (hasGit) void injectAgentGuidance(dirPath).catch(() => {});
+        }).catch(() => {});
       },
 
       deleteProjectAndReload: async (filePath) => {
@@ -585,10 +621,16 @@ export const useDashboardStore = create<DashboardState>()(
 
       updateProjectFromEvent: (payload) => {
         if (!payload.projectId) return;
-        const { projects } = get();
+        const { projects, roadmapItems } = get();
         const existingIdx = projects.findIndex(
           (p) => p.id === payload.projectId || p.frontmatter?.id === payload.projectId,
         );
+
+        // Phase 5.17: Store roadmap items in the dedicated store field
+        const nextRoadmapItems = { ...roadmapItems };
+        if (payload.roadmapItems.length > 0) {
+          nextRoadmapItems[payload.projectId] = payload.roadmapItems;
+        }
 
         if (existingIdx >= 0) {
           // Update existing project — preserve UI-only fields (filePath, dirPath, git*, children, etc.)
@@ -613,9 +655,11 @@ export const useDashboardStore = create<DashboardState>()(
           };
           const next = [...projects];
           next[existingIdx] = updated;
-          set({ projects: next });
+          set({ projects: next, roadmapItems: nextRoadmapItems });
+        } else {
+          // Project not in UI yet — still store roadmap items for when it appears
+          set({ roadmapItems: nextRoadmapItems });
         }
-        // New project from watcher is deferred to Phase 3+ (requires full ProjectViewModel shape)
       },
     }),
     {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock4, GitBranch } from 'lucide-react';
+import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
 import { AddProjectDialog } from './components/AddProjectDialog';
@@ -13,6 +14,7 @@ import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { SyncDialog } from './components/SyncDialog';
+import { getSyncStatusForDisplay } from './lib/sync';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
 import type { SearchableRoadmapItem } from './components/search';
@@ -47,7 +49,8 @@ import {
 } from './lib/gateway';
 import { commitPlanningDocs, fetchAllRepos, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
-import { enrichItemsWithDocs, readRoadmap, resolveDocFiles, writeRoadmap } from './lib/roadmap';
+import { readRoadmap, writeRoadmap } from './lib/roadmap';
+import { enrichItemsWithDocs, resolveDocFiles } from './lib/doc-resolution';
 import { autoCommitIfLocalOnly } from './lib/auto-commit';
 import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
 import type {
@@ -64,9 +67,14 @@ import { useDashboardStore } from './lib/store';
 import {
   chatRecoveryCursorAdvance,
   getDashboardSettings,
+  getValidationHistory,
   isTauriRuntime,
+  markRejectionResolved,
+  reorderItem,
   updateDashboardSettings,
+  type ValidationRejection,
 } from './lib/tauri';
+import { mapToRoadmapItemsWithDocs } from './lib/roadmap-item-mapper';
 import { defaultView, projectRoadmapView } from './lib/views';
 import { setupTauriEventListeners } from './lib/tauri-events';
 import { messageIdentitySignature } from './lib/chat-message-identity';
@@ -223,6 +231,7 @@ export default function App() {
   const viewContext = useDashboardStore((state) => state.viewContext);
   const loading = useDashboardStore((state) => state.loading);
   const selectedProjectId = useDashboardStore((state) => state.selectedProjectId);
+  const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
 
   const loadProjects = useDashboardStore((state) => state.loadProjects);
   const setProjects = useDashboardStore((state) => state.setProjects);
@@ -294,6 +303,26 @@ export default function App() {
     const gatherRoadmapItems = async () => {
       const items: SearchableRoadmapItem[] = [];
       for (const project of allProjects) {
+        // Migrated projects: read from Zustand store
+        if (project.stateJsonMigrated) {
+          const storeItems = storeRoadmapItems[project.id] || [];
+          for (const si of storeItems) {
+            items.push({
+              id: si.id,
+              title: si.title,
+              status: si.status,
+              priority: si.priority ?? undefined,
+              icon: si.icon ?? undefined,
+              nextAction: si.nextAction ?? undefined,
+              blockedBy: si.blockedBy ?? undefined,
+              tags: si.tags ?? undefined,
+              projectId: project.id,
+              projectTitle: project.title,
+            });
+          }
+          continue;
+        }
+        // Unmigrated projects: legacy ROADMAP.md path
         if (!project.hasRoadmap || !project.roadmapFilePath) continue;
         try {
           const roadmap = await readRoadmap(project.roadmapFilePath);
@@ -312,7 +341,7 @@ export default function App() {
     };
     void gatherRoadmapItems();
     return () => { cancelled = true; };
-  }, [allProjects]);
+  }, [allProjects, storeRoadmapItems]);
 
   // Filter out sub-projects from top-level view
   const topLevelProjects = useMemo(
@@ -328,6 +357,11 @@ export default function App() {
 
   // Unresolved sync state (conflict/failed persisted in localStorage)
   const [unresolvedSyncCount, setUnresolvedSyncCount] = useState(0);
+
+  // Validation rejection history (Phase 7.3)
+  const [validationRejections, setValidationRejections] = useState<
+    Record<string, ValidationRejection[]>
+  >({});
 
   const scanUnresolvedSyncState = useCallback(() => {
     let count = 0;
@@ -468,6 +502,11 @@ export default function App() {
       void fetchAllRepos(flat).then(() => loadProjects());
     });
   }, [loadProjects]);
+
+  // Load validation rejection history on startup (Phase 7.3)
+  useEffect(() => {
+    void getValidationHistory().then(setValidationRejections).catch(() => {});
+  }, []);
 
   // Load persisted chat messages on startup
   useEffect(() => {
@@ -1074,37 +1113,57 @@ export default function App() {
   };
 
   const openRoadmapView = async (project: ProjectViewModel) => {
-    if (!project.roadmapFilePath || !project.hasRoadmap) {
-      pushToast('error', `No ROADMAP.md found for ${project.title}`);
-      return;
-    }
-
-    try {
-      const roadmap = await readRoadmap(project.roadmapFilePath);
-      let enrichedRoadmapItems: RoadmapItemWithDocs[];
-
-      try {
-        const docsMap = await resolveDocFiles(project.dirPath, roadmap.items, project.frontmatter);
-        enrichedRoadmapItems = enrichItemsWithDocs(roadmap.items, docsMap);
-      } catch {
-        enrichedRoadmapItems = roadmap.items.map((item) => ({ ...item, docs: {} }));
+    if (project.stateJsonMigrated) {
+      // New path: read from Zustand store (db.json via get_all_projects)
+      const items = storeRoadmapItems[project.id] || [];
+      if (items.length === 0) {
+        pushToast('error', `No roadmap data found for ${project.title}`);
+        return;
       }
-
-      setRoadmapDocument(roadmap);
-      setRoadmapItems(enrichedRoadmapItems);
+      const enrichedItems = mapToRoadmapItemsWithDocs(items);
+      // Enrich with doc paths if project has git
+      try {
+        const docsMap = await resolveDocFiles(project.dirPath, enrichedItems, project.frontmatter);
+        const withDocs = enrichItemsWithDocs(enrichedItems, docsMap);
+        setRoadmapItems(withDocs);
+      } catch {
+        setRoadmapItems(enrichedItems);
+      }
+      setRoadmapDocument(null); // No ROADMAP.md document for migrated projects
       setViewContext(projectRoadmapView(project.id, project.title));
       setSelectedProjectId(undefined);
-    } catch (error) {
-      pushToast(
-        'error',
-        error instanceof Error ? error.message : `Failed to open roadmap for ${project.title}`,
-      );
+    } else {
+      // Legacy path: read from ROADMAP.md
+      if (!project.roadmapFilePath || !project.hasRoadmap) {
+        pushToast('error', `No roadmap data found for ${project.title}`);
+        return;
+      }
+
+      try {
+        const roadmap = await readRoadmap(project.roadmapFilePath);
+        let enrichedRoadmapItems: RoadmapItemWithDocs[];
+
+        try {
+          const docsMap = await resolveDocFiles(project.dirPath, roadmap.items, project.frontmatter);
+          enrichedRoadmapItems = enrichItemsWithDocs(roadmap.items, docsMap);
+        } catch {
+          enrichedRoadmapItems = roadmap.items.map((item) => ({ ...item, docs: {} }));
+        }
+
+        setRoadmapDocument(roadmap);
+        setRoadmapItems(enrichedRoadmapItems);
+        setViewContext(projectRoadmapView(project.id, project.title));
+        setSelectedProjectId(undefined);
+      } catch (error) {
+        pushToast(
+          'error',
+          error instanceof Error ? error.message : `Failed to open roadmap for ${project.title}`,
+        );
+      }
     }
   };
 
   const persistRoadmapChanges = async (nextItems: RoadmapItemWithDocs[]) => {
-    if (!roadmapDocument) return;
-
     const orderedByColumn: RoadmapItemWithDocs[] = [];
     for (const column of viewContext.columns) {
       const itemsInColumn = nextItems
@@ -1116,26 +1175,41 @@ export default function App() {
       orderedByColumn.push(...itemsInColumn);
     }
 
-    const nextDocument: RoadmapDocument = {
-      ...roadmapDocument,
-      items: orderedByColumn.map(({ docs: _docs, ...item }) => item),
-    };
-
     const previousItems = roadmapItems;
     setRoadmapItems(orderedByColumn);
 
-    try {
-      await writeRoadmap(nextDocument);
-      setRoadmapDocument(nextDocument);
-      // NOTE: ROADMAP.md auto-commit removed post-migration (data now in .clawchestra/state.json).
-      // writeRoadmap() still exists for legacy compat but kanban drag no longer auto-commits it.
-      pushToast('success', 'Roadmap saved');
-    } catch (error) {
-      setRoadmapItems(previousItems);
-      pushToast(
-        'error',
-        error instanceof Error ? error.message : 'Failed to save roadmap changes',
-      );
+    if (activeRoadmapProject?.stateJsonMigrated) {
+      // New path: write via Tauri commands (db.json → state.json projection)
+      try {
+        for (const item of orderedByColumn) {
+          await reorderItem(activeRoadmapProject.id, item.id, item.priority ?? 0, item.status);
+        }
+        pushToast('success', 'Roadmap saved');
+      } catch (error) {
+        setRoadmapItems(previousItems);
+        pushToast(
+          'error',
+          error instanceof Error ? error.message : 'Failed to save roadmap changes',
+        );
+      }
+    } else {
+      // Legacy path: write to ROADMAP.md
+      if (!roadmapDocument) return;
+      const nextDocument: RoadmapDocument = {
+        ...roadmapDocument,
+        items: orderedByColumn.map(({ docs: _docs, ...item }) => item),
+      };
+      try {
+        await writeRoadmap(nextDocument);
+        setRoadmapDocument(nextDocument);
+        pushToast('success', 'Roadmap saved');
+      } catch (error) {
+        setRoadmapItems(previousItems);
+        pushToast(
+          'error',
+          error instanceof Error ? error.message : 'Failed to save roadmap changes',
+        );
+      }
     }
   };
 
@@ -1597,6 +1671,11 @@ export default function App() {
           dirtyProjectCount={dirtyProjects.length}
           unresolvedSyncCount={unresolvedSyncCount}
           onOpenSync={() => setSyncDialogOpen(true)}
+          syncStatus={dashboardSettings ? getSyncStatusForDisplay(
+            dashboardSettings.openclawSyncMode,
+            null, // lastSyncedAt — populated from clawchestra-ready event
+            null, // lastSyncError
+          ) : undefined}
         />
 
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -1683,6 +1762,8 @@ export default function App() {
                   projectTitle={activeRoadmapProject?.title ?? 'Project'}
                   projectDir={activeRoadmapProject?.dirPath ?? ''}
                   projectFrontmatter={activeRoadmapProject?.frontmatter}
+                  projectId={activeRoadmapProject?.id}
+                  isMigrated={activeRoadmapProject?.stateJsonMigrated}
                   onClose={() => setSelectedRoadmapItemId(null)}
                   onStatusChange={(itemId, status) => {
                     const updated = roadmapItems.map((i) =>
@@ -1705,8 +1786,19 @@ export default function App() {
                   }}
                   renderItemIndicators={(project) => {
                     const gitHubStatusMeta = getGitHubStatusMeta(project.gitStatus);
+                    const projectRejections = validationRejections[project.id] ?? [];
                     return (
                       <>
+                        {projectRejections.length > 0 && (
+                          <ValidationBadge
+                            rejections={projectRejections}
+                            onDismiss={(timestamp) => {
+                              void markRejectionResolved(project.id, timestamp).then(() =>
+                                getValidationHistory().then(setValidationRejections).catch(() => {}),
+                              );
+                            }}
+                          />
+                        )}
                         {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
                         {project.hasRepo ? (
                           <BranchPopover

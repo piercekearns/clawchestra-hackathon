@@ -42,7 +42,6 @@ Instructions for agents interacting with Clawchestra (formerly Pipeline Dashboar
 ```
 .clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
 CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
-CHANGELOG.md                  — YAML frontmatter `entries:` array (completed items)
 roadmap/{item-id}.md          — Detail file per roadmap item
 docs/specs/{item-id}-spec.md  — Spec documents
 docs/plans/{item-id}-plan.md  — Plan documents
@@ -81,7 +80,7 @@ Aim for ~40 characters or fewer for roadmap item and project titles — this fit
 
 ## Rule Zero: Check If This Doc Needs Updating
 
-**Whenever making code changes to the Pipeline Dashboard:**
+**Whenever making code changes to Clawchestra:**
 
 1. **Always ask:** "Does this add, change, or remove any operation, capability, or rule?"
 2. If YES → update this AGENTS.md before considering the work complete
@@ -144,13 +143,14 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 
 | Operation | How Agent Does It |
 |-----------|-------------------|
-| **View projects** | Read files from configured catalog root (`get_dashboard_settings` → `catalogRoot`) |
-| **Add project** | Create `{catalogRoot}/{id}.md` with proper frontmatter (see Adding Projects) |
-| **Edit project** | Edit frontmatter in the project's `.md` file |
-| **Change status** | Update `status:` field in frontmatter |
-| **Change priority** | Update `priority:` field (ensure uniqueness!) |
-| **Delete project** | Delete the `.md` file |
-| **Move to column** | Change `status:` to target column value |
+| **View projects** | Read `CLAWCHESTRA.md` frontmatter from project directories under configured scan paths |
+| **Add project** | Create project directory + `CLAWCHESTRA.md` with frontmatter + `.clawchestra/state.json` (see Adding Projects) |
+| **Edit project metadata** | Edit frontmatter in `CLAWCHESTRA.md` |
+| **Edit roadmap items** | Edit `.clawchestra/state.json` `roadmapItems` array |
+| **Change status** | Update `status` field in `CLAWCHESTRA.md` frontmatter |
+| **Change priority** | Update `priority` field (ensure uniqueness within column) |
+| **Delete project** | Delete `CLAWCHESTRA.md` (removes from dashboard scan) |
+| **Move to column** | Change `status` to target column value |
 
 **Status values (ONLY these — app rejects others):** `in-progress` | `up-next` | `pending` | `dormant` | `archived`
 
@@ -160,18 +160,18 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 |-----------|-------------------|
 | **View roadmap** | Read `.clawchestra/state.json` `roadmapItems` array |
 | **Add item** | Add to `roadmapItems` array in `.clawchestra/state.json` |
-| **Mark complete** | Set item `status: complete` (NOT `done`) — auto-migrates to CHANGELOG.md |
+| **Mark complete** | Set item `status: complete` + `completedAt: YYYY-MM-DD` (NOT `done`). Completion is a status change, not a file move |
 | **Remove** | Remove from `roadmapItems` array (not a file deletion) |
 | **Reprioritize** | Change `priority` values in `.clawchestra/state.json` |
 
 **Roadmap status values (ONLY these — app rejects others):** `pending` | `up-next` | `in-progress` | `complete`
 
-### CHANGELOG
+### Completed Items
 
 | Operation | How Agent Does It |
 |-----------|-------------------|
-| **View changelog** | Parse `CHANGELOG.md` frontmatter `entries:` array |
-| **Edit entries** | Read-only for agents unless explicitly asked to edit |
+| **View completed items** | Filter `.clawchestra/state.json` `roadmapItems` for `status: complete` |
+| **Complete an item** | Set `status: complete` + `completedAt: YYYY-MM-DD` in state.json |
 
 ### Dashboard Actions
 
@@ -227,10 +227,10 @@ These documents appear in the UI when users click roadmap items. If the first th
 
 ```
 .clawchestra/state.json — JSON: project + roadmapItems (source of truth)
-CHANGELOG.md   — Frontmatter entries: array of completed items
-docs/          — Spec and plan documents for roadmap items
-src/           — React frontend (TypeScript, Tailwind, shadcn/ui)
-src-tauri/     — Rust backend (Tauri v2)
+CLAWCHESTRA.md          — Human documentation (frontmatter + markdown)
+docs/                   — Spec and plan documents for roadmap items
+src/                    — React frontend (TypeScript, Tailwind, shadcn/ui)
+src-tauri/              — Rust backend (Tauri v2)
 ```
 
 ---
@@ -279,10 +279,9 @@ When you create or update an artifact for a roadmap item (spec, plan, etc.), **a
 The `nextAction` is what humans see in the UI. If you write a spec but leave `nextAction` saying "Spec needed", the user sees stale/contradictory info.
 
 When the user says **"mark X as done"** or **"X is complete"**:
-1. Change item `status: complete` in `.clawchestra/state.json` — this triggers auto-migration:
-   - Item is appended to CHANGELOG.md `entries:` array (with `completedAt` date)
-   - Item is removed from `.clawchestra/state.json` `roadmapItems` array
-   - Migration is idempotent
+1. Set `status: complete` and `completedAt: YYYY-MM-DD` on the item in `.clawchestra/state.json`
+2. The item remains in `roadmapItems` with `status: complete` — it is NOT removed
+3. Clawchestra displays completed items in the "Complete" column
 
 When the user says **"remove X from the roadmap"** (without completing):
 1. Remove the item from the `roadmapItems` array in `.clawchestra/state.json`
@@ -292,25 +291,43 @@ When the user says **"remove X from the roadmap"** (without completing):
 
 ## Adding Projects
 
-Projects are markdown files in the configured catalog root (`catalogRoot` in settings).
+Projects are directories containing `CLAWCHESTRA.md` (human documentation) and `.clawchestra/state.json` (machine-readable state). They live under configured scan paths.
 
 When the user says **"add project X"** or **"create project for X"**:
 
 1. **Check existing priorities** in the target status column
-2. **Create** `{catalogRoot}/{project-id}.md` (or appropriate subdirectory)
-3. **Frontmatter** must include:
+2. **Create the project directory** (e.g., `{scanPath}/{project-id}/`)
+3. **Create `CLAWCHESTRA.md`** with frontmatter:
    ```yaml
    title: X
    status: up-next  # or whatever column specified
-   priority: N      # unique within column, bottom by default
    type: project
+   priority: N      # unique within column, bottom by default
    lastActivity: YYYY-MM-DD
    ```
-4. **Optional fields:** `tags`, `icon`, `repo`, `localPath`, `nextAction`
+4. **Create `.clawchestra/state.json`** with project + roadmapItems:
+   ```json
+   {
+     "project": { "title": "X", "status": "up-next", "description": "" },
+     "roadmapItems": []
+   }
+   ```
+5. **Add `.clawchestra/` to `.gitignore`** (state.json is device-local, not committed)
+6. **Optional fields:** `tags`, `icon`, `repo`, `nextAction` in frontmatter; `specDoc`, `planDoc` on roadmap items
 
-**Projects vs Deliverables:**
+### Registering an Existing Project
+
+If a git repo already exists and you want Clawchestra to track it:
+
+1. Create `CLAWCHESTRA.md` in the repo root with frontmatter (title, status, type, priority)
+2. Create `.clawchestra/` directory and `state.json` (project + empty roadmapItems)
+3. Add `.clawchestra/` to `.gitignore`
+4. Ensure the directory is under one of Clawchestra's configured scan paths
+5. Run `scripts/inject-current-branch.sh` to add the Clawchestra Integration section to CLAUDE.md
+
+**Projects vs Sub-projects:**
 - **Project** = top-level entity shown on main board (type: project)
-- **Deliverable** = child item within a project's roadmap (type: deliverable, has `parent:`)
+- **Sub-project** = child entity with `parent:` field pointing to parent project ID (type: sub-project)
 
 ---
 
@@ -446,3 +463,47 @@ Primary frontend chat implementation lives in `src/components/chat/`.
 - `src/components/chat/ChatBar.tsx` — composer/header used in collapsed and expanded states
 - `src-tauri/src/lib.rs` — all Tauri commands
 - `src-tauri/build.rs` — embeds BUILD_COMMIT at compile time
+- `src-tauri/src/state.rs` — db.json schema and AppState
+- `src/lib/store.ts` — Zustand store (projects, roadmap items)
+- `src/hooks/useProjectModal.ts` — project modal state + roadmap reads/writes
+
+---
+
+## Cross-Branch Documents
+
+Spec and plan documents (`docs/specs/`, `docs/plans/`) are git-tracked and may live on feature branches. Clawchestra uses `git show` to read documents cross-branch when they don't exist on the current branch.
+
+When writing a `specDoc` or `planDoc` field on a roadmap item, make sure you're on the branch where the document lives. Clawchestra records the branch automatically via `specDocBranch`/`planDocBranch` fields and uses this as a hint for future cross-branch reads.
+
+---
+
+## Agent Guidance Injection
+
+Clawchestra can inject a "Clawchestra Integration" section into `CLAUDE.md` across all local branches. This ensures agents on any branch know how to interact with `.clawchestra/state.json`.
+
+**For agents that cannot call Tauri commands:**
+
+Run `scripts/inject-current-branch.sh [project-dir]` to inject on the current branch only.
+
+**Self-injection template** (if the script is not available, add this to CLAUDE.md manually):
+
+```markdown
+## Clawchestra Integration
+
+Project orchestration state lives in `.clawchestra/state.json` (gitignored, always on disk).
+
+**Read:** Open `.clawchestra/state.json` to see project status, roadmap items, priorities. Always read immediately before writing — do not cache contents across operations.
+**Write:** Edit `.clawchestra/state.json` to update status, add items, change priorities. Include BOTH `project` and `roadmapItems` in every write. Clawchestra validates and syncs automatically.
+
+**Schema rules:**
+- Project statuses: in-progress | up-next | pending | dormant | archived
+- Roadmap item statuses: pending | up-next | in-progress | complete
+- When setting status: complete, always set completedAt: YYYY-MM-DD
+- Priorities are unique per column
+- Do NOT delete items from state.json — removal requires explicit action via Clawchestra UI
+- Items you omit from `roadmapItems` are NOT deleted — Clawchestra restores them on next projection
+
+**After writing:** If your changes don't appear in state.json after writing, check `.clawchestra/last-rejection.json` for validation errors.
+
+**Do NOT edit:** CLAWCHESTRA.md (human documentation only), any files in `.clawchestra/` other than state.json.
+```

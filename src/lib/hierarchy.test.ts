@@ -28,6 +28,7 @@ function project(
     isStale: false,
     needsReview: false,
     hasRepo: false,
+    stateJsonMigrated: false,
   };
 }
 

@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -94,11 +95,17 @@ pub fn sha256_hex(data: &[u8]) -> String {
 ///
 /// Watches all provided scan paths recursively. Events are categorized and
 /// dispatched to appropriate handlers.
+///
+/// Accepts a shutdown flag and in-flight counter for graceful shutdown (Phase 6.6).
+/// Set `shutdown` to true and wait for `in_flight` to reach zero before flushing on close.
 pub fn start_watching(
     app_handle: tauri::AppHandle,
     state: Arc<Mutex<AppState>>,
     flush_handle: Arc<DbFlushHandle>,
     scan_paths: Vec<String>,
+    shutdown: Arc<AtomicBool>,
+    in_flight: Arc<AtomicUsize>,
+    in_flight_notify: Arc<tokio::sync::Notify>,
 ) -> Result<RecommendedWatcher, String> {
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -124,6 +131,9 @@ pub fn start_watching(
     let state_clone = state.clone();
     let handle_clone = app_handle.clone();
     let flush_clone = flush_handle.clone();
+    let shutdown_clone = shutdown;
+    let in_flight_clone = in_flight;
+    let in_flight_notify_clone = in_flight_notify;
 
     std::thread::spawn(move || {
         // Debounce: collect events for 100ms before processing
@@ -132,6 +142,12 @@ pub fn start_watching(
         let mut first_event_time: Option<std::time::Instant> = None;
 
         loop {
+            // Fast-path exit on shutdown
+            if shutdown_clone.load(Ordering::Relaxed) {
+                tracing::info!("Watcher shutdown flag set, stopping event loop");
+                break;
+            }
+
             match rx.recv_timeout(debounce_duration) {
                 Ok(Ok(event)) => {
                     // Collect paths from the event
@@ -169,11 +185,17 @@ pub fn start_watching(
                 first_event_time = None;
 
                 for path in batch {
+                    // Skip processing if shutting down
+                    if shutdown_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
                     categorize_and_handle(
                         &path,
                         &handle_clone,
                         &state_clone,
                         &flush_clone,
+                        &in_flight_clone,
+                        &in_flight_notify_clone,
                     );
                 }
             }
@@ -193,6 +215,8 @@ fn categorize_and_handle(
     app_handle: &tauri::AppHandle,
     state: &Arc<Mutex<AppState>>,
     flush_handle: &Arc<DbFlushHandle>,
+    in_flight: &Arc<AtomicUsize>,
+    in_flight_notify: &Arc<tokio::sync::Notify>,
 ) {
     let file_name = path
         .file_name()
@@ -208,12 +232,16 @@ fn categorize_and_handle(
                 == Some(".clawchestra")
             {
                 if let Some(project_dir) = clawchestra_dir.parent() {
+                    // Track in-flight async tasks for graceful shutdown (Phase 6.6)
+                    in_flight.fetch_add(1, Ordering::SeqCst);
                     // Spawn async: avoids block_on deadlock when acquiring tokio Mutex
                     let path_owned = path.to_path_buf();
                     let project_dir_owned = project_dir.to_path_buf();
                     let handle = app_handle.clone();
                     let state = state.clone();
                     let flush = flush_handle.clone();
+                    let in_flight_dec = in_flight.clone();
+                    let in_flight_done = in_flight_notify.clone();
                     tauri::async_runtime::spawn(async move {
                         handle_state_json_change(
                             &path_owned,
@@ -223,6 +251,10 @@ fn categorize_and_handle(
                             &flush,
                         )
                         .await;
+                        // Decrement in-flight counter; notify if zero (watcher drain)
+                        if in_flight_dec.fetch_sub(1, Ordering::SeqCst) == 1 {
+                            in_flight_done.notify_one();
+                        }
                     });
                     return;
                 }

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FolderOpen, RefreshCcw } from 'lucide-react';
 import { ModalDragZone } from './ui/ModalDragZone';
 import type { DashboardSettings } from '../lib/settings';
-import type { ProjectStatus, ProjectViewModel } from '../lib/schema';
+import type { ProjectViewModel } from '../lib/schema';
+import { PROJECT_STATUSES, type ProjectStatus } from '../lib/constants';
 import {
   addExistingProjectFlow,
   canonicalSlugify,
@@ -25,7 +26,7 @@ interface AddProjectDialogProps {
 
 type WizardMode = 'create-new' | 'add-existing';
 
-const STATUS_OPTIONS: ProjectStatus[] = ['in-progress', 'up-next', 'pending', 'dormant', 'archived'];
+const STATUS_OPTIONS: readonly ProjectStatus[] = PROJECT_STATUSES;
 
 export function AddProjectDialog({
   open,
@@ -256,15 +257,6 @@ export function AddProjectDialog({
             <label className="inline-flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={createRoadmap}
-                onChange={(event) => setCreateRoadmap(event.target.checked)}
-                className="h-4 w-4 rounded border-neutral-300"
-              />
-              Create ROADMAP.md
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
                 checked={createAgents}
                 onChange={(event) => setCreateAgents(event.target.checked)}
                 className="h-4 w-4 rounded border-neutral-300"
@@ -361,8 +353,7 @@ export function AddProjectDialog({
                 <div className="rounded-lg border border-neutral-200 p-3 text-xs dark:border-neutral-700">
                   <p className="font-semibold">Compatibility Report</p>
                   <p>Git repo: {compatibility.isGitRepo ? 'yes' : 'no'}</p>
-                  <p>PROJECT.md: {compatibility.hasProjectMd ? (compatibility.projectMdStatus ?? 'found') : 'missing'}</p>
-                  <p>ROADMAP.md: {compatibility.hasRoadmapMd ? 'found' : 'missing'}</p>
+                  <p>CLAWCHESTRA.md: {compatibility.hasProjectMd ? (compatibility.projectMdStatus ?? 'found') : 'missing'}</p>
                   <p>AGENTS.md: {compatibility.hasAgentsMd ? 'found' : 'missing'}</p>
                   <p>Scan policy: {compatibility.insideScanPaths ? 'inside scan paths' : 'outside scan paths'}</p>
                   {compatibility.actions.length > 0 && (
@@ -415,7 +406,7 @@ export function AddProjectDialog({
                     onChange={(event) => setAddMissingProjectMd(event.target.checked)}
                     className="h-4 w-4 rounded border-neutral-300"
                   />
-                  Create PROJECT.md if missing
+                  Create CLAWCHESTRA.md if missing
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input
@@ -424,16 +415,7 @@ export function AddProjectDialog({
                     onChange={(event) => setAddMissingFrontmatter(event.target.checked)}
                     className="h-4 w-4 rounded border-neutral-300"
                   />
-                  Add PROJECT.md frontmatter when missing
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={addMissingRoadmap}
-                    onChange={(event) => setAddMissingRoadmap(event.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-300"
-                  />
-                  Create ROADMAP.md when missing
+                  Add CLAWCHESTRA.md frontmatter when missing
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input

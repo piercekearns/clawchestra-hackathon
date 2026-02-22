@@ -3,6 +3,7 @@ import { Input } from './ui/input';
 import { ErrorBadge } from './ErrorBadge';
 import type { DashboardError } from '../lib/errors';
 import { Button } from './ui/button';
+import type { SyncStatusDisplay } from '../lib/sync';
 
 interface HeaderProps {
   errors: DashboardError[];
@@ -13,6 +14,7 @@ interface HeaderProps {
   dirtyProjectCount: number;
   unresolvedSyncCount: number;
   onOpenSync: () => void;
+  syncStatus?: SyncStatusDisplay;
 }
 
 export function Header({
@@ -24,6 +26,7 @@ export function Header({
   dirtyProjectCount,
   unresolvedSyncCount,
   onOpenSync,
+  syncStatus,
 }: HeaderProps) {
   return (
     <header className="mb-4 rounded-2xl border border-neutral-200 bg-neutral-0/95 p-4 backdrop-blur dark:border-neutral-700 dark:bg-neutral-950/95">
@@ -39,6 +42,24 @@ export function Header({
             ⌘ + K
           </kbd>
         </div>
+
+        {syncStatus && syncStatus.status !== 'disabled' && (
+          <div
+            className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400"
+            title={`${syncStatus.label}${syncStatus.lastSyncTime ? ` (${syncStatus.lastSyncTime})` : ''}`}
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                syncStatus.status === 'synced'
+                  ? 'bg-green-500'
+                  : syncStatus.status === 'error'
+                    ? 'bg-amber-500'
+                    : 'bg-neutral-400'
+              }`}
+            />
+            {syncStatus.lastSyncTime ?? syncStatus.label}
+          </div>
+        )}
 
         <ErrorBadge errors={errors} />
 

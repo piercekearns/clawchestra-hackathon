@@ -15,12 +15,13 @@ pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 /// Maximum allowed file size for state.json (1MB).
 pub const MAX_STATE_JSON_SIZE: u64 = 1_048_576;
 
-/// Valid project statuses.
-const VALID_PROJECT_STATUSES: &[&str] =
-    &["in-progress", "up-next", "pending", "dormant", "archived"];
+use crate::state::{PROJECT_STATUSES, ROADMAP_ITEM_STATUSES};
 
-/// Valid roadmap item statuses.
-const VALID_ROADMAP_STATUSES: &[&str] = &["pending", "up-next", "in-progress", "complete"];
+/// Valid project statuses (from state.rs constants).
+const VALID_PROJECT_STATUSES: &[&str] = PROJECT_STATUSES;
+
+/// Valid roadmap item statuses (from state.rs constants).
+const VALID_ROADMAP_STATUSES: &[&str] = ROADMAP_ITEM_STATUSES;
 
 // --- Field length limits ---
 const MAX_PROJECT_TITLE_LEN: usize = 500;

@@ -34,6 +34,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
     fetchDocContent,
     getDocContent,
     getSourceBranch,
+    getContentSource,
     docLoading,
   } = useProjectModal(project, actions);
 
@@ -108,6 +109,7 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
                 fetchDocContent={fetchDocContent}
                 getDocContent={getDocContent}
                 getSourceBranch={getSourceBranch}
+                getContentSource={getContentSource}
                 docLoading={docLoading}
               />
             ) : (

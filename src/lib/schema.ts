@@ -11,13 +11,9 @@
  */
 
 import { differenceInDays, parseISO } from 'date-fns';
+import { PROJECT_STATUSES as VALID_STATUSES, type ProjectStatus, type RoadmapItemStatus as RoadmapStatus } from './constants';
 
-export type ProjectStatus =
-  | 'in-progress'
-  | 'up-next'
-  | 'pending'
-  | 'dormant'
-  | 'archived';
+export type { ProjectStatus } from './constants';
 
 export type ProjectType = 'project' | 'sub-project' | 'idea';
 
@@ -161,9 +157,9 @@ export interface GitResumeValidation {
 
 export interface ProjectViewModel extends BoardItem {
   id: string;
-  /** Absolute path to the PROJECT.md file */
+  /** Absolute path to the CLAWCHESTRA.md file (or legacy PROJECT.md) */
   filePath: string;
-  /** Absolute path to the project directory (parent of PROJECT.md) */
+  /** Absolute path to the project directory (parent of CLAWCHESTRA.md) */
   dirPath: string;
   frontmatter: ProjectFrontmatter;
   content: string;
@@ -178,9 +174,11 @@ export interface ProjectViewModel extends BoardItem {
   needsReview: boolean;
   /** True if frontmatter.repo is set (GitHub-linked) */
   hasRepo: boolean;
+  /** True after ROADMAP.md→state.json migration completes (Phase 5). Gates new vs legacy data path. */
+  stateJsonMigrated: boolean;
 }
 
-export type RoadmapStatus = 'pending' | 'up-next' | 'in-progress' | 'complete';
+export type { RoadmapStatus };
 
 export interface RoadmapItem extends BoardItem {
   id: string;
@@ -233,13 +231,7 @@ export const ROADMAP_COLUMNS: ColumnDefinition[] = [
   { id: 'complete', label: 'Complete' },
 ];
 
-export const VALID_STATUSES = [
-  'in-progress',
-  'up-next',
-  'pending',
-  'dormant',
-  'archived',
-] as const satisfies readonly ProjectStatus[];
+export { VALID_STATUSES };
 
 export const VALID_TYPES = [
   'project',

@@ -37,7 +37,6 @@
 ```
 .clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
 CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
-CHANGELOG.md                  — YAML frontmatter `entries:` array (completed items)
 roadmap/{item-id}.md          — Detail file per roadmap item
 docs/specs/{item-id}-spec.md  — Spec documents
 docs/plans/{item-id}-plan.md  — Plan documents

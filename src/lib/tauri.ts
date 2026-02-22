@@ -10,6 +10,7 @@ import type {
   GitStatus,
 } from './schema';
 import type { DashboardSettings } from './settings';
+import type { ProjectSummary, ProjectWithContent } from './state-json';
 
 export type SyncResult = {
   success: boolean;
@@ -61,6 +62,20 @@ export type ScanResult = {
 export type SkippedDirectory = {
   path: string;
   reason: string;
+};
+
+/** Partial update payload for a roadmap item — only fields that are present are applied. */
+export type RoadmapItemChanges = {
+  title?: string;
+  status?: string;
+  priority?: number;
+  nextAction?: string;
+  tags?: string[];
+  icon?: string;
+  blockedBy?: string;
+  specDoc?: string;
+  planDoc?: string;
+  completedAt?: string;
 };
 
 type TauriCommands = {
@@ -211,8 +226,6 @@ type TauriCommands = {
   };
   // Phase 6 sync commands
   install_openclaw_extension: { args: { openclawPath: string }; return: void };
-  get_openclaw_extension_version: { args: { openclawPath: string }; return: string | null };
-  is_openclaw_extension_stale: { args: { openclawPath: string }; return: boolean };
   get_extension_content: { args: Record<string, never>; return: string };
   sync_local_launch: { args: Record<string, never>; return: SyncResult };
   sync_merge_remote: { args: { remoteDbJson: string }; return: [string, SyncResult] };
@@ -222,6 +235,50 @@ type TauriCommands = {
   write_openclaw_system_context: {
     args: { clientUuid: string; hostname: string; platform: string };
     return: void;
+  };
+  // Phase 2/5 data commands
+  get_all_projects: { args: Record<string, never>; return: ProjectSummary[] };
+  get_project: { args: { projectId: string }; return: ProjectWithContent };
+  create_project_with_state: {
+    args: {
+      projectId: string;
+      projectPath: string;
+      title: string;
+      status: string;
+      description: string;
+    };
+    return: void;
+  };
+  update_roadmap_item: {
+    args: {
+      projectId: string;
+      itemId: string;
+      changes: RoadmapItemChanges;
+    };
+    return: void;
+  };
+  reorder_item: {
+    args: {
+      projectId: string;
+      itemId: string;
+      newPriority: number;
+      newStatus?: string | null;
+    };
+    return: void;
+  };
+  inject_agent_guidance: {
+    args: { projectPath: string };
+    return: BranchInjectionResult[];
+  };
+  // Phase 7 debug + validation commands
+  export_debug_info: { args: Record<string, never>; return: string };
+  get_validation_history: {
+    args: Record<string, never>;
+    return: Record<string, ValidationRejection[]>;
+  };
+  mark_rejection_resolved: {
+    args: { projectId: string; timestamp: number };
+    return: boolean;
   };
 };
 
@@ -566,14 +623,6 @@ export async function installOpenclawExtension(openclawPath: string): Promise<vo
   return typedInvoke('install_openclaw_extension', { openclawPath });
 }
 
-export async function getOpenclawExtensionVersion(openclawPath: string): Promise<string | null> {
-  return typedInvoke('get_openclaw_extension_version', { openclawPath });
-}
-
-export async function isOpenclawExtensionStale(openclawPath: string): Promise<boolean> {
-  return typedInvoke('is_openclaw_extension_stale', { openclawPath });
-}
-
 export async function getExtensionContent(): Promise<string> {
   return typedInvoke('get_extension_content');
 }
@@ -604,4 +653,86 @@ export async function writeOpenclawSystemContext(
   platform: string,
 ): Promise<void> {
   return typedInvoke('write_openclaw_system_context', { clientUuid, hostname, platform });
+}
+
+// Phase 2/5 data commands
+
+export async function getAllProjects(): Promise<ProjectSummary[]> {
+  return typedInvoke('get_all_projects');
+}
+
+export async function getProject(projectId: string): Promise<ProjectWithContent> {
+  return typedInvoke('get_project', { projectId });
+}
+
+export async function createProjectWithState(
+  projectId: string,
+  projectPath: string,
+  title: string,
+  status: string,
+  description: string,
+): Promise<void> {
+  return typedInvoke('create_project_with_state', {
+    projectId,
+    projectPath,
+    title,
+    status,
+    description,
+  });
+}
+
+export async function updateRoadmapItem(
+  projectId: string,
+  itemId: string,
+  changes: RoadmapItemChanges,
+): Promise<void> {
+  return typedInvoke('update_roadmap_item', { projectId, itemId, changes });
+}
+
+export async function reorderItem(
+  projectId: string,
+  itemId: string,
+  newPriority: number,
+  newStatus?: string | null,
+): Promise<void> {
+  return typedInvoke('reorder_item', { projectId, itemId, newPriority, newStatus });
+}
+
+export interface BranchInjectionResult {
+  name: string;
+  success: boolean;
+  skipReason?: string;
+}
+
+export async function injectAgentGuidance(
+  projectPath: string,
+): Promise<BranchInjectionResult[]> {
+  return typedInvoke('inject_agent_guidance', { projectPath });
+}
+
+// =============================================================================
+// Phase 7: Debug Export & Validation
+// =============================================================================
+
+export interface ValidationRejection {
+  timestamp: number;
+  project_id: string;
+  rejected_fields: string[];
+  reason: string;
+  resolved: boolean;
+}
+
+export async function exportDebugInfo(): Promise<string> {
+  return typedInvoke('export_debug_info');
+}
+
+export async function getValidationHistory(): Promise<Record<string, ValidationRejection[]>> {
+  return typedInvoke('get_validation_history');
+}
+
+export async function markRejectionResolved(
+  projectId: string,
+  timestamp: number,
+): Promise<boolean> {
+  return typedInvoke('mark_rejection_resolved', { projectId, timestamp });
 }

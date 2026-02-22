@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, GitBranch } from 'lucide-react';
+import { ArrowLeft, Cloud, GitBranch } from 'lucide-react';
 import type { RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import type { BadgeProps } from '../ui/badge';
 import { StatusBadge } from './StatusBadge';
@@ -41,9 +41,10 @@ interface RoadmapItemDetailProps {
   initialTab?: DocTab;
   onBack: () => void;
   onStatusChange: (itemId: string, status: RoadmapStatus) => void;
-  fetchDocContent: (path: string) => Promise<string>;
+  fetchDocContent: (path: string, opts?: { itemId?: string; docType?: 'spec' | 'plan' }) => Promise<string>;
   getDocContent: (path: string) => string | undefined;
   getSourceBranch?: (path: string) => string | undefined;
+  getContentSource?: (path: string) => 'local' | 'synced-snapshot' | 'git-show' | undefined;
   docLoading: boolean;
 }
 
@@ -56,6 +57,7 @@ export function RoadmapItemDetail({
   fetchDocContent,
   getDocContent,
   getSourceBranch,
+  getContentSource,
   docLoading,
 }: RoadmapItemDetailProps) {
   const availableTabs: DocTab[] = [];
@@ -66,7 +68,7 @@ export function RoadmapItemDetail({
     initialTab && availableTabs.includes(initialTab) ? initialTab : availableTabs[0] ?? null,
   );
 
-  // Fetch doc content when tab changes
+  // Fetch doc content when tab changes — passes item context for content field lookup
   useEffect(() => {
     if (!activeTab) return;
     const path = activeTab === 'spec' ? item.docs.spec : item.docs.plan;
@@ -75,12 +77,13 @@ export function RoadmapItemDetail({
     const cached = getDocContent(path);
     if (cached !== undefined) return;
 
-    void fetchDocContent(path);
-  }, [activeTab, item.docs.spec, item.docs.plan, fetchDocContent, getDocContent]);
+    void fetchDocContent(path, { itemId: item.id, docType: activeTab });
+  }, [activeTab, item.id, item.docs.spec, item.docs.plan, fetchDocContent, getDocContent]);
 
   const activeDocPath = activeTab === 'spec' ? item.docs.spec : item.docs.plan;
   const activeDocContent = activeDocPath ? getDocContent(activeDocPath) : undefined;
   const activeSourceBranch = activeDocPath ? getSourceBranch?.(activeDocPath) : undefined;
+  const activeContentSource = activeDocPath ? getContentSource?.(activeDocPath) : undefined;
 
   return (
     <div>
@@ -133,7 +136,14 @@ export function RoadmapItemDetail({
             ))}
           </div>
 
-          {activeSourceBranch && (
+          {activeContentSource === 'synced-snapshot' && (
+            <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+              <Cloud className="h-3 w-3" />
+              Viewing synced snapshot{activeSourceBranch ? ` from branch: ${activeSourceBranch}` : ''}
+            </div>
+          )}
+
+          {activeContentSource === 'git-show' && activeSourceBranch && (
             <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
               <GitBranch className="h-3 w-3" />
               Viewing from branch: {activeSourceBranch}

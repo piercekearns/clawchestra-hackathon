@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { ROADMAP_ITEM_STATUSES, PROJECT_STATUSES } from './constants';
 
 // ---------------------------------------------------------------------------
 // Roadmap item schema
@@ -17,7 +18,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 export const RoadmapItemSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
-  status: z.enum(['pending', 'up-next', 'in-progress', 'complete']),
+  status: z.enum(ROADMAP_ITEM_STATUSES),
   priority: z.number().int().optional(),
   nextAction: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -43,7 +44,7 @@ export const StateJsonDocumentSchema = z.object({
   project: z.object({
     id: z.string().min(1),
     title: z.string().min(1),
-    status: z.enum(['in-progress', 'up-next', 'pending', 'dormant', 'archived']),
+    status: z.enum(PROJECT_STATUSES),
     description: z.string(),
     parentId: z.string().nullable(),
     tags: z.array(z.string()),
@@ -155,4 +156,75 @@ export interface ClawchestraReadyPayload {
   projectCount: number;
   migratedCount: number;
   syncStatus: 'ok' | 'failed' | 'disabled';
+}
+
+// ---------------------------------------------------------------------------
+// Tauri command response types (Phase 5.0.8)
+// ---------------------------------------------------------------------------
+
+/** Roadmap item with all DB fields including branch, content, and timestamps.
+ * Returned by `get_project` Tauri command (distinct from event payloads which
+ * exclude content fields for size). Content fields are Phase 5.21 additions. */
+export interface RoadmapItemWithContent extends RoadmapItemState {
+  /** Per-field HLC timestamps (present in DB responses, absent from event payloads) */
+  title__updatedAt: number;
+  status__updatedAt: number;
+  priority__updatedAt: number;
+  nextAction__updatedAt?: number;
+  tags__updatedAt?: number;
+  icon__updatedAt?: number;
+  blockedBy__updatedAt?: number;
+  specDoc__updatedAt?: number;
+  planDoc__updatedAt?: number;
+  completedAt__updatedAt?: number;
+  /** Branch where spec doc lives (for cross-branch git show) */
+  specDocBranch?: string;
+  specDocBranch__updatedAt?: number;
+  /** Branch where plan doc lives (for cross-branch git show) */
+  planDocBranch?: string;
+  planDocBranch__updatedAt?: number;
+  /** Snapshot of spec doc content for cross-device access */
+  specDocContent?: string;
+  specDocContent__updatedAt?: number;
+  /** Snapshot of plan doc content for cross-device access */
+  planDocContent?: string;
+  planDocContent__updatedAt?: number;
+}
+
+/** Full project detail returned by `get_project` Tauri command.
+ * Includes content and branch fields on roadmap items. */
+export interface ProjectWithContent {
+  id: string;
+  projectPath: string;
+  stateJsonMigrated: boolean;
+  project: {
+    id: string;
+    title: string;
+    title__updatedAt: number;
+    status: string;
+    status__updatedAt: number;
+    description: string;
+    description__updatedAt: number;
+    parentId: string | null;
+    parentId__updatedAt: number;
+    tags: string[];
+    tags__updatedAt: number;
+  };
+  roadmapItems: RoadmapItemWithContent[];
+}
+
+/** Project summary returned by `get_all_projects` Tauri command.
+ * Lightweight — no roadmap items, no content. */
+export interface ProjectSummary {
+  id: string;
+  projectPath: string;
+  title: string;
+  status: string;
+  description: string;
+  parentId: string | null;
+  tags: string[];
+  roadmapItemCount: number;
+  stateJsonMigrated: boolean;
+  /** Full roadmap items (metadata only — content fields excluded). */
+  roadmapItems: RoadmapItemState[];
 }

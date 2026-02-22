@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod';
+import { ROADMAP_ITEM_STATUSES, PROJECT_STATUSES } from './constants';
 
 // ---------------------------------------------------------------------------
 // Project data (with per-field __updatedAt siblings)
@@ -18,7 +19,7 @@ export const DbProjectDataSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   title__updatedAt: z.number(),
-  status: z.enum(['in-progress', 'up-next', 'pending', 'dormant', 'archived']),
+  status: z.enum(PROJECT_STATUSES),
   status__updatedAt: z.number(),
   description: z.string(),
   description__updatedAt: z.number(),
@@ -38,7 +39,7 @@ export const DbRoadmapItemSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   title__updatedAt: z.number(),
-  status: z.enum(['pending', 'up-next', 'in-progress', 'complete']),
+  status: z.enum(ROADMAP_ITEM_STATUSES),
   status__updatedAt: z.number(),
   priority: z.number().int(),
   priority__updatedAt: z.number(),
@@ -58,6 +59,10 @@ export const DbRoadmapItemSchema = z.object({
   specDocBranch__updatedAt: z.number().optional(),
   planDocBranch: z.string().optional(),
   planDocBranch__updatedAt: z.number().optional(),
+  specDocContent: z.string().optional(),
+  specDocContent__updatedAt: z.number().optional(),
+  planDocContent: z.string().optional(),
+  planDocContent__updatedAt: z.number().optional(),
   completedAt: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -74,6 +79,7 @@ export type DbRoadmapItem = z.infer<typeof DbRoadmapItemSchema>;
 
 export const DbProjectSchema = z.object({
   projectPath: z.string(),
+  stateJsonMigrated: z.boolean().default(false),
   project: DbProjectDataSchema,
   roadmapItems: z.record(z.string(), DbRoadmapItemSchema),
 });

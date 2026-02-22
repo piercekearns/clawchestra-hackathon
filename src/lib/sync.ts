@@ -1,19 +1,87 @@
 /**
- * sync.ts -- Frontend sync orchestration for Clawchestra.
+ * sync.ts -- Frontend sync orchestration and status display for Clawchestra.
  *
  * Phase 6.6 of the Architecture Direction plan.
  *
- * Coordinates sync triggers:
- * - On launch: read local -> read remote -> HLC merge -> write both
- * - On close: flush to remote with 3s timeout
- *
- * Local mode sync is handled entirely in Rust (sync.rs).
- * Remote mode HTTP calls are made here (frontend has `fetch` built in),
- * with merge logic delegated to Rust via Tauri commands.
+ * Sync triggers (on-launch, continuous, on-close) are owned by Rust (sync.rs).
+ * This module provides:
+ * - Remote mode HTTP sync for launch/close (frontend has `fetch` built in)
+ * - SyncStatus type for UI display
+ * - formatLastSyncTime() helper for human-readable timestamps
+ * - getSyncStatusForDisplay() selector consumed by Header + Settings Dialog
  */
 
 import type { SyncResult } from './tauri';
 import type { SyncMode } from './settings';
+
+// ---------------------------------------------------------------------------
+// Sync status types and helpers (consumed by Header + Settings Dialog)
+// ---------------------------------------------------------------------------
+
+/** Sync state for the UI indicator. */
+export type SyncStatus = 'synced' | 'syncing' | 'error' | 'disabled';
+
+/** Display model for the sync status indicator. */
+export interface SyncStatusDisplay {
+  status: SyncStatus;
+  label: string;
+  lastSyncTime: string | null;
+}
+
+/**
+ * Format a wall-clock timestamp (milliseconds since epoch) as a human-readable
+ * relative time string (e.g., "just now", "2 minutes ago", "1 hour ago").
+ */
+export function formatLastSyncTime(timestampMs: number | null | undefined): string | null {
+  if (!timestampMs) return null;
+  const now = Date.now();
+  const diffMs = now - timestampMs;
+
+  if (diffMs < 0) return 'just now'; // clock skew tolerance
+  if (diffMs < 60_000) return 'just now';
+  if (diffMs < 3_600_000) {
+    const mins = Math.floor(diffMs / 60_000);
+    return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  }
+  if (diffMs < 86_400_000) {
+    const hours = Math.floor(diffMs / 3_600_000);
+    return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  }
+  const days = Math.floor(diffMs / 86_400_000);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/**
+ * Derive the sync status display model from current state.
+ * Consumed by the Header sync indicator and Settings Dialog.
+ */
+export function getSyncStatusForDisplay(
+  syncMode: SyncMode,
+  lastSyncedAt: number | null | undefined,
+  lastSyncError: string | null | undefined,
+): SyncStatusDisplay {
+  if (syncMode === 'Disabled' || syncMode === 'Unknown') {
+    return { status: 'disabled', label: 'Sync disabled', lastSyncTime: null };
+  }
+
+  if (lastSyncError) {
+    return {
+      status: 'error',
+      label: 'Sync failed — will retry on next change',
+      lastSyncTime: formatLastSyncTime(lastSyncedAt),
+    };
+  }
+
+  if (!lastSyncedAt) {
+    return { status: 'synced', label: 'Not synced yet', lastSyncTime: null };
+  }
+
+  return {
+    status: 'synced',
+    label: 'Synced',
+    lastSyncTime: formatLastSyncTime(lastSyncedAt),
+  };
+}
 import {
   syncLocalLaunch,
   syncMergeRemote,

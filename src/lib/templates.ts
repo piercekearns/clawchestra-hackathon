@@ -28,12 +28,8 @@ export async function bootstrapProjectTemplates(localPath: string, projectTitle:
     TODAY: today,
   };
 
-  const projectTemplate = fillTemplate(
-    await readTemplate('docs/templates/PROJECT.md'),
-    replacements,
-  );
-  const roadmapTemplate = fillTemplate(
-    await readTemplate('docs/templates/ROADMAP.md'),
+  const clawchestraTemplate = fillTemplate(
+    await readTemplate('docs/templates/CLAWCHESTRA.md'),
     replacements,
   );
   const agentsTemplate = fillTemplate(
@@ -41,7 +37,6 @@ export async function bootstrapProjectTemplates(localPath: string, projectTitle:
     replacements,
   );
 
-  await writeIfMissing(`${resolvedRepoPath}/PROJECT.md`, projectTemplate);
-  await writeIfMissing(`${resolvedRepoPath}/ROADMAP.md`, roadmapTemplate);
+  await writeIfMissing(`${resolvedRepoPath}/CLAWCHESTRA.md`, clawchestraTemplate);
   await writeIfMissing(`${resolvedRepoPath}/AGENTS.md`, agentsTemplate);
 }

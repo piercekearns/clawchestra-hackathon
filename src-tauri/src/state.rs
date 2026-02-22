@@ -15,6 +15,16 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 // ---------------------------------------------------------------------------
+// Status constants (Phase 5.1)
+// ---------------------------------------------------------------------------
+
+/// Valid statuses for a roadmap item.
+pub const ROADMAP_ITEM_STATUSES: &[&str] = &["pending", "up-next", "in-progress", "complete"];
+
+/// Valid statuses for a project.
+pub const PROJECT_STATUSES: &[&str] = &["in-progress", "up-next", "pending", "dormant", "archived"];
+
+// ---------------------------------------------------------------------------
 // Branded newtypes
 // ---------------------------------------------------------------------------
 
@@ -167,6 +177,14 @@ pub struct DbRoadmapItem {
     pub plan_doc_branch: Option<String>,
     #[serde(default, rename = "planDocBranch__updatedAt")]
     pub plan_doc_branch_updated_at: Option<u64>,
+    #[serde(default, rename = "specDocContent")]
+    pub spec_doc_content: Option<String>,
+    #[serde(default, rename = "specDocContent__updatedAt")]
+    pub spec_doc_content_updated_at: Option<u64>,
+    #[serde(default, rename = "planDocContent")]
+    pub plan_doc_content: Option<String>,
+    #[serde(default, rename = "planDocContent__updatedAt")]
+    pub plan_doc_content_updated_at: Option<u64>,
     #[serde(default, rename = "completedAt")]
     pub completed_at: Option<String>,
     #[serde(default, rename = "completedAt__updatedAt")]
@@ -178,6 +196,10 @@ pub struct DbRoadmapItem {
 #[serde(rename_all = "camelCase")]
 pub struct DbProjectEntry {
     pub project_path: String,
+    /// Per-project migration gate: true after ROADMAP.md→state.json migration completes.
+    /// Frontend checks this to decide Tauri commands vs writeRoadmap() path.
+    #[serde(default)]
+    pub state_json_migrated: bool,
     pub project: DbProjectData,
     #[serde(rename = "roadmapItems")]
     pub roadmap_items: HashMap<String, DbRoadmapItem>,
@@ -236,6 +258,9 @@ pub fn db_json_path() -> Result<PathBuf, String> {
 
 /// The inner type behind `Arc<tokio::sync::Mutex<AppState>>` — canonical runtime state.
 ///
+/// Hardcoded state history buffer size (Round 6 decision — no settings UI for this).
+pub const HISTORY_BUFFER_SIZE: usize = 20;
+
 /// All project/roadmap data lives here at runtime. db.json is the persistence
 /// layer (debounced writes). state.json files are projections for agent
 /// consumption.
@@ -251,12 +276,13 @@ pub struct AppState {
     pub hlc_counter: u64,
     /// Whether the in-memory DB has unflushed changes
     pub dirty: bool,
-    /// Maximum state history buffer size (from settings)
-    pub history_buffer_size: usize,
     /// This client's stable UUID (set once at startup, used for sync tie-breaking)
     pub client_uuid: String,
     /// Per-project circular buffer of validation rejection events (Phase 7.3)
     pub validation_rejections: HashMap<ProjectId, VecDeque<ValidationRejection>>,
+    /// SHA-256 hashes of recently written-back files (Phase 6.6 echo prevention).
+    /// Keyed by absolute file path. Cleared after the watcher processes the echo.
+    pub writeback_hashes: HashMap<String, String>,
 }
 
 impl Default for AppState {
@@ -267,9 +293,9 @@ impl Default for AppState {
             state_history: HashMap::new(),
             hlc_counter: 0,
             dirty: false,
-            history_buffer_size: 20,
             client_uuid: String::new(),
             validation_rejections: HashMap::new(),
+            writeback_hashes: HashMap::new(),
         }
     }
 }
@@ -303,7 +329,7 @@ impl AppState {
             .state_history
             .entry(project_id.clone())
             .or_insert_with(VecDeque::new);
-        if buffer.len() >= self.history_buffer_size {
+        if buffer.len() >= HISTORY_BUFFER_SIZE {
             buffer.pop_front();
         }
         buffer.push_back(entry);

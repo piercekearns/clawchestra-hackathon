@@ -5,6 +5,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
+import { injectAgentGuidance } from '../../lib/tauri';
 import type { ProjectModalActions } from './types';
 
 interface ProjectDetailsProps {
@@ -22,6 +23,8 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
   const [tags, setTags] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [injecting, setInjecting] = useState(false);
+  const [injectionResult, setInjectionResult] = useState<string | null>(null);
 
   useEffect(() => {
     setNextAction(project.nextAction ?? '');
@@ -207,7 +210,44 @@ export function ProjectDetails({ project, actions }: ProjectDetailsProps) {
                   Push Repo
                 </Button>
               )}
+
+              {project.hasGit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  title="Inject Clawchestra integration section into CLAUDE.md on all local branches"
+                  disabled={injecting}
+                  onClick={async () => {
+                    setInjecting(true);
+                    setInjectionResult(null);
+                    try {
+                      const results = await injectAgentGuidance(project.dirPath);
+                      const succeeded = results.filter((r) => r.success).length;
+                      const skipped = results.filter((r) => r.skipReason).length;
+                      setInjectionResult(
+                        `Injected ${succeeded}/${results.length} branches` +
+                        (skipped > 0 ? ` (${skipped} skipped)` : ''),
+                      );
+                    } catch (err) {
+                      setInjectionResult(
+                        `Failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+                      );
+                    } finally {
+                      setInjecting(false);
+                    }
+                  }}
+                >
+                  {injecting ? 'Injecting...' : 'Inject Agent Guidance'}
+                </Button>
+              )}
             </div>
+
+            {injectionResult && (
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                {injectionResult}
+              </p>
+            )}
           </div>
         </div>
       </div>

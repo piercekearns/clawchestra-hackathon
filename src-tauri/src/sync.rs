@@ -13,13 +13,16 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
 use crate::db_persistence::flush_db_json;
+use crate::state::{AppState, DbJson, DbProjectData, DbRoadmapItem};
 use crate::util::write_json_atomic;
-use crate::state::{DbJson, DbProjectData, DbRoadmapItem};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,6 +56,8 @@ export default function (api: any) {{
 
   const DATA_ROOT = path.join(os.homedir(), '.openclaw', 'clawchestra');
   const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5MB limit
+  const ALLOWED_FILES = new Set(['db.json', 'settings.json']);
+  const CONTENT_FIELDS = ['specDocContent', 'specDocContent__updatedAt', 'planDocContent', 'planDocContent__updatedAt'];
 
   // Constant-time string comparison to prevent timing attacks on bearer tokens
   function safeEqual(a: string, b: string): boolean {{
@@ -63,20 +68,27 @@ export default function (api: any) {{
   api.registerHttpRoute({{
     path: '/clawchestra/data/*',
     handler: async (req: any, res: any) => {{
-      // Bearer token auth (constant-time comparison for remote sync mode)
-      const settings = JSON.parse(
-        await fs.readFile(path.join(DATA_ROOT, 'settings.json'), 'utf-8').catch(() => '{{}}')
-      );
-      if (settings.bearerToken) {{
-        const auth = req.headers.authorization;
-        const expected = `Bearer ${{settings.bearerToken}}`;
-        if (!auth || !safeEqual(auth, expected)) {{
-          return res.status(401).json({{ error: 'Unauthorized' }});
-        }}
+      // Bearer token auth — fail-closed
+      const settingsRaw = await fs.readFile(path.join(DATA_ROOT, 'settings.json'), 'utf-8').catch(() => null);
+      if (!settingsRaw) {{
+        return res.status(500).json({{ error: 'Extension not configured — settings.json missing or unreadable' }});
+      }}
+      let settings;
+      try {{
+        settings = JSON.parse(settingsRaw);
+      }} catch {{
+        return res.status(500).json({{ error: 'Extension configuration invalid — settings.json is malformed JSON' }});
+      }}
+      if (!settings.bearerToken) {{
+        return res.status(500).json({{ error: 'Extension not configured — missing bearer token' }});
+      }}
+      const auth = req.headers.authorization;
+      const expected = `Bearer ${{settings.bearerToken}}`;
+      if (!auth || !safeEqual(auth, expected)) {{
+        return res.status(401).json({{ error: 'Unauthorized' }});
       }}
 
-      // Path validation -- use path.sep suffix to prevent prefix confusion
-      // (e.g., DATA_ROOT="/foo/bar" must not match "/foo/bar-evil/secret")
+      // Path validation — use path.sep suffix to prevent prefix confusion
       const requestedPath = req.params[0] || 'db.json';
       const resolved = path.resolve(DATA_ROOT, requestedPath);
       if (resolved !== DATA_ROOT && !resolved.startsWith(DATA_ROOT + path.sep)) {{
@@ -87,6 +99,20 @@ export default function (api: any) {{
         try {{
           const content = await fs.readFile(resolved, 'utf-8');
           res.setHeader('Content-Type', 'application/json');
+          // Progressive loading: ?fields=index strips content fields for fast initial paint
+          if (req.query?.fields === 'index') {{
+            const data = JSON.parse(content);
+            if (data.projects) {{
+              for (const proj of Object.values(data.projects) as any[]) {{
+                if (proj.roadmapItems) {{
+                  for (const item of Object.values(proj.roadmapItems) as any[]) {{
+                    for (const f of CONTENT_FIELDS) delete item[f];
+                  }}
+                }}
+              }}
+            }}
+            return res.send(JSON.stringify(data));
+          }}
           return res.send(content);
         }} catch {{
           return res.status(404).json({{ error: 'Not found' }});
@@ -94,12 +120,39 @@ export default function (api: any) {{
       }}
 
       if (req.method === 'PUT') {{
-        const body = JSON.stringify(req.body);
-        if (body.length > MAX_BODY_SIZE) {{
+        // Security: restrict PUT to allowlisted filenames only
+        const basename = path.basename(resolved);
+        if (!ALLOWED_FILES.has(basename)) {{
+          return res.status(403).json({{ error: `Cannot write to '${{basename}}' — only ${{[...ALLOWED_FILES].join(', ')}} allowed` }});
+        }}
+        const serialized = JSON.stringify(req.body, null, 2);
+        if (serialized.length > MAX_BODY_SIZE) {{
           return res.status(413).json({{ error: 'Payload too large' }});
         }}
+        // Body validation for db.json
+        if (basename === 'db.json') {{
+          if (!req.body || typeof req.body !== 'object') {{
+            return res.status(422).json({{ error: 'Invalid db.json — body must be a JSON object' }});
+          }}
+          if (typeof req.body._schemaVersion !== 'number') {{
+            return res.status(422).json({{ error: 'Invalid db.json — _schemaVersion must be a number' }});
+          }}
+          if (typeof req.body._hlcCounter !== 'number') {{
+            return res.status(422).json({{ error: 'Invalid db.json — _hlcCounter must be a number' }});
+          }}
+          if (typeof req.body.projects !== 'object' || req.body.projects === null) {{
+            return res.status(422).json({{ error: 'Invalid db.json — projects must be an object' }});
+          }}
+        }}
+        // Ensure target directory exists before realpath check
         await fs.mkdir(path.dirname(resolved), {{ recursive: true }});
-        await fs.writeFile(resolved, JSON.stringify(req.body, null, 2));
+        // Security: verify resolved path after realpath (symlink bypass prevention)
+        const realResolved = await fs.realpath(path.dirname(resolved)).catch(() => null);
+        const realDataRoot = await fs.realpath(DATA_ROOT).catch(() => DATA_ROOT);
+        if (!realResolved || !realResolved.startsWith(realDataRoot)) {{
+          return res.status(403).json({{ error: 'Path traversal blocked' }});
+        }}
+        await fs.writeFile(resolved, serialized);
         return res.json({{ ok: true }});
       }}
 
@@ -156,37 +209,6 @@ pub fn install_extension(openclaw_path: &str) -> Result<(), String> {
     );
 
     Ok(())
-}
-
-/// Check the installed extension version. Returns None if not installed or unreadable.
-pub fn get_installed_extension_version(openclaw_path: &str) -> Option<String> {
-    let extension_path = Path::new(openclaw_path)
-        .join("extensions")
-        .join("clawchestra-data-endpoint.ts");
-
-    let content = fs::read_to_string(&extension_path).ok()?;
-
-    // Parse version from `const EXTENSION_VERSION = '1.0.0';`
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("const EXTENSION_VERSION") {
-            if let Some(start) = trimmed.find('\'') {
-                if let Some(end) = trimmed[start + 1..].find('\'') {
-                    return Some(trimmed[start + 1..start + 1 + end].to_string());
-                }
-            }
-        }
-    }
-
-    None
-}
-
-/// Check if the installed extension is stale (older than current).
-pub fn is_extension_stale(openclaw_path: &str) -> bool {
-    match get_installed_extension_version(openclaw_path) {
-        Some(installed) => installed != EXTENSION_VERSION,
-        None => true, // Not installed = stale
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -522,6 +544,8 @@ fn merge_roadmap_item(
     merge_optional_field!(plan_doc, plan_doc_updated_at);
     merge_optional_field!(spec_doc_branch, spec_doc_branch_updated_at);
     merge_optional_field!(plan_doc_branch, plan_doc_branch_updated_at);
+    merge_optional_field!(spec_doc_content, spec_doc_content_updated_at);
+    merge_optional_field!(plan_doc_content, plan_doc_content_updated_at);
     merge_optional_field!(completed_at, completed_at_updated_at);
 
     (from_remote, from_local)
@@ -730,6 +754,281 @@ pub fn sync_local_on_close(db: &DbJson) -> SyncResult {
 }
 
 // ---------------------------------------------------------------------------
+// 6.6 Continuous sync handle (Phase 6.6)
+// ---------------------------------------------------------------------------
+
+/// Manages the 2-second continuous sync loop.
+///
+/// Polls every 2 seconds, checking if the HLC counter has changed since the
+/// last sync. If yes, syncs to the OpenClaw data directory. This approach
+/// avoids wiring sync triggers into every mutation command — the polling
+/// interval naturally debounces rapid mutations.
+///
+/// Local mode syncs directly to the filesystem. Remote mode is handled by
+/// TypeScript (has `fetch` built in).
+pub struct SyncHandle {
+    shutdown: Arc<AtomicBool>,
+}
+
+impl SyncHandle {
+    /// Start the continuous sync loop. Returns a handle for shutdown.
+    pub fn start(state: Arc<Mutex<AppState>>) -> Self {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_clone = shutdown.clone();
+
+        tauri::async_runtime::spawn(async move {
+            let mut last_synced_hlc: u64 = 0;
+            loop {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                if shutdown_clone.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                // Check if HLC counter changed (mutation happened)
+                let current_hlc = {
+                    let guard = state.lock().await;
+                    guard.db.hlc_counter
+                };
+
+                if current_hlc > last_synced_hlc {
+                    perform_continuous_sync(&state).await;
+                    // Update tracking counter after sync
+                    last_synced_hlc = {
+                        let guard = state.lock().await;
+                        guard.db.hlc_counter
+                    };
+                }
+            }
+            tracing::info!("Continuous sync loop stopped");
+        });
+
+        Self { shutdown }
+    }
+
+    /// Stop the continuous sync loop.
+    pub fn shutdown(&self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Perform a single continuous sync cycle (local mode).
+///
+/// Reads the OpenClaw copy of db.json, merges with in-memory state using HLC,
+/// and writes the merged result back to both locations.
+async fn perform_continuous_sync(state: &Arc<Mutex<AppState>>) {
+    // Snapshot under lock
+    let (db_snapshot, client_uuid, snapshot_hlc) = {
+        let guard = state.lock().await;
+        (
+            guard.db.clone(),
+            guard.client_uuid.clone(),
+            guard.db.hlc_counter,
+        )
+    };
+
+    // Read remote (local filesystem mode)
+    let remote_db = match read_local_openclaw_db() {
+        Some(db) => db,
+        None => {
+            // No remote file yet — just write local
+            if let Err(e) = write_local_openclaw_db(&db_snapshot) {
+                tracing::warn!("Continuous sync: failed to write initial sync file: {}", e);
+            }
+            return;
+        }
+    };
+
+    // Merge
+    let (mut merged, from_remote, _from_local) =
+        merge_db_json(&db_snapshot, &remote_db, &client_uuid);
+    fix_post_merge_invariants(&mut merged);
+
+    // Update last_synced_at (wall-clock, NOT HLC — used for write-back mtime comparison)
+    merged.last_synced_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    // Write to OpenClaw location
+    if let Err(e) = write_local_openclaw_db(&merged) {
+        tracing::warn!("Continuous sync: failed to write to OpenClaw: {}", e);
+        return;
+    }
+
+    // Write-back: if remote had content changes, write to local git files (Phase 6.6)
+    let writeback_hashes = if from_remote > 0 {
+        perform_write_backs(&db_snapshot, &merged)
+    } else {
+        Vec::new()
+    };
+
+    // Re-acquire lock; CAS check for concurrent mutations during sync
+    let mut guard = state.lock().await;
+    if guard.db.hlc_counter > snapshot_hlc {
+        // Concurrent mutation happened while we were syncing — re-merge
+        let (mut reconciled, _, _) = merge_db_json(&guard.db, &merged, &guard.client_uuid);
+        fix_post_merge_invariants_pub(&mut reconciled);
+        guard.db = reconciled;
+    } else if from_remote > 0 {
+        // Remote had newer fields — update in-memory state
+        guard.db = merged;
+    }
+    guard.hlc_counter = guard.db.hlc_counter;
+
+    // Store write-back hashes for echo prevention (cleared by watcher after match)
+    for (path, hash) in writeback_hashes {
+        guard.writeback_hashes.insert(path, hash);
+    }
+
+    tracing::debug!(
+        "Continuous sync completed: {} fields from remote",
+        from_remote
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 6.6 Write-back mechanism (git file sync)
+// ---------------------------------------------------------------------------
+
+/// Compare merged DB against pre-merge snapshot to find content field changes
+/// from remote, then write changed content back to local git files.
+///
+/// Returns a Vec of (absolute_path, sha256_hash) for echo prevention.
+fn perform_write_backs(snapshot: &DbJson, merged: &DbJson) -> Vec<(String, String)> {
+    let mut hashes: Vec<(String, String)> = Vec::new();
+
+    for (project_id, merged_entry) in &merged.projects {
+        let snapshot_entry = match snapshot.projects.get(project_id) {
+            Some(e) => e,
+            None => continue, // Entire project from remote — no write-back (no local repo)
+        };
+
+        for (item_id, merged_item) in &merged_entry.roadmap_items {
+            let snapshot_item = match snapshot_entry.roadmap_items.get(item_id) {
+                Some(i) => i,
+                None => continue, // New item from remote — no local file to write to
+            };
+
+            // Check specDocContent change
+            if merged_item.spec_doc_content != snapshot_item.spec_doc_content {
+                if let (Some(content), Some(doc_path)) =
+                    (&merged_item.spec_doc_content, &merged_item.spec_doc)
+                {
+                    if let Some(hash) = maybe_write_back_file(
+                        &merged_entry.project_path,
+                        doc_path,
+                        content,
+                        merged_item.spec_doc_branch.as_deref(),
+                        merged.last_synced_at,
+                    ) {
+                        hashes.push(hash);
+                    }
+                }
+            }
+
+            // Check planDocContent change
+            if merged_item.plan_doc_content != snapshot_item.plan_doc_content {
+                if let (Some(content), Some(doc_path)) =
+                    (&merged_item.plan_doc_content, &merged_item.plan_doc)
+                {
+                    if let Some(hash) = maybe_write_back_file(
+                        &merged_entry.project_path,
+                        doc_path,
+                        content,
+                        merged_item.plan_doc_branch.as_deref(),
+                        merged.last_synced_at,
+                    ) {
+                        hashes.push(hash);
+                    }
+                }
+            }
+        }
+    }
+
+    if !hashes.is_empty() {
+        tracing::info!("Write-back: wrote {} files from remote content", hashes.len());
+    }
+
+    hashes
+}
+
+/// Attempt to write content back to a local git file.
+///
+/// Returns `Some((absolute_path, sha256_hash))` on successful write, `None` if skipped.
+///
+/// Skipped when:
+/// - Current git branch doesn't match the expected branch (prevents cross-branch leakage)
+/// - Local file mtime is newer than `_lastSyncedAt` (user is actively editing)
+fn maybe_write_back_file(
+    project_path: &str,
+    doc_rel_path: &str,
+    content: &str,
+    expected_branch: Option<&str>,
+    last_synced_at: u64,
+) -> Option<(String, String)> {
+    let full_path = Path::new(project_path).join(doc_rel_path);
+
+    // Step 0: Check branch match (prevent cross-branch content leakage)
+    if let Some(expected) = expected_branch {
+        match crate::commands::git::run_git(project_path, &["rev-parse", "--abbrev-ref", "HEAD"]) {
+            Ok(current) => {
+                if current.trim() != expected {
+                    tracing::debug!(
+                        "Write-back skipped for {}: branch mismatch (current: {}, expected: {})",
+                        doc_rel_path,
+                        current.trim(),
+                        expected
+                    );
+                    return None;
+                }
+            }
+            Err(_) => {
+                // Not a git repo or git not available — skip write-back
+                return None;
+            }
+        }
+    }
+
+    // Step 1: Check file mtime vs _lastSyncedAt (wall-clock comparison)
+    if let Ok(metadata) = fs::metadata(&full_path) {
+        if let Ok(mtime) = metadata.modified() {
+            let mtime_ms = mtime
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            if mtime_ms > last_synced_at {
+                tracing::debug!(
+                    "Write-back skipped for {}: local file is newer than last sync",
+                    doc_rel_path
+                );
+                return None;
+            }
+        }
+    }
+    // If file doesn't exist yet, proceed (new file from remote)
+
+    // Step 2: Write content to the git file
+    let hash = crate::watcher::sha256_hex(content.as_bytes());
+    if let Some(parent) = full_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(&full_path, content) {
+        Ok(()) => {
+            tracing::info!(
+                "Write-back: wrote {} bytes to {}",
+                content.len(),
+                full_path.display()
+            );
+            Some((full_path.to_string_lossy().to_string(), hash))
+        }
+        Err(e) => {
+            tracing::warn!("Write-back failed for {}: {}", full_path.display(), e);
+            None
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -764,6 +1063,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Old Title".to_string(),
@@ -795,6 +1095,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "New Title".to_string(),
@@ -845,6 +1146,7 @@ mod tests {
                     "remote-proj".to_string(),
                     DbProjectEntry {
                         project_path: "/remote".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "remote-proj".to_string(),
                             title: "Remote Project".to_string(),
@@ -900,6 +1202,10 @@ mod tests {
                 spec_doc_branch_updated_at: None,
                 plan_doc_branch: None,
                 plan_doc_branch_updated_at: None,
+                spec_doc_content: None,
+                spec_doc_content_updated_at: None,
+                plan_doc_content: None,
+                plan_doc_content_updated_at: None,
                 completed_at: None,
                 completed_at_updated_at: None,
             },
@@ -932,6 +1238,10 @@ mod tests {
                 spec_doc_branch_updated_at: None,
                 plan_doc_branch: None,
                 plan_doc_branch_updated_at: None,
+                spec_doc_content: None,
+                spec_doc_content_updated_at: None,
+                plan_doc_content: None,
+                plan_doc_content_updated_at: None,
                 completed_at: None,
                 completed_at_updated_at: None,
             },
@@ -947,6 +1257,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Test".to_string(),
@@ -978,6 +1289,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Test".to_string(),
@@ -1027,6 +1339,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Local Title".to_string(),
@@ -1058,6 +1371,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Remote Title".to_string(),
@@ -1199,6 +1513,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Test".to_string(),
@@ -1230,6 +1545,7 @@ mod tests {
                     "proj-1".to_string(),
                     DbProjectEntry {
                         project_path: "/test".to_string(),
+                        state_json_migrated: false,
                         project: DbProjectData {
                             id: "proj-1".to_string(),
                             title: "Test".to_string(),
@@ -1271,6 +1587,10 @@ mod tests {
                                     spec_doc_branch_updated_at: None,
                                     plan_doc_branch: None,
                                     plan_doc_branch_updated_at: None,
+                                    spec_doc_content: None,
+                                    spec_doc_content_updated_at: None,
+                                    plan_doc_content: None,
+                                    plan_doc_content_updated_at: None,
                                     completed_at: None,
                                     completed_at_updated_at: None,
                                 },

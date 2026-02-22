@@ -131,12 +131,17 @@ export async function checkExistingProjectCompatibility(args: {
   const folderName = args.folderPath.split('/').pop() || args.folderPath;
   const repoInfo = await probeRepo(args.folderPath);
 
-  const projectPath = `${args.folderPath}/PROJECT.md`;
+  // 5.19: Check CLAWCHESTRA.md first, fall back to PROJECT.md
+  const clawchestraPath = `${args.folderPath}/CLAWCHESTRA.md`;
+  const legacyProjectPath = `${args.folderPath}/PROJECT.md`;
   const roadmapPath = `${args.folderPath}/ROADMAP.md`;
   const agentsPath = `${args.folderPath}/AGENTS.md`;
   const readmePath = `${args.folderPath}/README.md`;
 
-  const hasProjectMd = await pathExists(projectPath);
+  const hasClawchestraMd = await pathExists(clawchestraPath);
+  const hasLegacyProjectMd = await pathExists(legacyProjectPath);
+  const hasProjectMd = hasClawchestraMd || hasLegacyProjectMd;
+  const projectPath = hasClawchestraMd ? clawchestraPath : legacyProjectPath;
   const hasRoadmapMd = await pathExists(roadmapPath);
   const hasAgentsMd = await pathExists(agentsPath);
   const hasReadme = await pathExists(readmePath);
@@ -168,35 +173,37 @@ export async function checkExistingProjectCompatibility(args: {
   const scanPathCheck = ensureInsideScanPaths(args.folderPath, args.scanPaths);
   const actions: CompatibilityAction[] = [];
 
+  // 5.19: Dual-filename warning
+  if (hasClawchestraMd && hasLegacyProjectMd) {
+    actions.push({
+      type: 'prompt',
+      file: 'PROJECT.md',
+      description: 'Both CLAWCHESTRA.md and PROJECT.md found. CLAWCHESTRA.md takes precedence. Delete PROJECT.md to resolve.',
+      severity: 'warning',
+    });
+  }
+
   if (!hasProjectMd) {
     actions.push({
       type: 'create',
-      file: 'PROJECT.md',
-      description: 'Create PROJECT.md from template',
+      file: 'CLAWCHESTRA.md',
+      description: 'Create CLAWCHESTRA.md from template',
       severity: 'warning',
     });
-  } else if (projectMdStatus === 'missing-frontmatter') {
+  } else if (projectMdStatus === 'missing-frontmatter' && !hasClawchestraMd) {
+    // Only warn about frontmatter on legacy PROJECT.md (CLAWCHESTRA.md has no frontmatter)
     actions.push({
       type: 'update',
       file: 'PROJECT.md',
       description: 'Add frontmatter block to PROJECT.md',
       severity: 'warning',
     });
-  } else if (projectMdStatus === 'invalid-frontmatter') {
+  } else if (projectMdStatus === 'invalid-frontmatter' && !hasClawchestraMd) {
     actions.push({
       type: 'prompt',
       file: 'PROJECT.md',
       description: 'Fix invalid PROJECT.md frontmatter manually before adding',
       severity: 'error',
-    });
-  }
-
-  if (!hasRoadmapMd) {
-    actions.push({
-      type: 'create',
-      file: 'ROADMAP.md',
-      description: 'Create ROADMAP.md skeleton',
-      severity: 'info',
     });
   }
   if (!hasAgentsMd) {
@@ -426,8 +433,14 @@ export async function addExistingProjectFlow(
   };
 
   try {
-    const projectPath = `${localPath}/PROJECT.md`;
+    // 5.19: Use CLAWCHESTRA.md for new files, respect existing PROJECT.md for legacy
+    const hasClawchestra = await pathExists(`${localPath}/CLAWCHESTRA.md`);
+    const projectPath = hasClawchestra ? `${localPath}/CLAWCHESTRA.md` : `${localPath}/PROJECT.md`;
+    const projectFileName = hasClawchestra ? 'CLAWCHESTRA.md' : 'PROJECT.md';
+
     if (!input.report.hasProjectMd && input.addMissingProjectMd) {
+      // New creation: always use CLAWCHESTRA.md
+      const newProjectPath = `${localPath}/CLAWCHESTRA.md`;
       const projectMarkdown = matter.stringify(
         projectBodyTemplate(input.title),
         compactFrontmatter({
@@ -437,7 +450,7 @@ export async function addExistingProjectFlow(
           lastActivity: new Date().toISOString().split('T')[0],
         }),
       );
-      await writeWithBackup(projectPath, projectMarkdown);
+      await writeWithBackup(newProjectPath, projectMarkdown);
     } else if (input.report.projectMdStatus === 'missing-frontmatter' && input.addMissingFrontmatter) {
       const current = await readFile(projectPath);
       const patched = matter.stringify(
@@ -460,7 +473,7 @@ export async function addExistingProjectFlow(
 
     if (!input.report.isGitRepo && input.initGitIfMissing) {
       const filesForCommit = [
-        'PROJECT.md',
+        input.report.hasProjectMd ? projectFileName : 'CLAWCHESTRA.md',
         ...(input.addMissingRoadmap ? ['ROADMAP.md'] : []),
         ...(input.addMissingAgents ? ['AGENTS.md'] : []),
       ];

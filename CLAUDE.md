@@ -38,7 +38,6 @@
 ```
 .clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
 CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
-CHANGELOG.md                  — YAML frontmatter `entries:` array (completed items)
 roadmap/{item-id}.md          — Detail file per roadmap item
 docs/specs/{item-id}-spec.md  — Spec documents
 docs/plans/{item-id}-plan.md  — Plan documents
@@ -92,7 +91,7 @@ Read `AGENTS.md` for the complete operations reference, including:
 |------|---------|
 | `AGENTS.md` | Full operations reference (READ THIS) |
 | `.clawchestra/state.json` | JSON roadmap source of truth |
-| `CHANGELOG.md` | Completed items |
+| `CLAWCHESTRA.md` | Human documentation (frontmatter + markdown) |
 | `docs/specs/{item-id}-spec.md` | Spec documents |
 | `docs/plans/{item-id}-plan.md` | Plan documents |
 | `roadmap/{item-id}.md` | Detail files per item |
