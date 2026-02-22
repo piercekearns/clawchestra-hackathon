@@ -96,8 +96,14 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
           className="group absolute right-0 top-0 h-full w-3 cursor-col-resize"
         >
-          <div className={`absolute right-0 top-0 h-full w-0.5 transition-colors group-hover:bg-neutral-300 dark:group-hover:bg-neutral-600 ${isResizing ? 'bg-revival-accent-400/50' : ''}`} />
-          <div className="pointer-events-none absolute right-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-revival-accent-400/60 shadow-sm dark:bg-revival-accent-400/40" />
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-1">
+            <div
+              className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors group-hover:bg-neutral-300 dark:group-hover:bg-neutral-600 ${isResizing ? 'bg-revival-accent-400/40' : ''}`}
+            />
+            <div
+              className={`absolute left-1/2 top-1/2 h-6 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400/60 dark:bg-revival-accent-400/40'}`}
+            />
+          </div>
         </div>
       )}
     </div>
