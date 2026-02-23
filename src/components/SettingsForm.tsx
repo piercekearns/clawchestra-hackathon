@@ -336,12 +336,36 @@ export function SettingsForm({
               onClick={async () => {
                 try {
                   const info = await exportDebugInfo();
-                  await navigator.clipboard.writeText(info);
+                  let copiedOk = false;
+                  try {
+                    await navigator.clipboard.writeText(info);
+                    copiedOk = true;
+                  } catch {
+                    // Fallback: legacy clipboard path
+                    const textarea = document.createElement('textarea');
+                    textarea.value = info;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    try {
+                      copiedOk = document.execCommand('copy');
+                    } finally {
+                      document.body.removeChild(textarea);
+                    }
+                  }
+
+                  if (!copiedOk) {
+                    throw new Error('Clipboard write failed');
+                  }
+
                   setDebugCopied(true);
                   onNotify?.('success', 'Debug info copied');
                   setTimeout(() => setDebugCopied(false), 1500);
-                } catch {
-                  onNotify?.('error', 'Failed to copy debug info');
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : 'Failed to copy debug info';
+                  onNotify?.('error', message);
                 }
               }}
             >

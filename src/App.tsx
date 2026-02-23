@@ -1863,6 +1863,19 @@ export default function App() {
     onOpenLinkedProject: (projectId) => setSelectedProjectId(projectId),
   };
 
+  const toastContent = toasts.map((toast) => (
+    <div
+      key={toast.id}
+      className={`pointer-events-auto w-full max-w-md rounded-lg border px-3 py-2 text-sm shadow-lg backdrop-blur ${
+        toast.kind === 'error'
+          ? 'border-status-danger/45 bg-status-danger/12 text-status-danger dark:bg-status-danger/18'
+          : 'border-revival-accent-400/45 bg-neutral-100/92 text-neutral-900 dark:bg-neutral-900/92 dark:text-neutral-100'
+      }`}
+    >
+      {toast.message}
+    </div>
+  ));
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
       <TitleBar settingsMode={settingsPageOpen} />
@@ -2071,6 +2084,12 @@ export default function App() {
         </>
         )}
 
+      {settingsPageOpen && toasts.length > 0 && (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
+          {toastContent}
+        </div>
+      )}
+
       <div className={settingsPageOpen ? 'hidden' : ''}>
         <ChatShell
           messages={chatMessages}
@@ -2176,20 +2195,11 @@ export default function App() {
           }
         }}
       />
-      <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`pointer-events-auto w-full max-w-md rounded-lg border px-3 py-2 text-sm shadow-lg backdrop-blur ${
-              toast.kind === 'error'
-                ? 'border-status-danger/45 bg-status-danger/12 text-status-danger dark:bg-status-danger/18'
-                : 'border-revival-accent-400/45 bg-neutral-100/92 text-neutral-900 dark:bg-neutral-900/92 dark:text-neutral-100'
-            }`}
-          >
-            {toast.message}
-          </div>
-        ))}
-      </div>
+      {!settingsPageOpen && toasts.length > 0 && (
+        <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
+          {toastContent}
+        </div>
+      )}
     </div>
   );
 }
