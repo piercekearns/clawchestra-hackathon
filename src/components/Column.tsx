@@ -17,6 +17,7 @@ interface ColumnProps<T extends BoardItem> {
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
   renderItemHoverActions?: (item: T) => ReactNode;
+  showPriority?: boolean;
   /** Spread onto the header to make it a drag handle for column reordering */
   headerDragHandleProps?: Record<string, unknown>;
 }
@@ -33,6 +34,7 @@ export function Column<T extends BoardItem>({
   renderItemIndicators,
   renderItemActions,
   renderItemHoverActions,
+  showPriority = true,
 }: ColumnProps<T>) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const { onKeyDown: dragHandleOnKeyDown, ...dragHandleProps } = (headerDragHandleProps ?? {}) as {
@@ -100,6 +102,7 @@ export function Column<T extends BoardItem>({
                 renderIndicators={renderItemIndicators}
                 renderActions={renderItemActions}
                 renderHoverActions={renderItemHoverActions}
+                showPriority={showPriority}
               />
             ))}
 

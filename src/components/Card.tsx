@@ -11,6 +11,7 @@ interface CardProps<T extends BoardItem> {
   renderIndicators?: (item: T) => ReactNode;
   renderActions?: (item: T) => ReactNode;
   renderHoverActions?: (item: T) => ReactNode;
+  showPriority?: boolean;
 }
 
 export function Card<T extends BoardItem>({
@@ -20,6 +21,7 @@ export function Card<T extends BoardItem>({
   renderIndicators,
   renderActions,
   renderHoverActions,
+  showPriority = true,
 }: CardProps<T>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -50,7 +52,7 @@ export function Card<T extends BoardItem>({
         <div className="flex shrink-0 items-center gap-1">
           {renderIndicators ? renderIndicators(item) : null}
           {warning ? <AlertTriangle className="h-4 w-4 text-status-warning" /> : null}
-          {item.priority !== undefined ? (
+          {showPriority && item.priority !== undefined ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:border-neutral-600 dark:text-neutral-200">
               P{item.priority}
             </span>

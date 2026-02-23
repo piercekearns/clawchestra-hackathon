@@ -38,6 +38,7 @@ interface BoardProps<T extends BoardItem> {
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
   renderItemHoverActions?: (item: T) => ReactNode;
+  showPriority?: boolean;
 }
 
 const MIN_COLUMN_WIDTH = 300;
@@ -117,6 +118,7 @@ export function Board<T extends BoardItem>({
   renderItemIndicators,
   renderItemActions,
   renderItemHoverActions,
+  showPriority,
 }: BoardProps<T>) {
   const collapsedColumns = useDashboardStore(
     (s) => s.collapsedColumns[boardId] ?? EMPTY_ARRAY,
@@ -161,6 +163,7 @@ export function Board<T extends BoardItem>({
   );
 
   const grouped = useMemo(() => groupByStatus(localItems, orderedColumns), [orderedColumns, localItems]);
+  const resolvedShowPriority = showPriority ?? boardId !== 'projects';
   const activeItem = activeCardId ? localItems.find((entry) => entry.id === activeCardId) ?? null : null;
   const columnIdSet = useMemo(() => new Set(orderedColumns.map((c) => c.id)), [orderedColumns]);
   const collapsedSet = useMemo(() => new Set(collapsedColumns), [collapsedColumns]);
@@ -404,6 +407,7 @@ export function Board<T extends BoardItem>({
                     renderItemIndicators={renderItemIndicators}
                     renderItemActions={renderItemActions}
                     renderItemHoverActions={renderItemHoverActions}
+                    showPriority={resolvedShowPriority}
                     headerDragHandleProps={{ ...listeners, ...attributes }}
                   />
                 )}
@@ -421,6 +425,7 @@ export function Board<T extends BoardItem>({
               onClick={() => undefined}
               renderIndicators={renderItemIndicators}
               renderHoverActions={renderItemHoverActions}
+              showPriority={resolvedShowPriority}
             />
           </div>
         ) : activeColumn ? (
@@ -452,6 +457,7 @@ export function Board<T extends BoardItem>({
                   onClick={() => undefined}
                   renderIndicators={renderItemIndicators}
                   renderHoverActions={renderItemHoverActions}
+                  showPriority={resolvedShowPriority}
                 />
               ))}
               {activeColumnItemCount === 0 && (

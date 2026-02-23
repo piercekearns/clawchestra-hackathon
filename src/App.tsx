@@ -147,22 +147,15 @@ const UPSTREAM_FAILURE_DEDUP_MS = 60_000;
 const InlineBranch = () => (
   <GitBranch className="inline-block h-3 w-3 align-[-2px]" />
 );
-const InlineCheck = () => (
-  <Check
-    className="inline-block h-3 w-3 align-[-2px]"
-    strokeWidth={2.5}
-    strokeLinejoin="miter"
-    strokeLinecap="square"
-  />
-);
 
 function getGitHubStatusMeta(
   status?: GitStatus,
 ): { className: string; label: string; tooltip: ReactNode } {
   if (!status?.state || status.state === 'unknown') {
+    const fallbackBranch = status?.branch ?? 'Git';
     return {
       className: 'text-neutral-600 dark:text-neutral-400',
-      label: 'Git status unavailable',
+      label: fallbackBranch,
       tooltip: status?.details || 'Git status unavailable',
     };
   }
@@ -176,7 +169,7 @@ function getGitHubStatusMeta(
   if (!hasRemote) {
     return {
       className: 'text-neutral-600 dark:text-neutral-400',
-      label: `${branch} · not linked to GitHub`,
+      label: branch,
       tooltip: <><InlineBranch /> {branch} · not linked to GitHub — push to connect</>,
     };
   }
@@ -190,8 +183,7 @@ function getGitHubStatusMeta(
   let textSuffix = '';
   if (status.state === 'uncommitted') textSuffix = ' · uncommitted changes';
 
-  const label = `${branch}${sync}${textSuffix}`;
-  const isSynced = status.state === 'clean' && sync === '';
+  const label = `${branch}${sync}`;
 
   const classMap: Record<string, string> = {
     clean: 'text-emerald-600 dark:text-emerald-400',
@@ -203,9 +195,7 @@ function getGitHubStatusMeta(
   return {
     className: classMap[status.state] ?? 'text-neutral-600 dark:text-neutral-400',
     label,
-    tooltip: isSynced
-      ? <><InlineBranch /> {branch} <InlineCheck /></>
-      : <><InlineBranch /> {branch}{sync}{textSuffix}</>,
+    tooltip: <><InlineBranch /> {branch}{sync}{textSuffix}</>,
   };
 }
 
