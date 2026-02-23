@@ -67,6 +67,7 @@ import type { DashboardSettings } from './lib/settings';
 import { useDashboardStore } from './lib/store';
 import {
   chatRecoveryCursorAdvance,
+  getAppUpdateLockState,
   getDashboardSettings,
   getValidationHistory,
   isTauriRuntime,
@@ -419,6 +420,24 @@ export default function App() {
   const loadProjectsTimeoutRef = useRef<number | null>(null);
   const docsRefreshTimeoutRef = useRef<number | null>(null);
 
+  const maybeLoadProjects = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      await loadProjects();
+      return;
+    }
+
+    try {
+      const lockState = await getAppUpdateLockState();
+      if (lockState.lockPresent && !lockState.stale) {
+        return;
+      }
+    } catch {
+      // If lock state check fails, proceed with loading.
+    }
+
+    await loadProjects();
+  }, [loadProjects]);
+
   const scheduleLoadProjects = useCallback(
     (delay = 250) => {
       if (loadProjectsTimeoutRef.current) {
@@ -426,10 +445,10 @@ export default function App() {
       }
       loadProjectsTimeoutRef.current = window.setTimeout(() => {
         loadProjectsTimeoutRef.current = null;
-        void loadProjects();
+        void maybeLoadProjects();
       }, delay);
     },
-    [loadProjects],
+    [maybeLoadProjects],
   );
 
   const scheduleDocsRefresh = useCallback(
