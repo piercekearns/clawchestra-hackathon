@@ -4,7 +4,7 @@ id: ui-tweaks
 status: pending
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Next: decide next UI tweak (settings page vs project card badge cleanup)"
+nextAction: "Next: settings page (full board) — model selector/context usage pending"
 lastActivity: "2026-02-23"
 ---
 
