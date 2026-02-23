@@ -185,11 +185,18 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw
           </span>
-          <StatusBadge
-            state={connectionState}
-            labelOverride={statusLabelOverride}
-            title={statusTitle}
-          />
+          <div
+            className="cursor-default"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <StatusBadge
+              state={connectionState}
+              labelOverride={statusLabelOverride}
+              title={statusTitle}
+            />
+          </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
           {images.length > 0 ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
@@ -216,11 +223,13 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw
           </span>
-          <StatusBadge
-            state={connectionState}
-            labelOverride={statusLabelOverride}
-            title={statusTitle}
-          />
+          <div className="cursor-default">
+            <StatusBadge
+              state={connectionState}
+              labelOverride={statusLabelOverride}
+              title={statusTitle}
+            />
+          </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
           {images.length > 0 ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
