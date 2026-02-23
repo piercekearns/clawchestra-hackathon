@@ -79,7 +79,12 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const prevInputRef = useRef(input);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const showDropdown = shouldShowCommandDropdown(input) && !dropdownDismissed;
-  const showModelBadge = connectionState === 'connected' && Boolean(activeModelLabel);
+  const statusLabelOverride =
+    connectionState === 'connected' ? activeModelLabel ?? null : null;
+  const statusTitle =
+    connectionState === 'connected' && activeModelLabel
+      ? activeModelTooltip ?? activeModelLabel
+      : undefined;
   
   // Reset dismissed state only when input actually changes
   useEffect(() => {
@@ -180,16 +185,11 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw
           </span>
-          {showModelBadge ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300"
-              title={activeModelTooltip ?? activeModelLabel}
-            >
-              {activeModelLabel}
-            </span>
-          ) : (
-            <StatusBadge state={connectionState} />
-          )}
+          <StatusBadge
+            state={connectionState}
+            labelOverride={statusLabelOverride}
+            title={statusTitle}
+          />
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
           {images.length > 0 ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
@@ -216,16 +216,11 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw
           </span>
-          {showModelBadge ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300"
-              title={activeModelTooltip ?? activeModelLabel}
-            >
-              {activeModelLabel}
-            </span>
-          ) : (
-            <StatusBadge state={connectionState} />
-          )}
+          <StatusBadge
+            state={connectionState}
+            labelOverride={statusLabelOverride}
+            title={statusTitle}
+          />
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
           {images.length > 0 ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">

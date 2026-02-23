@@ -3,6 +3,8 @@ import type { ChatConnectionState } from './types';
 
 interface StatusBadgeProps {
   state: ChatConnectionState;
+  labelOverride?: string | null;
+  title?: string;
 }
 
 const STATE_CONFIG: Record<ChatConnectionState, { label: string; colorClass: string; animate?: boolean }> = {
@@ -30,17 +32,21 @@ const STATE_CONFIG: Record<ChatConnectionState, { label: string; colorClass: str
   },
 };
 
-export function StatusBadge({ state }: StatusBadgeProps) {
+export function StatusBadge({ state, labelOverride, title }: StatusBadgeProps) {
   const config = STATE_CONFIG[state];
+  const label = labelOverride ?? config.label;
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300">
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300"
+      title={title}
+    >
       {config.animate ? (
         <Loader2 className={`h-2.5 w-2.5 animate-spin ${config.colorClass}`} />
       ) : (
         <Circle className={`h-2.5 w-2.5 ${config.colorClass}`} />
       )}
-      {config.label}
+      {label}
     </span>
   );
 }
