@@ -12,7 +12,7 @@ import type { ProjectModalActions } from './components/modal';
 import { Header } from './components/Header';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/sidebar/Sidebar';
-import { SettingsDialog } from './components/SettingsDialog';
+import { SettingsPage } from './components/SettingsPage';
 import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay } from './lib/sync';
 import { ChatShell, createQueueId } from './components/chat';
@@ -104,6 +104,21 @@ function applyTheme(preference: ThemePreference) {
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const isDark = preference === 'dark' || (preference === 'system' && systemDark);
   root.classList.toggle('dark', isDark);
+}
+
+function formatProviderDisplayName(providerId?: string | null): string | null {
+  if (!providerId) return null;
+  const normalized = providerId.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'github-copilot') return 'Copilot';
+  if (normalized === 'openai') return 'OpenAI';
+  if (normalized === 'anthropic') return 'Anthropic';
+  if (normalized === 'google') return 'Google';
+  return normalized
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
 }
 
 /** Optimistically mark a project's git status as dirty with an additional file entry. */
@@ -250,7 +265,7 @@ export default function App() {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsPageOpen, setSettingsPageOpen] = useState(false);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -279,6 +294,7 @@ export default function App() {
   const blockedQueueMessageIdRef = useRef<string | null>(null);
   const hardClearTimerRef = useRef<number | null>(null);
   const lastGatewayActiveTurnsRef = useRef(gatewayActiveTurns);
+  const sessionModelRefreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
@@ -502,10 +518,12 @@ export default function App() {
     return null;
   }, [agentActivity, isChatBusy]);
 
-  const activeModelLabel = useMemo(
-    () => formatModelDisplayName(activeSessionModel),
-    [activeSessionModel],
-  );
+  const activeModelLabel = useMemo(() => {
+    const modelLabel = formatModelDisplayName(activeSessionModel);
+    const providerLabel = formatProviderDisplayName(activeSessionProvider);
+    if (providerLabel && modelLabel) return `${providerLabel} · ${modelLabel}`;
+    return modelLabel ?? providerLabel;
+  }, [activeSessionModel, activeSessionProvider]);
 
   const activeModelTooltip = useMemo(() => {
     if (!activeSessionModel && !activeSessionProvider) return null;
@@ -525,9 +543,23 @@ export default function App() {
   const refreshActiveSessionModel = useCallback(async () => {
     if (!isTauriRuntime()) return;
     if (wsConnectionState !== 'connected') return;
-    const snapshot = await fetchSessionModel();
-    if (!snapshot) return;
-    setActiveSessionModel(snapshot.model, snapshot.provider);
+    if (sessionModelRefreshInFlightRef.current) {
+      return sessionModelRefreshInFlightRef.current;
+    }
+
+    const refreshTask = (async () => {
+      const snapshot = await fetchSessionModel({
+        allowDefaultsFallback: false,
+      });
+      if (!snapshot) return;
+      if (!snapshot.model && !snapshot.provider) return;
+      setActiveSessionModel(snapshot.model, snapshot.provider);
+    })().finally(() => {
+      sessionModelRefreshInFlightRef.current = null;
+    });
+
+    sessionModelRefreshInFlightRef.current = refreshTask;
+    return refreshTask;
   }, [setActiveSessionModel, wsConnectionState]);
 
   useEffect(() => {
@@ -876,9 +908,27 @@ export default function App() {
   }, [addSystemBubble]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) return;
     if (wsConnectionState !== 'connected') return;
-    void refreshActiveSessionModel();
-  }, [refreshActiveSessionModel, wsConnectionState]);
+
+    let cancelled = false;
+    const pollMs = chatSending ? 4000 : 15000;
+
+    const refresh = async () => {
+      if (cancelled) return;
+      await refreshActiveSessionModel();
+    };
+
+    void refresh();
+    const interval = window.setInterval(() => {
+      void refresh();
+    }, pollMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [chatSending, refreshActiveSessionModel, wsConnectionState]);
 
   const reconcileRecentHistory = useCallback(async (): Promise<number> => {
     if (recoveryInFlightRef.current) {
@@ -1113,9 +1163,9 @@ export default function App() {
           return;
         }
 
-        if (settingsDialogOpen) {
+        if (settingsPageOpen) {
           event.preventDefault();
-          setSettingsDialogOpen(false);
+          setSettingsPageOpen(false);
           return;
         }
 
@@ -1145,7 +1195,7 @@ export default function App() {
         return;
       }
 
-      if (selectedProjectId || addDialogOpen) {
+      if (settingsPageOpen || selectedProjectId || addDialogOpen) {
         return;
       }
 
@@ -1177,7 +1227,7 @@ export default function App() {
     chatDrawerOpen,
     isRoadmapView,
     searchOpen,
-    settingsDialogOpen,
+    settingsPageOpen,
     syncDialogOpen,
     selectedProjectId,
     setSelectedProjectId,
@@ -1586,8 +1636,7 @@ export default function App() {
       setChatStreamingContent(null);
       setGatewayConnected(true);
       blockedQueueMessageIdRef.current = null;
-      void refreshActiveSessionModel();
-      
+
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {
         await addChatMessage(msg);
@@ -1676,7 +1725,7 @@ export default function App() {
           });
         }
       }
-      
+
       if (!chatDrawerOpenRef.current && result.lastContent) {
         setChatResponseToastMessage(result.lastContent);
       }
@@ -1699,6 +1748,7 @@ export default function App() {
       if (isConnectionError) {
         setGatewayConnected(false);
       }
+      void refreshActiveSessionModel();
       addError({ type: 'gateway_down', message: messageText });
       void addSystemBubble(
         'failure',
@@ -1710,6 +1760,7 @@ export default function App() {
     } finally {
       setChatSending(false);
       setChatStreamingContent(null);
+      void refreshActiveSessionModel();
     }
   };
 
@@ -1791,9 +1842,38 @@ export default function App() {
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         {sidebarSide === 'left' ? (
-          <Sidebar side="left" onOpenSettings={() => setSettingsDialogOpen(true)} />
+          <Sidebar
+            side="left"
+            mode={settingsPageOpen ? 'settings' : 'default'}
+            onOpenSettings={() => setSettingsPageOpen(true)}
+            onBack={() => setSettingsPageOpen(false)}
+          />
         ) : null}
         <div className="relative flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
+        {settingsPageOpen ? (
+          <main className="mb-4 min-h-0 flex-1">
+            <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
+              <div className="h-full min-h-0 overflow-y-auto">
+                <SettingsPage
+                  active={settingsPageOpen}
+                  settings={dashboardSettings}
+                  onSave={async (settings) => {
+                    try {
+                      const saved = await updateDashboardSettings(settings);
+                      setDashboardSettings(saved);
+                      await loadProjects();
+                      pushToast('success', 'Settings saved');
+                    } catch (error) {
+                      pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
+                      throw error;
+                    }
+                  }}
+                />
+              </div>
+            </section>
+          </main>
+        ) : (
+          <>
         <Header
           errors={errors}
           onRefresh={async () => {
@@ -1961,6 +2041,8 @@ export default function App() {
             </div>
           </section>
         </main>
+        </>
+        )}
 
       <ChatShell
         messages={chatMessages}
@@ -1986,52 +2068,61 @@ export default function App() {
         onRetryConnection={retryGatewayConnection}
       />
 
-      <ProjectModal
-        open={Boolean(selectedProject)}
-        project={selectedProject}
-        boardScoped={sidebarOpen}
-        onClose={() => setSelectedProjectId(undefined)}
-        actions={projectModalActions}
-      />
+      {!settingsPageOpen && (
+        <>
+          <ProjectModal
+            open={Boolean(selectedProject)}
+            project={selectedProject}
+            boardScoped={sidebarOpen}
+            onClose={() => setSelectedProjectId(undefined)}
+            actions={projectModalActions}
+          />
 
-      <AddProjectDialog
-        open={addDialogOpen}
-        settings={dashboardSettings}
-        existingProjects={allProjects}
-        boardScoped={sidebarOpen}
-        onClose={() => setAddDialogOpen(false)}
-        onComplete={async (message) => {
-          try {
-            await loadProjects();
-            pushToast('success', message);
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Reload failed');
-            throw error;
-          }
-        }}
-      />
+          <AddProjectDialog
+            open={addDialogOpen}
+            settings={dashboardSettings}
+            existingProjects={allProjects}
+            boardScoped={sidebarOpen}
+            onClose={() => setAddDialogOpen(false)}
+            onComplete={async (message) => {
+              try {
+                await loadProjects();
+                pushToast('success', message);
+              } catch (error) {
+                pushToast('error', error instanceof Error ? error.message : 'Reload failed');
+                throw error;
+              }
+            }}
+          />
 
-      <SyncDialog
-        open={syncDialogOpen}
-        onOpenChange={(open) => {
-          setSyncDialogOpen(open);
-          if (!open) scanUnresolvedSyncState();
-        }}
-        projects={allProjects}
-        boardScoped={sidebarOpen}
-        onRequestChatPrefill={(prefillText) => {
-          setSyncDialogOpen(false);
-          setChatDrawerOpen(true);
-          setChatPrefillRequest({
-            id: `prefill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            text: prefillText,
-          });
-        }}
-        onSyncComplete={() => { void loadProjects(); }}
-      />
+          <SyncDialog
+            open={syncDialogOpen}
+            onOpenChange={(open) => {
+              setSyncDialogOpen(open);
+              if (!open) scanUnresolvedSyncState();
+            }}
+            projects={allProjects}
+            boardScoped={sidebarOpen}
+            onRequestChatPrefill={(prefillText) => {
+              setSyncDialogOpen(false);
+              setChatDrawerOpen(true);
+              setChatPrefillRequest({
+                id: `prefill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                text: prefillText,
+              });
+            }}
+            onSyncComplete={() => { void loadProjects(); }}
+          />
+        </>
+      )}
         </div>
         {sidebarSide === 'right' ? (
-          <Sidebar side="right" onOpenSettings={() => setSettingsDialogOpen(true)} />
+          <Sidebar
+            side="right"
+            mode={settingsPageOpen ? 'settings' : 'default'}
+            onOpenSettings={() => setSettingsPageOpen(true)}
+            onBack={() => setSettingsPageOpen(false)}
+          />
         ) : null}
       </div>
 
@@ -2056,24 +2147,6 @@ export default function App() {
           }
         }}
       />
-
-      <SettingsDialog
-        open={settingsDialogOpen}
-        settings={dashboardSettings}
-        onClose={() => setSettingsDialogOpen(false)}
-        onSave={async (settings) => {
-          try {
-            const saved = await updateDashboardSettings(settings);
-            setDashboardSettings(saved);
-            await loadProjects();
-            pushToast('success', 'Settings saved');
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
-            throw error;
-          }
-        }}
-      />
-
       <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
         {toasts.map((toast) => (
           <div

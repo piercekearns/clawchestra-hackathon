@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ComponentType } from 'react';
-import { Monitor, Moon, Settings, Sun } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Monitor, Moon, Settings, Sun } from 'lucide-react';
 import type { ThemePreference } from '../../lib/schema';
 import {
   useDashboardStore,
@@ -10,10 +10,12 @@ import {
 
 interface SidebarProps {
   side: 'left' | 'right';
+  mode?: 'default' | 'settings';
   onOpenSettings: () => void;
+  onBack?: () => void;
 }
 
-export function Sidebar({ side, onOpenSettings }: SidebarProps) {
+export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: SidebarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const sidebarWidth = useDashboardStore((s) => s.sidebarWidth);
   const themePreference = useDashboardStore((s) => s.themePreference);
@@ -25,6 +27,8 @@ export function Sidebar({ side, onOpenSettings }: SidebarProps) {
   const [isResizing, setIsResizing] = useState(false);
   const [isHandleHover, setIsHandleHover] = useState(false);
   const isRight = side === 'right';
+  const isSettingsMode = mode === 'settings';
+  const BackIcon = isRight ? ArrowRight : ArrowLeft;
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -76,6 +80,21 @@ export function Sidebar({ side, onOpenSettings }: SidebarProps) {
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className="flex h-full w-full flex-col overflow-hidden">
+        {/* Settings back button */}
+        {sidebarOpen && isSettingsMode && onBack && (
+          <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
+            <button
+              type="button"
+              onClick={onBack}
+              className={`flex items-center gap-2 rounded-md px-2 py-1 text-sm text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-100 ${isRight ? 'justify-end' : 'justify-start'} w-full`}
+            >
+              {!isRight && <BackIcon className="h-4 w-4" />}
+              <span>Back to Clawchestra</span>
+              {isRight && <BackIcon className="h-4 w-4" />}
+            </button>
+          </div>
+        )}
+
         {/* Theme toggle pinned to top */}
         {sidebarOpen && (
           <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
@@ -114,7 +133,7 @@ export function Sidebar({ side, onOpenSettings }: SidebarProps) {
         <div className="flex-1" />
 
         {/* Settings button pinned to bottom — only rendered when open to keep out of tab order */}
-        {sidebarOpen && (
+        {sidebarOpen && !isSettingsMode && (
           <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
             <button
               type="button"

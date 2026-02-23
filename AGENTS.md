@@ -178,7 +178,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | Operation | How Agent Does It |
 |-----------|-------------------|
 | **Trigger refresh** | Tell user to click Refresh (or file change triggers watcher) |
-| **Open settings** | User clicks Settings button in header |
+| **Open settings** | User clicks Settings in sidebar → board becomes Settings page; use Back to return |
 | **Update paths** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings` |
 | **Trigger update** | Commit code changes; user clicks Update button |
 | **Run multi-branch Git Sync** | Use Sync dialog: select file categories, optional `Pull first` when behind, optional `Also sync to` branches, then commit on source and cherry-pick to targets. Push/pull controls are hidden for `(local)` branches without upstream. On conflicts, generate/edit an AI proposal in-dialog, explicitly approve apply, then continue sync; manual fallback prompts remain available. |
@@ -368,6 +368,7 @@ This app uses:
 - Title bar includes **left + right** sidebar toggles (mirrored icons).
 - Sidebar can dock **left or right**; only one side open at a time.
 - Theme toggle lives **inside the sidebar**, aligned to the top-left (left dock) or top-right (right dock).
+- **Settings mode:** clicking Settings switches the board to a full settings page; sidebar shows a “Back to Clawchestra” control (no tabs yet).
 
 When adding new UI:
 - Check existing components in `src/components/ui/` first
