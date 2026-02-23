@@ -1852,25 +1852,23 @@ export default function App() {
         <div className="relative flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
         {settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
-            <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
-              <div className="h-full min-h-0 overflow-y-auto">
-                <SettingsPage
-                  active={settingsPageOpen}
-                  settings={dashboardSettings}
-                  onSave={async (settings) => {
-                    try {
-                      const saved = await updateDashboardSettings(settings);
-                      setDashboardSettings(saved);
-                      await loadProjects();
-                      pushToast('success', 'Settings saved');
-                    } catch (error) {
-                      pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
-                      throw error;
-                    }
-                  }}
-                />
-              </div>
-            </section>
+            <div className="h-full min-h-0 overflow-y-auto">
+              <SettingsPage
+                active={settingsPageOpen}
+                settings={dashboardSettings}
+                onSave={async (settings) => {
+                  try {
+                    const saved = await updateDashboardSettings(settings);
+                    setDashboardSettings(saved);
+                    await loadProjects();
+                    pushToast('success', 'Settings saved');
+                  } catch (error) {
+                    pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
+                    throw error;
+                  }
+                }}
+              />
+            </div>
           </main>
         ) : (
           <>

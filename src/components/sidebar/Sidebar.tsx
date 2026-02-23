@@ -96,7 +96,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: Side
         )}
 
         {/* Theme toggle pinned to top */}
-        {sidebarOpen && (
+        {sidebarOpen && !isSettingsMode && (
           <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
             <div
               className={`pointer-events-auto flex ${isRight ? 'justify-end' : 'justify-start'}`}
