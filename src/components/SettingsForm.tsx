@@ -474,6 +474,11 @@ function SettingsSelect({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    setOpen(false);
+  }, [value, open]);
+
   return (
     <div className="relative">
       <button
@@ -492,6 +497,7 @@ function SettingsSelect({
         <div
           ref={menuRef}
           className="absolute z-30 mt-1 w-full rounded-lg border border-neutral-200 bg-neutral-0 p-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+          onClick={() => setOpen(false)}
         >
           {options.map((option) => {
             const isSelected = option.value === value;
