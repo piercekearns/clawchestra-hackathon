@@ -923,7 +923,7 @@ export default function App() {
 
         let recoveredCount = 0;
         const recoveredSignatures: string[] = [];
-        const shouldSuppressDuringActiveRun = isChatBusy;
+        const shouldSuppressDuringActiveRun = gatewayActiveTurns > 0;
         let lastMergedMessage: ChatMessage | null = null;
         for (const message of recovered) {
           if (shouldSuppressDuringActiveRun && message.role === 'assistant') {
@@ -1001,7 +1001,7 @@ export default function App() {
     } finally {
       recoveryInFlightRef.current = null;
     }
-  }, [addChatMessage, addSystemBubble, isChatBusy]);
+  }, [addChatMessage, addSystemBubble, gatewayActiveTurns]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -1558,6 +1558,7 @@ export default function App() {
       content: `${text || 'Please analyze attached images.'}${imageSummary}`,
       timestamp: Date.now(),
     };
+    const sendStartedAt = userMessage.timestamp ?? Date.now();
 
     const attachments: GatewayImageAttachment[] = payload.images.map((image) => ({
       name: image.name,
@@ -1639,6 +1640,50 @@ export default function App() {
           );
         } catch (error) {
           console.warn('[Chat] Failed to advance recovery cursor after send:', error);
+        }
+      }
+
+      const expectedAssistantSignatures = result.messages
+        .filter((msg) => msg.role === 'assistant')
+        .map((msg) => messageIdentitySignature(msg));
+      const hasRecentExpectedAssistant = (): boolean => {
+        if (expectedAssistantSignatures.length === 0) return false;
+        const signatureSet = new Set(expectedAssistantSignatures);
+        return useDashboardStore
+          .getState()
+          .chatMessages
+          .some((existing) => {
+            if (existing.role !== 'assistant') return false;
+            if ((existing.timestamp ?? 0) < sendStartedAt - 30_000) return false;
+            return signatureSet.has(messageIdentitySignature(existing));
+          });
+      };
+
+      let surfacedAssistant = hasRecentExpectedAssistant();
+      if (!surfacedAssistant && expectedAssistantSignatures.length > 0) {
+        console.warn(
+          '[Chat] Send completed but assistant message is not visible yet; forcing history reconciliation',
+          {
+            expectedAssistantCount: expectedAssistantSignatures.length,
+            sendStartedAt,
+          },
+        );
+        await reconcileRecentHistory();
+        surfacedAssistant = hasRecentExpectedAssistant();
+      }
+
+      if (!surfacedAssistant) {
+        const fallbackContent = result.lastContent.trim();
+        if (fallbackContent.length > 0) {
+          console.warn(
+            '[Chat] Send completed without visible assistant message after reconciliation; injecting fallback assistant message',
+            { sendStartedAt, fallbackLength: fallbackContent.length },
+          );
+          await addChatMessage({
+            role: 'assistant',
+            content: fallbackContent,
+            timestamp: Date.now(),
+          });
         }
       }
       

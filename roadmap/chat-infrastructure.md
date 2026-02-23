@@ -444,7 +444,7 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 ### BUG-012: Live turn stalls in Clawchestra; reply appears only after nudge/restart
 **Reported:** 2026-02-23 11:38 (local)
 **Severity:** High
-**Status:** Open — investigation in progress
+**Status:** In progress — app-side visibility guard landed (pending verification)
 
 **Symptoms:**
 - User sends a message from Clawchestra chat bar and sees long-running `Working...` behavior.
@@ -482,10 +482,23 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
   - no-final stabilization path depends on `process.poll` terminal detection and can continue waiting for long windows;
   - if `process.poll` is stale/non-terminal while assistant content has already been produced, live turn resolution can be delayed;
   - message then surfaces later through history recovery or after a subsequent user turn.
-- Recovery cursoring appears incomplete in app wiring:
-  - local `chat_recovery_cursor` table currently has `0` rows despite repeated recovery events;
-  - code reads cursor state (`chatRecoveryCursorGet`) but does not currently advance it in `gateway.ts`;
-  - this likely increases broad history replay and makes recovery behavior noisier/less deterministic after reconnect/restart.
+- Post-send UI handoff can fail even when gateway lifecycle completes:
+  - user-provided browser logs show acknowledged send, repeated `chat delta`, `chat final`, lifecycle transition to `completed`, and `Post-send: history found 1 messages`;
+  - this points to assistant-message surfacing failure after gateway completion (state/render/dedupe/reconciliation path), not transport failure for that run.
+- Recovery cursor behavior remains suspicious in runtime data:
+  - local `chat_recovery_cursor` table observed with `0` rows despite repeated recovery events;
+  - source code now advances cursor from app paths, so runtime mismatch may indicate stale build/runtime invoke issues and still increases replay noise.
+
+**Update (2026-02-23 ~12:56):**
+- User provided console trace for run `57aaf284-9389-40b6-8a96-e11c880638ca` showing:
+  - `chat.send acknowledged`
+  - many `chat state=delta` events
+  - `chat state=final` (`finalLen=624`)
+  - lifecycle `streaming -> awaiting_output -> settling -> completed`
+  - `Post-send: history found 1 messages (624 chars), streamed 624 chars`
+- Added app-side mitigation in `src/App.tsx`:
+  - recovery suppression now keys to actual `gatewayActiveTurns > 0` (instead of broad busy state), so post-final reconciliation is less likely to skip assistant backfill;
+  - post-send visibility guard now verifies assistant output is actually present in store, forces reconciliation when missing, and injects a last-content fallback assistant message if still absent.
 
 **Related bugs:**
 - BUG-001 (assistant not appearing / recovery dependence)
