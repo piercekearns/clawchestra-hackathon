@@ -1579,9 +1579,6 @@ export default function App() {
           attachments,
           onStreamDelta: (content) => {
             setChatStreamingContent(content);
-            if (!chatDrawerOpenRef.current && content.trim().length > 0) {
-              setChatResponseToastMessage(content);
-            }
           },
         },
       );
