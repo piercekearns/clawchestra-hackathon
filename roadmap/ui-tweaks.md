@@ -4,7 +4,7 @@ id: ui-tweaks
 status: pending
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Next: modals scoped to board area when sidebar open"
+nextAction: "Next: decide next UI tweak (settings page vs project card badge cleanup)"
 lastActivity: "2026-02-23"
 ---
 
@@ -81,6 +81,8 @@ When the sidebar is open and Settings is clicked, replace the board area with a 
 ---
 
 ## 5 — Modals Scoped to Board Area
+
+**Status:** ✅ Fixed (2026‑02‑23)
 
 When the sidebar is open, modals triggered from the board section should be constrained to the board area only — not the full app width.
 
@@ -204,7 +206,7 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 4. Divider notch — ✅ done (visible handle)
 5. Live state.json watcher — ✅ done (instant updates)
 6. Active model indicator (read‑only) — ✅ done (2026‑02‑23)
-7. Modal scoping — medium risk (portal/container changes)
+7. Modal scoping — ✅ done (2026‑02‑23)
 8. Right sidebar toggle — ✅ done (2026‑02‑23)
 9. Theme colour relocation — ✅ done (2026‑02‑23)
 10. Settings as page — larger UI change
