@@ -13,7 +13,7 @@ export function GitHubStatusBadge({ className, tooltip, label, onClick }: GitHub
 
   return (
     <Wrapper
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-neutral-600 transition-colors dark:text-neutral-400${onClick ? ' cursor-pointer hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100' : ''}`}
+      className={`relative -translate-y-[1px] inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-neutral-600 transition-colors dark:text-neutral-400${onClick ? ' cursor-pointer hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100' : ''}`}
       tabIndex={0}
       aria-label={label}
       onClick={(e) => {
