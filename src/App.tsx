@@ -1871,7 +1871,7 @@ export default function App() {
             onBack={handleSettingsBack}
           />
         ) : null}
-        <div className="relative flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
+        <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? 'bg-neutral-50 dark:bg-neutral-900' : 'px-4 pb-4 pt-4 md:px-6'}`}>
         {settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
             <div className="h-full min-h-0 overflow-y-auto">
@@ -2066,29 +2066,31 @@ export default function App() {
         </>
         )}
 
-      <ChatShell
-        messages={chatMessages}
-        gatewayConnected={gatewayConnected}
-        connectionState={chatConnectionState}
-        activityLabel={chatActivityLabel}
-        activeModelLabel={activeModelLabel}
-        activeModelTooltip={activeModelTooltip}
-        streamingContent={chatStreamingContent}
-        prefillRequest={chatPrefillRequest}
-        drawerOpen={chatDrawerOpen}
-        responseToastMessage={chatResponseToastMessage}
-        isAgentWorking={isChatBusy}
-        queue={chatQueue}
-        hasMoreMessages={chatHasMore}
-        loadingMoreMessages={chatLoadingMore}
-        onDrawerOpenChange={setChatDrawerOpen}
-        onDismissResponseToast={() => setChatResponseToastMessage(null)}
-        onSend={sendChatMessage}
-        onQueueMessage={queueChatMessage}
-        onRemoveFromQueue={removeFromChatQueue}
-        onLoadMore={loadMoreChatMessages}
-        onRetryConnection={retryGatewayConnection}
-      />
+      {!settingsPageOpen && (
+        <ChatShell
+          messages={chatMessages}
+          gatewayConnected={gatewayConnected}
+          connectionState={chatConnectionState}
+          activityLabel={chatActivityLabel}
+          activeModelLabel={activeModelLabel}
+          activeModelTooltip={activeModelTooltip}
+          streamingContent={chatStreamingContent}
+          prefillRequest={chatPrefillRequest}
+          drawerOpen={chatDrawerOpen}
+          responseToastMessage={chatResponseToastMessage}
+          isAgentWorking={isChatBusy}
+          queue={chatQueue}
+          hasMoreMessages={chatHasMore}
+          loadingMoreMessages={chatLoadingMore}
+          onDrawerOpenChange={setChatDrawerOpen}
+          onDismissResponseToast={() => setChatResponseToastMessage(null)}
+          onSend={sendChatMessage}
+          onQueueMessage={queueChatMessage}
+          onRemoveFromQueue={removeFromChatQueue}
+          onLoadMore={loadMoreChatMessages}
+          onRetryConnection={retryGatewayConnection}
+        />
+      )}
 
       {!settingsPageOpen && (
         <>

@@ -11,7 +11,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({ active, settings, onSave, onDirtyChange, saveNudge }: SettingsPageProps) {
   return (
-    <div className="min-h-full w-full rounded-2xl bg-neutral-50 px-6 py-5 dark:bg-neutral-900">
+    <div className="min-h-full w-full bg-neutral-50 px-8 py-6 dark:bg-neutral-900">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <div>
           <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">

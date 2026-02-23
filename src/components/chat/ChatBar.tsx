@@ -176,7 +176,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           onClick={onToggleDrawer}
           aria-expanded={drawerOpen}
           aria-label={drawerOpen ? 'Collapse chat drawer' : 'Open chat drawer'}
-          title={drawerOpen ? 'Collapse chat drawer' : 'Open chat drawer'}
         >
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw

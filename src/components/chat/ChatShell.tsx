@@ -595,7 +595,6 @@ export function ChatShell({
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => onDrawerOpenChange(false)}
                   aria-label="Collapse chat drawer"
-                  title="Collapse chat drawer"
                 >
                   <ChevronDown className="h-4 w-4" />
                 </button>
