@@ -234,6 +234,7 @@ export default function App() {
   const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
 
   const loadProjects = useDashboardStore((state) => state.loadProjects);
+  const updateProjectFromEvent = useDashboardStore((state) => state.updateProjectFromEvent);
   const setProjects = useDashboardStore((state) => state.setProjects);
   const addError = useDashboardStore((state) => state.addError);
   const setGatewayConnected = useDashboardStore((state) => state.setGatewayConnected);
@@ -409,6 +410,40 @@ export default function App() {
       }
     };
   }, [activeRoadmapProject, roadmapDocument]);
+
+  const loadProjectsTimeoutRef = useRef<number | null>(null);
+  const docsRefreshTimeoutRef = useRef<number | null>(null);
+
+  const scheduleLoadProjects = useCallback(
+    (delay = 250) => {
+      if (loadProjectsTimeoutRef.current) {
+        window.clearTimeout(loadProjectsTimeoutRef.current);
+      }
+      loadProjectsTimeoutRef.current = window.setTimeout(() => {
+        loadProjectsTimeoutRef.current = null;
+        void loadProjects();
+      }, delay);
+    },
+    [loadProjects],
+  );
+
+  const scheduleDocsRefresh = useCallback(
+    (delay = 200) => {
+      if (docsRefreshTimeoutRef.current) {
+        window.clearTimeout(docsRefreshTimeoutRef.current);
+      }
+      docsRefreshTimeoutRef.current = window.setTimeout(() => {
+        docsRefreshTimeoutRef.current = null;
+        void refreshRoadmapDocsRef.current();
+      }, delay);
+    },
+    [],
+  );
+
+  useEffect(() => () => {
+    if (loadProjectsTimeoutRef.current) window.clearTimeout(loadProjectsTimeoutRef.current);
+    if (docsRefreshTimeoutRef.current) window.clearTimeout(docsRefreshTimeoutRef.current);
+  }, []);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -954,19 +989,19 @@ export default function App() {
       if (!isTauriRuntime()) return;
 
       const unsubscribe = await setupTauriEventListeners({
-        onStateJsonMerged: () => {
-          void loadProjects();
-          void refreshRoadmapDocsRef.current();
+        onStateJsonMerged: (payload) => {
+          updateProjectFromEvent(payload);
+          scheduleDocsRefresh();
         },
         onClawchestraReady: () => {
           void loadProjects();
         },
         onProjectFileChanged: () => {
-          void loadProjects();
-          void refreshRoadmapDocsRef.current();
+          scheduleLoadProjects();
+          scheduleDocsRefresh();
         },
         onGitStatusChanged: () => {
-          void loadProjects();
+          scheduleLoadProjects();
         },
       });
 
@@ -984,7 +1019,7 @@ export default function App() {
       disposed = true;
       cleanup?.();
     };
-  }, [loadProjects]);
+  }, [loadProjects, scheduleDocsRefresh, scheduleLoadProjects, updateProjectFromEvent]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
