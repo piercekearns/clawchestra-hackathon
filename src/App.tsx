@@ -1121,6 +1121,19 @@ export default function App() {
     }
   }, [allProjects, selectedProjectId, setSelectedProjectId]);
 
+  const handleSettingsOpen = useCallback(() => {
+    setSettingsSaveNudge(false);
+    setSettingsPageOpen(true);
+  }, []);
+
+  const handleSettingsBack = useCallback(() => {
+    if (settingsDirty) {
+      setSettingsSaveNudge(true);
+      return;
+    }
+    setSettingsPageOpen(false);
+  }, [settingsDirty]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -1247,19 +1260,6 @@ export default function App() {
     setViewContext(defaultView());
     setRoadmapDocument(null);
     setRoadmapItems([]);
-  };
-
-  const handleSettingsOpen = () => {
-    setSettingsSaveNudge(false);
-    setSettingsPageOpen(true);
-  };
-
-  const handleSettingsBack = () => {
-    if (settingsDirty) {
-      setSettingsSaveNudge(true);
-      return;
-    }
-    setSettingsPageOpen(false);
   };
 
   const openRoadmapView = async (project: ProjectViewModel) => {

@@ -222,7 +222,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <StatusBadge
               state={connectionState}
               labelOverride={statusLabelOverride}
-              title={statusTitle}
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
