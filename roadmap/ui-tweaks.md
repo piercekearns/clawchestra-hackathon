@@ -148,6 +148,8 @@ Surface the currently active OpenClaw model somewhere in the Clawchestra UI, wit
 
 Currently, external writes to `.clawchestra/state.json` (by agents, the CLI, or tools like this one) aren't reflected in the board until the user navigates away and back. The app reads `state.json` on mount/route change only — no live watching.
 
+**Status:** ✅ Fixed (2026‑02‑23)
+
 **Fix:** Add a Tauri file watcher on `.clawchestra/state.json`. When a write is detected, re-read the file and sync the store — no navigation required.
 
 **Implementation notes:**
@@ -194,7 +196,7 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 2. Git Sync success styling — ✅ done (match user bubble)
 3. Git Sync file lists stack — ✅ done (stacked rows)
 4. Divider notch — ✅ done (visible handle)
-5. Live state.json watcher — small lift, but touches infra/state sync
+5. Live state.json watcher — ✅ done (instant updates)
 6. Active model indicator (read‑only) — low risk once data is available
 7. Modal scoping — medium risk (portal/container changes)
 8. Right sidebar toggle — medium risk (state + layout)
