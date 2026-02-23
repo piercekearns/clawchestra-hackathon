@@ -441,6 +441,61 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 
 ---
 
+### BUG-012: Live turn stalls in Clawchestra; reply appears only after nudge/restart
+**Reported:** 2026-02-23 11:38 (local)
+**Severity:** High
+**Status:** Open — investigation in progress
+
+**Symptoms:**
+- User sends a message from Clawchestra chat bar and sees long-running `Working...` behavior.
+- OpenClaw Gateway Dashboard shows stream activity / eventual final output.
+- Clawchestra often does not surface that final reply live in the drawer.
+- Reply may appear only after:
+  - force quit + relaunch (history recovery), or
+  - sending another message to “nudge” the session.
+
+**Reproduction pattern (user-reported):**
+1. Send message in Clawchestra.
+2. UI shows send + long working indicator.
+3. OpenClaw dashboard shows ongoing work and may complete the turn.
+4. Clawchestra does not reliably surface the completed reply until restart or follow-up prompt.
+
+**Context:**
+- Post-fix baseline: 2026-02-22
+- Reported Monday, 2026-02-23 at 11:38 local.
+- Behavior is intermittent (not every turn), but frequent enough to disrupt normal chat workflow.
+
+**Investigation evidence (2026-02-23):**
+- Local runtime DB examined: `/Users/piercekearns/Library/Application Support/Clawchestra/chat.db`
+- Confirmed user-turn gap with no assistant/system event between two user prompts:
+  - User message at `2026-02-23 11:01:30`
+  - Next user “Are you stuck?” at `2026-02-23 11:14:39`
+  - Gap: `788.6s` (~13m 9s) with no assistant entry persisted in that window.
+  - Assistant reply then appears at `2026-02-23 11:16:00`, consistent with delayed surfacing after nudge.
+- System history indicates heavy recovery reliance:
+  - `Recovered recent chat messages` events: 19 total
+  - 12 events on `2026-02-22` (195 recovered messages total)
+  - 3 events on `2026-02-23` (6 recovered messages total)
+
+**Likely area (current hypothesis):**
+- Send lifecycle completion logic in `src/lib/gateway.ts` is likely too conservative when `final` events are missed/delayed:
+  - no-final stabilization path depends on `process.poll` terminal detection and can continue waiting for long windows;
+  - if `process.poll` is stale/non-terminal while assistant content has already been produced, live turn resolution can be delayed;
+  - message then surfaces later through history recovery or after a subsequent user turn.
+- Recovery cursoring appears incomplete in app wiring:
+  - local `chat_recovery_cursor` table currently has `0` rows despite repeated recovery events;
+  - code reads cursor state (`chatRecoveryCursorGet`) but does not currently advance it in `gateway.ts`;
+  - this likely increases broad history replay and makes recovery behavior noisier/less deterministic after reconnect/restart.
+
+**Related bugs:**
+- BUG-001 (assistant not appearing / recovery dependence)
+- BUG-003 (streaming/turn assembly instability)
+- BUG-006 (stuck `Working...` lifecycle)
+
+**Scenario links:** reconnect-mid-run, update-mid-turn (overlap), no-final-resolution
+
+---
+
 ### FINDING-001: `gateway_call` has no subprocess timeout — can block indefinitely
 **Surfaced:** 2026-02-21 (architecture-direction-v2 hardening sprint, round 4 review)
 **Severity:** P2 — Important (not a bug per se, but a reliability gap)
