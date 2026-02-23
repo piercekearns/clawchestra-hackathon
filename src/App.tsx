@@ -234,6 +234,7 @@ export default function App() {
   const viewContext = useDashboardStore((state) => state.viewContext);
   const loading = useDashboardStore((state) => state.loading);
   const selectedProjectId = useDashboardStore((state) => state.selectedProjectId);
+  const sidebarOpen = useDashboardStore((state) => state.sidebarOpen);
   const sidebarSide = useDashboardStore((state) => state.sidebarSide);
   const activeSessionModel = useDashboardStore((state) => state.activeSessionModel);
   const activeSessionProvider = useDashboardStore((state) => state.activeSessionProvider);
@@ -1867,6 +1868,7 @@ export default function App() {
                   projectFrontmatter={activeRoadmapProject?.frontmatter}
                   projectId={activeRoadmapProject?.id}
                   isMigrated={activeRoadmapProject?.stateJsonMigrated}
+                  boardScoped={sidebarOpen}
                   onClose={() => setSelectedRoadmapItemId(null)}
                   onStatusChange={(itemId, status) => {
                     const updated = roadmapItems.map((i) =>
@@ -1948,18 +1950,55 @@ export default function App() {
         onLoadMore={loadMoreChatMessages}
         onRetryConnection={retryGatewayConnection}
       />
+
+      <ProjectModal
+        open={Boolean(selectedProject)}
+        project={selectedProject}
+        boardScoped={sidebarOpen}
+        onClose={() => setSelectedProjectId(undefined)}
+        actions={projectModalActions}
+      />
+
+      <AddProjectDialog
+        open={addDialogOpen}
+        settings={dashboardSettings}
+        existingProjects={allProjects}
+        boardScoped={sidebarOpen}
+        onClose={() => setAddDialogOpen(false)}
+        onComplete={async (message) => {
+          try {
+            await loadProjects();
+            pushToast('success', message);
+          } catch (error) {
+            pushToast('error', error instanceof Error ? error.message : 'Reload failed');
+            throw error;
+          }
+        }}
+      />
+
+      <SyncDialog
+        open={syncDialogOpen}
+        onOpenChange={(open) => {
+          setSyncDialogOpen(open);
+          if (!open) scanUnresolvedSyncState();
+        }}
+        projects={allProjects}
+        boardScoped={sidebarOpen}
+        onRequestChatPrefill={(prefillText) => {
+          setSyncDialogOpen(false);
+          setChatDrawerOpen(true);
+          setChatPrefillRequest({
+            id: `prefill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text: prefillText,
+          });
+        }}
+        onSyncComplete={() => { void loadProjects(); }}
+      />
         </div>
         {sidebarSide === 'right' ? (
           <Sidebar side="right" onOpenSettings={() => setSettingsDialogOpen(true)} />
         ) : null}
       </div>
-
-      <ProjectModal
-        open={Boolean(selectedProject)}
-        project={selectedProject}
-        onClose={() => setSelectedProjectId(undefined)}
-        actions={projectModalActions}
-      />
 
       <SearchModal
         isOpen={searchOpen}
@@ -1983,22 +2022,6 @@ export default function App() {
         }}
       />
 
-      <AddProjectDialog
-        open={addDialogOpen}
-        settings={dashboardSettings}
-        existingProjects={allProjects}
-        onClose={() => setAddDialogOpen(false)}
-        onComplete={async (message) => {
-          try {
-            await loadProjects();
-            pushToast('success', message);
-          } catch (error) {
-            pushToast('error', error instanceof Error ? error.message : 'Reload failed');
-            throw error;
-          }
-        }}
-      />
-
       <SettingsDialog
         open={settingsDialogOpen}
         settings={dashboardSettings}
@@ -2014,24 +2037,6 @@ export default function App() {
             throw error;
           }
         }}
-      />
-
-      <SyncDialog
-        open={syncDialogOpen}
-        onOpenChange={(open) => {
-          setSyncDialogOpen(open);
-          if (!open) scanUnresolvedSyncState();
-        }}
-        projects={allProjects}
-        onRequestChatPrefill={(text) => {
-          setSyncDialogOpen(false);
-          setChatDrawerOpen(true);
-          setChatPrefillRequest({
-            id: `prefill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            text,
-          });
-        }}
-        onSyncComplete={() => { void loadProjects(); }}
       />
 
       <div className="pointer-events-none fixed left-1/2 top-4 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">

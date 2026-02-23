@@ -22,6 +22,7 @@ interface AddProjectDialogProps {
   existingProjects: ProjectViewModel[];
   onClose: () => void;
   onComplete: (message: string) => Promise<void> | void;
+  boardScoped?: boolean;
 }
 
 type WizardMode = 'create-new' | 'add-existing';
@@ -34,6 +35,7 @@ export function AddProjectDialog({
   existingProjects,
   onClose,
   onComplete,
+  boardScoped,
 }: AddProjectDialogProps) {
   const [mode, setMode] = useState<WizardMode>('create-new');
   const [error, setError] = useState<string | null>(null);
@@ -137,8 +139,10 @@ export function AddProjectDialog({
     }
   };
 
+  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm`;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    <div className={overlayClass}>
       <ModalDragZone />
       <div className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-neutral-0 p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         <div className="mb-4 flex items-center justify-between">

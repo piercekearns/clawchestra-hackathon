@@ -15,6 +15,7 @@ interface RoadmapItemDialogProps {
   isMigrated?: boolean;
   onClose: () => void;
   onStatusChange: (itemId: string, status: RoadmapStatus) => void;
+  boardScoped?: boolean;
 }
 
 /**
@@ -30,6 +31,7 @@ export function RoadmapItemDialog({
   isMigrated,
   onClose,
   onStatusChange,
+  boardScoped,
 }: RoadmapItemDialogProps) {
   const [enrichedItem, setEnrichedItem] = useState<RoadmapItemWithDocs | null>(null);
   const [docCache, setDocCache] = useState<Record<string, string>>({});
@@ -179,11 +181,14 @@ export function RoadmapItemDialog({
 
   if (!item || !enrichedItem) return null;
 
+  const backdropClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 bg-black/40 backdrop-blur-sm`;
+  const dialogClass = `${boardScoped ? 'absolute' : 'fixed'} inset-x-4 top-[5%] z-50 mx-auto ${boardScoped ? 'max-h-[90%]' : 'max-h-[90vh]'} max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900`;
+
   return (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+        className={backdropClass}
         onClick={onClose}
       />
       <ModalDragZone />
@@ -191,7 +196,7 @@ export function RoadmapItemDialog({
       {/* Dialog */}
       <div
         ref={dialogRef}
-        className="fixed inset-x-4 top-[5%] z-50 mx-auto max-h-[90vh] max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+        className={dialogClass}
         role="dialog"
         aria-modal
         aria-label={`Roadmap item: ${item.title}`}

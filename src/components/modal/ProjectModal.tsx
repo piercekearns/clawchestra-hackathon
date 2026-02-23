@@ -15,9 +15,10 @@ interface ProjectModalProps {
   open: boolean;
   onClose: () => void;
   actions: ProjectModalActions;
+  boardScoped?: boolean;
 }
 
-export function ProjectModal({ project, open, onClose, actions }: ProjectModalProps) {
+export function ProjectModal({ project, open, onClose, actions, boardScoped }: ProjectModalProps) {
   const {
     localStatus,
     updateProjectStatus,
@@ -64,16 +65,19 @@ export function ProjectModal({ project, open, onClose, actions }: ProjectModalPr
 
   const hasRoadmap = project.hasRoadmap;
 
+  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4`;
+  const dialogClass = `${boardScoped ? 'h-[min(90%,56rem)] max-h-[90%]' : 'h-[min(90vh,56rem)]'} w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-0 p-3 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 sm:p-5`;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4"
+      className={overlayClass}
       onClick={onClose}
     >
       <ModalDragZone />
       <div
         role="dialog"
         aria-modal="true"
-        className="h-[min(90vh,56rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-0 p-3 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 sm:p-5"
+        className={dialogClass}
         onClick={(event) => event.stopPropagation()}
       >
         <ProjectModalHeader
