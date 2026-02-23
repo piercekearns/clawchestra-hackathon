@@ -15,7 +15,7 @@ export function GitHubStatusBadge({ className, tooltip, label, onClick }: GitHub
   return (
     <Tooltip text={tooltip}>
       <Wrapper
-        className={`inline-flex items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-200${onClick ? ' cursor-pointer transition-shadow hover:ring-2 hover:ring-current/20' : ''}`}
+        className={`inline-flex items-center gap-1 text-[10px] text-neutral-700 dark:text-neutral-200${onClick ? ' cursor-pointer transition-colors hover:text-neutral-900 dark:hover:text-neutral-100' : ''}`}
         tabIndex={0}
         aria-label={label}
         onClick={(e) => {
