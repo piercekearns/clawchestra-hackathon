@@ -43,7 +43,7 @@ export function Column<T extends BoardItem>({
   return (
     <section
       ref={setNodeRef}
-      className={`flex h-full min-h-0 min-w-0 flex-col rounded-2xl border p-3 transition-colors duration-200 ${
+      className={`flex h-full min-h-[24rem] min-w-0 flex-col rounded-2xl border p-3 transition-colors duration-200 ${
         isOver || highlighted
           ? 'border-revival-accent-400 bg-revival-accent-50/60 dark:bg-revival-accent-900/20'
           : 'border-neutral-200 bg-neutral-100/60 dark:border-neutral-700 dark:bg-neutral-900/40'

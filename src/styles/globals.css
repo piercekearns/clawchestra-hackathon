@@ -85,11 +85,24 @@
 
   .kanban-scroll {
     -ms-overflow-style: auto;
-    scrollbar-width: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+    scrollbar-gutter: stable both-edges;
   }
 
   .kanban-scroll::-webkit-scrollbar {
-    height: auto;
+    height: 8px;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.6);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
 
   .scrollbar-hidden {
