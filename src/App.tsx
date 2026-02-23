@@ -266,6 +266,8 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [settingsPageOpen, setSettingsPageOpen] = useState(false);
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsSaveNudge, setSettingsSaveNudge] = useState(false);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1165,7 +1167,7 @@ export default function App() {
 
         if (settingsPageOpen) {
           event.preventDefault();
-          setSettingsPageOpen(false);
+          handleSettingsBack();
           return;
         }
 
@@ -1232,12 +1234,32 @@ export default function App() {
     selectedProjectId,
     setSelectedProjectId,
     setViewContext,
+    handleSettingsBack,
   ]);
+
+  useEffect(() => {
+    if (!settingsDirty) {
+      setSettingsSaveNudge(false);
+    }
+  }, [settingsDirty]);
 
   const resetToProjectBoard = () => {
     setViewContext(defaultView());
     setRoadmapDocument(null);
     setRoadmapItems([]);
+  };
+
+  const handleSettingsOpen = () => {
+    setSettingsSaveNudge(false);
+    setSettingsPageOpen(true);
+  };
+
+  const handleSettingsBack = () => {
+    if (settingsDirty) {
+      setSettingsSaveNudge(true);
+      return;
+    }
+    setSettingsPageOpen(false);
   };
 
   const openRoadmapView = async (project: ProjectViewModel) => {
@@ -1845,8 +1867,8 @@ export default function App() {
           <Sidebar
             side="left"
             mode={settingsPageOpen ? 'settings' : 'default'}
-            onOpenSettings={() => setSettingsPageOpen(true)}
-            onBack={() => setSettingsPageOpen(false)}
+            onOpenSettings={handleSettingsOpen}
+            onBack={handleSettingsBack}
           />
         ) : null}
         <div className="relative flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
@@ -1856,6 +1878,8 @@ export default function App() {
               <SettingsPage
                 active={settingsPageOpen}
                 settings={dashboardSettings}
+                saveNudge={settingsSaveNudge}
+                onDirtyChange={(dirty) => setSettingsDirty(dirty)}
                 onSave={async (settings) => {
                   try {
                     const saved = await updateDashboardSettings(settings);
@@ -2118,8 +2142,8 @@ export default function App() {
           <Sidebar
             side="right"
             mode={settingsPageOpen ? 'settings' : 'default'}
-            onOpenSettings={() => setSettingsPageOpen(true)}
-            onBack={() => setSettingsPageOpen(false)}
+            onOpenSettings={handleSettingsOpen}
+            onBack={handleSettingsBack}
           />
         ) : null}
       </div>

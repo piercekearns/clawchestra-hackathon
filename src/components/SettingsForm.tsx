@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ClipboardCopy, Copy, Plus, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -16,6 +16,8 @@ interface SettingsFormProps {
   onSave: (settings: DashboardSettings) => Promise<void>;
   onCancel?: () => void;
   onSaved?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  saveNudge?: boolean;
 }
 
 export function SettingsForm({
@@ -24,6 +26,8 @@ export function SettingsForm({
   onSave,
   onCancel,
   onSaved,
+  onDirtyChange,
+  saveNudge,
 }: SettingsFormProps) {
   const [scanPaths, setScanPaths] = useState<string[]>(['']);
   const [openclawWorkspacePath, setOpenclawWorkspacePath] = useState('');
@@ -36,6 +40,37 @@ export function SettingsForm({
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [debugCopied, setDebugCopied] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const baselineRef = useRef<{
+    scanPaths: string[];
+    openclawWorkspacePath: string;
+    appSourcePath: string;
+    updateMode: UpdateMode;
+    openclawContextPolicy: OpenClawContextPolicy;
+    syncMode: SyncMode;
+    remoteUrl: string;
+  } | null>(null);
+  const saveButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const buildSnapshot = useMemo(() => {
+    return (values: {
+      scanPaths: string[];
+      openclawWorkspacePath: string;
+      appSourcePath: string;
+      updateMode: UpdateMode;
+      openclawContextPolicy: OpenClawContextPolicy;
+      syncMode: SyncMode;
+      remoteUrl: string;
+    }) => ({
+      scanPaths: values.scanPaths.map((p) => p.trim()),
+      openclawWorkspacePath: values.openclawWorkspacePath.trim(),
+      appSourcePath: values.appSourcePath.trim(),
+      updateMode: values.updateMode,
+      openclawContextPolicy: values.openclawContextPolicy,
+      syncMode: values.syncMode,
+      remoteUrl: values.remoteUrl.trim(),
+    });
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -47,17 +82,79 @@ export function SettingsForm({
       setOpenclawContextPolicy('selected-project-first');
       setSyncMode('Local');
       setRemoteUrl('');
+      baselineRef.current = buildSnapshot({
+        scanPaths: [''],
+        openclawWorkspacePath: '',
+        appSourcePath: '',
+        updateMode: 'source-rebuild',
+        openclawContextPolicy: 'selected-project-first',
+        syncMode: 'Local',
+        remoteUrl: '',
+      });
+      setIsDirty(false);
+      onDirtyChange?.(false);
       return;
     }
 
-    setScanPaths(settings.scanPaths.length > 0 ? [...settings.scanPaths] : ['']);
+    const nextScanPaths = settings.scanPaths.length > 0 ? [...settings.scanPaths] : [''];
+    setScanPaths(nextScanPaths);
     setOpenclawWorkspacePath(settings.openclawWorkspacePath ?? '');
     setAppSourcePath(settings.appSourcePath ?? '');
     setUpdateMode(settings.updateMode);
     setOpenclawContextPolicy(settings.openclawContextPolicy);
     setSyncMode(settings.openclawSyncMode);
     setRemoteUrl(settings.openclawRemoteUrl ?? '');
-  }, [active, settings]);
+    baselineRef.current = buildSnapshot({
+      scanPaths: nextScanPaths,
+      openclawWorkspacePath: settings.openclawWorkspacePath ?? '',
+      appSourcePath: settings.appSourcePath ?? '',
+      updateMode: settings.updateMode,
+      openclawContextPolicy: settings.openclawContextPolicy,
+      syncMode: settings.openclawSyncMode,
+      remoteUrl: settings.openclawRemoteUrl ?? '',
+    });
+    setIsDirty(false);
+    onDirtyChange?.(false);
+  }, [active, buildSnapshot, onDirtyChange, settings]);
+
+  useEffect(() => {
+    if (!active) return;
+    const baseline = baselineRef.current;
+    if (!baseline) return;
+    const current = buildSnapshot({
+      scanPaths,
+      openclawWorkspacePath,
+      appSourcePath,
+      updateMode,
+      openclawContextPolicy,
+      syncMode,
+      remoteUrl,
+    });
+    const dirty = JSON.stringify(baseline) !== JSON.stringify(current);
+    if (dirty !== isDirty) {
+      setIsDirty(dirty);
+      onDirtyChange?.(dirty);
+    }
+  }, [
+    active,
+    appSourcePath,
+    buildSnapshot,
+    isDirty,
+    onDirtyChange,
+    openclawContextPolicy,
+    openclawWorkspacePath,
+    remoteUrl,
+    scanPaths,
+    syncMode,
+    updateMode,
+  ]);
+
+  useEffect(() => {
+    if (!saveNudge || !isDirty) return;
+    if (saveButtonRef.current) {
+      saveButtonRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [isDirty, saveNudge]);
 
   const validScanPaths = scanPaths.map((p) => p.trim()).filter(Boolean);
 
@@ -110,7 +207,7 @@ export function SettingsForm({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
             <span>Chat Context Workspace Path (optional)</span>
             <Input
@@ -133,7 +230,7 @@ export function SettingsForm({
           </label>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
             <span>Update Mode</span>
             <div className="relative">
@@ -175,7 +272,7 @@ export function SettingsForm({
       <div className={`mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-700 ${!settings ? 'opacity-60' : ''}`}>
         <h3 className="mb-3 text-sm font-medium">Sync</h3>
         <div className="grid gap-3">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3">
             <label className="grid gap-1 text-sm">
               <span>Sync Mode</span>
               <div className="relative">
@@ -263,37 +360,57 @@ export function SettingsForm({
         </div>
       </div>
 
-      <div className="mt-5 flex justify-end gap-2">
+      <div className="mt-5 flex items-center justify-end gap-2">
+        {saveNudge && isDirty ? (
+          <span className="mr-auto text-xs text-neutral-500 dark:text-neutral-400">
+            Save changes to return
+          </span>
+        ) : null}
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
         )}
-        <Button
-          type="button"
-          disabled={!settings || saving || validScanPaths.length === 0}
-          onClick={async () => {
-            if (!settings) return;
-            setSaving(true);
-            try {
-              await onSave({
-                ...settings,
-                scanPaths: validScanPaths,
-                openclawWorkspacePath: openclawWorkspacePath.trim() || null,
-                appSourcePath: appSourcePath.trim() || null,
-                updateMode,
-                openclawContextPolicy,
-                openclawSyncMode: syncMode,
-                openclawRemoteUrl: remoteUrl.trim() || null,
-              });
-              onSaved?.();
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Settings'}
-        </Button>
+        {isDirty && (
+          <Button
+            ref={saveButtonRef}
+            type="button"
+            disabled={!settings || saving || validScanPaths.length === 0}
+            className={saveNudge ? 'ring-2 ring-revival-accent-400/40' : ''}
+            onClick={async () => {
+              if (!settings) return;
+              setSaving(true);
+              try {
+                await onSave({
+                  ...settings,
+                  scanPaths: validScanPaths,
+                  openclawWorkspacePath: openclawWorkspacePath.trim() || null,
+                  appSourcePath: appSourcePath.trim() || null,
+                  updateMode,
+                  openclawContextPolicy,
+                  openclawSyncMode: syncMode,
+                  openclawRemoteUrl: remoteUrl.trim() || null,
+                });
+                baselineRef.current = buildSnapshot({
+                  scanPaths: validScanPaths,
+                  openclawWorkspacePath,
+                  appSourcePath,
+                  updateMode,
+                  openclawContextPolicy,
+                  syncMode,
+                  remoteUrl,
+                });
+                setIsDirty(false);
+                onDirtyChange?.(false);
+                onSaved?.();
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? 'Saving...' : 'Save changes'}
+          </Button>
+        )}
       </div>
     </>
   );
