@@ -42,8 +42,10 @@ interface BoardProps<T extends BoardItem> {
 
 const MIN_COLUMN_WIDTH = 300;
 const COLUMN_GAP = 16;
-const SCROLLBAR_CONTAINER_PX = 10;
+const SCROLLBAR_CONTAINER_PX = 12;
+const SCROLLBAR_TOP_GAP_PX = 6;
 const SCROLLBAR_THUMB_PX = 7;
+const SCROLLBAR_TRACK_PX = 3;
 const SCROLLBAR_MIN_THUMB_PX = 32;
 const EMPTY_ARRAY: string[] = [];
 
@@ -525,8 +527,11 @@ export function Board<T extends BoardItem>({
         </div>
 
         <div
-          className="relative mt-0.5"
-          style={{ height: `${SCROLLBAR_CONTAINER_PX}px` }}
+          className="relative"
+          style={{
+            height: `${SCROLLBAR_CONTAINER_PX}px`,
+            marginTop: `${SCROLLBAR_TOP_GAP_PX}px`,
+          }}
         >
           <div
             ref={scrollbarTrackRef}
@@ -534,8 +539,12 @@ export function Board<T extends BoardItem>({
             style={{ height: `${SCROLLBAR_THUMB_PX}px`, opacity: scrollbarState.visible ? 1 : 0 }}
           >
             <div
+              className="absolute bottom-0 left-0 right-0 rounded-full bg-neutral-200/40 dark:bg-revival-accent-400/15"
+              style={{ height: `${SCROLLBAR_TRACK_PX}px` }}
+            />
+            <div
               onMouseDown={handleScrollbarThumbMouseDown}
-              className="absolute top-0 h-full rounded-full bg-neutral-300/40 transition-colors hover:bg-neutral-400/60 dark:bg-revival-accent-400/55 dark:hover:bg-revival-accent-400/75"
+              className="absolute bottom-0 h-full rounded-full bg-neutral-400/60 transition-colors hover:bg-neutral-500/70 dark:bg-revival-accent-400/65 dark:hover:bg-revival-accent-400/85"
               style={{
                 width: `${scrollbarState.width}px`,
                 transform: `translateX(${scrollbarState.left}px)`,
