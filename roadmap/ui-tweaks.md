@@ -4,7 +4,7 @@ id: ui-tweaks
 status: pending
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Next: active model indicator (read-only)"
+nextAction: "Next: modals scoped to board area when sidebar open"
 lastActivity: "2026-02-23"
 ---
 
@@ -29,6 +29,8 @@ Add a visual notch/handle in the middle of the divider bar between the sidebar a
 
 ## 2 — Right-Side Sidebar Toggle (Title Bar)
 
+**Status:** ✅ Fixed (2026‑02‑23)
+
 Add a mirrored sidebar toggle icon to the **top-right** of the title bar, so the sidebar can be opened on either side.
 
 **Behaviour (current scope — single sidebar):**
@@ -49,6 +51,8 @@ Add a mirrored sidebar toggle icon to the **top-right** of the title bar, so the
 ---
 
 ## 3 — Theme Colour Controls → Move to Sidebar / Settings
+
+**Status:** ✅ Fixed (2026‑02‑23)
 
 The theme colour controls currently sit in the title bar. Adding a right-side toggle button (item 2) requires that space.
 
@@ -114,6 +118,8 @@ Kanban cards in the Pending column have their right border/stroke clipped at cer
 ---
 
 ## 7 — Active Model Indicator (+ Context Window Usage)
+
+**Status:** ✅ Fixed (2026‑02‑23)
 
 Surface the currently active OpenClaw model somewhere in the Clawchestra UI, with optional context usage visibility.
 
@@ -197,10 +203,10 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 3. Git Sync file lists stack — ✅ done (stacked rows)
 4. Divider notch — ✅ done (visible handle)
 5. Live state.json watcher — ✅ done (instant updates)
-6. Active model indicator (read‑only) — low risk once data is available
+6. Active model indicator (read‑only) — ✅ done (2026‑02‑23)
 7. Modal scoping — medium risk (portal/container changes)
-8. Right sidebar toggle — medium risk (state + layout)
-9. Theme colour relocation — depends on item 8
+8. Right sidebar toggle — ✅ done (2026‑02‑23)
+9. Theme colour relocation — ✅ done (2026‑02‑23)
 10. Settings as page — larger UI change
 11. Model selector (if/when) — higher risk, depends on item 6
 12. Context window usage — higher risk, depends on item 6
