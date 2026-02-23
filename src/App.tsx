@@ -1200,6 +1200,19 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!activeRoadmapProject?.stateJsonMigrated) return;
+    const items = storeRoadmapItems[activeRoadmapProject.id];
+    if (!items) return;
+
+    const mapped = mapToRoadmapItemsWithDocs(items);
+    setRoadmapItems((prev) => {
+      if (prev.length === 0) return mapped;
+      const docsById = new Map(prev.map((item) => [item.id, item.docs]));
+      return mapped.map((item) => ({ ...item, docs: docsById.get(item.id) ?? item.docs }));
+    });
+  }, [activeRoadmapProject?.id, activeRoadmapProject?.stateJsonMigrated, storeRoadmapItems]);
+
   const persistRoadmapChanges = async (nextItems: RoadmapItemWithDocs[]) => {
     const orderedByColumn: RoadmapItemWithDocs[] = [];
     for (const column of viewContext.columns) {
