@@ -99,10 +99,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           onMouseEnter={() => setIsHandleHover(true)}
           onMouseLeave={() => setIsHandleHover(false)}
           onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
-          className="group absolute right-0 top-0 h-full w-3 cursor-col-resize"
+          className="group absolute right-0 top-0 h-full w-[6px] translate-x-1/2 cursor-col-resize"
         >
           <div
-            className={`pointer-events-none absolute right-0 top-1/2 h-6 w-1.5 -translate-y-1/2 translate-x-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400'}`}
+            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400'}`}
           />
         </div>
       )}
