@@ -84,22 +84,23 @@
   }
 
   .kanban-scroll {
-    --kanban-scrollbar-thumb: rgba(148, 163, 184, 0.25);
-    --kanban-scrollbar-thumb-hover: rgba(148, 163, 184, 0.4);
+    --kanban-scrollbar-thumb: rgba(148, 163, 184, 0.18);
+    --kanban-scrollbar-thumb-hover: rgba(148, 163, 184, 0.32);
     -ms-overflow-style: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--kanban-scrollbar-thumb) transparent;
     scrollbar-gutter: stable both-edges;
-    padding-bottom: var(--kanban-scrollbar-gutter, 8px);
+    padding-bottom: var(--kanban-scrollbar-gutter, 7px);
   }
 
   .dark .kanban-scroll {
-    --kanban-scrollbar-thumb: rgba(223, 255, 0, 0.35);
-    --kanban-scrollbar-thumb-hover: rgba(223, 255, 0, 0.55);
+    --kanban-scrollbar-thumb: rgba(223, 255, 0, 0.45);
+    --kanban-scrollbar-thumb-hover: rgba(223, 255, 0, 0.7);
+    scrollbar-color: var(--kanban-scrollbar-thumb) transparent;
   }
 
   .kanban-scroll::-webkit-scrollbar {
-    height: 7px;
+    height: 8px;
   }
 
   .kanban-scroll::-webkit-scrollbar-track {
@@ -113,8 +114,16 @@
     background-clip: content-box;
   }
 
+  .dark .kanban-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(223, 255, 0, 0.45);
+  }
+
   .kanban-scroll::-webkit-scrollbar-thumb:hover {
     background-color: var(--kanban-scrollbar-thumb-hover);
+  }
+
+  .dark .kanban-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(223, 255, 0, 0.7);
   }
 
   .scrollbar-hidden {

@@ -42,7 +42,7 @@ interface BoardProps<T extends BoardItem> {
 
 const MIN_COLUMN_WIDTH = 300;
 const COLUMN_GAP = 16;
-const SCROLLBAR_GUTTER_PX = 8;
+const SCROLLBAR_GUTTER_PX = 7;
 const EMPTY_ARRAY: string[] = [];
 
 /**
