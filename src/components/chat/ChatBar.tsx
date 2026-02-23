@@ -81,10 +81,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const showDropdown = shouldShowCommandDropdown(input) && !dropdownDismissed;
   const statusLabelOverride =
     connectionState === 'connected' ? activeModelLabel ?? null : null;
-  const statusTitle =
-    connectionState === 'connected' && activeModelLabel
-      ? activeModelTooltip ?? activeModelLabel
-      : undefined;
   
   // Reset dismissed state only when input actually changes
   useEffect(() => {
@@ -194,7 +190,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <StatusBadge
               state={connectionState}
               labelOverride={statusLabelOverride}
-              title={statusTitle}
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
