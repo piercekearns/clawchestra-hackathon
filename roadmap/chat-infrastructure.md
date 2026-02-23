@@ -97,6 +97,8 @@ When appending future bug updates, include: `Post-fix baseline: 2026-02-22` so w
 
 **Update (03:26):** Another post-Update message drop. Multiple assistant messages (spec sufficiency discussion, plan vs spec explanation) visible in Gateway Dashboard but never appeared in Clawchestra chat after Update. Last visible message in drawer was from ~03:13. Consistent with Update-triggered pattern.
 
+**Update (23:38, 2026-02-22):** Post-fix baseline: 2026-02-22. On first app load after the latest reliability-fix commit, chat drawer showed recovery bubble "Recovered recent chat messages / Recovered: 17", but visible timeline ended at ~22:14 and did not include many newer turns. The latest visible user turn had no corresponding latest assistant completion in drawer history. Confirms startup/recovery path can still miss newest assistant content despite backfill activity.
+
 ---
 
 ### BUG-002: User messages missing from chat history
@@ -121,6 +123,8 @@ When appending future bug updates, include: `Post-fix baseline: 2026-02-22` so w
 
 **Key insight:** The Update button triggers an app reload without first persisting in-memory chat state. This is the common root cause for both BUG-001 and BUG-002.
 
+**Update (23:38, 2026-02-22):** Post-fix baseline: 2026-02-22. Same startup event as BUG-001 showed a hard history cutoff around ~22:14 in the drawer even though many user turns were sent after that time. Recovery bubble reported 17 restored messages, but the most recent user-side turns were still missing from visible history. Confirms unresolved loss/gap behavior for user timeline restoration on load.
+
 ---
 
 ### BUG-003: Streaming delta fragments as separate messages
@@ -140,6 +144,8 @@ When appending future bug updates, include: `Post-fix baseline: 2026-02-22` so w
 **Update (21:51):** Reproduced again during a long tool-heavy turn (~21:45–21:51). A single streaming message (agent reading files, running tests, writing bugs) was being received as one large chat bubble. Mid-stream, the typing animation stopped, the single bubble split into 7+ separate fragment bubbles (visible in screenshot: "Now update the tests to match:", "All passing. Let me run the full test suite...", "141 tests passing. Now let me check TypeScript compilation:", etc.). The final summary message ("Here's the summary: Done — three things handled...") was delivered to the gateway but never appeared in the chat drawer. Status badge still showed "Connected" throughout. Identical triple-symptom: fragment split + animation drop + message loss. No app update or compaction involved this time — pure streaming pipeline failure during a normal long turn.
 
 **Update (01:53, 2026-02-20):** Reproduced again during a long edit-heavy turn (~01:45–01:53). Agent was doing surgical file edits (6 files, DirtyFileEntry struct changes), running tsc, cargo test, bun test. Same triple-symptom: one large streaming bubble split into 6+ fragments ("Now check the Rust tests:", "Need to add PartialEq...", "The tests now need to pass tuples..."), animation dropped, final summary message ("Done. Now each file in the sync dialog will show its git status...") delivered to gateway but not visible in chat. Git Sync badge updated to show 1 (proving the commit landed) but the reply explaining the work was lost. This is now the 3rd reproduction with identical pattern — long tool-heavy turns are the reliable trigger.
+
+**Update (23:38, 2026-02-22):** Post-fix baseline: 2026-02-22. No clear fragment-splitting observed in this report, but recovery behavior still produced stale cutoff + missing latest turns after startup ("Recovered: 17" shown, latest timeline absent). Track as overlap signal only; primary classification remains BUG-001/BUG-002 until fragment evidence reappears.
 
 ---
 
@@ -395,6 +401,43 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 - Root-cause mitigation (longer upstream timeout / split monitoring strategy) still needs OpenClaw-side configuration or behavior change.
 
 **Scenario links:** none yet (new category — agent timeout during tmux monitoring)
+
+---
+
+### BUG-011: Leaked `[[reply_to_current]]` token at start of assistant replies
+**Reported:** 2026-02-23
+**Severity:** Medium
+**Status:** In progress — app-side stripping landed (pending verification)
+
+**Symptoms:**
+- Intermittently, assistant replies in Clawchestra begin with literal `[[reply_to_current]]`
+- The rest of the message body is present, but the control token is visible to the user
+
+**Reproduction pattern:**
+1. Send normal chat prompts over OpenClaw gateway session
+2. Occasionally receive assistant reply with `[[reply_to_current]]` prefixed at message start
+3. Not deterministic; appears sporadically across turns
+
+**Context:**
+- Post-fix baseline: 2026-02-22
+- Observed during normal chat usage (no required app update/restart trigger)
+
+**Likely area:**
+- Assistant control directives from upstream are leaking into display text and are not normalized out in all ingestion paths (stream delta/final, history recovery, and persisted message hydration).
+
+**Update (2026-02-23):**
+- Added `stripAssistantControlDirectives` normalization helper to remove leading `[[reply_to_current]]` prefixes.
+- Wired stripping into:
+  - assistant history extraction (`extractAssistantMessagesFromHistory`, `extractAssistantMessagesForTurn`)
+  - recovery hydration (`recoverRecentSessionMessages`)
+  - live streaming delta/final handling (`waitForOpenClawRun`, `sendViaTauriWs`)
+  - store-level incoming assistant sanitization (`sanitizeIncomingChatMessage`)
+  - non-WS fallbacks (`sendViaOpenAIHttp`, `sendViaTauriOpenClaw`)
+- Added regression tests:
+  - `src/lib/chat-normalization.test.ts` (directive stripping behavior)
+  - `src/lib/gateway.test.ts` (assistant history extraction strips leaked directive)
+
+**Scenario links:** none yet
 
 ---
 

@@ -13,6 +13,7 @@ import { useDashboardStore } from './store';
 import { CHAT_RELIABILITY_FLAGS } from './chat-reliability-flags';
 import {
   normalizeChatContentForMatch,
+  stripAssistantControlDirectives,
   unwrapGatewayContextWrappedUserContent,
 } from './chat-normalization';
 import { TurnLifecycleEngine } from './chat-turn-engine';
@@ -801,7 +802,7 @@ function collectInternalNoReplyRunIds(messages: GatewayHistoryMessage[]): Set<st
     if (message.role !== 'assistant') continue;
     const runId = getHistoryMessageRunId(message);
     if (!runId) continue;
-    const content = extractText(message.content).trim();
+    const content = stripAssistantControlDirectives(extractText(message.content)).trim();
     if (!content) continue;
     if (!isNoReplySentinel(content)) continue;
     runIds.add(runId);
@@ -814,7 +815,7 @@ function shouldSuppressNoReplyRunAssistantMessage(
   noReplyRunIds: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
-  const content = extractText(message.content).trim();
+  const content = stripAssistantControlDirectives(extractText(message.content)).trim();
   if (content && isNoReplySentinel(content)) return true;
   const runId = getHistoryMessageRunId(message);
   return Boolean(runId && noReplyRunIds.has(runId));
@@ -924,7 +925,7 @@ function extractAssistantMessagesFromHistory(
     if (id && options.baselineIds.has(id)) continue;
     if (timestamp !== undefined && timestamp < options.minTimestamp) continue;
 
-    const content = extractText(message.content).trim();
+    const content = stripAssistantControlDirectives(extractText(message.content)).trim();
     if (!content) continue;
 
     const dedupeKey = id ?? `${timestamp ?? 'na'}:${content}`;
@@ -1208,7 +1209,7 @@ function extractAssistantMessagesForTurn(
       (id === undefined && timestamp === undefined);
     if (!shouldIncludeForTurn) continue;
 
-    const content = extractText(message.content).trim();
+    const content = stripAssistantControlDirectives(extractText(message.content)).trim();
     if (!content) continue;
 
     const dedupeKey = id ?? `${timestamp ?? 'na'}:${content}`;
@@ -1293,13 +1294,17 @@ export async function recoverRecentSessionMessages(options?: {
       continue;
     }
 
-    let content = extractText(message.content).trim();
+    let content = extractText(message.content);
     if (role === 'user') {
       const unwrapped = unwrapGatewayContextWrappedUserContent(content);
       if (unwrapped) {
         content = unwrapped;
       }
     }
+    if (role === 'assistant') {
+      content = stripAssistantControlDirectives(content);
+    }
+    content = content.trim();
     if (!content) continue;
 
     const id = getHistoryMessageId(message);
@@ -1661,7 +1666,7 @@ async function sendViaOpenAIHttp(
     throw new Error('Unexpected response shape from gateway');
   }
 
-  return data.choices[0].message.content;
+  return stripAssistantControlDirectives(data.choices[0].message.content);
 }
 
 async function openOpenClawConnection(transport: GatewayTransport): Promise<OpenClawConnection> {
@@ -1842,7 +1847,7 @@ async function waitForOpenClawRun(
       const state = typeof chat.state === 'string' ? chat.state : '';
 
       if (state === 'delta') {
-        const deltaText = extractText(chat.message);
+        const deltaText = stripAssistantControlDirectives(extractText(chat.message));
         if (deltaText && deltaText.length >= streamedText.length) {
           streamedText = deltaText;
           // Call the streaming callback if provided
@@ -1869,7 +1874,7 @@ async function waitForOpenClawRun(
 
       if (state === 'final') {
         // Extract final content if present - the final event may contain the complete message
-        const finalText = extractText(chat.message);
+        const finalText = stripAssistantControlDirectives(extractText(chat.message));
         if (finalText && finalText.length >= streamedText.length) {
           streamedText = finalText;
           if (onStreamDelta) {
@@ -1894,7 +1899,7 @@ async function waitForOpenClawRun(
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i] as Record<string, unknown>;
     if (message.role !== 'assistant') continue;
-    const text = extractText(message.content);
+    const text = stripAssistantControlDirectives(extractText(message.content));
     if (text.trim()) return text.trim();
   }
 
@@ -1946,11 +1951,12 @@ async function sendViaTauriOpenClaw(
     content: attachment.content,
   }));
 
-  return sendOpenClawMessage({
+  const response = await sendOpenClawMessage({
     message: messageText,
     attachments: mappedAttachments,
     sessionKey: transport.sessionKey,
   });
+  return stripAssistantControlDirectives(response);
 }
 
 function setAgentActivity(
@@ -2634,7 +2640,7 @@ async function sendViaTauriWs(
 
         if (state === 'delta' || state === 'content' || state === 'streaming') {
           lastDeltaTime = Date.now();
-          const deltaText = extractText(chat.message);
+          const deltaText = stripAssistantControlDirectives(extractText(chat.message));
           if (deltaText) {
             transitionLifecycle('stream_delta');
             sawRunOwnedContent = true;
@@ -2710,7 +2716,7 @@ async function sendViaTauriWs(
             console.log('[Gateway] Ignoring unscoped final event during active send');
             return;
           }
-          const finalText = extractText(chat.message);
+          const finalText = stripAssistantControlDirectives(extractText(chat.message));
           const timeSinceSend = Date.now() - sendRequestedAt;
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, eventRunId=${eventRunId ?? 'none'}, timeSinceSend=${timeSinceSend}ms`);
 

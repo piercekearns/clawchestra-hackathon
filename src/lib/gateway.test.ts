@@ -288,6 +288,28 @@ describe('gateway client', () => {
     expect(extracted.map((message) => message.content)).toEqual(['first answer', 'second answer']);
   });
 
+  it('strips leaked reply_to_current directives from extracted assistant history', () => {
+    const messages = [
+      { id: 'u-1', role: 'user', content: 'prompt', timestamp: 10 },
+      {
+        id: 'a-1',
+        role: 'assistant',
+        content: '[[reply_to_current]]\nHere is the real response body.',
+        timestamp: 11,
+      },
+      { id: 'u-2', role: 'user', content: 'next', timestamp: 12 },
+    ];
+
+    const extracted = __gatewayTestUtils.extractAssistantMessagesForTurn(messages, {
+      baselineIds: new Set(),
+      minTimestamp: 0,
+      expectedUserText: 'prompt',
+    });
+
+    expect(extracted).toHaveLength(1);
+    expect(extracted[0]?.content).toBe('Here is the real response body.');
+  });
+
   it('prefers run-scoped history messages when runId is available', () => {
     const messages = [
       { id: 'u-1', role: 'user', content: 'prompt', timestamp: 10 },

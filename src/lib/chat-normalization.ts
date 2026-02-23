@@ -1,6 +1,8 @@
 const CONTEXT_PREFIX_PATTERN =
   /^(User workspace path:[^\n]*|User is viewing project:[^\n]*|User is viewing:[^\n]*)/u;
 const USER_REQUEST_MARKER = 'User request:';
+const ASSISTANT_REPLY_TO_CURRENT_DIRECTIVE_PATTERN =
+  /^\s*\[\[\s*reply_to_current(?:\s*:[^\]]+)?\s*\]\](?:[ \t]*\n)?/iu;
 
 /**
  * Strip OpenClaw envelope metadata from user message content for display.
@@ -47,6 +49,28 @@ export function stripOpenClawEnvelope(content: string): string {
   ).trim();
 
   return text;
+}
+
+/**
+ * Strip known assistant control directives that should never be user-visible.
+ *
+ * OpenClaw can occasionally leak routing directives like `[[reply_to_current]]`
+ * into assistant content. We remove those prefixes while preserving the rest
+ * of the response body.
+ */
+export function stripAssistantControlDirectives(content: string): string {
+  let text = content.replace(/\r\n/g, '\n');
+  if (!text) return text;
+
+  let removedDirective = false;
+  for (let i = 0; i < 4; i += 1) {
+    const match = text.match(ASSISTANT_REPLY_TO_CURRENT_DIRECTIVE_PATTERN);
+    if (!match) break;
+    text = text.slice(match[0].length);
+    removedDirective = true;
+  }
+
+  return removedDirective ? text.trimStart() : text;
 }
 
 function looksLikeWorkspacePathToken(token: string): boolean {

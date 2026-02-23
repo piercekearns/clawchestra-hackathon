@@ -25,6 +25,7 @@ import {
 } from './chat-persistence';
 import {
   normalizeChatContentForMatch,
+  stripAssistantControlDirectives,
 } from './chat-normalization';
 import {
   isLikelyDuplicateMessage,
@@ -112,6 +113,15 @@ function comparableMessageContent(message: ChatMessage): string {
 }
 
 function sanitizeIncomingChatMessage(message: ChatMessage): ChatMessage {
+  if (message.role === 'assistant') {
+    const sanitized = stripAssistantControlDirectives(message.content);
+    if (sanitized === message.content) return message;
+    return {
+      ...message,
+      content: sanitized,
+    };
+  }
+
   if (message.role !== 'user') return message;
   const unwrapped = unwrapUserContentForDisplay(message);
   if (!unwrapped) return message;

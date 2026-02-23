@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   normalizeChatContentWithContextUnwrap,
+  stripAssistantControlDirectives,
   stripOpenClawEnvelope,
   unwrapGatewayContextWrappedUserContent,
 } from './chat-normalization';
@@ -136,5 +137,25 @@ describe('stripOpenClawEnvelope', () => {
   it('handles empty/whitespace input', () => {
     expect(stripOpenClawEnvelope('')).toBe('');
     expect(stripOpenClawEnvelope('  ')).toBe('');
+  });
+});
+
+describe('stripAssistantControlDirectives', () => {
+  it('strips a leaked reply_to_current directive prefix', () => {
+    const raw = '[[reply_to_current]]\nHere is the actual assistant reply.';
+    expect(stripAssistantControlDirectives(raw)).toBe(
+      'Here is the actual assistant reply.',
+    );
+  });
+
+  it('strips repeated directive prefixes and preserves body', () => {
+    const raw =
+      '[[reply_to_current]]\n[[reply_to_current]]\n\nFinal response body.';
+    expect(stripAssistantControlDirectives(raw)).toBe('Final response body.');
+  });
+
+  it('leaves bracketed text untouched when not a leading control directive', () => {
+    const raw = 'Documenting syntax: [[reply_to_current]] is an internal token.';
+    expect(stripAssistantControlDirectives(raw)).toBe(raw);
   });
 });
