@@ -53,6 +53,8 @@ interface DashboardState {
   themePreference: ThemePreference;
   loading: boolean;
   selectedProjectId?: string;
+  activeSessionModel: string | null;
+  activeSessionProvider: string | null;
   /** Collapsed columns per board. Key: board id ("projects" | "roadmap:{projectId}"), Value: collapsed column status ids */
   collapsedColumns: Record<string, string[]>;
   /** Custom column order per board. Key: board id, Value: ordered status ids */
@@ -72,6 +74,7 @@ interface DashboardState {
   setAgentActivity: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
   setViewContext: (view: ViewContext) => void;
   setThemePreference: (pref: ThemePreference) => void;
+  setActiveSessionModel: (model: string | null, provider: string | null) => void;
   addChatMessage: (message: ChatMessage) => Promise<void>;
   addSystemBubble: (
     kind: SystemBubbleKind,
@@ -341,6 +344,8 @@ export const useDashboardStore = create<DashboardState>()(
       themePreference: 'system',
       loading: false,
       selectedProjectId: undefined,
+      activeSessionModel: null,
+      activeSessionProvider: null,
       collapsedColumns: {},
       columnOrder: {},
       sidebarOpen: false,
@@ -411,6 +416,9 @@ export const useDashboardStore = create<DashboardState>()(
       setViewContext: (viewContext) => set({ viewContext }),
 
       setThemePreference: (themePreference) => set({ themePreference }),
+
+      setActiveSessionModel: (activeSessionModel, activeSessionProvider) =>
+        set({ activeSessionModel, activeSessionProvider }),
 
       addChatMessage: async (message) => {
         const normalizedMessage = sanitizeIncomingChatMessage(message);

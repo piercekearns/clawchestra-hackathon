@@ -142,6 +142,8 @@ interface ChatShellProps {
   gatewayConnected: boolean;
   connectionState: ChatConnectionState;
   activityLabel: string | null;
+  activeModelLabel?: string | null;
+  activeModelTooltip?: string | null;
   streamingContent?: string | null;
   prefillRequest?: ChatPrefillRequest | null;
   drawerOpen: boolean;
@@ -164,6 +166,8 @@ export function ChatShell({
   gatewayConnected,
   connectionState,
   activityLabel,
+  activeModelLabel,
+  activeModelTooltip,
   streamingContent,
   prefillRequest,
   drawerOpen,
@@ -631,6 +635,8 @@ export function ChatShell({
                   showToggle={false}
                   connectionState={connectionState}
                   activityLabel={activityLabel}
+                  activeModelLabel={activeModelLabel}
+                  activeModelTooltip={activeModelTooltip}
                   drawerOpen={drawerOpen}
                   input={input}
                   sending={showAsSending}
@@ -667,6 +673,8 @@ export function ChatShell({
             showToggle
             connectionState={connectionState}
             activityLabel={activityLabel}
+            activeModelLabel={activeModelLabel}
+            activeModelTooltip={activeModelTooltip}
             drawerOpen={drawerOpen}
             input={input}
             sending={showAsSending}

@@ -1359,6 +1359,103 @@ export async function recoverRecentSessionMessages(options?: {
   return recovered;
 }
 
+function extractOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function extractOptionalRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  if (Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+export interface SessionModelSnapshot {
+  sessionKey: string;
+  model: string | null;
+  provider: string | null;
+}
+
+export async function fetchSessionModel(options?: {
+  transport?: GatewayTransport;
+  sessionKey?: string;
+}): Promise<SessionModelSnapshot | null> {
+  const transport = await resolveTransport(options?.transport);
+  const sessionKey = options?.sessionKey?.trim() || transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
+  if (!sessionKey) return null;
+
+  if (transport.mode === 'tauri-ws') {
+    const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+    try {
+      const connection = await getTauriOpenClawConnection(
+        transport.wsUrl,
+        sessionKey,
+        transport.token,
+      );
+
+      const payload = (await connection.request('sessions.list', {
+        search: sessionKey,
+        limit: 8,
+        includeGlobal: true,
+        includeUnknown: true,
+      })) as unknown;
+
+      const record = extractOptionalRecord(payload);
+      const defaultsRecord = extractOptionalRecord(record?.defaults) ?? {};
+      const sessionsRaw = Array.isArray(record?.sessions) ? record?.sessions ?? [] : [];
+      const sessions = sessionsRaw
+        .map((entry) => extractOptionalRecord(entry))
+        .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+      const exactMatch = sessions.find((entry) => entry.key === sessionKey) ?? sessions[0];
+      const model =
+        extractOptionalString(exactMatch?.model) ?? extractOptionalString(defaultsRecord.model);
+      const provider =
+        extractOptionalString(exactMatch?.modelProvider) ??
+        extractOptionalString(defaultsRecord.modelProvider);
+
+      return { sessionKey, model, provider };
+    } catch (error) {
+      console.warn('[Gateway] Failed to fetch session model:', error);
+      return null;
+    }
+  }
+
+  if (transport.mode === 'openclaw-ws') {
+    const connection = await openOpenClawConnection(transport);
+    try {
+      const payload = await connection.request('sessions.list', {
+        search: sessionKey,
+        limit: 8,
+        includeGlobal: true,
+        includeUnknown: true,
+      });
+
+      const record = extractOptionalRecord(payload);
+      const defaultsRecord = extractOptionalRecord(record?.defaults) ?? {};
+      const sessionsRaw = Array.isArray(record?.sessions) ? record?.sessions ?? [] : [];
+      const sessions = sessionsRaw
+        .map((entry) => extractOptionalRecord(entry))
+        .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+      const exactMatch = sessions.find((entry) => entry.key === sessionKey) ?? sessions[0];
+      const model =
+        extractOptionalString(exactMatch?.model) ?? extractOptionalString(defaultsRecord.model);
+      const provider =
+        extractOptionalString(exactMatch?.modelProvider) ??
+        extractOptionalString(defaultsRecord.modelProvider);
+
+      return { sessionKey, model, provider };
+    } catch (error) {
+      console.warn('[Gateway] Failed to fetch session model:', error);
+      return null;
+    } finally {
+      connection.close();
+    }
+  }
+
+  return null;
+}
+
 function toOpenAIMessagePayload(
   messages: ChatMessage[],
   attachments: GatewayImageAttachment[] = [],

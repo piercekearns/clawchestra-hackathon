@@ -23,6 +23,8 @@ function hasFilePayload(dataTransfer: DataTransfer | null): boolean {
 interface ChatBarProps {
   connectionState: ChatConnectionState;
   activityLabel: string | null;
+  activeModelLabel?: string | null;
+  activeModelTooltip?: string | null;
   drawerOpen: boolean;
   variant?: 'floating' | 'embedded';
   showToggle?: boolean;
@@ -48,6 +50,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   {
     connectionState,
     activityLabel,
+    activeModelLabel,
+    activeModelTooltip,
     drawerOpen,
     variant = 'floating',
     showToggle = true,
@@ -175,6 +179,14 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw
           </span>
+          {activeModelLabel ? (
+            <span
+              className="rounded-full border border-neutral-300/70 px-2 py-0.5 text-[10px] font-medium text-neutral-600 dark:border-neutral-600 dark:text-neutral-300"
+              title={activeModelTooltip ?? activeModelLabel}
+            >
+              {activeModelLabel}
+            </span>
+          ) : null}
           <StatusBadge state={connectionState} />
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
           {images.length > 0 ? (
@@ -202,6 +214,14 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
             OpenClaw
           </span>
+          {activeModelLabel ? (
+            <span
+              className="rounded-full border border-neutral-300/70 px-2 py-0.5 text-[10px] font-medium text-neutral-600 dark:border-neutral-600 dark:text-neutral-300"
+              title={activeModelTooltip ?? activeModelLabel}
+            >
+              {activeModelLabel}
+            </span>
+          ) : null}
           <StatusBadge state={connectionState} />
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
           {images.length > 0 ? (

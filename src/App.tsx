@@ -32,6 +32,7 @@ import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
   DEFAULT_SESSION_KEY,
+  fetchSessionModel,
   finalizeActiveTurnsForSession,
   getActiveTurnCount,
   hydratePendingTurns,
@@ -78,6 +79,7 @@ import { mapToRoadmapItemsWithDocs } from './lib/roadmap-item-mapper';
 import { defaultView, projectRoadmapView } from './lib/views';
 import { setupTauriEventListeners } from './lib/tauri-events';
 import { messageIdentitySignature } from './lib/chat-message-identity';
+import { formatModelDisplayName } from './lib/model-label';
 import { CHAT_RELIABILITY_FLAGS } from './lib/chat-reliability-flags';
 import {
   buildFailureBubbleDedupeKey,
@@ -231,6 +233,8 @@ export default function App() {
   const viewContext = useDashboardStore((state) => state.viewContext);
   const loading = useDashboardStore((state) => state.loading);
   const selectedProjectId = useDashboardStore((state) => state.selectedProjectId);
+  const activeSessionModel = useDashboardStore((state) => state.activeSessionModel);
+  const activeSessionProvider = useDashboardStore((state) => state.activeSessionProvider);
   const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
 
   const loadProjects = useDashboardStore((state) => state.loadProjects);
@@ -240,6 +244,7 @@ export default function App() {
   const setGatewayConnected = useDashboardStore((state) => state.setGatewayConnected);
   const setAgentActivity = useDashboardStore((state) => state.setAgentActivity);
   const setViewContext = useDashboardStore((state) => state.setViewContext);
+  const setActiveSessionModel = useDashboardStore((state) => state.setActiveSessionModel);
   const addChatMessage = useDashboardStore((state) => state.addChatMessage);
   const addSystemBubble = useDashboardStore((state) => state.addSystemBubble);
   const loadChatMessages = useDashboardStore((state) => state.loadChatMessages);
@@ -486,6 +491,18 @@ export default function App() {
     return null;
   }, [agentActivity, isChatBusy]);
 
+  const activeModelLabel = useMemo(
+    () => formatModelDisplayName(activeSessionModel),
+    [activeSessionModel],
+  );
+
+  const activeModelTooltip = useMemo(() => {
+    if (!activeSessionModel && !activeSessionProvider) return null;
+    const model = activeSessionModel ?? 'unknown model';
+    if (!activeSessionProvider) return model;
+    return `${activeSessionProvider} · ${model}`;
+  }, [activeSessionModel, activeSessionProvider]);
+
   const pushToast = (kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
     setToasts((current) => [...current, { id, kind, message }]);
@@ -493,6 +510,14 @@ export default function App() {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, 3600);
   };
+
+  const refreshActiveSessionModel = useCallback(async () => {
+    if (!isTauriRuntime()) return;
+    if (wsConnectionState !== 'connected') return;
+    const snapshot = await fetchSessionModel();
+    if (!snapshot) return;
+    setActiveSessionModel(snapshot.model, snapshot.provider);
+  }, [setActiveSessionModel, wsConnectionState]);
 
   useEffect(() => {
     chatDrawerOpenRef.current = chatDrawerOpen;
@@ -838,6 +863,11 @@ export default function App() {
       unsubscribe();
     };
   }, [addSystemBubble]);
+
+  useEffect(() => {
+    if (wsConnectionState !== 'connected') return;
+    void refreshActiveSessionModel();
+  }, [refreshActiveSessionModel, wsConnectionState]);
 
   const reconcileRecentHistory = useCallback(async (): Promise<number> => {
     if (recoveryInFlightRef.current) {
@@ -1544,6 +1574,7 @@ export default function App() {
       setChatStreamingContent(null);
       setGatewayConnected(true);
       blockedQueueMessageIdRef.current = null;
+      void refreshActiveSessionModel();
       
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {
@@ -1877,6 +1908,8 @@ export default function App() {
         gatewayConnected={gatewayConnected}
         connectionState={chatConnectionState}
         activityLabel={chatActivityLabel}
+        activeModelLabel={activeModelLabel}
+        activeModelTooltip={activeModelTooltip}
         streamingContent={chatStreamingContent}
         prefillRequest={chatPrefillRequest}
         drawerOpen={chatDrawerOpen}
