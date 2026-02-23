@@ -102,7 +102,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           className="group absolute right-0 top-0 h-full w-3 cursor-col-resize"
         >
           <div
-            className={`pointer-events-none absolute right-0 top-1/2 h-6 w-1.5 -translate-y-1/2 translate-x-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400/60 dark:bg-revival-accent-400/40'}`}
+            className={`pointer-events-none absolute right-0 top-1/2 h-6 w-1.5 -translate-y-1/2 translate-x-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400' : 'bg-revival-accent-400'}`}
           />
         </div>
       )}
