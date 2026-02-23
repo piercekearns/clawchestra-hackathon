@@ -84,22 +84,22 @@
   }
 
   .kanban-scroll {
-    --kanban-scrollbar-thumb: rgba(148, 163, 184, 0.35);
-    --kanban-scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
+    --kanban-scrollbar-thumb: rgba(148, 163, 184, 0.25);
+    --kanban-scrollbar-thumb-hover: rgba(148, 163, 184, 0.4);
     -ms-overflow-style: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--kanban-scrollbar-thumb) transparent;
     scrollbar-gutter: stable both-edges;
-    padding-bottom: var(--kanban-scrollbar-gutter, 10px);
+    padding-bottom: var(--kanban-scrollbar-gutter, 8px);
   }
 
   .dark .kanban-scroll {
-    --kanban-scrollbar-thumb: rgba(148, 163, 184, 0.28);
-    --kanban-scrollbar-thumb-hover: rgba(148, 163, 184, 0.42);
+    --kanban-scrollbar-thumb: rgba(223, 255, 0, 0.35);
+    --kanban-scrollbar-thumb-hover: rgba(223, 255, 0, 0.55);
   }
 
   .kanban-scroll::-webkit-scrollbar {
-    height: 6px;
+    height: 7px;
   }
 
   .kanban-scroll::-webkit-scrollbar-track {

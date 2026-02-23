@@ -65,7 +65,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r bg-neutral-50 dark:bg-neutral-900 ${isResizing || isHandleHover ? 'border-revival-accent-500/60 dark:border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r bg-neutral-50 dark:bg-neutral-900 ${isResizing || isHandleHover ? 'border-revival-accent-600/70 dark:border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className="flex h-full w-full flex-col overflow-hidden">
@@ -102,7 +102,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           className="group absolute right-0 top-0 h-full w-[6px] translate-x-1/2 cursor-col-resize"
         >
           <div
-            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-400 dark:bg-revival-accent-300' : 'bg-revival-accent-500 dark:bg-revival-accent-400'}`}
+            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-500 dark:bg-revival-accent-300' : 'bg-revival-accent-600 dark:bg-revival-accent-400'}`}
           />
         </div>
       )}

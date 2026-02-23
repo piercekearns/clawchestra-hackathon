@@ -42,7 +42,7 @@ interface BoardProps<T extends BoardItem> {
 
 const MIN_COLUMN_WIDTH = 300;
 const COLUMN_GAP = 16;
-const SCROLLBAR_GUTTER_PX = 10;
+const SCROLLBAR_GUTTER_PX = 8;
 const EMPTY_ARRAY: string[] = [];
 
 /**
@@ -381,13 +381,13 @@ export function Board<T extends BoardItem>({
       onDragEnd={handleDragEnd}
     >
       <div
-        className="kanban-scroll h-full min-h-[24rem] min-w-0 overflow-x-auto overflow-y-hidden"
+        className="kanban-scroll h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden"
         style={{ '--kanban-scrollbar-gutter': `${SCROLLBAR_GUTTER_PX}px` } as React.CSSProperties}
       >
         <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
           <div
             ref={gridRef}
-            className="grid min-h-[24rem] w-full gap-4 pr-2"
+            className="grid min-h-0 w-full gap-4 pr-2"
             style={{
               gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
               gridTemplateRows: 'minmax(0, 1fr)',
