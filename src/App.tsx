@@ -234,6 +234,7 @@ export default function App() {
   const viewContext = useDashboardStore((state) => state.viewContext);
   const loading = useDashboardStore((state) => state.loading);
   const selectedProjectId = useDashboardStore((state) => state.selectedProjectId);
+  const sidebarSide = useDashboardStore((state) => state.sidebarSide);
   const activeSessionModel = useDashboardStore((state) => state.activeSessionModel);
   const activeSessionProvider = useDashboardStore((state) => state.activeSessionProvider);
   const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
@@ -1753,7 +1754,9 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
       <TitleBar />
       <div className="flex min-h-0 flex-1">
-        <Sidebar onOpenSettings={() => setSettingsDialogOpen(true)} />
+        {sidebarSide === 'left' ? (
+          <Sidebar side="left" onOpenSettings={() => setSettingsDialogOpen(true)} />
+        ) : null}
         <div className="relative flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6">
         <Header
           errors={errors}
@@ -1946,6 +1949,9 @@ export default function App() {
         onRetryConnection={retryGatewayConnection}
       />
         </div>
+        {sidebarSide === 'right' ? (
+          <Sidebar side="right" onOpenSettings={() => setSettingsDialogOpen(true)} />
+        ) : null}
       </div>
 
       <ProjectModal

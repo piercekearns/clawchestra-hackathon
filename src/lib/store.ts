@@ -60,8 +60,10 @@ interface DashboardState {
   /** Custom column order per board. Key: board id, Value: ordered status ids */
   columnOrder: Record<string, string[]>;
   sidebarOpen: boolean;
+  sidebarSide: 'left' | 'right';
   sidebarWidth: number;
   setSidebarOpen: (open: boolean) => void;
+  setSidebarSide: (side: 'left' | 'right') => void;
   setSidebarWidth: (width: number) => void;
 
   setProjects: (projects: ProjectViewModel[]) => void;
@@ -349,6 +351,7 @@ export const useDashboardStore = create<DashboardState>()(
       collapsedColumns: {},
       columnOrder: {},
       sidebarOpen: false,
+      sidebarSide: 'left',
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
 
       setProjects: (projects) => set({ projects }),
@@ -609,6 +612,7 @@ export const useDashboardStore = create<DashboardState>()(
         })),
 
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      setSidebarSide: (sidebarSide) => set({ sidebarSide }),
       setSidebarWidth: (width) =>
         set({ sidebarWidth: Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width)) }),
 

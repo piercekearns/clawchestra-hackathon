@@ -1,19 +1,29 @@
-import { Loader2, Monitor, Moon, PanelLeft, PanelLeftClose, Sun } from 'lucide-react';
+import { Loader2, PanelLeft, PanelLeftClose } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
-import type { ThemePreference } from '../lib/schema';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
 
 export function TitleBar() {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
+  const sidebarSide = useDashboardStore((s) => s.sidebarSide);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
-  const themePreference = useDashboardStore((s) => s.themePreference);
-  const setThemePreference = useDashboardStore((s) => s.setThemePreference);
+  const setSidebarSide = useDashboardStore((s) => s.setSidebarSide);
   const { updateAvailable, updating, updateBlockedReason, handleUpdate } = useAppUpdate();
 
-  const ToggleIcon = sidebarOpen ? PanelLeftClose : PanelLeft;
+  const leftOpen = sidebarOpen && sidebarSide === 'left';
+  const rightOpen = sidebarOpen && sidebarSide === 'right';
+  const LeftToggleIcon = leftOpen ? PanelLeftClose : PanelLeft;
+  const RightToggleIcon = rightOpen ? PanelLeftClose : PanelLeft;
+  const toggleSidebar = (side: 'left' | 'right') => {
+    if (sidebarOpen && sidebarSide === side) {
+      setSidebarOpen(false);
+      return;
+    }
+    setSidebarSide(side);
+    setSidebarOpen(true);
+  };
   const startWindowDrag = () => {
     void getCurrentWindow().startDragging().catch(() => {});
   };
@@ -26,17 +36,17 @@ export function TitleBar() {
       {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
       <div className="w-[78px] shrink-0" />
 
-      {/* Sidebar toggle */}
+      {/* Left sidebar toggle */}
       <button
         type="button"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+        onClick={() => toggleSidebar('left')}
+        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''}`}
         onMouseDown={(e) => e.stopPropagation()}
-        aria-expanded={sidebarOpen}
+        aria-expanded={leftOpen}
         aria-controls="sidebar"
-        aria-label="Toggle sidebar"
+        aria-label="Toggle left sidebar"
       >
-        <ToggleIcon className="h-4 w-4" />
+        <LeftToggleIcon className="h-4 w-4" />
       </button>
 
       {/* Spacer — pushes logo+title to center */}
@@ -87,61 +97,21 @@ export function TitleBar() {
         )}
       </div>
 
-      {/* Spacer — pushes theme toggle to right */}
+      {/* Spacer — pushes right toggle to the edge */}
       <div className="flex-1" />
 
-      {/* Theme toggle */}
-      <div
-        className="pointer-events-auto inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600"
+      {/* Right sidebar toggle */}
+      <button
+        type="button"
+        onClick={() => toggleSidebar('right')}
+        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''}`}
         onMouseDown={(e) => e.stopPropagation()}
+        aria-expanded={rightOpen}
+        aria-controls="sidebar"
+        aria-label="Toggle right sidebar"
       >
-        <ThemeButton
-          pref="light"
-          current={themePreference}
-          onClick={setThemePreference}
-          icon={Sun}
-          label="Light theme"
-        />
-        <ThemeButton
-          pref="dark"
-          current={themePreference}
-          onClick={setThemePreference}
-          icon={Moon}
-          label="Dark theme"
-        />
-        <ThemeButton
-          pref="system"
-          current={themePreference}
-          onClick={setThemePreference}
-          icon={Monitor}
-          label="System theme"
-        />
-      </div>
+        <RightToggleIcon className="h-4 w-4 -scale-x-100" />
+      </button>
     </div>
-  );
-}
-
-function ThemeButton({
-  pref,
-  current,
-  onClick,
-  icon: Icon,
-  label,
-}: {
-  pref: ThemePreference;
-  current: ThemePreference;
-  onClick: (pref: ThemePreference) => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      className={`rounded p-1 ${pref === current ? 'bg-neutral-200 dark:bg-neutral-700' : ''}`}
-      onClick={() => onClick(pref)}
-      aria-label={label}
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </button>
   );
 }

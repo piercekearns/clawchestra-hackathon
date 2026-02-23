@@ -364,6 +364,11 @@ This app uses:
 - **Lucide React** — icons
 - **Brand color**: `#DFFF00` (revival yellow) for accents, buttons, badges
 
+**Sidebar controls:**
+- Title bar includes **left + right** sidebar toggles (mirrored icons).
+- Sidebar can dock **left or right**; only one side open at a time.
+- Theme toggle lives **inside the sidebar**, aligned to the top-left (left dock) or top-right (right dock).
+
 When adding new UI:
 - Check existing components in `src/components/ui/` first
 - Match the existing dark/light theme patterns

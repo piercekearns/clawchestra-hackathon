@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
-import { Settings } from 'lucide-react';
+import { useCallback, useRef, useState, type ComponentType } from 'react';
+import { Monitor, Moon, Settings, Sun } from 'lucide-react';
+import type { ThemePreference } from '../../lib/schema';
 import {
   useDashboardStore,
   SIDEBAR_MIN_WIDTH,
@@ -8,18 +9,22 @@ import {
 } from '../../lib/store';
 
 interface SidebarProps {
+  side: 'left' | 'right';
   onOpenSettings: () => void;
 }
 
-export function Sidebar({ onOpenSettings }: SidebarProps) {
+export function Sidebar({ side, onOpenSettings }: SidebarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const sidebarWidth = useDashboardStore((s) => s.sidebarWidth);
+  const themePreference = useDashboardStore((s) => s.themePreference);
+  const setThemePreference = useDashboardStore((s) => s.setThemePreference);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
   const setSidebarWidth = useDashboardStore((s) => s.setSidebarWidth);
   const isDragging = useRef(false);
   const rafHandle = useRef(0);
   const [isResizing, setIsResizing] = useState(false);
   const [isHandleHover, setIsHandleHover] = useState(false);
+  const isRight = side === 'right';
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -35,11 +40,13 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         cancelAnimationFrame(rafHandle.current);
         rafHandle.current = requestAnimationFrame(() => {
           if (!isDragging.current) return;
-          if (x < SIDEBAR_MIN_WIDTH - 40) {
+          const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+          const width = isRight ? viewportWidth - x : x;
+          if (width < SIDEBAR_MIN_WIDTH - 40) {
             setSidebarOpen(false);
             setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
           } else {
-            setSidebarWidth(x);
+            setSidebarWidth(width);
           }
         });
       };
@@ -65,10 +72,44 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r bg-neutral-50 dark:bg-neutral-900 ${isResizing || isHandleHover ? 'border-revival-accent-600/70 dark:border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative z-20 flex shrink-0 flex-col overflow-visible bg-neutral-50 dark:bg-neutral-900 ${isRight ? 'border-l' : 'border-r'} ${isResizing || isHandleHover ? 'border-revival-accent-600/70 dark:border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className="flex h-full w-full flex-col overflow-hidden">
+        {/* Theme toggle pinned to top */}
+        {sidebarOpen && (
+          <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
+            <div
+              className={`pointer-events-auto flex ${isRight ? 'justify-end' : 'justify-start'}`}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600">
+                <ThemeButton
+                  pref="light"
+                  current={themePreference}
+                  onClick={setThemePreference}
+                  icon={Sun}
+                  label="Light theme"
+                />
+                <ThemeButton
+                  pref="dark"
+                  current={themePreference}
+                  onClick={setThemePreference}
+                  icon={Moon}
+                  label="Dark theme"
+                />
+                <ThemeButton
+                  pref="system"
+                  current={themePreference}
+                  onClick={setThemePreference}
+                  icon={Monitor}
+                  label="System theme"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Main content area — empty for Phase 1 */}
         <div className="flex-1" />
 
@@ -87,7 +128,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         )}
       </div>
 
-      {/* Drag handle (right edge) — wide hit area, narrow visual indicator */}
+      {/* Drag handle (edge) — wide hit area, narrow visual indicator */}
       {sidebarOpen && (
         <div
           role="separator"
@@ -99,7 +140,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           onMouseEnter={() => setIsHandleHover(true)}
           onMouseLeave={() => setIsHandleHover(false)}
           onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
-          className="group absolute right-0 top-0 h-full w-[6px] translate-x-1/2 cursor-col-resize"
+          className={`group absolute top-0 h-full w-[6px] cursor-col-resize ${isRight ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`}
         >
           <div
             className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-500 dark:bg-revival-accent-300' : 'bg-revival-accent-600 dark:bg-revival-accent-400'}`}
@@ -107,5 +148,30 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function ThemeButton({
+  pref,
+  current,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  pref: ThemePreference;
+  current: ThemePreference;
+  onClick: (pref: ThemePreference) => void;
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={`rounded p-1 ${pref === current ? 'bg-neutral-200 dark:bg-neutral-700' : ''}`}
+      onClick={() => onClick(pref)}
+      aria-label={label}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
   );
 }
