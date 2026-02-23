@@ -4,8 +4,8 @@ id: ui-tweaks
 status: pending
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Implement in priority order — start with divider notch (smallest lift)"
-lastActivity: "2026-02-22"
+nextAction: "Next: active model indicator (read-only)"
+lastActivity: "2026-02-23"
 ---
 
 # UI Tweaks
