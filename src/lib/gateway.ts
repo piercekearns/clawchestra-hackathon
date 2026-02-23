@@ -1382,7 +1382,9 @@ export async function fetchSessionModel(options?: {
   sessionKey?: string;
 }): Promise<SessionModelSnapshot | null> {
   const transport = await resolveTransport(options?.transport);
-  const sessionKey = options?.sessionKey?.trim() || transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
+  const transportSessionKey =
+    'sessionKey' in transport ? transport.sessionKey?.trim() : undefined;
+  const sessionKey = options?.sessionKey?.trim() || transportSessionKey || DEFAULT_SESSION_KEY;
   if (!sessionKey) return null;
 
   if (transport.mode === 'tauri-ws') {
