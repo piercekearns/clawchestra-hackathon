@@ -20,7 +20,6 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: Side
   const sidebarWidth = useDashboardStore((s) => s.sidebarWidth);
   const themePreference = useDashboardStore((s) => s.themePreference);
   const setThemePreference = useDashboardStore((s) => s.setThemePreference);
-  const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
   const setSidebarWidth = useDashboardStore((s) => s.setSidebarWidth);
   const isDragging = useRef(false);
   const rafHandle = useRef(0);
@@ -46,12 +45,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: Side
           if (!isDragging.current) return;
           const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
           const width = isRight ? viewportWidth - x : x;
-          if (width < SIDEBAR_MIN_WIDTH - 40) {
-            setSidebarOpen(false);
-            setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
-          } else {
-            setSidebarWidth(width);
-          }
+          setSidebarWidth(width);
         });
       };
 
@@ -68,7 +62,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: Side
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     },
-    [setSidebarOpen, setSidebarWidth],
+    [setSidebarWidth],
   );
 
   return (
