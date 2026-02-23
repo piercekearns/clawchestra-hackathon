@@ -500,6 +500,16 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
   - recovery suppression now keys to actual `gatewayActiveTurns > 0` (instead of broad busy state), so post-final reconciliation is less likely to skip assistant backfill;
   - post-send visibility guard now verifies assistant output is actually present in store, forces reconciliation when missing, and injects a last-content fallback assistant message if still absent.
 
+**Update (2026-02-23 ~13:xx):**
+- Additional user logs show this turn still emitted normal streaming lifecycle:
+  - transport connected (`tauri-ws`)
+  - repeated `chat state=delta`
+  - `chat state=final`
+  - gateway lifecycle completed (`finalFastPath`, `history found 1`)
+- This weakens the hypothesis that provider/model choice alone is suppressing streaming for these runs.
+- Added collapsed-surface streaming visibility fix in `src/App.tsx`:
+  - while drawer is closed, `onStreamDelta` now updates response toast content live (instead of waiting for final only), so users see progressive output during long runs.
+
 **Related bugs:**
 - BUG-001 (assistant not appearing / recovery dependence)
 - BUG-003 (streaming/turn assembly instability)
