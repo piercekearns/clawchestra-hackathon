@@ -1134,6 +1134,10 @@ export default function App() {
     setSettingsPageOpen(false);
   }, [settingsDirty]);
 
+  const handleSettingsDirtyChange = useCallback((dirty: boolean) => {
+    setSettingsDirty(dirty);
+  }, []);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -1879,7 +1883,8 @@ export default function App() {
                 active={settingsPageOpen}
                 settings={dashboardSettings}
                 saveNudge={settingsSaveNudge}
-                onDirtyChange={(dirty) => setSettingsDirty(dirty)}
+                onDirtyChange={handleSettingsDirtyChange}
+                onNotify={(kind, message) => pushToast(kind, message)}
                 onSave={async (settings) => {
                   try {
                     const saved = await updateDashboardSettings(settings);

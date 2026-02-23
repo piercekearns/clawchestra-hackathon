@@ -7,9 +7,10 @@ interface SettingsPageProps {
   onSave: (settings: DashboardSettings) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   saveNudge?: boolean;
+  onNotify?: (kind: 'success' | 'error', message: string) => void;
 }
 
-export function SettingsPage({ active, settings, onSave, onDirtyChange, saveNudge }: SettingsPageProps) {
+export function SettingsPage({ active, settings, onSave, onDirtyChange, saveNudge, onNotify }: SettingsPageProps) {
   return (
     <div className="min-h-full w-full bg-neutral-50 px-8 py-6 dark:bg-neutral-900">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -25,6 +26,7 @@ export function SettingsPage({ active, settings, onSave, onDirtyChange, saveNudg
           onSave={onSave}
           onDirtyChange={onDirtyChange}
           saveNudge={saveNudge}
+          onNotify={onNotify}
         />
       </div>
     </div>

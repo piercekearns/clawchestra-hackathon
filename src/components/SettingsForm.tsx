@@ -18,6 +18,7 @@ interface SettingsFormProps {
   onSaved?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   saveNudge?: boolean;
+  onNotify?: (kind: 'success' | 'error', message: string) => void;
 }
 
 export function SettingsForm({
@@ -28,6 +29,7 @@ export function SettingsForm({
   onSaved,
   onDirtyChange,
   saveNudge,
+  onNotify,
 }: SettingsFormProps) {
   const [scanPaths, setScanPaths] = useState<string[]>(['']);
   const [openclawWorkspacePath, setOpenclawWorkspacePath] = useState('');
@@ -233,34 +235,26 @@ export function SettingsForm({
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
             <span>Update Mode</span>
-            <div className="relative">
-              <select
-                value={updateMode}
-                onChange={(event) => setUpdateMode(event.target.value as UpdateMode)}
-                className="h-10 w-full appearance-none rounded-lg border border-neutral-300 bg-neutral-50 px-3 pr-9 text-sm text-neutral-800 outline-none transition-colors hover:border-neutral-400 focus:border-revival-accent-400 focus:ring-2 focus:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500"
-              >
-                <option value="none">none</option>
-                <option value="source-rebuild">source-rebuild</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-            </div>
+            <SettingsSelect
+              value={updateMode}
+              onChange={(value) => setUpdateMode(value as UpdateMode)}
+              options={[
+                { value: 'none', label: 'none' },
+                { value: 'source-rebuild', label: 'source-rebuild' },
+              ]}
+            />
           </label>
 
           <label className="grid gap-1 text-sm">
             <span>Chat Context Policy</span>
-            <div className="relative">
-              <select
-                value={openclawContextPolicy}
-                onChange={(event) =>
-                  setOpenclawContextPolicy(event.target.value as OpenClawContextPolicy)
-                }
-                className="h-10 w-full appearance-none rounded-lg border border-neutral-300 bg-neutral-50 px-3 pr-9 text-sm text-neutral-800 outline-none transition-colors hover:border-neutral-400 focus:border-revival-accent-400 focus:ring-2 focus:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500"
-              >
-                <option value="selected-project-first">selected-project-first</option>
-                <option value="workspace-default">workspace-default</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-            </div>
+            <SettingsSelect
+              value={openclawContextPolicy}
+              onChange={(value) => setOpenclawContextPolicy(value as OpenClawContextPolicy)}
+              options={[
+                { value: 'selected-project-first', label: 'selected-project-first' },
+                { value: 'workspace-default', label: 'workspace-default' },
+              ]}
+            />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Controls prompt context priority only (selected project vs workspace path).
             </span>
@@ -275,18 +269,15 @@ export function SettingsForm({
           <div className="grid gap-3">
             <label className="grid gap-1 text-sm">
               <span>Sync Mode</span>
-              <div className="relative">
-                <select
-                  value={syncMode}
-                  onChange={(event) => setSyncMode(event.target.value as SyncMode)}
-                  className="h-10 w-full appearance-none rounded-lg border border-neutral-300 bg-neutral-50 px-3 pr-9 text-sm text-neutral-800 outline-none transition-colors hover:border-neutral-400 focus:border-revival-accent-400 focus:ring-2 focus:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500"
-                >
-                  <option value="Local">Local</option>
-                  <option value="Remote">Remote</option>
-                  <option value="Disabled">Disabled</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-              </div>
+              <SettingsSelect
+                value={syncMode}
+                onChange={(value) => setSyncMode(value as SyncMode)}
+                options={[
+                  { value: 'Local', label: 'Local' },
+                  { value: 'Remote', label: 'Remote' },
+                  { value: 'Disabled', label: 'Disabled' },
+                ]}
+              />
               <span className="text-xs text-neutral-500 dark:text-neutral-400">
                 Local: same machine. Remote: sync via HTTP endpoint.
               </span>
@@ -347,9 +338,10 @@ export function SettingsForm({
                   const info = await exportDebugInfo();
                   await navigator.clipboard.writeText(info);
                   setDebugCopied(true);
+                  onNotify?.('success', 'Debug info copied');
                   setTimeout(() => setDebugCopied(false), 1500);
                 } catch {
-                  // Silently fail — clipboard may not be available
+                  onNotify?.('error', 'Failed to copy debug info');
                 }
               }}
             >
@@ -413,5 +405,88 @@ export function SettingsForm({
         )}
       </div>
     </>
+  );
+}
+
+
+type SelectOption = { value: string; label: string };
+
+function SettingsSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+        className={`flex h-10 w-full items-center justify-between rounded-lg border border-neutral-300 bg-neutral-50 px-3 text-sm text-neutral-800 transition-colors hover:border-neutral-400 focus-visible:border-revival-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500 ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+      >
+        <span className="truncate">{selected?.label ?? value}</span>
+        <ChevronDown
+          className={`h-4 w-4 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="absolute z-30 mt-1 w-full rounded-lg border border-neutral-200 bg-neutral-0 p-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition-colors ${isSelected ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100' : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800'}`}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="truncate">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
