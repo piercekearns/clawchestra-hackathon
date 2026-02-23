@@ -1865,7 +1865,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
-      <TitleBar />
+      <TitleBar settingsMode={settingsPageOpen} />
       <div className="flex min-h-0 flex-1">
         {sidebarSide === 'left' ? (
           <Sidebar

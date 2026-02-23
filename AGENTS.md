@@ -368,7 +368,7 @@ This app uses:
 - Title bar includes **left + right** sidebar toggles (mirrored icons).
 - Sidebar can dock **left or right**; only one side open at a time.
 - Theme toggle lives **inside the sidebar**, aligned to the top-left (left dock) or top-right (right dock).
-- **Settings mode:** clicking Settings switches the board to a full settings page; sidebar shows a “Back to Clawchestra” control (no tabs yet).
+- **Settings mode:** clicking Settings switches the board to a full settings page; sidebar shows a “Back to Clawchestra” control (no tabs yet). Sidebar toggles cannot close the sidebar while in settings mode (can swap sides only).
 
 When adding new UI:
 - Check existing components in `src/components/ui/` first

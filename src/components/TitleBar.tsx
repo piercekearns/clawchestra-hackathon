@@ -5,7 +5,11 @@ import { useAppUpdate } from '../hooks/useAppUpdate';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
 
-export function TitleBar() {
+interface TitleBarProps {
+  settingsMode?: boolean;
+}
+
+export function TitleBar({ settingsMode = false }: TitleBarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const sidebarSide = useDashboardStore((s) => s.sidebarSide);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
@@ -16,7 +20,12 @@ export function TitleBar() {
   const rightOpen = sidebarOpen && sidebarSide === 'right';
   const LeftToggleIcon = leftOpen ? PanelLeftClose : PanelLeft;
   const RightToggleIcon = rightOpen ? PanelLeftClose : PanelLeft;
+  const leftLocked = settingsMode && leftOpen;
+  const rightLocked = settingsMode && rightOpen;
   const toggleSidebar = (side: 'left' | 'right') => {
+    if (settingsMode && sidebarOpen && sidebarSide === side) {
+      return;
+    }
     if (sidebarOpen && sidebarSide === side) {
       setSidebarOpen(false);
       return;
@@ -40,7 +49,8 @@ export function TitleBar() {
       <button
         type="button"
         onClick={() => toggleSidebar('left')}
-        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''}`}
+        disabled={leftLocked}
+        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${leftLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
         onMouseDown={(e) => e.stopPropagation()}
         aria-expanded={leftOpen}
         aria-controls="sidebar"
@@ -104,7 +114,8 @@ export function TitleBar() {
       <button
         type="button"
         onClick={() => toggleSidebar('right')}
-        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''}`}
+        disabled={rightLocked}
+        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${rightLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
         onMouseDown={(e) => e.stopPropagation()}
         aria-expanded={rightOpen}
         aria-controls="sidebar"
