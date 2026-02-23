@@ -65,25 +65,27 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative z-20 flex shrink-0 flex-col overflow-hidden border-r bg-neutral-50 dark:bg-neutral-900 ${isResizing || isHandleHover ? 'border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r bg-neutral-50 dark:bg-neutral-900 ${isResizing || isHandleHover ? 'border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
-      {/* Main content area — empty for Phase 1 */}
-      <div className="flex-1" />
+      <div className="flex h-full w-full flex-col overflow-hidden">
+        {/* Main content area — empty for Phase 1 */}
+        <div className="flex-1" />
 
-      {/* Settings button pinned to bottom — only rendered when open to keep out of tab order */}
-      {sidebarOpen && (
-        <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </button>
-        </div>
-      )}
+        {/* Settings button pinned to bottom — only rendered when open to keep out of tab order */}
+        {sidebarOpen && (
+          <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Drag handle (right edge) — wide hit area, narrow visual indicator */}
       {sidebarOpen && (
