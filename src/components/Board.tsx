@@ -379,7 +379,7 @@ export function Board<T extends BoardItem>({
       onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
-      <div className="kanban-scroll -mb-2 h-full min-h-[24rem] min-w-0 overflow-x-auto overflow-y-hidden pb-0">
+      <div className="kanban-scroll h-full min-h-[24rem] min-w-0 overflow-x-auto overflow-y-hidden pb-3">
         <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
           <div
             ref={gridRef}
