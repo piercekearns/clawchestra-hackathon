@@ -42,7 +42,9 @@ interface BoardProps<T extends BoardItem> {
 
 const MIN_COLUMN_WIDTH = 300;
 const COLUMN_GAP = 16;
-const SCROLLBAR_GUTTER_PX = 7;
+const SCROLLBAR_CONTAINER_PX = 10;
+const SCROLLBAR_THUMB_PX = 7;
+const SCROLLBAR_MIN_THUMB_PX = 32;
 const EMPTY_ARRAY: string[] = [];
 
 /**
@@ -144,6 +146,10 @@ export function Board<T extends BoardItem>({
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollbarTrackRef = useRef<HTMLDivElement>(null);
+  const [scrollbarState, setScrollbarState] = useState({ left: 0, width: 0, visible: false });
+  const scrollbarDragRef = useRef({ active: false, startX: 0, startScrollLeft: 0 });
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
   const [itemsBeforeDrag, setItemsBeforeDrag] = useState<T[] | null>(null);
   const [dragSourceStatus, setDragSourceStatus] = useState<string | null>(null);
@@ -161,6 +167,31 @@ export function Board<T extends BoardItem>({
     }),
   );
 
+  const updateScrollbar = useCallback(() => {
+    const scrollEl = scrollRef.current;
+    const trackEl = scrollbarTrackRef.current;
+    if (!scrollEl || !trackEl) return;
+
+    const { scrollWidth, clientWidth, scrollLeft } = scrollEl;
+    const trackWidth = trackEl.clientWidth;
+
+    if (scrollWidth <= clientWidth || trackWidth === 0) {
+      setScrollbarState({ left: 0, width: 0, visible: false });
+      return;
+    }
+
+    const ratio = clientWidth / scrollWidth;
+    const rawThumbWidth = Math.round(trackWidth * ratio);
+    const thumbWidth = Math.min(trackWidth, Math.max(SCROLLBAR_MIN_THUMB_PX, rawThumbWidth));
+    const maxThumbLeft = Math.max(0, trackWidth - thumbWidth);
+    const maxScrollLeft = Math.max(0, scrollWidth - clientWidth);
+    const left = maxScrollLeft > 0
+      ? Math.round((scrollLeft / maxScrollLeft) * maxThumbLeft)
+      : 0;
+
+    setScrollbarState({ left, width: thumbWidth, visible: true });
+  }, []);
+
   const grouped = useMemo(() => groupByStatus(localItems, orderedColumns), [orderedColumns, localItems]);
   const activeItem = activeCardId ? localItems.find((entry) => entry.id === activeCardId) ?? null : null;
   const columnIdSet = useMemo(() => new Set(orderedColumns.map((c) => c.id)), [orderedColumns]);
@@ -170,6 +201,28 @@ export function Board<T extends BoardItem>({
     () => orderedColumns.length * MIN_COLUMN_WIDTH + Math.max(0, orderedColumns.length - 1) * COLUMN_GAP,
     [orderedColumns.length],
   );
+
+  useEffect(() => {
+    updateScrollbar();
+  }, [updateScrollbar, orderedColumns.length, localItems.length]);
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const handleScroll = () => updateScrollbar();
+    scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollEl.removeEventListener('scroll', handleScroll);
+  }, [updateScrollbar]);
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    const trackEl = scrollbarTrackRef.current;
+    if (!scrollEl || !trackEl) return;
+    const observer = new ResizeObserver(() => updateScrollbar());
+    observer.observe(scrollEl);
+    observer.observe(trackEl);
+    return () => observer.disconnect();
+  }, [updateScrollbar]);
 
   const sortableColumnIds = useMemo(
     () => orderedColumns.map((c) => `col:${c.id}`),
@@ -371,6 +424,59 @@ export function Board<T extends BoardItem>({
     onItemsChange(localItems);
   };
 
+  const handleScrollbarThumbMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const scrollEl = scrollRef.current;
+      const trackEl = scrollbarTrackRef.current;
+      if (!scrollEl || !trackEl) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      scrollbarDragRef.current = {
+        active: true,
+        startX: event.clientX,
+        startScrollLeft: scrollEl.scrollLeft,
+      };
+
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+
+      const handleMouseMove = (e: MouseEvent) => {
+        if (!scrollbarDragRef.current.active) return;
+        const dx = e.clientX - scrollbarDragRef.current.startX;
+        const { scrollWidth, clientWidth } = scrollEl;
+        const trackWidth = trackEl.clientWidth;
+        const maxScroll = Math.max(0, scrollWidth - clientWidth);
+        if (maxScroll === 0 || trackWidth === 0) return;
+
+        const ratio = clientWidth / scrollWidth;
+        const rawThumbWidth = Math.round(trackWidth * ratio);
+        const thumbWidth = Math.min(trackWidth, Math.max(SCROLLBAR_MIN_THUMB_PX, rawThumbWidth));
+        const maxThumbLeft = Math.max(0, trackWidth - thumbWidth);
+        if (maxThumbLeft === 0) return;
+
+        const scrollDelta = (dx / maxThumbLeft) * maxScroll;
+        scrollEl.scrollLeft = Math.min(
+          maxScroll,
+          Math.max(0, scrollbarDragRef.current.startScrollLeft + scrollDelta),
+        );
+      };
+
+      const handleMouseUp = () => {
+        scrollbarDragRef.current.active = false;
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [],
+  );
+
   return (
     <DndContext
       sensors={sensors}
@@ -380,42 +486,65 @@ export function Board<T extends BoardItem>({
       onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
-      <div
-        className="kanban-scroll h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden"
-        style={{ '--kanban-scrollbar-gutter': `${SCROLLBAR_GUTTER_PX}px` } as React.CSSProperties}
-      >
-        <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
+        <div
+          ref={scrollRef}
+          className="kanban-scroll flex-1 min-h-0 min-w-0 overflow-x-auto overflow-y-hidden"
+        >
+          <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
+            <div
+              ref={gridRef}
+              className="grid min-h-0 w-full gap-4 pr-2"
+              style={{
+                gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
+                gridTemplateRows: 'minmax(0, 1fr)',
+                minWidth: `${minBoardWidth}px`,
+              }}
+            >
+              {orderedColumns.map((column) => (
+                <SortableColumn key={column.id} column={column}>
+                  {({ listeners, attributes }) => (
+                    <Column
+                      column={column}
+                      items={grouped[column.id] ?? []}
+                      collapsed={collapsedSet.has(column.id)}
+                      highlighted={cardDragOverColumnId === column.id}
+                      onToggleCollapse={() => handleToggleCollapse(column.id)}
+                      onItemClick={onItemClick}
+                      getItemWarning={getItemWarning}
+                      renderItemIndicators={renderItemIndicators}
+                      renderItemActions={renderItemActions}
+                      renderItemHoverActions={renderItemHoverActions}
+                      headerDragHandleProps={{ ...listeners, ...attributes }}
+                    />
+                  )}
+                </SortableColumn>
+              ))}
+            </div>
+          </SortableContext>
+        </div>
+
+        <div
+          className="relative mt-0.5"
+          style={{ height: `${SCROLLBAR_CONTAINER_PX}px` }}
+        >
           <div
-            ref={gridRef}
-            className="grid min-h-0 w-full gap-4 pr-2"
-            style={{
-              gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
-              gridTemplateRows: 'minmax(0, 1fr)',
-              minWidth: `${minBoardWidth}px`,
-              height: `calc(100% - ${SCROLLBAR_GUTTER_PX}px)`,
-            }}
+            ref={scrollbarTrackRef}
+            className="absolute bottom-0 left-0 right-0"
+            style={{ height: `${SCROLLBAR_THUMB_PX}px`, opacity: scrollbarState.visible ? 1 : 0 }}
           >
-            {orderedColumns.map((column) => (
-              <SortableColumn key={column.id} column={column}>
-                {({ listeners, attributes }) => (
-                  <Column
-                    column={column}
-                    items={grouped[column.id] ?? []}
-                    collapsed={collapsedSet.has(column.id)}
-                    highlighted={cardDragOverColumnId === column.id}
-                    onToggleCollapse={() => handleToggleCollapse(column.id)}
-                    onItemClick={onItemClick}
-                    getItemWarning={getItemWarning}
-                    renderItemIndicators={renderItemIndicators}
-                    renderItemActions={renderItemActions}
-                    renderItemHoverActions={renderItemHoverActions}
-                    headerDragHandleProps={{ ...listeners, ...attributes }}
-                  />
-                )}
-              </SortableColumn>
-            ))}
+            <div
+              onMouseDown={handleScrollbarThumbMouseDown}
+              className="absolute top-0 h-full rounded-full bg-neutral-300/40 transition-colors hover:bg-neutral-400/60 dark:bg-revival-accent-400/55 dark:hover:bg-revival-accent-400/75"
+              style={{
+                width: `${scrollbarState.width}px`,
+                transform: `translateX(${scrollbarState.left}px)`,
+              }}
+              role="scrollbar"
+              aria-orientation="horizontal"
+            />
           </div>
-        </SortableContext>
+        </div>
       </div>
 
       <DragOverlay>
