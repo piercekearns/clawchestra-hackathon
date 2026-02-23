@@ -2071,7 +2071,7 @@ export default function App() {
         </>
         )}
 
-      {!settingsPageOpen && (
+      <div className={settingsPageOpen ? 'hidden' : ''}>
         <ChatShell
           messages={chatMessages}
           gatewayConnected={gatewayConnected}
@@ -2095,7 +2095,7 @@ export default function App() {
           onLoadMore={loadMoreChatMessages}
           onRetryConnection={retryGatewayConnection}
         />
-      )}
+      </div>
 
       {!settingsPageOpen && (
         <>
