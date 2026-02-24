@@ -181,7 +181,7 @@ export function RoadmapItemDialog({
 
   if (!item || !enrichedItem) return null;
 
-  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-[60] flex items-start justify-center px-4 py-[5%]`;
+  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-[60] flex items-center justify-center px-4 py-6`;
   const backdropClass = `absolute inset-0 bg-black/40 backdrop-blur-sm`;
   const dialogClass = `w-full ${boardScoped ? 'max-h-full' : 'max-h-[90vh]'} max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 relative group z-10`;
 
