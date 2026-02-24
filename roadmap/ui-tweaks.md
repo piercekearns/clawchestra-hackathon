@@ -252,6 +252,18 @@ Remove the special dark-grey background from sidebars and the settings page so t
 
 ---
 
+## 15 — Sidebar Divider Notch Hidden Under Modal Overlay
+
+When a board-scoped modal is open with the sidebar visible, the divider notch/line gets visually cut in half (overlay/blur sits on top of the board side). Ensure the notch renders **above** the modal overlay so the divider is continuous.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Likely z-index / stacking context issue with the modal blur container.
+- Divider + notch should remain visible across both sidebar + board sides.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -268,5 +280,6 @@ Remove the special dark-grey background from sidebars and the settings page so t
 12. Sticky modal close button (hover only)
 13. Chat toast preview: basic markdown
 14. Sidebar/settings background uses app default
-15. Model selector (if/when) — higher risk, depends on item 6
-16. Context window usage — higher risk, depends on item 6
+15. Sidebar divider notch above modal overlay
+16. Model selector (if/when) — higher risk, depends on item 6
+17. Context window usage — higher risk, depends on item 6
