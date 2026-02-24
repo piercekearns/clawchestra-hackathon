@@ -152,7 +152,15 @@ const BACKFILL_JITTER_RATIO = 0.2;
 const TURN_PERSIST_THROTTLE_MS = 1500;
 const GATEWAY_DEBUG_LOG = import.meta.env.DEV || import.meta.env.VITE_GATEWAY_DEBUG === '1';
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
-const OPENCLAW_SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing'];
+const OPENCLAW_SCOPES = [
+  'operator.read',
+  'operator.write',
+  'operator.admin',
+  'operator.approvals',
+  'operator.pairing',
+  'chat.send',
+  'chat.history',
+];
 const TURN_TERMINAL_RETENTION_MS = 60_000;
 
 let cachedOpenClawTransportPromise: Promise<GatewayTransport | null> | null = null;
@@ -433,6 +441,36 @@ function mapOpenClawConnectionError(error: unknown): Error {
   if (lower.includes('unauthorized') || lower.includes('invalid token')) {
     return new Error(
       'OpenClaw authentication failed. Verify `~/.openclaw/openclaw.json` gateway token and restart the gateway.',
+    );
+  }
+
+  return new Error(message);
+}
+
+function isFatalSendAckError(error: unknown): boolean {
+  const lower = normalizeErrorMessage(error).toLowerCase();
+  return (
+    lower.includes('missing scope') ||
+    lower.includes('operator.read') ||
+    lower.includes('operator.write') ||
+    lower.includes('unauthorized') ||
+    lower.includes('invalid token')
+  );
+}
+
+function mapSendAckError(error: unknown): Error {
+  const message = normalizeErrorMessage(error);
+  const lower = message.toLowerCase();
+
+  if (lower.includes('missing scope')) {
+    return new Error(
+      'OpenClaw websocket operator scopes are insufficient (require operator.read/operator.write). Update gateway token/scopes and reconnect.',
+    );
+  }
+
+  if (lower.includes('unauthorized') || lower.includes('invalid token')) {
+    return new Error(
+      'OpenClaw websocket authentication failed. Verify `~/.openclaw/openclaw.json` gateway token and restart the gateway.',
     );
   }
 
@@ -1586,17 +1624,6 @@ function composeContextWrappedUserMessage(contextMessage: string, userText: stri
   return `${contextMessage}\n\nUser request:\n${userText}`;
 }
 
-function shouldFallbackToTauriCliTransport(error: unknown): boolean {
-  const normalized = normalizeErrorMessage(error).toLowerCase();
-  return (
-    normalized.includes('missing scope') ||
-    normalized.includes('operator.read') ||
-    normalized.includes('operator.write') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('invalid token')
-  );
-}
-
 async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return null;
 
@@ -1604,52 +1631,15 @@ async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
     cachedOpenClawTransportPromise = (async () => {
       try {
         const config = await getOpenClawGatewayConfig();
-        const wsTransport: GatewayTransport = {
+
+        // Use Tauri WebSocket for streaming support
+        console.log('[Gateway] Using tauri-ws transport');
+        return {
           mode: 'tauri-ws',
           wsUrl: config.wsUrl,
           token: config.token,
           sessionKey: config.sessionKey,
-        };
-
-        try {
-          const { getTauriOpenClawConnection } = await import('./tauri-websocket');
-          const probeConnection = await getTauriOpenClawConnection(
-            wsTransport.wsUrl,
-            wsTransport.sessionKey || DEFAULT_SESSION_KEY,
-            wsTransport.token,
-          );
-          await probeConnection.request('sessions.list', {
-            search: wsTransport.sessionKey || DEFAULT_SESSION_KEY,
-            limit: 1,
-            includeGlobal: true,
-            includeUnknown: true,
-          });
-          console.log('[Gateway] Using tauri-ws transport');
-          return wsTransport;
-        } catch (error) {
-          const reason = normalizeErrorMessage(error);
-          if (shouldFallbackToTauriCliTransport(error)) {
-            console.warn(
-              '[Gateway] Tauri WS transport is scope-limited, falling back to tauri-openclaw:',
-              reason,
-            );
-          } else {
-            console.warn(
-              '[Gateway] Tauri WS probe failed, falling back to tauri-openclaw:',
-              reason,
-            );
-          }
-          try {
-            const { closeTauriOpenClawConnection } = await import('./tauri-websocket');
-            closeTauriOpenClawConnection();
-          } catch {
-            // Ignore close failures; fallback transport is still valid.
-          }
-          return {
-            mode: 'tauri-openclaw',
-            sessionKey: config.sessionKey,
-          } as GatewayTransport;
-        }
+        } as GatewayTransport;
       } catch {
         return null;
       }
@@ -2304,6 +2294,10 @@ async function sendViaTauriWs(
       transitionLifecycle('send_acknowledged');
       logSend('chat.send acknowledged');
     } catch (sendErr) {
+      if (isFatalSendAckError(sendErr)) {
+        warnSend('[reason=fatal_send_ack] chat.send failed with fatal auth/scope error:', sendErr);
+        throw mapSendAckError(sendErr);
+      }
       warnSend('[reason=failed_unacked_send] chat.send failed — will poll for response:', sendErr);
       upsertTurn(turnToken, {
         sessionKey,
