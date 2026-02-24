@@ -328,7 +328,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                   ? 'Message OpenClaw (Enter sends, Shift+Enter newline)...'
                   : 'Gateway offline. You can still draft here.'
             }
-            className="max-h-[210px] min-h-[44px] w-full resize-none border-0 bg-transparent px-3 py-3 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+            className="max-h-[210px] min-h-[44px] w-full resize-none border-0 bg-transparent px-3 pb-[13px] pt-[11px] pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
           />
 
           <button
