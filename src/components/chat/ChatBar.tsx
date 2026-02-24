@@ -135,11 +135,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const expanded = composerHeight > 72;
   const isFloating = variant === 'floating';
   const hasContent = input.trim() || images.length > 0;
-  const queuedCount = queue.filter((item) => item.status === 'queued').length;
-  const failedCount = queue.length - queuedCount;
-  const queueBadgeLabel =
-    queuedCount > 0 ? `${queuedCount} queued` : failedCount > 0 ? `${failedCount} failed` : null;
-  const queueIndicator = queueBadgeLabel;
+  // queue indicator removed
 
   return (
     <div
@@ -204,12 +200,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               {images.length} image{images.length === 1 ? '' : 's'} attached
             </span>
           ) : null}
-          {queueIndicator ? (
-            <span className="rounded-full border border-revival-accent/50 bg-revival-accent/10 px-2 py-0.5 text-[10px] text-revival-accent flex items-center gap-1">
-              <Clock className="h-3 w-3 text-[#DFFF00]" />
-              {queueIndicator}
-            </span>
-          ) : null}
           {showToggle ? (
             <span
               className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-neutral-500 dark:text-neutral-300"
@@ -236,12 +226,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               {images.length} image{images.length === 1 ? '' : 's'} attached
             </span>
           ) : null}
-          {queueIndicator ? (
-            <span className="rounded-full border border-revival-accent/50 bg-revival-accent/10 px-2 py-0.5 text-[10px] text-revival-accent flex items-center gap-1">
-              <Clock className="h-3 w-3 text-[#DFFF00]" />
-              {queueIndicator}
-            </span>
-          ) : null}
         </div>
       )}
 
@@ -256,7 +240,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               key={item.id}
               className="flex items-center gap-2 rounded-md border border-dashed border-neutral-400/50 dark:border-neutral-600 bg-neutral-100/80 dark:bg-neutral-800/50 px-2 py-1.5 text-sm"
             >
-              <Clock className="h-3 w-3 text-neutral-400 flex-shrink-0" />
+              <Clock className="h-3 w-3 text-[#DFFF00] flex-shrink-0" />
               <span className="flex-1 truncate text-neutral-700 dark:text-neutral-300 text-xs">
                 {item.text || `[${item.attachments.length} image${item.attachments.length === 1 ? '' : 's'}]`}
                 {item.status === 'queued' && item.attemptCount > 0 ? ' (retrying...)' : ''}
