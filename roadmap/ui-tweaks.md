@@ -227,6 +227,19 @@ Keep the modal close **X** button pinned to the top-right of the modal viewport 
 
 ---
 
+## 13 — Chat Toast Preview: Basic Markdown Rendering
+
+Allow limited markdown formatting in the **chat toast preview bubble** (e.g., bold/italic) so `**All fixed**` renders as bold instead of showing the asterisks.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Keep it lightweight — support inline styles only (bold, italic, inline code), no block elements.
+- Avoid layout growth; keep the toast compact.
+- Sanitise output (no links or images in toast).
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -241,5 +254,6 @@ Keep the modal close **X** button pinned to the top-right of the modal viewport 
 10. Settings as page — larger UI change
 11. Column card list collapse (per-column toggle)
 12. Sticky modal close button (hover only)
-13. Model selector (if/when) — higher risk, depends on item 6
-14. Context window usage — higher risk, depends on item 6
+13. Chat toast preview: basic markdown
+14. Model selector (if/when) — higher risk, depends on item 6
+15. Context window usage — higher risk, depends on item 6
