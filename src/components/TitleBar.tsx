@@ -39,7 +39,7 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
 
   return (
     <div
-      className="relative z-50 flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
+      className="relative z-[90] flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
       onMouseDown={startWindowDrag}
     >
       {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
