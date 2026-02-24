@@ -4,15 +4,16 @@
 # Triggered by the in-app Update button.
 # Builds in the background, then replaces the installed app and restarts it.
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="Clawchestra"
-BUNDLE_PATH="$SCRIPT_DIR/src-tauri/target/release/bundle/macos/$APP_NAME.app"
 INSTALL_PATH="${CLAWCHESTRA_INSTALL_PATH:-/Applications/$APP_NAME.app}"
 RESTART_AFTER_BUILD="${CLAWCHESTRA_RESTART_AFTER_BUILD:-1}"
 LOCK_DIR="/tmp/clawchestra-update.lock"
 LOCK_PID_FILE="$LOCK_DIR/pid"
+BUILD_DIR="$SCRIPT_DIR"
+TMP_WORKTREE=""
 
 acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -44,18 +45,102 @@ cleanup_lock() {
   rm -rf "$LOCK_DIR" 2>/dev/null || true
 }
 
+cleanup_worktree() {
+  if [ -z "${TMP_WORKTREE:-}" ]; then
+    return
+  fi
+  if [ -d "$TMP_WORKTREE" ]; then
+    git -C "$SCRIPT_DIR" worktree remove --force "$TMP_WORKTREE" >/dev/null 2>&1 || rm -rf "$TMP_WORKTREE"
+  fi
+}
+
+cleanup_all() {
+  cleanup_worktree
+  cleanup_lock
+}
+
+repo_is_dirty() {
+  if git -C "$SCRIPT_DIR" status --porcelain --untracked-files=normal | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+prepare_clean_worktree() {
+  if ! command -v git >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! repo_is_dirty; then
+    return 1
+  fi
+
+  TMP_WORKTREE="$(mktemp -d /tmp/clawchestra-update-worktree.XXXXXX)"
+  echo "ℹ️ Retrying from clean HEAD worktree: $TMP_WORKTREE"
+
+  if git -C "$SCRIPT_DIR" worktree add --detach "$TMP_WORKTREE" HEAD >/dev/null; then
+    if [ -d "$SCRIPT_DIR/node_modules" ] && [ ! -e "$TMP_WORKTREE/node_modules" ]; then
+      ln -s "$SCRIPT_DIR/node_modules" "$TMP_WORKTREE/node_modules"
+    fi
+    if [ -d "$SCRIPT_DIR/src-tauri/target" ] && [ ! -e "$TMP_WORKTREE/src-tauri/target" ]; then
+      mkdir -p "$TMP_WORKTREE/src-tauri"
+      ln -s "$SCRIPT_DIR/src-tauri/target" "$TMP_WORKTREE/src-tauri/target"
+    fi
+    BUILD_DIR="$TMP_WORKTREE"
+    return 0
+  fi
+
+  echo "⚠️ Failed to create clean worktree."
+  rm -rf "$TMP_WORKTREE"
+  TMP_WORKTREE=""
+  return 1
+}
+
+build_app_bundle() {
+  local dir="$1"
+  cd "$dir"
+  pnpm tauri build --bundles app
+}
+
 acquire_lock
-trap cleanup_lock EXIT
+trap cleanup_all EXIT
 
 echo "🔨 Building Clawchestra..."
-cd "$SCRIPT_DIR"
+cd "$BUILD_DIR"
 
 # Ensure cargo and pnpm are in PATH
 source ~/.cargo/env 2>/dev/null || true
-export PATH="/opt/homebrew/bin:$PATH"
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/Library/pnpm:$HOME/.local/share/pnpm:$PATH"
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  if command -v corepack >/dev/null 2>&1; then
+    corepack enable >/dev/null 2>&1 || true
+  fi
+fi
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "❌ pnpm not found in PATH. Ensure Node/pnpm is installed."
+  exit 1
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "❌ cargo not found in PATH. Ensure Rust toolchain is installed."
+  exit 1
+fi
 
 # Build app bundle only (no DMG).
-pnpm tauri build --bundles app
+if ! build_app_bundle "$SCRIPT_DIR"; then
+  if prepare_clean_worktree; then
+    echo "⚠️ Initial build failed. Retrying from clean HEAD..."
+    build_app_bundle "$BUILD_DIR"
+  else
+    exit 1
+  fi
+fi
+
+BUNDLE_PATH="$BUILD_DIR/src-tauri/target/release/bundle/macos/$APP_NAME.app"
 
 if [ ! -d "$BUNDLE_PATH" ]; then
   echo "❌ Build failed - no app bundle found at: $BUNDLE_PATH"

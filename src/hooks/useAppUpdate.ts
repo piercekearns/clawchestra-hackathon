@@ -32,6 +32,12 @@ function summarizeUpdateFailureLog(content: string): string | null {
   const tsLine = lines.find((line) => line.includes('error TS'));
   if (tsLine) return `Build failed: ${tsLine.trim()}`;
 
+  const rustCodeLine = lines.find((line) => /^\s*error\[E\d+\]/.test(line));
+  if (rustCodeLine) return `Build failed: ${rustCodeLine.trim()}`;
+
+  const rustCompileLine = lines.find((line) => line.includes('could not compile'));
+  if (rustCompileLine) return `Build failed: ${rustCompileLine.trim()}`;
+
   const beforeBuildFailure = lines.find(
     (line) => line.includes('beforeBuildCommand') && line.includes('failed'),
   );
