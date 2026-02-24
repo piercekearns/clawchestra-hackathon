@@ -215,5 +215,7 @@ pub(crate) async fn run_app_update(
         .spawn()
         .map_err(|error| error.to_string())?;
 
-    Ok("Update started - app will restart after build completes".to_string())
+    Ok(format!(
+        "Update started - app will restart after build completes (log: {log_path})"
+    ))
 }

@@ -653,8 +653,11 @@ export async function getTauriOpenClawConnection(
         );
 
         if (refreshedKey !== requestedConfigKey) {
+          const staleConnection = connectionInstance as TauriOpenClawConnection | null;
           try {
-            await connectionInstance?.disconnect();
+            if (staleConnection) {
+              await staleConnection.disconnect();
+            }
           } catch {
             // ignore disconnect failures
           }
