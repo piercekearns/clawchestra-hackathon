@@ -139,7 +139,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const failedCount = queue.length - queuedCount;
   const queueBadgeLabel =
     queuedCount > 0 ? `${queuedCount} queued` : failedCount > 0 ? `${failedCount} failed` : null;
-  const queueIndicator = queueBadgeLabel ?? (sending && hasContent ? 'Queue' : null);
+  const queueIndicator = queueBadgeLabel;
 
   return (
     <div
