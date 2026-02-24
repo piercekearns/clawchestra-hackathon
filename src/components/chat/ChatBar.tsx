@@ -139,6 +139,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const failedCount = queue.length - queuedCount;
   const queueBadgeLabel =
     queuedCount > 0 ? `${queuedCount} queued` : failedCount > 0 ? `${failedCount} failed` : null;
+  const queueIndicator = queueBadgeLabel ?? (sending && hasContent ? 'Queue' : null);
 
   return (
     <div
@@ -203,10 +204,10 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               {images.length} image{images.length === 1 ? '' : 's'} attached
             </span>
           ) : null}
-          {queueBadgeLabel ? (
+          {queueIndicator ? (
             <span className="rounded-full border border-[#DFFF00]/80 bg-[#DFFF00] px-2 py-0.5 text-[10px] text-neutral-900 flex items-center gap-1 shadow-sm">
               <Clock className="h-3 w-3" />
-              {queueBadgeLabel}
+              {queueIndicator}
             </span>
           ) : null}
           {showToggle ? (
@@ -235,10 +236,10 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               {images.length} image{images.length === 1 ? '' : 's'} attached
             </span>
           ) : null}
-          {queueBadgeLabel ? (
+          {queueIndicator ? (
             <span className="rounded-full border border-[#DFFF00]/80 bg-[#DFFF00] px-2 py-0.5 text-[10px] text-neutral-900 flex items-center gap-1 shadow-sm">
               <Clock className="h-3 w-3" />
-              {queueBadgeLabel}
+              {queueIndicator}
             </span>
           ) : null}
         </div>
