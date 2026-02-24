@@ -201,7 +201,7 @@ function getGitHubStatusMeta(
   const label = `${branch}${sync}`;
 
   const classMap: Record<string, string> = {
-    clean: 'text-emerald-600 dark:text-emerald-400',
+    clean: 'text-[#DFFF00] dark:text-[#DFFF00]',
     uncommitted: 'text-amber-600 dark:text-amber-400',
     unpushed: 'text-sky-600 dark:text-sky-400',
     behind: 'text-rose-600 dark:text-rose-400',
