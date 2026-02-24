@@ -2190,22 +2190,6 @@ export default function App() {
                     void persistRoadmapChanges(nextItems);
                   }}
                 />
-                <RoadmapItemDialog
-                  item={roadmapItems.find((i) => i.id === selectedRoadmapItemId) ?? null}
-                  projectTitle={activeRoadmapProject?.title ?? 'Project'}
-                  projectDir={activeRoadmapProject?.dirPath ?? ''}
-                  projectFrontmatter={activeRoadmapProject?.frontmatter}
-                  projectId={activeRoadmapProject?.id}
-                  isMigrated={activeRoadmapProject?.stateJsonMigrated}
-                  boardScoped={sidebarOpen}
-                  onClose={() => setSelectedRoadmapItemId(null)}
-                  onStatusChange={(itemId, status) => {
-                    const updated = roadmapItems.map((i) =>
-                      i.id === itemId ? { ...i, status } : i,
-                    );
-                    void persistRoadmapChanges(updated);
-                  }}
-                />
                 </>
               ) : (
                 <Board
@@ -2255,6 +2239,25 @@ export default function App() {
             </div>
           </section>
         </main>
+
+        {isRoadmapView ? (
+          <RoadmapItemDialog
+            item={roadmapItems.find((i) => i.id === selectedRoadmapItemId) ?? null}
+            projectTitle={activeRoadmapProject?.title ?? 'Project'}
+            projectDir={activeRoadmapProject?.dirPath ?? ''}
+            projectFrontmatter={activeRoadmapProject?.frontmatter}
+            projectId={activeRoadmapProject?.id}
+            isMigrated={activeRoadmapProject?.stateJsonMigrated}
+            boardScoped
+            onClose={() => setSelectedRoadmapItemId(null)}
+            onStatusChange={(itemId, status) => {
+              const updated = roadmapItems.map((i) =>
+                i.id === itemId ? { ...i, status } : i,
+              );
+              void persistRoadmapChanges(updated);
+            }}
+          />
+        ) : null}
         </>
         )}
 
