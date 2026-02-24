@@ -4,7 +4,7 @@ id: ui-tweaks
 status: pending
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Next: settings page (full board) — model selector/context usage pending"
+nextAction: "Items 4 and 11 shipped. Next: item 12 (sticky modal close button), then items 13-17."
 lastActivity: "2026-02-24"
 ---
 
@@ -63,6 +63,8 @@ The theme colour controls currently sit in the title bar. Adding a right-side to
 ---
 
 ## 4 — Settings as Full Board Page (Not Modal)
+
+**Status:** ✅ Fixed (2026‑02‑23)
 
 When the sidebar is open and Settings is clicked, replace the board area with a full settings page instead of opening a modal.
 
@@ -302,7 +304,7 @@ Top-bar error messages (e.g., build failures) are hard to copy. Replace full err
 7. Modal scoping — ✅ done (2026‑02‑23)
 8. Right sidebar toggle — ✅ done (2026‑02‑23)
 9. Theme colour relocation — ✅ done (2026‑02‑23)
-10. Settings as page — larger UI change
+10. Settings as page — ✅ done (2026‑02‑23)
 11. Column card list collapse / column minimization — ✅ done (dual controls, persisted)
 12. Sticky modal close button (hover only)
 13. Chat toast preview: basic markdown
