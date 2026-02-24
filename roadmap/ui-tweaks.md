@@ -264,6 +264,18 @@ When a board-scoped modal is open with the sidebar visible, the divider notch/li
 
 ---
 
+## 16 — Chat Drawer Resize Helper Text Should Not Show When Expanded
+
+The "Drag to resize" helper text still appears on hover over the chat drawer’s top lip when the drawer is fully expanded. It should not show in the expanded state.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Hide helper on hover when drawer is open/expanded.
+- Keep behaviour as-is for the collapsed/closed state.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -281,5 +293,6 @@ When a board-scoped modal is open with the sidebar visible, the divider notch/li
 13. Chat toast preview: basic markdown
 14. Sidebar/settings background uses app default
 15. Sidebar divider notch above modal overlay
-16. Model selector (if/when) — higher risk, depends on item 6
-17. Context window usage — higher risk, depends on item 6
+16. Chat drawer resize helper hidden when expanded
+17. Model selector (if/when) — higher risk, depends on item 6
+18. Context window usage — higher risk, depends on item 6
