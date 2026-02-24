@@ -5,7 +5,7 @@ import { CommandDropdown } from './CommandDropdown';
 import { StatusBadge } from './StatusBadge';
 import type { ChatAttachment, ChatConnectionState, QueuedMessage } from './types';
 
-const MIN_INPUT_HEIGHT = 40;
+const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 210;
 
 // Check if input shows a partial slash command (no space yet = still selecting)
@@ -283,7 +283,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
       )}
 
       <div className="min-h-0 p-2">
-        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all ${
+        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:44px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] ${
           sending 
             ? 'border-revival-accent/50' 
             : 'border-neutral-300/70 dark:border-neutral-600'
@@ -328,7 +328,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                   ? 'Message OpenClaw (Enter sends, Shift+Enter newline)...'
                   : 'Gateway offline. You can still draft here.'
             }
-            className="max-h-[210px] min-h-[44px] w-full resize-none border-0 bg-transparent px-3 pb-[15px] pt-[9px] pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+            className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent px-3 pb-[var(--input-pad)] pt-[var(--input-pad)] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
           />
 
           <button
@@ -336,7 +336,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             disabled={!hasContent}
             onClick={onSubmit}
             aria-label={sending ? 'Queue message' : 'Send message'}
-            className={`absolute bottom-3 right-3 inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+            className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
               sending
                 ? 'bg-revival-accent/70 text-neutral-900 hover:bg-revival-accent/90'
                 : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
