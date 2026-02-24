@@ -1484,6 +1484,10 @@ export async function fetchSessionModel(options?: {
     }
   }
 
+  if (transport.mode === 'tauri-openclaw') {
+    return fetchSessionModelViaTauriCli(sessionKey, allowDefaultsFallback);
+  }
+
   if (transport.mode === 'openclaw-ws') {
     const connection = await openOpenClawConnection(transport);
     try {
@@ -1582,6 +1586,17 @@ function composeContextWrappedUserMessage(contextMessage: string, userText: stri
   return `${contextMessage}\n\nUser request:\n${userText}`;
 }
 
+function shouldFallbackToTauriCliTransport(error: unknown): boolean {
+  const normalized = normalizeErrorMessage(error).toLowerCase();
+  return (
+    normalized.includes('missing scope') ||
+    normalized.includes('operator.read') ||
+    normalized.includes('operator.write') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('invalid token')
+  );
+}
+
 async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return null;
 
@@ -1589,15 +1604,52 @@ async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
     cachedOpenClawTransportPromise = (async () => {
       try {
         const config = await getOpenClawGatewayConfig();
-        
-        // Use Tauri WebSocket for streaming support
-        console.log('[Gateway] Using tauri-ws transport');
-        return {
+        const wsTransport: GatewayTransport = {
           mode: 'tauri-ws',
           wsUrl: config.wsUrl,
           token: config.token,
           sessionKey: config.sessionKey,
-        } as GatewayTransport;
+        };
+
+        try {
+          const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+          const probeConnection = await getTauriOpenClawConnection(
+            wsTransport.wsUrl,
+            wsTransport.sessionKey || DEFAULT_SESSION_KEY,
+            wsTransport.token,
+          );
+          await probeConnection.request('sessions.list', {
+            search: wsTransport.sessionKey || DEFAULT_SESSION_KEY,
+            limit: 1,
+            includeGlobal: true,
+            includeUnknown: true,
+          });
+          console.log('[Gateway] Using tauri-ws transport');
+          return wsTransport;
+        } catch (error) {
+          const reason = normalizeErrorMessage(error);
+          if (shouldFallbackToTauriCliTransport(error)) {
+            console.warn(
+              '[Gateway] Tauri WS transport is scope-limited, falling back to tauri-openclaw:',
+              reason,
+            );
+          } else {
+            console.warn(
+              '[Gateway] Tauri WS probe failed, falling back to tauri-openclaw:',
+              reason,
+            );
+          }
+          try {
+            const { closeTauriOpenClawConnection } = await import('./tauri-websocket');
+            closeTauriOpenClawConnection();
+          } catch {
+            // Ignore close failures; fallback transport is still valid.
+          }
+          return {
+            mode: 'tauri-openclaw',
+            sessionKey: config.sessionKey,
+          } as GatewayTransport;
+        }
       } catch {
         return null;
       }
