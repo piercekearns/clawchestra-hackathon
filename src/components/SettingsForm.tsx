@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ClipboardCopy, Copy, Plus, Trash2 } from 'lucide-react';
+import { ClipboardCopy, Copy, Plus, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
+import { BrandedSelect } from './ui/branded-select';
 import { Input } from './ui/input';
 import type {
   DashboardSettings,
@@ -267,7 +268,7 @@ export function SettingsForm({
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
             <span>Update Mode</span>
-            <SettingsSelect
+            <BrandedSelect
               value={updateMode}
               onChange={(value) => setUpdateMode(value as UpdateMode)}
               options={[
@@ -279,7 +280,7 @@ export function SettingsForm({
 
           <label className="grid gap-1 text-sm">
             <span>Chat Context Policy</span>
-            <SettingsSelect
+            <BrandedSelect
               value={openclawContextPolicy}
               onChange={(value) => setOpenclawContextPolicy(value as OpenClawContextPolicy)}
               options={[
@@ -301,7 +302,7 @@ export function SettingsForm({
           <div className="grid gap-3">
             <label className="grid gap-1 text-sm">
               <span>Sync Mode</span>
-              <SettingsSelect
+              <BrandedSelect
                 value={syncMode}
                 onChange={(value) => setSyncMode(value as SyncMode)}
                 options={[
@@ -531,89 +532,5 @@ export function SettingsForm({
         )}
       </div>
     </>
-  );
-}
-
-
-type SelectOption = { value: string; label: string };
-
-function SettingsSelect({
-  value,
-  onChange,
-  options,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (buttonRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey, true);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative">
-      <button
-        ref={buttonRef}
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
-        className={`flex h-10 w-full items-center justify-between rounded-lg border border-neutral-300 bg-neutral-50 px-3 text-sm text-neutral-800 transition-colors hover:border-neutral-400 focus-visible:border-revival-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400/40 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-500 ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
-      >
-        <span className="truncate">{selected?.label ?? value}</span>
-        <ChevronDown
-          className={`h-4 w-4 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="absolute z-30 mt-1 w-full rounded-lg border border-neutral-200 bg-neutral-0 p-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-          onClick={() => setOpen(false)}
-        >
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition-colors ${isSelected ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100' : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800'}`}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-              >
-                <span className="truncate">{option.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
