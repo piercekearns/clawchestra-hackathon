@@ -91,15 +91,9 @@ export function Column<T extends BoardItem>({
           </>
         ) : (
           <>
-            <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
-              {column.label}
-            </h2>
-            <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-              {items.length}
-            </span>
             <button
               type="button"
-              className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+              className="shrink-0 rounded p-0.5 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleCardsCollapse?.();
@@ -113,6 +107,12 @@ export function Column<T extends BoardItem>({
                 <ChevronUp className="h-3.5 w-3.5" />
               )}
             </button>
+            <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+              {column.label}
+            </h2>
+            <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+              {items.length}
+            </span>
             <button
               type="button"
               className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
