@@ -318,19 +318,6 @@ Replace the paper‑plane send icon with an **up arrow**, slightly reduce the ro
 
 ---
 
-## 20 — Quote Selection → Ask OpenClaw
-
-When selecting text inside assistant chat banner replies, show a small tooltip (quote icon + “Ask OpenClaw”). Clicking it should prefill the chat bar with a quoted excerpt for easy follow‑up.
-
-**Status:** ⏳ Pending (added 2026‑02‑24)
-
-**Notes:**
-- Tooltip appears only when text selection is within assistant reply bubbles.
-- Clicking inserts a quoted snippet into the chat bar (e.g. `> ...`), preserving the selection.
-- No global selection listeners beyond the chat area.
-
----
-
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -352,6 +339,5 @@ When selecting text inside assistant chat banner replies, show a small tooltip (
 17. Title bar error details modal — ⏳ pending
 18. Chat bar height: remove inner field shell — ⏳ pending
 19. Chat send button: up arrow + bottom-right anchor — ✅ done (2026‑02‑24)
-20. Quote selection → Ask OpenClaw — ⏳ pending
-21. Model selector (if/when) — higher risk, depends on item 6
-22. Context window usage — higher risk, depends on item 6
+20. Model selector (if/when) — higher risk, depends on item 6
+21. Context window usage — higher risk, depends on item 6
