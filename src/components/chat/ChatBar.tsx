@@ -20,11 +20,16 @@ function hasFilePayload(dataTransfer: DataTransfer | null): boolean {
   return Array.from(dataTransfer.types ?? []).includes('Files');
 }
 
+function formatUsageNumber(value: number): string {
+  return Math.round(value).toLocaleString();
+}
+
 interface ChatBarProps {
   connectionState: ChatConnectionState;
   activityLabel: string | null;
   activeModelLabel?: string | null;
   activeModelTooltip?: string | null;
+  activeModelUsage?: { used: number; max: number; percent: number } | null;
   drawerOpen: boolean;
   variant?: 'floating' | 'embedded';
   showToggle?: boolean;
@@ -53,6 +58,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     activityLabel,
     activeModelLabel,
     activeModelTooltip,
+    activeModelUsage,
     drawerOpen,
     variant = 'floating',
     showToggle = true,
@@ -135,7 +141,13 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const expanded = composerHeight > 72;
   const isFloating = variant === 'floating';
   const hasContent = input.trim() || images.length > 0;
-  // queue indicator removed
+  const usagePercent =
+    connectionState === 'connected' && activeModelUsage ? activeModelUsage.percent : null;
+  const usageTooltip =
+    connectionState === 'connected' && activeModelUsage
+      ? `Context window: ${Math.round(activeModelUsage.percent)}% full\n${formatUsageNumber(activeModelUsage.used)} / ${formatUsageNumber(activeModelUsage.max)} tokens used`
+      : null;
+  const modelTooltip = [activeModelTooltip, usageTooltip].filter(Boolean).join('\n') || undefined;
 
   return (
     <div
@@ -192,6 +204,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <StatusBadge
               state={connectionState}
               labelOverride={statusLabelOverride}
+              title={modelTooltip}
+              usagePercent={usagePercent}
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
@@ -218,6 +232,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <StatusBadge
               state={connectionState}
               labelOverride={statusLabelOverride}
+              title={modelTooltip}
+              usagePercent={usagePercent}
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}

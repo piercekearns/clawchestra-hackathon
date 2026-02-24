@@ -663,6 +663,12 @@ export default function App() {
     return `${activeSessionProvider} · ${model}`;
   }, [activeSessionModel, activeSessionProvider]);
 
+  const activeModelUsage = null as {
+    used: number;
+    max: number;
+    percent: number;
+  } | null;
+
   const pushToast = useCallback((kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
     setToasts((current) => [...current, { id, kind, message }]);
@@ -2401,6 +2407,7 @@ export default function App() {
           activityLabel={chatActivityLabel}
           activeModelLabel={activeModelLabel}
           activeModelTooltip={activeModelTooltip}
+          activeModelUsage={activeModelUsage}
           streamingContent={chatStreamingContent}
           prefillRequest={chatPrefillRequest}
           drawerOpen={chatDrawerOpen}

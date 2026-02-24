@@ -144,6 +144,7 @@ interface ChatShellProps {
   activityLabel: string | null;
   activeModelLabel?: string | null;
   activeModelTooltip?: string | null;
+  activeModelUsage?: { used: number; max: number; percent: number } | null;
   streamingContent?: string | null;
   prefillRequest?: ChatPrefillRequest | null;
   drawerOpen: boolean;
@@ -170,6 +171,7 @@ export function ChatShell({
   activityLabel,
   activeModelLabel,
   activeModelTooltip,
+  activeModelUsage,
   streamingContent,
   prefillRequest,
   drawerOpen,
@@ -639,6 +641,7 @@ export function ChatShell({
                   activityLabel={activityLabel}
                   activeModelLabel={activeModelLabel}
                   activeModelTooltip={activeModelTooltip}
+                  activeModelUsage={activeModelUsage}
                   drawerOpen={drawerOpen}
                   input={input}
                   sending={showAsSending}
@@ -678,6 +681,7 @@ export function ChatShell({
             activityLabel={activityLabel}
             activeModelLabel={activeModelLabel}
             activeModelTooltip={activeModelTooltip}
+            activeModelUsage={activeModelUsage}
             drawerOpen={drawerOpen}
             input={input}
             sending={showAsSending}
