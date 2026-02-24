@@ -222,7 +222,7 @@ Add dual header controls so each column can:
 
 Keep the modal close **X** button pinned to the top-right of the modal viewport while scrolling, so it’s always reachable without scrolling back to the top.
 
-**Status:** ⏳ Pending (added 2026‑02‑24)
+**Status:** ✅ Fixed (2026‑02‑24)
 
 **Notes:**
 - Show the X button on hover/focus of the modal (or when the modal is active), so it doesn’t obscure content when idle.
