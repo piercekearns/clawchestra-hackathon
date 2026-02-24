@@ -512,13 +512,8 @@ export default function App() {
     if (agentActivity === 'compacting') return 'Compacting...';
     if (agentActivity === 'typing') return 'Typing...';
     if (agentActivity === 'working') return 'Working...';
-    // Fallback: if a send is in-flight, always show activity
-    // (mirrors OpenClaw webchat: indicator persists from send to final)
-    if (isChatBusy) {
-      return 'Working...';
-    }
     return null;
-  }, [agentActivity, isChatBusy]);
+  }, [agentActivity]);
 
   const activeModelLabel = useMemo(() => {
     const modelLabel = formatModelDisplayName(activeSessionModel);

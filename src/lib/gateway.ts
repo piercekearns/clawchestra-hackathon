@@ -2811,6 +2811,7 @@ async function sendViaTauriWs(
           sawToolSinceLastContent = true;
         } else if (TERMINAL_ACTIVITY_STATES.has(state) && ownsTerminalEvent(eventRunId)) {
           touchTurnSignal(turnToken);
+          setAgentActivity('idle', onActivityChange);
         }
 
         const announce = parseAnnounceMetadata(chat, true);
