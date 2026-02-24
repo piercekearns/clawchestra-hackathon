@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { ModalDragZone } from '../ui/ModalDragZone';
 import type { ProjectFrontmatter, RoadmapItem, RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/doc-resolution';
-import { readFile, gitReadFileAtRef, gitGetBranchStates, getProject } from '../../lib/tauri';
+import { readFile, gitReadFileAtRef, gitGetBranchStates, getProject, isTauriRuntime } from '../../lib/tauri';
 import { RoadmapItemDetail } from './RoadmapItemDetail';
 
 interface RoadmapItemDialogProps {
@@ -178,6 +178,51 @@ export function RoadmapItemDialog({
     (path: string): 'local' | 'synced-snapshot' | 'git-show' | undefined => docContentSource[path],
     [docContentSource],
   );
+
+  useEffect(() => {
+    if (!item || !enrichedItem || !isTauriRuntime()) return;
+
+    const docPaths = [enrichedItem.docs.spec, enrichedItem.docs.plan].filter(
+      (path): path is string => Boolean(path),
+    );
+    if (docPaths.length === 0) return;
+
+    const refreshPaths = (paths: string[]) => {
+      paths.forEach((path) => {
+        setDocCache((prev) => {
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        });
+        setDocSourceBranch((prev) => {
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        });
+        setDocContentSource((prev) => {
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        });
+        const docType = path === enrichedItem.docs.plan ? 'plan' : 'spec';
+        void fetchDocContent(path, { itemId: item.id, docType });
+      });
+    };
+
+    let unwatch: (() => void) | null = null;
+    (async () => {
+      try {
+        const fs = await import('@tauri-apps/plugin-fs');
+        unwatch = await fs.watch(docPaths, () => refreshPaths(docPaths), { delayMs: 200 });
+      } catch (error) {
+        console.warn('[RoadmapItemDialog] Failed to watch doc paths:', error);
+      }
+    })();
+
+    return () => {
+      if (unwatch) unwatch();
+    };
+  }, [item, enrichedItem, fetchDocContent]);
 
   if (!item || !enrichedItem) return null;
 

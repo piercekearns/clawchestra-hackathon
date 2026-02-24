@@ -69,6 +69,7 @@ interface DashboardState {
   setSidebarWidth: (width: number) => void;
 
   setProjects: (projects: ProjectViewModel[]) => void;
+  setRoadmapItemsForProject: (projectId: string, items: RoadmapItemState[]) => void;
   loadProjects: () => Promise<void>;
   addError: (error: DashboardError) => void;
   clearError: (error: DashboardError) => void;
@@ -347,6 +348,16 @@ export const __storeTestUtils = {
   collapseChatDuplicates,
 };
 
+function normalizeBoardColumnState(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== 'object') return {};
+  const normalized: Record<string, string[]> = {};
+  for (const [boardId, columns] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(columns)) continue;
+    normalized[boardId] = columns.filter((columnId): columnId is string => typeof columnId === 'string');
+  }
+  return normalized;
+}
+
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
@@ -373,6 +384,13 @@ export const useDashboardStore = create<DashboardState>()(
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
 
       setProjects: (projects) => set({ projects }),
+      setRoadmapItemsForProject: (projectId, items) =>
+        set((state) => ({
+          roadmapItems: {
+            ...state.roadmapItems,
+            [projectId]: items,
+          },
+        })),
 
       loadProjects: async () => {
         set({ loading: true });
@@ -747,6 +765,16 @@ export const useDashboardStore = create<DashboardState>()(
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<DashboardState>;
+        return {
+          ...currentState,
+          ...persisted,
+          collapsedColumns: normalizeBoardColumnState(persisted.collapsedColumns),
+          minimizedColumns: normalizeBoardColumnState(persisted.minimizedColumns),
+          columnOrder: normalizeBoardColumnState(persisted.columnOrder),
+        };
+      },
     },
   ),
 );

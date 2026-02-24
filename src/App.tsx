@@ -62,6 +62,7 @@ import type {
   RoadmapItemWithDocs,
   ThemePreference,
 } from './lib/schema';
+import type { RoadmapItemState } from './lib/state-json';
 import type { DashboardSettings } from './lib/settings';
 import { useDashboardStore } from './lib/store';
 import {
@@ -157,6 +158,7 @@ const RECOVERY_NEAR_DUP_WINDOW_MS = 10 * 60_000;
 const RECOVERY_BUBBLE_DEDUP_MS = 5 * 60_000;
 const SESSION_KEY_PATTERN = /\bagent:[a-z0-9:_-]+\b/gi;
 const UPSTREAM_FAILURE_DEDUP_MS = 60_000;
+const EMPTY_COLUMN_IDS: string[] = [];
 
 /** Inline icons for use in tooltips and text */
 const InlineBranch = () => (
@@ -264,6 +266,7 @@ export default function App() {
   const loadProjects = useDashboardStore((state) => state.loadProjects);
   const updateProjectFromEvent = useDashboardStore((state) => state.updateProjectFromEvent);
   const setProjects = useDashboardStore((state) => state.setProjects);
+  const setRoadmapItemsForProject = useDashboardStore((state) => state.setRoadmapItemsForProject);
   const addError = useDashboardStore((state) => state.addError);
   const setGatewayConnected = useDashboardStore((state) => state.setGatewayConnected);
   const setAgentActivity = useDashboardStore((state) => state.setAgentActivity);
@@ -411,6 +414,21 @@ export default function App() {
     return allProjects.find((project) => project.id === viewContext.projectId);
   }, [allProjects, viewContext]);
 
+  const roadmapBoardId = useMemo(
+    () => (activeRoadmapProject ? `roadmap:${activeRoadmapProject.id}` : null),
+    [activeRoadmapProject?.id],
+  );
+  const collapsedRoadmapColumns = useDashboardStore((state) =>
+    roadmapBoardId ? state.collapsedColumns?.[roadmapBoardId] ?? EMPTY_COLUMN_IDS : EMPTY_COLUMN_IDS,
+  );
+  const minimizedRoadmapColumns = useDashboardStore((state) =>
+    roadmapBoardId ? state.minimizedColumns?.[roadmapBoardId] ?? EMPTY_COLUMN_IDS : EMPTY_COLUMN_IDS,
+  );
+  const hiddenRoadmapStatuses = useMemo(
+    () => new Set([...collapsedRoadmapColumns, ...minimizedRoadmapColumns]),
+    [collapsedRoadmapColumns, minimizedRoadmapColumns],
+  );
+
   // Re-resolve roadmap item docs (spec/plan existence) without leaving the view.
   // Stored in a ref so the file watcher can call it without adding deps.
   const refreshRoadmapDocsRef = useRef<() => Promise<void>>(() => Promise.resolve());
@@ -437,6 +455,7 @@ export default function App() {
 
   const loadProjectsTimeoutRef = useRef<number | null>(null);
   const docsRefreshTimeoutRef = useRef<number | null>(null);
+  const roadmapRefreshTimeoutRef = useRef<number | null>(null);
 
   const maybeLoadProjects = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -482,10 +501,98 @@ export default function App() {
     [],
   );
 
+  const refreshRoadmapFromFile = useCallback(
+    async (mode: 'visible' | 'all' = 'visible') => {
+      if (!activeRoadmapProject || !isTauriRuntime()) return;
+      const roadmapPath = `${activeRoadmapProject.dirPath}/ROADMAP.md`;
+
+      try {
+        const { readRoadmap } = await import('./lib/roadmap');
+        const document = await readRoadmap(roadmapPath);
+        const items: RoadmapItemState[] = document.items.map((item, index) => ({
+          id: item.id,
+          title: item.title,
+          status: item.status,
+          priority: item.priority ?? index + 1,
+          nextAction: item.nextAction ?? undefined,
+          blockedBy: item.blockedBy ?? undefined,
+          tags: item.tags ?? undefined,
+          icon: item.icon ?? undefined,
+          specDoc: item.specDoc ?? undefined,
+          planDoc: item.planDoc ?? undefined,
+        }));
+
+        setRoadmapItemsForProject(activeRoadmapProject.id, items);
+
+        const mapped = mapToRoadmapItemsWithDocs(items);
+        setRoadmapItems((prev) => {
+          if (prev.length === 0) return mapped;
+
+          const prevById = new Map(prev.map((entry) => [entry.id, entry]));
+          const docsById = new Map(prev.map((entry) => [entry.id, entry.docs]));
+
+          return mapped.map((entry) => {
+            const next = { ...entry, docs: docsById.get(entry.id) ?? entry.docs };
+            if (mode === 'visible' && hiddenRoadmapStatuses.has(entry.status)) {
+              return prevById.get(entry.id) ?? next;
+            }
+            return next;
+          });
+        });
+
+        scheduleDocsRefresh();
+      } catch (error) {
+        console.warn('[Roadmap] Failed to refresh from file:', error);
+      }
+    },
+    [activeRoadmapProject, hiddenRoadmapStatuses, scheduleDocsRefresh, setRoadmapItemsForProject],
+  );
+
+  const scheduleRoadmapRefresh = useCallback(
+    (mode: 'visible' | 'all' = 'visible', delay = 200) => {
+      if (roadmapRefreshTimeoutRef.current) {
+        window.clearTimeout(roadmapRefreshTimeoutRef.current);
+      }
+      roadmapRefreshTimeoutRef.current = window.setTimeout(() => {
+        roadmapRefreshTimeoutRef.current = null;
+        void refreshRoadmapFromFile(mode);
+      }, delay);
+    },
+    [refreshRoadmapFromFile],
+  );
+
   useEffect(() => () => {
     if (loadProjectsTimeoutRef.current) window.clearTimeout(loadProjectsTimeoutRef.current);
     if (docsRefreshTimeoutRef.current) window.clearTimeout(docsRefreshTimeoutRef.current);
+    if (roadmapRefreshTimeoutRef.current) window.clearTimeout(roadmapRefreshTimeoutRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!activeRoadmapProject || !isRoadmapView) return;
+    scheduleRoadmapRefresh('all', 0);
+  }, [activeRoadmapProject?.id, isRoadmapView, scheduleRoadmapRefresh]);
+
+  useEffect(() => {
+    if (!activeRoadmapProject || !isRoadmapView) return;
+    scheduleRoadmapRefresh('all', 150);
+  }, [collapsedRoadmapColumns, minimizedRoadmapColumns, activeRoadmapProject?.id, isRoadmapView, scheduleRoadmapRefresh]);
+
+  useEffect(() => {
+    if (!activeRoadmapProject || !isRoadmapView || !isTauriRuntime()) return;
+    const roadmapPath = `${activeRoadmapProject.dirPath}/ROADMAP.md`;
+    let unwatch: (() => void) | null = null;
+    (async () => {
+      try {
+        const fs = await import('@tauri-apps/plugin-fs');
+        unwatch = await fs.watch(roadmapPath, () => scheduleRoadmapRefresh('visible'), { delayMs: 200 });
+      } catch (error) {
+        console.warn('[Roadmap] Failed to watch roadmap file:', error);
+      }
+    })();
+    return () => {
+      if (unwatch) unwatch();
+    };
+  }, [activeRoadmapProject?.id, isRoadmapView, scheduleRoadmapRefresh]);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
