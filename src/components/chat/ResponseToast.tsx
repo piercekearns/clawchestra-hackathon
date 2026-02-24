@@ -1,10 +1,14 @@
 import { Bot, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ResponseToastProps {
   message: string;
   onOpen: () => void;
   onDismiss: () => void;
 }
+
+const TOAST_ALLOWED_ELEMENTS = ['p', 'strong', 'em', 'code', 'del', 'br'] as const;
 
 export function ResponseToast({ message, onOpen, onDismiss }: ResponseToastProps) {
   return (
@@ -17,7 +21,23 @@ export function ResponseToast({ message, onOpen, onDismiss }: ResponseToastProps
           onClick={onOpen}
           title="Open chat drawer"
         >
-          {message}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            skipHtml
+            allowedElements={[...TOAST_ALLOWED_ELEMENTS]}
+            unwrapDisallowed
+            components={{
+              p: ({ children }) => <span>{children}</span>,
+              br: () => <span> </span>,
+              code: ({ children }) => (
+                <code className="rounded bg-neutral-200/70 px-1 py-0.5 text-[0.7rem] dark:bg-neutral-700/70">
+                  {children}
+                </code>
+              ),
+            }}
+          >
+            {message}
+          </ReactMarkdown>
         </button>
         <button
           type="button"
