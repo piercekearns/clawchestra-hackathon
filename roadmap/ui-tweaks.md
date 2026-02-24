@@ -248,7 +248,7 @@ Allow limited markdown formatting in the **chat toast preview bubble** (e.g., bo
 
 Remove the special dark-grey background from sidebars and the settings page so the **global app background** shows through. Boundaries should be defined only by divider lines.
 
-**Status:** ⏳ Pending (added 2026‑02‑24)
+**Status:** ✅ Fixed (2026‑02‑24)
 
 **Notes:**
 - Sidebars and settings should feel like part of one continuous canvas, not separate panels.
@@ -306,9 +306,9 @@ Top-bar error messages (e.g., build failures) are hard to copy. Replace full err
 9. Theme colour relocation — ✅ done (2026‑02‑23)
 10. Settings as page — ✅ done (2026‑02‑23)
 11. Column card list collapse / column minimization — ✅ done (dual controls, persisted)
-12. Sticky modal close button (hover only)
-13. Chat toast preview: basic markdown
-14. Sidebar/settings background uses app default
+12. Sticky modal close button (hover only) — ✅ done (2026‑02‑24)
+13. Chat toast preview: basic markdown — ✅ done (2026‑02‑24)
+14. Sidebar/settings background uses app default — ✅ done (2026‑02‑24)
 15. Sidebar divider notch above modal overlay
 16. Chat drawer resize helper hidden when expanded
 17. Title bar error details modal
