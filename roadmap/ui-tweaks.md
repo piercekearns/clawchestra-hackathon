@@ -200,16 +200,18 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 
 ## 11 — Column Card List Collapse (Not Column Collapse)
 
-Add a header toggle to collapse/expand the **card list within a column** (cards hide/reveal) without changing the column width or rotating the header.
+Add dual header controls so each column can:
+- hide/reveal the **card list** (up/down arrow), and
+- minimize/restore the **entire column** (`chevrons-right-left`) to a narrow vertical pill.
 
-**Status:** ⏳ Pending (added 2026‑02‑24)
+**Status:** ✅ Fixed (2026‑02‑24)
 
 **Notes:**
-- Distinct from **Collapsible Kanban Columns** (the vertical header / narrow column feature already shipped).
-- When collapsed, keep the full-width header visible and show the column title + count.
-- Collapse is per-column and should persist like other UI prefs (new key; don’t reuse `collapsedColumns`).
-- **Icon:** use `chevrons-right-left` (preferred over up/down since those already map to card visibility toggles elsewhere).
-- **Header layout:** remove the 2×3 drag dots; move the count badge to the right (into the dots’ slot), and place the chevrons button where the count currently sits.
+- Card-list collapse remains independent from full-column minimization.
+- Minimization is per-column and persisted under a dedicated key (separate from `collapsedColumns`).
+- Header keeps draggable hand cursor while removing drag-dot visuals.
+- Full-size header keeps title + count + both controls visible.
+- Minimized state renders as a vertical pill with restore affordance.
 - Keep the hand cursor on the header to preserve the draggable affordance even without the dots.
 
 ---
@@ -301,7 +303,7 @@ Top-bar error messages (e.g., build failures) are hard to copy. Replace full err
 8. Right sidebar toggle — ✅ done (2026‑02‑23)
 9. Theme colour relocation — ✅ done (2026‑02‑23)
 10. Settings as page — larger UI change
-11. Column card list collapse (per-column toggle)
+11. Column card list collapse / column minimization — ✅ done (dual controls, persisted)
 12. Sticky modal close button (hover only)
 13. Chat toast preview: basic markdown
 14. Sidebar/settings background uses app default

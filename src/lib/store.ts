@@ -57,6 +57,8 @@ interface DashboardState {
   activeSessionProvider: string | null;
   /** Collapsed columns per board. Key: board id ("projects" | "roadmap:{projectId}"), Value: collapsed column status ids */
   collapsedColumns: Record<string, string[]>;
+  /** Minimized columns per board. Key: board id ("projects" | "roadmap:{projectId}"), Value: minimized column status ids */
+  minimizedColumns: Record<string, string[]>;
   /** Custom column order per board. Key: board id, Value: ordered status ids */
   columnOrder: Record<string, string[]>;
   sidebarOpen: boolean;
@@ -92,7 +94,9 @@ interface DashboardState {
   clearChatHistory: () => Promise<void>;
   setSelectedProjectId: (id?: string) => void;
   toggleColumnCollapse: (boardId: string, columnId: string) => void;
+  toggleColumnMinimize: (boardId: string, columnId: string) => void;
   isColumnCollapsed: (boardId: string, columnId: string) => boolean;
+  isColumnMinimized: (boardId: string, columnId: string) => boolean;
   setColumnOrder: (boardId: string, order: string[]) => void;
   updateProjectAndReload: (project: ProjectViewModel, updates: ProjectUpdate) => Promise<void>;
   createProjectAndReload: (
@@ -349,6 +353,7 @@ export const useDashboardStore = create<DashboardState>()(
       activeSessionModel: null,
       activeSessionProvider: null,
       collapsedColumns: {},
+      minimizedColumns: {},
       columnOrder: {},
       sidebarOpen: false,
       sidebarSide: 'left',
@@ -598,8 +603,28 @@ export const useDashboardStore = create<DashboardState>()(
           };
         }),
 
+      toggleColumnMinimize: (boardId, columnId) =>
+        set((state) => {
+          const current = state.minimizedColumns[boardId] ?? [];
+          const isMinimized = current.includes(columnId);
+          const next = isMinimized
+            ? current.filter((id) => id !== columnId)
+            : [...current, columnId];
+          return {
+            minimizedColumns: {
+              ...state.minimizedColumns,
+              [boardId]: next,
+            },
+          };
+        }),
+
       isColumnCollapsed: (boardId, columnId) => {
         const current = get().collapsedColumns[boardId] ?? [];
+        return current.includes(columnId);
+      },
+
+      isColumnMinimized: (boardId, columnId) => {
+        const current = get().minimizedColumns[boardId] ?? [];
         return current.includes(columnId);
       },
 
@@ -693,6 +718,7 @@ export const useDashboardStore = create<DashboardState>()(
       partialize: (state) => ({
         themePreference: state.themePreference,
         collapsedColumns: state.collapsedColumns,
+        minimizedColumns: state.minimizedColumns,
         columnOrder: state.columnOrder,
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,

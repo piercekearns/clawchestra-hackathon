@@ -42,6 +42,7 @@ interface BoardProps<T extends BoardItem> {
 }
 
 const MIN_COLUMN_WIDTH = 300;
+const MINIMIZED_COLUMN_WIDTH = 78;
 const COLUMN_GAP = 16;
 const EMPTY_ARRAY: string[] = [];
 
@@ -126,12 +127,20 @@ export function Board<T extends BoardItem>({
   const savedColumnOrder = useDashboardStore(
     (s) => s.columnOrder[boardId],
   );
+  const minimizedColumns = useDashboardStore(
+    (s) => s.minimizedColumns[boardId] ?? EMPTY_ARRAY,
+  );
   const toggleColumnCollapse = useDashboardStore((s) => s.toggleColumnCollapse);
+  const toggleColumnMinimize = useDashboardStore((s) => s.toggleColumnMinimize);
   const setColumnOrder = useDashboardStore((s) => s.setColumnOrder);
 
   const handleToggleCollapse = useCallback(
     (columnId: string) => toggleColumnCollapse(boardId, columnId),
     [boardId, toggleColumnCollapse],
+  );
+  const handleToggleMinimize = useCallback(
+    (columnId: string) => toggleColumnMinimize(boardId, columnId),
+    [boardId, toggleColumnMinimize],
   );
 
   // Resolve column display order from saved preferences
@@ -167,10 +176,27 @@ export function Board<T extends BoardItem>({
   const activeItem = activeCardId ? localItems.find((entry) => entry.id === activeCardId) ?? null : null;
   const columnIdSet = useMemo(() => new Set(orderedColumns.map((c) => c.id)), [orderedColumns]);
   const collapsedSet = useMemo(() => new Set(collapsedColumns), [collapsedColumns]);
+  const minimizedSet = useMemo(() => new Set(minimizedColumns), [minimizedColumns]);
 
   const minBoardWidth = useMemo(
-    () => orderedColumns.length * MIN_COLUMN_WIDTH + Math.max(0, orderedColumns.length - 1) * COLUMN_GAP,
-    [orderedColumns.length],
+    () =>
+      orderedColumns.reduce(
+        (total, column) => total + (minimizedSet.has(column.id) ? MINIMIZED_COLUMN_WIDTH : MIN_COLUMN_WIDTH),
+        0,
+      ) + Math.max(0, orderedColumns.length - 1) * COLUMN_GAP,
+    [minimizedSet, orderedColumns],
+  );
+
+  const gridTemplateColumns = useMemo(
+    () =>
+      orderedColumns
+        .map((column) =>
+          minimizedSet.has(column.id)
+            ? `${MINIMIZED_COLUMN_WIDTH}px`
+            : `minmax(${MIN_COLUMN_WIDTH}px, 1fr)`,
+        )
+        .join(' '),
+    [minimizedSet, orderedColumns],
   );
 
   const sortableColumnIds = useMemo(
@@ -388,7 +414,7 @@ export function Board<T extends BoardItem>({
             ref={gridRef}
             className="grid h-full min-h-0 w-full gap-4 pr-2"
             style={{
-              gridTemplateColumns: `repeat(${orderedColumns.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`,
+              gridTemplateColumns,
               gridTemplateRows: 'minmax(0, 1fr)',
               minWidth: `${minBoardWidth}px`,
             }}
@@ -399,9 +425,11 @@ export function Board<T extends BoardItem>({
                   <Column
                     column={column}
                     items={grouped[column.id] ?? []}
-                    collapsed={collapsedSet.has(column.id)}
+                    cardsCollapsed={collapsedSet.has(column.id)}
+                    minimized={minimizedSet.has(column.id)}
                     highlighted={cardDragOverColumnId === column.id}
-                    onToggleCollapse={() => handleToggleCollapse(column.id)}
+                    onToggleCardsCollapse={() => handleToggleCollapse(column.id)}
+                    onToggleMinimize={() => handleToggleMinimize(column.id)}
                     onItemClick={onItemClick}
                     getItemWarning={getItemWarning}
                     renderItemIndicators={renderItemIndicators}
@@ -432,9 +460,14 @@ export function Board<T extends BoardItem>({
           <div
             className="flex flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
             style={{
-              width: gridRef.current
-                ? `${(gridRef.current.clientWidth - (orderedColumns.length - 1) * COLUMN_GAP) / orderedColumns.length}px`
-                : `${MIN_COLUMN_WIDTH}px`,
+              width: minimizedSet.has(activeColumn.id)
+                ? `${MINIMIZED_COLUMN_WIDTH}px`
+                : `${Math.max(
+                  MIN_COLUMN_WIDTH,
+                  gridRef.current
+                    ? (gridRef.current.clientWidth - (orderedColumns.length - 1) * COLUMN_GAP) / orderedColumns.length
+                    : MIN_COLUMN_WIDTH,
+                )}px`,
               height: gridRef.current ? `${gridRef.current.clientHeight}px` : undefined,
             }}
           >

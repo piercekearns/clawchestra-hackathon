@@ -185,6 +185,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`CLAWCHESTRA.md` / `.clawchestra/state.json`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
 | **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
 | **Run onboarding reconciliation audit** | Use Tauri command `run_onboarding_reconciliation` to audit+repair tracked projects toward canonical onboarding invariants and return a per-project matrix (`before`, `actions`, `after`, `warnings`, invariant pass/fail) |
+| **Adjust Kanban column visibility** | Use column header controls: up/down toggles card-list visibility; `chevrons-right-left` minimizes/restores the whole column. Both persist per board. |
 | **Search/filter** | Not available via agent — UI only |
 
 ---
