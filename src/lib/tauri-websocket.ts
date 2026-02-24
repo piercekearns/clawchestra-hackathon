@@ -12,6 +12,7 @@ import WebSocket from '@tauri-apps/plugin-websocket';
 import { invoke } from '@tauri-apps/api/core';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
+import { getOpenClawGatewayConfig } from './tauri';
 
 const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
 const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 5_000;
@@ -26,6 +27,45 @@ const OPENCLAW_CLIENT_SCOPES = [
   'chat.send',
   'chat.history',
 ];
+
+type GatewayConfigSnapshot = {
+  wsUrl: string;
+  sessionKey: string;
+  token?: string;
+};
+
+let lastKnownGatewayConfig: GatewayConfigSnapshot | null = null;
+
+function shouldRefreshGatewayConfig(error: unknown): boolean {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('connect challenge') ||
+    normalized.includes('token mismatch') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('auth token') ||
+    normalized.includes('clock')
+  );
+}
+
+function resolveGatewayConfigSnapshot(
+  wsUrl: string,
+  sessionKey: string,
+  token?: string,
+): GatewayConfigSnapshot {
+  if (
+    lastKnownGatewayConfig &&
+    lastKnownGatewayConfig.wsUrl === wsUrl &&
+    lastKnownGatewayConfig.sessionKey === sessionKey
+  ) {
+    if (lastKnownGatewayConfig.token && lastKnownGatewayConfig.token !== token) {
+      return lastKnownGatewayConfig;
+    }
+  }
+
+  return { wsUrl, sessionKey, token };
+}
 
 export interface OpenClawMessage {
   type: string;
@@ -536,7 +576,12 @@ export async function getTauriOpenClawConnection(
   sessionKey: string,
   token?: string,
 ): Promise<TauriOpenClawConnection> {
-  const requestedConfigKey = getConnectionConfigKey(wsUrl, sessionKey, token);
+  const resolved = resolveGatewayConfigSnapshot(wsUrl, sessionKey, token);
+  const requestedConfigKey = getConnectionConfigKey(
+    resolved.wsUrl,
+    resolved.sessionKey,
+    resolved.token,
+  );
 
   // Reuse existing connection if connected or reconnecting (don't create duplicates)
   if (connectionInstance) {
@@ -575,10 +620,55 @@ export async function getTauriOpenClawConnection(
 
   connectionConfigKey = requestedConfigKey;
   connectionPromise = (async () => {
-    connectionInstance = new TauriOpenClawConnection(wsUrl, sessionKey, token);
-    wireConnectionStateToStore(connectionInstance); // Wire BEFORE connect so all transitions are captured
-    await connectionInstance.connect();  // setState('connecting') → setState('connected')
-    return connectionInstance;
+    const attemptConfig = (config: GatewayConfigSnapshot) => {
+      connectionInstance = new TauriOpenClawConnection(
+        config.wsUrl,
+        config.sessionKey,
+        config.token,
+      );
+      wireConnectionStateToStore(connectionInstance); // Wire BEFORE connect so all transitions are captured
+      return connectionInstance.connect();
+    };
+
+    try {
+      await attemptConfig(resolved);
+      lastKnownGatewayConfig = resolved;
+      return connectionInstance!;
+    } catch (error) {
+      if (!shouldRefreshGatewayConfig(error)) {
+        throw error;
+      }
+
+      try {
+        const refreshed = await getOpenClawGatewayConfig();
+        const refreshedSnapshot: GatewayConfigSnapshot = {
+          wsUrl: refreshed.wsUrl,
+          sessionKey: refreshed.sessionKey,
+          token: refreshed.token,
+        };
+        const refreshedKey = getConnectionConfigKey(
+          refreshedSnapshot.wsUrl,
+          refreshedSnapshot.sessionKey,
+          refreshedSnapshot.token,
+        );
+
+        if (refreshedKey !== requestedConfigKey) {
+          try {
+            await connectionInstance?.disconnect();
+          } catch {
+            // ignore disconnect failures
+          }
+          connectionConfigKey = refreshedKey;
+          await attemptConfig(refreshedSnapshot);
+          lastKnownGatewayConfig = refreshedSnapshot;
+          return connectionInstance!;
+        }
+      } catch (refreshError) {
+        console.warn('[TauriWS] Refreshing gateway config failed:', refreshError);
+      }
+
+      throw error;
+    }
   })();
 
   try {
