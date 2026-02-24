@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
-import { ChevronDown, ChevronUp, ChevronsLeftRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsRightLeft } from 'lucide-react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { Card } from './Card';
 
@@ -71,7 +71,7 @@ export function Column<T extends BoardItem>({
       >
         {minimized ? (
           <>
-            <div className="flex w-full shrink-0 flex-col items-center gap-1">
+            <div className="flex w-full shrink-0 items-center justify-center">
               <button
                 type="button"
                 className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
@@ -82,15 +82,15 @@ export function Column<T extends BoardItem>({
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label={`Restore ${column.label} column`}
               >
-                <ChevronsLeftRight className="h-3.5 w-3.5" />
+                <ChevronsRightLeft className="h-3.5 w-3.5" />
               </button>
-              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                {items.length}
-              </span>
             </div>
-            <div className="mt-1 flex min-h-0 w-full flex-1 items-start justify-center">
+            <div className="mt-1 flex min-h-0 w-full flex-1 items-start justify-center gap-1">
               <span className="[text-orientation:mixed] [writing-mode:vertical-rl] text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
                 {column.label}
+              </span>
+              <span className="[text-orientation:mixed] [writing-mode:vertical-rl] rounded-full bg-neutral-200 px-1.5 py-1 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                {items.length}
               </span>
             </div>
           </>
@@ -126,7 +126,7 @@ export function Column<T extends BoardItem>({
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label={`Minimize ${column.label} column`}
               >
-                <ChevronsLeftRight className="h-3.5 w-3.5" />
+                <ChevronsRightLeft className="h-3.5 w-3.5" />
               </button>
               <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
                 {items.length}
