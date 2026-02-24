@@ -284,7 +284,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
       )}
 
       <div className="min-h-0 p-2">
-        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2+3px)] ${
+        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
           sending 
             ? 'border-revival-accent/50' 
             : 'border-neutral-300/70 dark:border-neutral-600'
@@ -329,7 +329,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                   ? 'Message OpenClaw (Enter sends, Shift+Enter newline)...'
                   : 'Gateway offline. You can still draft here.'
             }
-            className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[var(--input-pad)] pt-[var(--input-pad)] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+            className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
           />
 
           <button
