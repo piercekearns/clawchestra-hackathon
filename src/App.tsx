@@ -505,22 +505,39 @@ export default function App() {
     async (mode: 'visible' | 'all' = 'visible') => {
       if (!activeRoadmapProject || !isTauriRuntime()) return;
       const roadmapPath = `${activeRoadmapProject.dirPath}/ROADMAP.md`;
+      const stateJsonPath = `${activeRoadmapProject.dirPath}/.clawchestra/state.json`;
 
       try {
-        const { readRoadmap } = await import('./lib/roadmap');
-        const document = await readRoadmap(roadmapPath);
-        const items: RoadmapItemState[] = document.items.map((item, index) => ({
-          id: item.id,
-          title: item.title,
-          status: item.status,
-          priority: item.priority ?? index + 1,
-          nextAction: item.nextAction ?? undefined,
-          blockedBy: item.blockedBy ?? undefined,
-          tags: item.tags ?? undefined,
-          icon: item.icon ?? undefined,
-          specDoc: item.specDoc ?? undefined,
-          planDoc: item.planDoc ?? undefined,
-        }));
+        let items: RoadmapItemState[] = [];
+
+        if (activeRoadmapProject.stateJsonMigrated) {
+          const { readFile } = await import('./lib/tauri');
+          const { parseStateJson } = await import('./lib/state-json');
+          const raw = await readFile(stateJsonPath);
+          const parsed = parseStateJson(JSON.parse(raw));
+          if (!parsed.ok) {
+            throw parsed.error;
+          }
+          items = parsed.data.roadmapItems.map((item, index) => ({
+            ...item,
+            priority: item.priority ?? index + 1,
+          }));
+        } else {
+          const { readRoadmap } = await import('./lib/roadmap');
+          const document = await readRoadmap(roadmapPath);
+          items = document.items.map((item, index) => ({
+            id: item.id,
+            title: item.title,
+            status: item.status,
+            priority: item.priority ?? index + 1,
+            nextAction: item.nextAction ?? undefined,
+            blockedBy: item.blockedBy ?? undefined,
+            tags: item.tags ?? undefined,
+            icon: item.icon ?? undefined,
+            specDoc: item.specDoc ?? undefined,
+            planDoc: item.planDoc ?? undefined,
+          }));
+        }
 
         setRoadmapItemsForProject(activeRoadmapProject.id, items);
 
@@ -579,12 +596,13 @@ export default function App() {
 
   useEffect(() => {
     if (!activeRoadmapProject || !isRoadmapView || !isTauriRuntime()) return;
-    const roadmapPath = `${activeRoadmapProject.dirPath}/ROADMAP.md`;
+    const watchPath = activeRoadmapProject.stateJsonMigrated
+      ? `${activeRoadmapProject.dirPath}/.clawchestra/state.json`
+      : `${activeRoadmapProject.dirPath}/ROADMAP.md`;
     let unwatch: (() => void) | null = null;
     (async () => {
       try {
-        const fs = await import('@tauri-apps/plugin-fs');
-        unwatch = await fs.watch(roadmapPath, () => scheduleRoadmapRefresh('visible'), { delayMs: 200 });
+        unwatch = await watch(watchPath, () => scheduleRoadmapRefresh('visible'), { delayMs: 200 });
       } catch (error) {
         console.warn('[Roadmap] Failed to watch roadmap file:', error);
       }
@@ -592,7 +610,7 @@ export default function App() {
     return () => {
       if (unwatch) unwatch();
     };
-  }, [activeRoadmapProject?.id, isRoadmapView, scheduleRoadmapRefresh]);
+  }, [activeRoadmapProject?.id, activeRoadmapProject?.stateJsonMigrated, isRoadmapView, scheduleRoadmapRefresh]);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
