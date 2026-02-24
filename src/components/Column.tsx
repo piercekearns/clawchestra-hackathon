@@ -58,7 +58,7 @@ export function Column<T extends BoardItem>({
       <header
         className={`cursor-grab rounded-lg bg-neutral-100 transition-colors hover:bg-neutral-200/80 active:cursor-grabbing dark:bg-neutral-800 dark:hover:bg-neutral-700/80 ${
           minimized
-            ? 'flex h-full min-h-0 flex-col items-center gap-3 px-1 py-2'
+            ? 'flex h-full min-h-0 flex-col items-center px-1 py-2'
             : 'mb-3 mr-[1px] flex items-center gap-1.5 px-3 py-2'
         }`}
         role="button"
@@ -71,21 +71,26 @@ export function Column<T extends BoardItem>({
       >
         {minimized ? (
           <>
-            <button
-              type="button"
-              className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMinimize?.();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              aria-label={`Restore ${column.label} column`}
-            >
-              <ChevronsLeftRight className="h-3.5 w-3.5" />
-            </button>
-            <div className="flex min-h-0 flex-1 items-center justify-center">
+            <div className="flex w-full shrink-0 flex-col items-center gap-1">
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMinimize?.();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`Restore ${column.label} column`}
+              >
+                <ChevronsLeftRight className="h-3.5 w-3.5" />
+              </button>
+              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                {items.length}
+              </span>
+            </div>
+            <div className="mt-1 flex min-h-0 w-full flex-1 items-start justify-center">
               <span className="[text-orientation:mixed] [writing-mode:vertical-rl] text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
-                {column.label} {items.length}
+                {column.label}
               </span>
             </div>
           </>
@@ -102,29 +107,31 @@ export function Column<T extends BoardItem>({
               aria-label={cardsCollapsed ? `Show ${column.label} cards` : `Hide ${column.label} cards`}
             >
               {cardsCollapsed ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
                 <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
               )}
             </button>
             <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
               {column.label}
             </h2>
-            <span className="ml-auto rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-              {items.length}
-            </span>
-            <button
-              type="button"
-              className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMinimize?.();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              aria-label={`Minimize ${column.label} column`}
-            >
-              <ChevronsLeftRight className="h-3.5 w-3.5" />
-            </button>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMinimize?.();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`Minimize ${column.label} column`}
+              >
+                <ChevronsLeftRight className="h-3.5 w-3.5" />
+              </button>
+              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                {items.length}
+              </span>
+            </div>
           </>
         )}
       </header>
