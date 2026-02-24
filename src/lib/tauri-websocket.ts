@@ -9,10 +9,23 @@
  */
 
 import WebSocket from '@tauri-apps/plugin-websocket';
+import { invoke } from '@tauri-apps/api/core';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
 
 const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
+const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 5_000;
+const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
+const OPENCLAW_CLIENT_VERSION = '0.1.0';
+const OPENCLAW_CLIENT_MODE = 'webchat';
+const OPENCLAW_CLIENT_ROLE = 'operator';
+const OPENCLAW_CLIENT_SCOPES = [
+  'operator.read',
+  'operator.write',
+  'operator.admin',
+  'chat.send',
+  'chat.history',
+];
 
 export interface OpenClawMessage {
   type: string;
@@ -28,6 +41,36 @@ export interface ChatDelta {
   errorMessage?: string;
 }
 
+interface GatewayConnectChallengePayload {
+  nonce?: string;
+}
+
+interface GatewayDeviceAuthProof {
+  id: string;
+  publicKey: string;
+  signature: string;
+  signedAt: number;
+  nonce: string;
+}
+
+async function getOpenClawWsDeviceAuth(params: {
+  nonce: string;
+  clientId: string;
+  clientMode: string;
+  role: string;
+  scopes: string[];
+  token?: string;
+}): Promise<GatewayDeviceAuthProof> {
+  return invoke<GatewayDeviceAuthProof>('get_openclaw_ws_device_auth', {
+    nonce: params.nonce,
+    clientId: params.clientId,
+    clientMode: params.clientMode,
+    role: params.role,
+    scopes: params.scopes,
+    token: params.token ?? null,
+  });
+}
+
 type MessageHandler = (event: string, payload: unknown) => void;
 
 export class TauriOpenClawConnection {
@@ -41,6 +84,12 @@ export class TauriOpenClawConnection {
   private messageIdCounter = 0;
   private sessionKey: string;
   private token?: string;
+  private connectChallengeNonce: string | null = null;
+  private connectChallengeWaiters = new Set<{
+    resolve: (nonce: string) => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
 
   // State machine fields
   private _state: ChatConnectionState = 'disconnected';
@@ -124,6 +173,7 @@ export class TauriOpenClawConnection {
     console.warn(`[TauriWS] Force reconnect: ${reason}`);
     this.stopKeepalive();
     this.rejectPendingCallbacks(`WebSocket reconnect: ${reason}`);
+    this.clearConnectChallengeState(new Error(`WebSocket reconnect: ${reason}`));
 
     const active = this.ws;
     this.ws = null;
@@ -137,10 +187,59 @@ export class TauriOpenClawConnection {
     this.scheduleReconnect();
   }
 
+  private clearConnectChallengeState(error?: Error): void {
+    this.connectChallengeNonce = null;
+    if (this.connectChallengeWaiters.size === 0) return;
+
+    const pending = Array.from(this.connectChallengeWaiters);
+    this.connectChallengeWaiters.clear();
+    pending.forEach((waiter) => {
+      clearTimeout(waiter.timer);
+      if (error) {
+        waiter.reject(error);
+      }
+    });
+  }
+
+  private waitForConnectChallenge(): Promise<string> {
+    if (this.connectChallengeNonce) {
+      return Promise.resolve(this.connectChallengeNonce);
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          this.connectChallengeWaiters.delete(waiter);
+          reject(new Error('Timed out waiting for gateway connect challenge'));
+        }, OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS),
+      };
+      this.connectChallengeWaiters.add(waiter);
+    });
+  }
+
+  private handleConnectChallengeEvent(payload: unknown): void {
+    const record = payload as GatewayConnectChallengePayload | null;
+    const nonce = typeof record?.nonce === 'string' ? record.nonce.trim() : '';
+    if (!nonce) return;
+
+    this.connectChallengeNonce = nonce;
+    if (this.connectChallengeWaiters.size === 0) return;
+
+    const pending = Array.from(this.connectChallengeWaiters);
+    this.connectChallengeWaiters.clear();
+    pending.forEach((waiter) => {
+      clearTimeout(waiter.timer);
+      waiter.resolve(nonce);
+    });
+  }
+
   async connect(): Promise<void> {
     const connectUrl = this.wsUrl;
     console.log('[TauriWS] Connecting to:', connectUrl);
     this.setState('connecting');
+    this.clearConnectChallengeState();
 
     try {
       this.ws = await WebSocket.connect(connectUrl, {
@@ -160,6 +259,7 @@ export class TauriOpenClawConnection {
         this.stopKeepalive();
         this.ws = null;
         this.rejectPendingCallbacks('WebSocket closed');
+        this.clearConnectChallengeState(new Error('WebSocket closed'));
         this.scheduleReconnect();
         return;
       }
@@ -173,19 +273,30 @@ export class TauriOpenClawConnection {
     // is returned before the async task inserts it into the ConnectionManager.
     await new Promise((resolve) => setTimeout(resolve, 500));
 
+    const connectNonce = await this.waitForConnectChallenge();
+    const deviceProof = await getOpenClawWsDeviceAuth({
+      nonce: connectNonce,
+      clientId: OPENCLAW_CLIENT_ID,
+      clientMode: OPENCLAW_CLIENT_MODE,
+      role: OPENCLAW_CLIENT_ROLE,
+      scopes: OPENCLAW_CLIENT_SCOPES,
+      token: this.token,
+    });
+
     // Send connect message with auth (required by OpenClaw gateway protocol)
     await this.request<{ ok?: boolean; error?: { message?: string } }>('connect', {
       minProtocol: 3,
       maxProtocol: 3,
       client: {
-        id: 'openclaw-control-ui',
-        version: '0.1.0',
+        id: OPENCLAW_CLIENT_ID,
+        version: OPENCLAW_CLIENT_VERSION,
         platform: 'tauri',
-        mode: 'webchat',
+        mode: OPENCLAW_CLIENT_MODE,
       },
-      role: 'operator',
-      scopes: ['operator.write', 'operator.admin', 'chat.send', 'chat.history'],
+      role: OPENCLAW_CLIENT_ROLE,
+      scopes: OPENCLAW_CLIENT_SCOPES,
       auth: this.token ? { token: this.token } : undefined,
+      device: deviceProof,
       userAgent: 'Pipeline-Dashboard/1.0',
       locale: 'en-US',
     });
@@ -235,6 +346,9 @@ export class TauriOpenClawConnection {
       if (type === 'event') {
         const eventName = message.event as string;
         const eventData = message.payload;
+        if (eventName === 'connect.challenge') {
+          this.handleConnectChallengeEvent(eventData);
+        }
         const chatState = typeof eventData === 'object' && eventData !== null
           ? (eventData as Record<string, unknown>).state
           : undefined;
@@ -375,6 +489,7 @@ export class TauriOpenClawConnection {
   async disconnect(): Promise<void> {
     this.disposed = true;
     this.stopKeepalive();
+    this.clearConnectChallengeState(new Error('Connection disposed'));
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

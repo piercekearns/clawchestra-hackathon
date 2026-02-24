@@ -28,6 +28,10 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tauri::Emitter;
 use tracing_subscriber::prelude::*;
+use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD};
+use base64::Engine as _;
+use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
 /// Type alias for the shared application state, used as Tauri managed state.
 type SharedAppState = Arc<tokio::sync::Mutex<AppState>>;
@@ -45,6 +49,24 @@ struct OpenClawGatewayConfig {
     ws_url: String,
     token: Option<String>,
     session_key: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawIdentityFile {
+    device_id: String,
+    public_key_pem: String,
+    private_key_pem: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawWsDeviceAuthProof {
+    id: String,
+    public_key: String,
+    signature: String,
+    signed_at: i64,
+    nonce: String,
 }
 
 /// OpenClaw sync mode — how Clawchestra communicates with OpenClaw for db.json sync.
@@ -716,6 +738,93 @@ fn get_openclaw_gateway_config() -> Result<OpenClawGatewayConfig, String> {
         ws_url: format!("ws://127.0.0.1:{port}"),
         token,
         session_key: DEFAULT_SESSION_KEY.to_string(),
+    })
+}
+
+fn decode_pem_block(pem: &str, label: &str) -> Result<Vec<u8>, String> {
+    let begin = format!("-----BEGIN {label}-----");
+    let end = format!("-----END {label}-----");
+
+    let body = pem
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && *line != begin && *line != end)
+        .collect::<String>();
+
+    if body.is_empty() {
+        return Err(format!("Invalid PEM block for {label}"));
+    }
+
+    BASE64_STANDARD
+        .decode(body.as_bytes())
+        .map_err(|error| format!("Failed to decode PEM {label}: {error}"))
+}
+
+#[tauri::command]
+fn get_openclaw_ws_device_auth(
+    nonce: String,
+    client_id: String,
+    client_mode: String,
+    role: String,
+    scopes: Vec<String>,
+    token: Option<String>,
+) -> Result<OpenClawWsDeviceAuthProof, String> {
+    let nonce = nonce.trim().to_string();
+    if nonce.is_empty() {
+        return Err("Missing gateway connect nonce".to_string());
+    }
+
+    let client_id = client_id.trim().to_string();
+    let client_mode = client_mode.trim().to_string();
+    let role = role.trim().to_string();
+    if client_id.is_empty() || client_mode.is_empty() || role.is_empty() {
+        return Err("Invalid websocket device auth parameters".to_string());
+    }
+
+    let home = env::var("HOME").map_err(|error| error.to_string())?;
+    let identity_path = Path::new(&home)
+        .join(".openclaw")
+        .join("identity")
+        .join("device.json");
+
+    let identity_raw = fs::read_to_string(&identity_path)
+        .map_err(|error| format!("Failed to read OpenClaw identity ({identity_path:?}): {error}"))?;
+    let identity: OpenClawIdentityFile = serde_json::from_str(&identity_raw)
+        .map_err(|error| format!("Failed to parse OpenClaw identity JSON: {error}"))?;
+
+    let private_der = decode_pem_block(&identity.private_key_pem, "PRIVATE KEY")?;
+    let public_der = decode_pem_block(&identity.public_key_pem, "PUBLIC KEY")?;
+
+    let signing_key = SigningKey::from_pkcs8_der(&private_der)
+        .map_err(|error| format!("Failed to decode OpenClaw private key: {error}"))?;
+    let verifying_key = VerifyingKey::from_public_key_der(&public_der)
+        .map_err(|error| format!("Failed to decode OpenClaw public key: {error}"))?;
+
+    let signed_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("System clock error: {error}"))?
+        .as_millis() as i64;
+    let scope_csv = scopes.join(",");
+    let payload = format!(
+        "v2|{}|{}|{}|{}|{}|{}|{}|{}",
+        identity.device_id,
+        client_id,
+        client_mode,
+        role,
+        scope_csv,
+        signed_at_ms,
+        token.unwrap_or_default(),
+        nonce,
+    );
+
+    let signature = signing_key.sign(payload.as_bytes());
+
+    Ok(OpenClawWsDeviceAuthProof {
+        id: identity.device_id,
+        public_key: BASE64_URL_SAFE_NO_PAD.encode(verifying_key.to_bytes()),
+        signature: BASE64_URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        signed_at: signed_at_ms,
+        nonce,
     })
 }
 
@@ -2980,6 +3089,7 @@ pub fn run() {
             create_directory,
             pick_folder,
             get_openclaw_gateway_config,
+            get_openclaw_ws_device_auth,
             openclaw_ping,
             openclaw_chat,
             openclaw_sessions_list,
