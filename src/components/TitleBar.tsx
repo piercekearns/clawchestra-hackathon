@@ -42,28 +42,27 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
       className="relative z-[90] flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
       onMouseDown={startWindowDrag}
     >
-      {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
-      <div className="w-[78px] shrink-0" />
+      <div className="flex items-center gap-2">
+        {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
+        <div className="w-[78px] shrink-0" />
 
-      {/* Left sidebar toggle */}
-      <button
-        type="button"
-        onClick={() => toggleSidebar('left')}
-        disabled={leftLocked}
-        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${leftLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
-        onMouseDown={(e) => e.stopPropagation()}
-        aria-expanded={leftOpen}
-        aria-controls="sidebar"
-        aria-label="Toggle left sidebar"
-      >
-        <LeftToggleIcon className="h-4 w-4" />
-      </button>
-
-      {/* Spacer — pushes logo+title to center */}
-      <div className="flex-1" />
+        {/* Left sidebar toggle */}
+        <button
+          type="button"
+          onClick={() => toggleSidebar('left')}
+          disabled={leftLocked}
+          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${leftLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+          onMouseDown={(e) => e.stopPropagation()}
+          aria-expanded={leftOpen}
+          aria-controls="sidebar"
+          aria-label="Toggle left sidebar"
+        >
+          <LeftToggleIcon className="h-4 w-4" />
+        </button>
+      </div>
 
       {/* Centered logo + title group */}
-      <div className="pointer-events-none flex select-none items-center gap-2">
+      <div className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 select-none items-center gap-2">
         <img
           src={logoDark}
           alt=""
@@ -112,22 +111,21 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         )}
       </div>
 
-      {/* Spacer — pushes right toggle to the edge */}
-      <div className="flex-1" />
-
       {/* Right sidebar toggle */}
-      <button
-        type="button"
-        onClick={() => toggleSidebar('right')}
-        disabled={rightLocked}
-        className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${rightLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
-        onMouseDown={(e) => e.stopPropagation()}
-        aria-expanded={rightOpen}
-        aria-controls="sidebar"
-        aria-label="Toggle right sidebar"
-      >
-        <RightToggleIcon className="h-4 w-4 -scale-x-100" />
-      </button>
+      <div className="ml-auto flex items-center">
+        <button
+          type="button"
+          onClick={() => toggleSidebar('right')}
+          disabled={rightLocked}
+          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${rightLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+          onMouseDown={(e) => e.stopPropagation()}
+          aria-expanded={rightOpen}
+          aria-controls="sidebar"
+          aria-label="Toggle right sidebar"
+        >
+          <RightToggleIcon className="h-4 w-4 -scale-x-100" />
+        </button>
+      </div>
     </div>
   );
 }
