@@ -1,14 +1,18 @@
 import matter from 'gray-matter';
 import type { DashboardSettings } from './settings';
-import { createProject, removeProject } from './projects';
 import {
+  type BranchInjectionResult,
+  createProjectWithState,
   createDirectory,
   gitInitRepo,
+  injectAgentGuidance,
   pathExists,
   pickFolder,
   probeRepo,
   readFile,
+  renameProjectMd,
   removePath,
+  runMigration,
   writeFile,
 } from './tauri';
 import type { ProjectStatus, ProjectViewModel } from './schema';
@@ -89,6 +93,15 @@ function ensureInsideScanPaths(path: string, scanPaths: string[]): { inside: boo
   return { inside: false };
 }
 
+function summarizeInjectionOutcomes(results: BranchInjectionResult[]): string | null {
+  const skipped = results.filter((entry) => !entry.success);
+  if (skipped.length === 0) return null;
+  const details = skipped
+    .map((entry) => `${entry.name}${entry.skipReason ? ` (${entry.skipReason})` : ''}`)
+    .join(', ');
+  return `Guidance injection skipped on ${skipped.length} branch(es): ${details}`;
+}
+
 export type CompatibilityAction = {
   type: 'create' | 'update' | 'prompt';
   file: string;
@@ -104,9 +117,12 @@ export type CompatibilityReport = {
   isGitRepo: boolean;
   gitBranch?: string;
   gitRemote?: string;
+  hasClawchestraMd: boolean;
+  hasLegacyProjectMd: boolean;
   hasProjectMd: boolean;
   projectMdStatus?: ProjectMdStatus;
   hasRoadmapMd: boolean;
+  hasStateJson: boolean;
   hasAgentsMd: boolean;
   hasReadme: boolean;
   inferredTitle: string;
@@ -135,6 +151,7 @@ export async function checkExistingProjectCompatibility(args: {
   const clawchestraPath = `${args.folderPath}/CLAWCHESTRA.md`;
   const legacyProjectPath = `${args.folderPath}/PROJECT.md`;
   const roadmapPath = `${args.folderPath}/ROADMAP.md`;
+  const stateJsonPath = `${args.folderPath}/.clawchestra/state.json`;
   const agentsPath = `${args.folderPath}/AGENTS.md`;
   const readmePath = `${args.folderPath}/README.md`;
 
@@ -143,6 +160,7 @@ export async function checkExistingProjectCompatibility(args: {
   const hasProjectMd = hasClawchestraMd || hasLegacyProjectMd;
   const projectPath = hasClawchestraMd ? clawchestraPath : legacyProjectPath;
   const hasRoadmapMd = await pathExists(roadmapPath);
+  const hasStateJson = await pathExists(stateJsonPath);
   const hasAgentsMd = await pathExists(agentsPath);
   const hasReadme = await pathExists(readmePath);
 
@@ -167,7 +185,10 @@ export async function checkExistingProjectCompatibility(args: {
   const inferredStatus: ProjectStatus = detectedStatus ?? 'pending';
   const inferredId = canonicalSlugify(inferredTitle || folderName);
 
-  const idConflict = args.existingProjects.some((entry) => entry.id === inferredId);
+  const matchingProject = args.existingProjects.find((entry) => entry.id === inferredId);
+  const idConflict = matchingProject
+    ? normalizePathForComparison(matchingProject.dirPath) !== normalizePathForComparison(args.folderPath)
+    : false;
   const conflictingEntryId = idConflict ? inferredId : undefined;
 
   const scanPathCheck = ensureInsideScanPaths(args.folderPath, args.scanPaths);
@@ -238,6 +259,22 @@ export async function checkExistingProjectCompatibility(args: {
       severity: 'warning',
     });
   }
+  if (hasStateJson) {
+    actions.push({
+      type: 'prompt',
+      file: '.clawchestra/state.json',
+      description: 'Existing state.json detected; onboarding will preserve and import it.',
+      severity: 'info',
+    });
+  }
+  if (hasRoadmapMd) {
+    actions.push({
+      type: 'prompt',
+      file: 'ROADMAP.md',
+      description: 'Legacy roadmap detected; onboarding will run migration before registration.',
+      severity: 'info',
+    });
+  }
 
   return {
     folderPath: args.folderPath,
@@ -245,9 +282,12 @@ export async function checkExistingProjectCompatibility(args: {
     isGitRepo: repoInfo.isGitRepo,
     gitBranch: repoInfo.gitBranch,
     gitRemote: repoInfo.gitRemote,
+    hasClawchestraMd,
+    hasLegacyProjectMd,
     hasProjectMd,
     projectMdStatus,
     hasRoadmapMd,
+    hasStateJson,
     hasAgentsMd,
     hasReadme,
     inferredTitle,
@@ -273,7 +313,6 @@ type CreateFlowInput = {
   status: ProjectStatus;
   priority?: number;
   initializeGit: boolean;
-  createRoadmap: boolean;
   createAgents: boolean;
 };
 
@@ -283,14 +322,6 @@ function projectBodyTemplate(title: string): string {
 ## Overview
 
 Describe the purpose, scope, and current state of this project.
-`;
-}
-
-function roadmapTemplate(title: string): string {
-  return `---
-items: []
----
-# ROADMAP — ${title}
 `;
 }
 
@@ -304,7 +335,7 @@ Instructions for agents working on this project.
 export async function createNewProjectFlow(
   input: CreateFlowInput,
   existingProjects: ProjectViewModel[],
-): Promise<{ id: string; localPath: string }> {
+): Promise<{ id: string; localPath: string; notes: string[] }> {
   const title = input.title.trim();
   if (!title) throw new Error('Project title is required');
 
@@ -312,7 +343,16 @@ export async function createNewProjectFlow(
   if (isReservedProjectId(id)) {
     throw new Error(`"${id}" is reserved. Choose a different folder name.`);
   }
-  if (existingProjects.some((project) => project.id === id)) {
+  const localPath = `${input.scanPath}/${id}`;
+
+  const existingMatch = existingProjects.find((project) => project.id === id);
+  if (existingMatch) {
+    if (
+      normalizePathForComparison(existingMatch.dirPath)
+      === normalizePathForComparison(localPath)
+    ) {
+      return { id, localPath, notes: [] };
+    }
     throw new Error(`A project with id "${id}" already exists`);
   }
 
@@ -322,13 +362,20 @@ export async function createNewProjectFlow(
       throw new Error('Selected path is outside configured scan paths');
     }
   }
-  const localPath = `${input.scanPath}/${id}`;
+
   if (await pathExists(localPath)) {
+    const hasCanonicalMd = await pathExists(`${localPath}/CLAWCHESTRA.md`);
+    const hasStateJson = await pathExists(`${localPath}/.clawchestra/state.json`);
+    if (hasCanonicalMd && hasStateJson) {
+      await createProjectWithState(id, localPath, title, input.status, '');
+      return { id, localPath, notes: [] };
+    }
     throw new Error(`Target folder already exists: ${localPath}`);
   }
 
   const createdFiles: string[] = [];
   let folderCreated = false;
+  const notes: string[] = [];
 
   try {
     await withMutationRetry(() => createDirectory(localPath));
@@ -345,13 +392,9 @@ export async function createNewProjectFlow(
         nextAction: 'Define first implementation milestone',
       }),
     );
-    await withMutationRetry(() => writeFile(`${localPath}/PROJECT.md`, projectMarkdown));
-    createdFiles.push('PROJECT.md');
+    await withMutationRetry(() => writeFile(`${localPath}/CLAWCHESTRA.md`, projectMarkdown));
+    createdFiles.push('CLAWCHESTRA.md');
 
-    if (input.createRoadmap) {
-      await withMutationRetry(() => writeFile(`${localPath}/ROADMAP.md`, roadmapTemplate(title)));
-      createdFiles.push('ROADMAP.md');
-    }
     if (input.createAgents) {
       await withMutationRetry(() => writeFile(`${localPath}/AGENTS.md`, agentsTemplate(title)));
       createdFiles.push('AGENTS.md');
@@ -360,7 +403,7 @@ export async function createNewProjectFlow(
     await withMutationRetry(() =>
       writeFile(
         `${localPath}/.gitignore`,
-        `node_modules\n.DS_Store\ndist\n.target\n`,
+        `node_modules\n.DS_Store\ndist\n.target\n.clawchestra/\n`,
       ),
     );
     createdFiles.push('.gitignore');
@@ -369,7 +412,19 @@ export async function createNewProjectFlow(
       await gitInitRepo(localPath, true, createdFiles);
     }
 
-    return { id, localPath };
+    await createProjectWithState(id, localPath, title, input.status, '');
+
+    if (input.initializeGit) {
+      const injectionResults = await injectAgentGuidance(localPath).catch(() => null);
+      if (injectionResults === null) {
+        notes.push('Guidance injection failed after git initialization.');
+      } else {
+        const summary = summarizeInjectionOutcomes(injectionResults);
+        if (summary) notes.push(summary);
+      }
+    }
+
+    return { id, localPath, notes };
   } catch (error) {
     for (const relative of createdFiles) {
       await withMutationRetry(() => removePath(`${localPath}/${relative}`)).catch(() => undefined);
@@ -388,7 +443,6 @@ type AddExistingInput = {
   fallbackStatus: ProjectStatus;
   addMissingProjectMd: boolean;
   addMissingFrontmatter: boolean;
-  addMissingRoadmap: boolean;
   addMissingAgents: boolean;
   initGitIfMissing: boolean;
   allowDirtyOverride: boolean;
@@ -397,7 +451,7 @@ type AddExistingInput = {
 export async function addExistingProjectFlow(
   input: AddExistingInput,
   existingProjects: ProjectViewModel[],
-): Promise<{ id: string; localPath: string }> {
+): Promise<{ id: string; localPath: string; notes: string[] }> {
   if (input.report.projectMdStatus === 'invalid-frontmatter') {
     throw new Error('PROJECT.md frontmatter is invalid. Fix it before adding.');
   }
@@ -412,13 +466,18 @@ export async function addExistingProjectFlow(
   if (isReservedProjectId(id)) {
     throw new Error(`"${id}" is reserved. Choose a different id.`);
   }
-  if (existingProjects.some((project) => project.id === id)) {
+  const existingMatch = existingProjects.find((project) => project.id === id);
+  if (
+    existingMatch
+    && normalizePathForComparison(existingMatch.dirPath) !== normalizePathForComparison(input.report.folderPath)
+  ) {
     throw new Error(`A project with id "${id}" already exists`);
   }
 
   const localPath = input.report.folderPath;
   const createdFilePaths: string[] = [];
   const backups = new Map<string, string>();
+  const notes: string[] = [];
 
   const writeWithBackup = async (filePath: string, content: string): Promise<void> => {
     const exists = await pathExists(filePath);
@@ -451,7 +510,11 @@ export async function addExistingProjectFlow(
         }),
       );
       await writeWithBackup(newProjectPath, projectMarkdown);
-    } else if (input.report.projectMdStatus === 'missing-frontmatter' && input.addMissingFrontmatter) {
+    } else if (
+      input.report.projectMdStatus === 'missing-frontmatter'
+      && !hasClawchestra
+      && input.addMissingFrontmatter
+    ) {
       const current = await readFile(projectPath);
       const patched = matter.stringify(
         current,
@@ -464,22 +527,58 @@ export async function addExistingProjectFlow(
       await writeWithBackup(projectPath, patched);
     }
 
-    if (!input.report.hasRoadmapMd && input.addMissingRoadmap) {
-      await writeWithBackup(`${localPath}/ROADMAP.md`, roadmapTemplate(input.title));
-    }
     if (!input.report.hasAgentsMd && input.addMissingAgents) {
       await writeWithBackup(`${localPath}/AGENTS.md`, agentsTemplate(input.title));
+    }
+
+    if (input.report.hasStateJson) {
+      const stateJsonPath = `${localPath}/.clawchestra/state.json`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = `${localPath}/.clawchestra/backup/state.pre-onboarding.${timestamp}.json`;
+      const stateContent = await readFile(stateJsonPath);
+      await withMutationRetry(() => writeFile(backupPath, stateContent));
     }
 
     if (!input.report.isGitRepo && input.initGitIfMissing) {
       const filesForCommit = [
         input.report.hasProjectMd ? projectFileName : 'CLAWCHESTRA.md',
-        ...(input.addMissingRoadmap ? ['ROADMAP.md'] : []),
         ...(input.addMissingAgents ? ['AGENTS.md'] : []),
       ];
       await gitInitRepo(localPath, true, filesForCommit);
     }
-    return { id, localPath };
+
+    if (input.report.hasRoadmapMd) {
+      const migration = await runMigration(id, localPath, input.title);
+      if (migration.error) {
+        throw new Error(`Migration failed: ${migration.error}`);
+      }
+      if (migration.stepAfter !== 'Complete') {
+        throw new Error(`Migration incomplete: finished at ${migration.stepAfter}`);
+      }
+    }
+
+    await createProjectWithState(id, localPath, input.title, input.fallbackStatus, '');
+    const renamed = await renameProjectMd(localPath).catch(() => false);
+    const canonicalMdExists = await pathExists(`${localPath}/CLAWCHESTRA.md`);
+    if (!canonicalMdExists) {
+      throw new Error('Onboarding incomplete: CLAWCHESTRA.md is missing after canonicalization.');
+    }
+    if (!renamed && input.report.hasLegacyProjectMd) {
+      notes.push('PROJECT.md rename to CLAWCHESTRA.md was skipped or failed.');
+    }
+
+    const shouldInjectGuidance = input.report.isGitRepo || input.initGitIfMissing;
+    if (shouldInjectGuidance) {
+      const injectionResults = await injectAgentGuidance(localPath).catch(() => null);
+      if (injectionResults === null) {
+        notes.push('Guidance injection failed after onboarding.');
+      } else {
+        const summary = summarizeInjectionOutcomes(injectionResults);
+        if (summary) notes.push(summary);
+      }
+    }
+
+    return { id, localPath, notes };
   } catch (error) {
     for (const createdPath of createdFilePaths) {
       await withMutationRetry(() => removePath(createdPath)).catch(() => undefined);

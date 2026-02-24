@@ -184,6 +184,7 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **Run multi-branch Git Sync** | Use Sync dialog: select file categories, optional `Pull first` when behind, optional `Also sync to` branches, then commit on source and cherry-pick to targets. Push/pull controls are hidden for `(local)` branches without upstream. On conflicts, generate/edit an AI proposal in-dialog, explicitly approve apply, then continue sync; manual fallback prompts remain available. |
 | **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`CLAWCHESTRA.md` / `.clawchestra/state.json`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
 | **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
+| **Run onboarding reconciliation audit** | Use Tauri command `run_onboarding_reconciliation` to audit+repair tracked projects toward canonical onboarding invariants and return a per-project matrix (`before`, `actions`, `after`, `warnings`, invariant pass/fail) |
 | **Search/filter** | Not available via agent — UI only |
 
 ---
@@ -320,10 +321,15 @@ When the user says **"add project X"** or **"create project for X"**:
 If a git repo already exists and you want Clawchestra to track it:
 
 1. Create `CLAWCHESTRA.md` in the repo root with frontmatter (title, status, type, priority)
-2. Create `.clawchestra/` directory and `state.json` (project + empty roadmapItems)
+2. Create `.clawchestra/` directory and `state.json` (project + empty roadmapItems), or let Add Existing import pre-existing state
 3. Add `.clawchestra/` to `.gitignore`
 4. Ensure the directory is under one of Clawchestra's configured scan paths
 5. Run `scripts/inject-current-branch.sh` to add the Clawchestra Integration section to CLAUDE.md
+
+**Wizard behavior (Add Existing):**
+- If `.clawchestra/state.json` already exists, onboarding backs it up to `.clawchestra/backup/state.pre-onboarding.<timestamp>.json` and imports it (no destructive overwrite).
+- If legacy `ROADMAP.md` is present, onboarding runs migration before canonical registration.
+- For git repos, CLAUDE guidance injection is attempted automatically and remains non-fatal.
 
 **Projects vs Sub-projects:**
 - **Project** = top-level entity shown on main board (type: project)
@@ -441,7 +447,7 @@ Commands are filtered via fuzzy matching as you type. Arrow keys navigate, Enter
 When the agent is working (processing a message), you can continue typing and submit additional messages. These are **queued** and sent automatically when the current response completes.
 
 - Queue indicator shows in the chat bar header ("N queued")
-- Queued messages appear above the input with ✕ to remove
+- Queued messages appear above the input with ✕ to remove; retry-exhausted items remain as failed rows with a manual retry action
 - Queue processes in FIFO order
 - Send button shows clock icon when queuing
 

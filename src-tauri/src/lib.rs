@@ -10,7 +10,7 @@ mod util;
 mod validation;
 mod watcher;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -110,6 +110,9 @@ struct DashboardSettings {
     /// URL of the remote OpenClaw instance (when sync_mode is Remote)
     #[serde(default)]
     openclaw_remote_url: Option<String>,
+    /// Continuous sync interval for local mode polling (milliseconds).
+    #[serde(default = "default_openclaw_sync_interval_ms")]
+    openclaw_sync_interval_ms: u64,
     /// Bearer token for authenticating with the remote OpenClaw instance.
     /// Now stored in OS keychain; kept in struct for backwards-compat deserialization only.
     #[serde(default, skip_serializing)]
@@ -172,6 +175,10 @@ fn default_update_mode() -> String {
 
 fn default_openclaw_context_policy() -> String {
     "selected-project-first".to_string()
+}
+
+fn default_openclaw_sync_interval_ms() -> u64 {
+    2_000
 }
 
 fn settings_file_path() -> Result<PathBuf, String> {
@@ -326,6 +333,11 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
         settings.openclaw_context_policy = default_openclaw_context_policy();
     }
 
+    // Keep continuous sync intervals in a safe and predictable range.
+    settings.openclaw_sync_interval_ms = settings
+        .openclaw_sync_interval_ms
+        .clamp(1_000, 60_000);
+
     Ok(settings)
 }
 
@@ -341,6 +353,7 @@ pub(crate) fn default_settings() -> DashboardSettings {
         client_uuid: None,
         openclaw_sync_mode: SyncMode::default(),
         openclaw_remote_url: None,
+        openclaw_sync_interval_ms: default_openclaw_sync_interval_ms(),
         openclaw_bearer_token: None,
     };
 
@@ -355,6 +368,7 @@ pub(crate) fn default_settings() -> DashboardSettings {
         client_uuid: None,
         openclaw_sync_mode: SyncMode::default(),
         openclaw_remote_url: None,
+        openclaw_sync_interval_ms: default_openclaw_sync_interval_ms(),
         openclaw_bearer_token: None,
     })
 }
@@ -571,6 +585,239 @@ fn scan_projects(scan_paths: Vec<String>) -> Result<ScanResult, String> {
     Ok(ScanResult { projects, skipped })
 }
 
+fn normalize_path_for_compare(path: &str) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| PathBuf::from(path))
+        .to_string_lossy()
+        .to_string()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegistrationIdentityCheck {
+    Proceed,
+    NoOp,
+}
+
+fn check_registration_identity_conflicts(
+    db: &state::DbJson,
+    project_id: &str,
+    project_path: &str,
+) -> Result<RegistrationIdentityCheck, String> {
+    let normalized_project_path = normalize_path_for_compare(project_path);
+
+    // Idempotence rule: same id + same path => success/no-op.
+    if let Some(existing) = db.projects.get(project_id) {
+        if normalize_path_for_compare(&existing.project_path) == normalized_project_path {
+            return Ok(RegistrationIdentityCheck::NoOp);
+        }
+        return Err(format!(
+            "Project '{}' already exists at a different path: {}",
+            project_id, existing.project_path
+        ));
+    }
+
+    // Conflict rule: same path + different id => hard error.
+    if let Some((existing_id, _)) = db.projects.iter().find(|(id, entry)| {
+        **id != project_id
+            && normalize_path_for_compare(&entry.project_path) == normalized_project_path
+    }) {
+        return Err(format!(
+            "Path '{}' is already tracked under project id '{}'",
+            project_path, existing_id
+        ));
+    }
+
+    Ok(RegistrationIdentityCheck::Proceed)
+}
+
+fn infer_project_id_from_dir(project_dir: &Path) -> Option<String> {
+    let folder_name = project_dir.file_name()?.to_string_lossy().to_lowercase();
+    let mut slug = String::new();
+    let mut last_was_dash = false;
+
+    for ch in folder_name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            slug.push('-');
+            last_was_dash = true;
+        }
+    }
+
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        None
+    } else {
+        Some(slug)
+    }
+}
+
+fn parse_frontmatter_title(content: &str) -> Option<String> {
+    let mut frontmatter_delimiters = 0;
+    let mut in_frontmatter = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            frontmatter_delimiters += 1;
+            in_frontmatter = frontmatter_delimiters == 1;
+            if frontmatter_delimiters >= 2 {
+                break;
+            }
+            continue;
+        }
+
+        if in_frontmatter && trimmed.starts_with("title:") {
+            let title = trimmed
+                .trim_start_matches("title:")
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .trim();
+            if !title.is_empty() {
+                return Some(title.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn read_project_title(project_dir: &Path) -> Option<String> {
+    let preferred = project_dir.join("CLAWCHESTRA.md");
+    let legacy = project_dir.join("PROJECT.md");
+    let file_path = if preferred.exists() {
+        preferred
+    } else if legacy.exists() {
+        legacy
+    } else {
+        return None;
+    };
+
+    let content = fs::read_to_string(file_path).ok()?;
+    parse_frontmatter_title(&content)
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LaunchMigrationSummary {
+    scanned_project_count: usize,
+    migrated_count: usize,
+    legacy_renamed_count: usize,
+    warning_count: usize,
+    warnings: Vec<String>,
+}
+
+impl LaunchMigrationSummary {
+    fn empty() -> Self {
+        Self {
+            scanned_project_count: 0,
+            migrated_count: 0,
+            legacy_renamed_count: 0,
+            warning_count: 0,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+fn run_startup_migration_sweep(
+    app_state: &mut AppState,
+    settings: &DashboardSettings,
+) -> LaunchMigrationSummary {
+    let scan_result = match scan_projects(settings.scan_paths.clone()) {
+        Ok(result) => result,
+        Err(error) => {
+            return LaunchMigrationSummary {
+                warning_count: 1,
+                warnings: vec![format!("Startup migration scan failed: {error}")],
+                ..LaunchMigrationSummary::empty()
+            };
+        }
+    };
+
+    let mut summary = LaunchMigrationSummary {
+        scanned_project_count: scan_result.projects.len(),
+        ..LaunchMigrationSummary::empty()
+    };
+
+    let mut path_to_project_id: HashMap<String, String> = app_state
+        .db
+        .projects
+        .iter()
+        .map(|(id, entry)| (normalize_path_for_compare(&entry.project_path), id.clone()))
+        .collect();
+
+    for project_path in scan_result.projects {
+        let project_dir = PathBuf::from(&project_path);
+        let normalized_project_path = normalize_path_for_compare(&project_path);
+
+        let project_id = path_to_project_id
+            .get(&normalized_project_path)
+            .cloned()
+            .or_else(|| infer_project_id_from_dir(&project_dir));
+
+        let Some(project_id) = project_id else {
+            summary.warning_count += 1;
+            summary.warnings.push(format!(
+                "Skipped startup migration for '{}' because project id could not be inferred",
+                project_path
+            ));
+            continue;
+        };
+
+        let step_before = migration::derive_migration_step(&project_dir, &project_id, app_state);
+        if step_before != MigrationStep::Complete {
+            let fallback_title = project_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(project_id.as_str())
+                .to_string();
+            let project_title = read_project_title(&project_dir).unwrap_or(fallback_title);
+            let result =
+                migration::run_project_migration(app_state, &project_id, &project_dir, &project_title);
+
+            if result.step_after != result.step_before || result.items_imported > 0 {
+                summary.migrated_count += 1;
+            }
+
+            if let Some(error) = result.error {
+                summary.warning_count += 1;
+                summary
+                    .warnings
+                    .push(format!("{}: {}", project_path, error));
+            }
+
+            for warning in result.warnings {
+                summary.warning_count += 1;
+                summary
+                    .warnings
+                    .push(format!("{}: {}", project_path, warning));
+            }
+
+            path_to_project_id.insert(normalized_project_path.clone(), project_id.clone());
+        }
+
+        if migration::uses_legacy_filename(&project_dir) {
+            match migration::rename_project_file(&project_dir) {
+                Ok(true) => {
+                    summary.legacy_renamed_count += 1;
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    summary.warning_count += 1;
+                    summary.warnings.push(format!(
+                        "{}: Failed to rename PROJECT.md during startup sweep: {}",
+                        project_path, error
+                    ));
+                }
+            }
+        }
+    }
+
+    summary
+}
+
 /// Validate that a path is within one of the allowed directories.
 /// Prevents arbitrary filesystem access via IPC commands.
 fn validate_allowed_path(path: &str) -> Result<(), String> {
@@ -622,6 +869,61 @@ fn validate_allowed_path(path: &str) -> Result<(), String> {
     }
 
     Err(format!("Path not within allowed directories: {path}"))
+}
+
+fn canonicalize_for_policy(path: &Path) -> Result<PathBuf, String> {
+    if path.exists() {
+        fs::canonicalize(path).map_err(|e| format!("Cannot resolve path: {e}"))
+    } else if let Some(parent) = path.parent() {
+        if parent.exists() {
+            let canon_parent =
+                fs::canonicalize(parent).map_err(|e| format!("Cannot resolve parent path: {e}"))?;
+            Ok(canon_parent.join(path.file_name().unwrap_or_default()))
+        } else {
+            Err(format!("Path is not resolvable: {}", path.to_string_lossy()))
+        }
+    } else {
+        Err(format!("Path is not resolvable: {}", path.to_string_lossy()))
+    }
+}
+
+/// Enforce onboarding policy: project paths must be inside configured scan paths.
+fn validate_project_path_in_scan_paths_with_settings(
+    project_path: &Path,
+    scan_paths: &[String],
+) -> Result<(), String> {
+    if scan_paths.is_empty() {
+        return Err("No scan paths configured. Configure scan paths before onboarding.".to_string());
+    }
+
+    let canonical_project = canonicalize_for_policy(project_path)?;
+
+    for scan_path in scan_paths {
+        let expanded = expand_tilde(&scan_path).unwrap_or_else(|_| PathBuf::from(&scan_path));
+        let canonical_scan = if expanded.exists() {
+            match fs::canonicalize(&expanded) {
+                Ok(path) => path,
+                Err(_) => continue,
+            }
+        } else {
+            continue;
+        };
+
+        if canonical_project.starts_with(&canonical_scan) {
+            return Ok(());
+        }
+    }
+
+    Err(format!(
+        "Project path is outside configured scan paths: {}",
+        project_path.to_string_lossy()
+    ))
+}
+
+/// Enforce onboarding policy: project paths must be inside configured scan paths.
+fn validate_project_path_in_scan_paths(project_path: &Path) -> Result<(), String> {
+    let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
+    validate_project_path_in_scan_paths_with_settings(project_path, &settings.scan_paths)
 }
 
 #[tauri::command]
@@ -909,6 +1211,31 @@ fn get_or_create_bearer_token() -> Result<String, String> {
 #[tauri::command]
 fn get_openclaw_bearer_token() -> Result<String, String> {
     get_or_create_bearer_token()
+}
+
+#[tauri::command]
+fn set_openclaw_bearer_token(token: String) -> Result<(), String> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return Err("Bearer token cannot be empty".to_string());
+    }
+
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_BEARER_KEY)
+        .map_err(|e| format!("Keyring init error: {e}"))?;
+    entry
+        .set_password(trimmed)
+        .map_err(|e| format!("Keyring store error: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_openclaw_bearer_token() -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_BEARER_KEY)
+        .map_err(|e| format!("Keyring init error: {e}"))?;
+    match entry.delete_password() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("Keyring clear error: {e}")),
+    }
 }
 
 fn extension_for_mime(mime_type: &str) -> &'static str {
@@ -1811,12 +2138,11 @@ async fn create_project_with_state(
     app_state: tauri::State<'_, SharedAppState>,
     flush_handle: tauri::State<'_, SharedFlushHandle>,
 ) -> Result<(), String> {
-    use std::path::Path;
-
     let project_dir = Path::new(&project_path);
     if !project_dir.is_absolute() {
         return Err("project_path must be absolute".to_string());
     }
+    validate_project_path_in_scan_paths(project_dir)?;
 
     // Validate status
     if !state::PROJECT_STATUSES.contains(&status.as_str()) {
@@ -1827,84 +2153,192 @@ async fn create_project_with_state(
     }
 
     let mut guard = app_state.lock().await;
-
-    // Check for duplicate project ID
-    if guard.db.projects.contains_key(&project_id) {
-        return Err(format!("Project '{}' already exists", project_id));
+    match check_registration_identity_conflicts(&guard.db, &project_id, &project_path)? {
+        RegistrationIdentityCheck::NoOp => return Ok(()),
+        RegistrationIdentityCheck::Proceed => {}
     }
 
-    let ts = guard.next_hlc();
+    let state_json_path = project_dir.join(".clawchestra").join("state.json");
+    let state_json_exists = state_json_path.exists();
 
-    // 1. Register in db.json (in-memory)
-    let project_data = state::DbProjectData {
-        id: project_id.clone(),
-        title: title.clone(),
-        title_updated_at: ts,
-        status: status.clone(),
-        status_updated_at: ts,
-        description: description.clone(),
-        description_updated_at: ts,
-        parent_id: None,
-        parent_id_updated_at: ts,
-        tags: vec![],
-        tags_updated_at: ts,
-    };
+    if state_json_exists {
+        // Preserve/import existing local state.json instead of overwriting with an empty projection.
+        let raw = std::fs::read_to_string(&state_json_path)
+            .map_err(|e| format!("Failed to read existing state.json: {}", e))?;
+        let incoming: state::StateJson = serde_json::from_str(&raw)
+            .map_err(|e| format!("Failed to parse existing state.json: {}", e))?;
+        if incoming.project.id != project_id {
+            return Err(format!(
+                "Existing state.json project.id '{}' does not match requested project id '{}'",
+                incoming.project.id, project_id
+            ));
+        }
 
-    let entry = state::DbProjectEntry {
-        project_path: project_path.clone(),
-        state_json_migrated: true, // New projects start fully migrated
-        project: project_data,
-        roadmap_items: std::collections::HashMap::new(),
-    };
+        let validation = validation::validate_state_json(&incoming, None);
+        if !validation.rejected_fields.is_empty() {
+            let reasons: Vec<String> = validation
+                .rejected_fields
+                .iter()
+                .take(5)
+                .map(|r| format!("{} ({})", r.field, r.reason))
+                .collect();
+            return Err(format!(
+                "Existing state.json failed validation: {}",
+                reasons.join("; ")
+            ));
+        }
 
-    guard.db.projects.insert(project_id.clone(), entry);
-    guard.mark_dirty();
+        let ts = guard.next_hlc();
+        let mut roadmap_items: HashMap<String, state::DbRoadmapItem> = HashMap::new();
+        for (index, item) in incoming.roadmap_items.iter().enumerate() {
+            let priority = item.priority.unwrap_or((index as i64) + 1);
+            roadmap_items.insert(
+                item.id.clone(),
+                state::DbRoadmapItem {
+                    id: item.id.clone(),
+                    title: item.title.clone(),
+                    title_updated_at: ts,
+                    status: item.status.clone(),
+                    status_updated_at: ts,
+                    priority,
+                    priority_updated_at: ts,
+                    next_action: item.next_action.clone(),
+                    next_action_updated_at: item.next_action.as_ref().map(|_| ts),
+                    tags: item.tags.clone(),
+                    tags_updated_at: item.tags.as_ref().map(|_| ts),
+                    icon: item.icon.clone(),
+                    icon_updated_at: item.icon.as_ref().map(|_| ts),
+                    blocked_by: item.blocked_by.clone(),
+                    blocked_by_updated_at: item.blocked_by.as_ref().map(|_| ts),
+                    spec_doc: item.spec_doc.clone(),
+                    spec_doc_updated_at: item.spec_doc.as_ref().map(|_| ts),
+                    plan_doc: item.plan_doc.clone(),
+                    plan_doc_updated_at: item.plan_doc.as_ref().map(|_| ts),
+                    spec_doc_branch: None,
+                    spec_doc_branch_updated_at: None,
+                    plan_doc_branch: None,
+                    plan_doc_branch_updated_at: None,
+                    spec_doc_content: None,
+                    spec_doc_content_updated_at: None,
+                    plan_doc_content: None,
+                    plan_doc_content_updated_at: None,
+                    completed_at: item.completed_at.clone(),
+                    completed_at_updated_at: item.completed_at.as_ref().map(|_| ts),
+                },
+            );
+        }
 
-    // 2. Create .clawchestra/ directory
-    let clawchestra_dir = project_dir.join(".clawchestra");
-    if let Err(e) = std::fs::create_dir_all(&clawchestra_dir) {
-        // Rollback: remove from db
-        guard.db.projects.remove(&project_id);
-        return Err(format!("Failed to create .clawchestra/: {}", e));
-    }
+        let entry = state::DbProjectEntry {
+            project_path: project_path.clone(),
+            state_json_migrated: true,
+            project: state::DbProjectData {
+                id: project_id.clone(),
+                title: incoming.project.title.clone(),
+                title_updated_at: ts,
+                status: incoming.project.status.clone(),
+                status_updated_at: ts,
+                description: incoming.project.description.clone(),
+                description_updated_at: ts,
+                parent_id: incoming.project.parent_id.clone(),
+                parent_id_updated_at: ts,
+                tags: incoming.project.tags.clone(),
+                tags_updated_at: ts,
+            },
+            roadmap_items,
+        };
+        guard.db.projects.insert(project_id.clone(), entry);
+        guard.mark_dirty();
 
-    // 3. Write state.json projection
-    if let Some(state_json) = guard.project_state_json(&project_id) {
-        let state_json_path = clawchestra_dir.join("state.json");
-        match serde_json::to_string_pretty(&state_json) {
-            Ok(content) => {
-                if let Err(e) = std::fs::write(&state_json_path, &content) {
-                    guard.db.projects.remove(&project_id);
-                    return Err(format!("Failed to write state.json: {}", e));
+        let hash = crate::watcher::sha256_hex(raw.as_bytes());
+        guard
+            .content_hashes
+            .insert(state::ProjectId(project_id.clone()), hash);
+
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let entry = state::HistoryEntry {
+                timestamp: guard.hlc_counter,
+                source: state::HistorySource::Ui,
+                changed_fields: vec!["*".to_string()],
+                state: state_json,
+            };
+            guard.push_history(&state::ProjectId(project_id.clone()), entry);
+        }
+
+        if let Err(e) = migration::update_gitignore(project_dir) {
+            tracing::warn!("Failed to update .gitignore for imported project: {}", e);
+        }
+    } else {
+        let ts = guard.next_hlc();
+
+        // 1. Register in db.json (in-memory)
+        let project_data = state::DbProjectData {
+            id: project_id.clone(),
+            title: title.clone(),
+            title_updated_at: ts,
+            status: status.clone(),
+            status_updated_at: ts,
+            description: description.clone(),
+            description_updated_at: ts,
+            parent_id: None,
+            parent_id_updated_at: ts,
+            tags: vec![],
+            tags_updated_at: ts,
+        };
+
+        let entry = state::DbProjectEntry {
+            project_path: project_path.clone(),
+            state_json_migrated: true, // New projects start fully migrated
+            project: project_data,
+            roadmap_items: std::collections::HashMap::new(),
+        };
+
+        guard.db.projects.insert(project_id.clone(), entry);
+        guard.mark_dirty();
+
+        // 2. Create .clawchestra/ directory
+        let clawchestra_dir = project_dir.join(".clawchestra");
+        if let Err(e) = std::fs::create_dir_all(&clawchestra_dir) {
+            // Rollback: remove from db
+            guard.db.projects.remove(&project_id);
+            return Err(format!("Failed to create .clawchestra/: {}", e));
+        }
+
+        // 3. Write state.json projection
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            match serde_json::to_string_pretty(&state_json) {
+                Ok(content) => {
+                    if let Err(e) = std::fs::write(&state_json_path, &content) {
+                        guard.db.projects.remove(&project_id);
+                        return Err(format!("Failed to write state.json: {}", e));
+                    }
+                    // Store content hash
+                    let hash = crate::watcher::sha256_hex(content.as_bytes());
+                    guard
+                        .content_hashes
+                        .insert(state::ProjectId(project_id.clone()), hash);
                 }
-                // Store content hash
-                let hash = crate::watcher::sha256_hex(content.as_bytes());
-                guard
-                    .content_hashes
-                    .insert(state::ProjectId(project_id.clone()), hash);
-            }
-            Err(e) => {
-                guard.db.projects.remove(&project_id);
-                return Err(format!("Failed to serialize state.json: {}", e));
+                Err(e) => {
+                    guard.db.projects.remove(&project_id);
+                    return Err(format!("Failed to serialize state.json: {}", e));
+                }
             }
         }
-    }
+        // 4. Update .gitignore
+        if let Err(e) = migration::update_gitignore(project_dir) {
+            tracing::warn!("Failed to update .gitignore for new project: {}", e);
+            // Non-fatal — project is still registered
+        }
 
-    // 4. Update .gitignore
-    if let Err(e) = migration::update_gitignore(project_dir) {
-        tracing::warn!("Failed to update .gitignore for new project: {}", e);
-        // Non-fatal — project is still registered
-    }
-
-    // Push initial history entry
-    if let Some(state_json) = guard.project_state_json(&project_id) {
-        let entry = state::HistoryEntry {
-            timestamp: guard.hlc_counter,
-            source: state::HistorySource::Ui,
-            changed_fields: vec!["*".to_string()],
-            state: state_json,
-        };
-        guard.push_history(&state::ProjectId(project_id.clone()), entry);
+        // Push initial history entry
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let entry = state::HistoryEntry {
+                timestamp: guard.hlc_counter,
+                source: state::HistorySource::Ui,
+                changed_fields: vec!["*".to_string()],
+                state: state_json,
+            };
+            guard.push_history(&state::ProjectId(project_id.clone()), entry);
+        }
     }
 
     // Trigger persistence
@@ -2012,6 +2446,15 @@ struct RoadmapItemChanges {
     spec_doc: Option<String>,
     plan_doc: Option<String>,
     completed_at: Option<String>,
+}
+
+/// Batch reorder input entry for one roadmap item mutation.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchReorderInput {
+    item_id: String,
+    new_priority: i64,
+    new_status: Option<String>,
 }
 
 /// Update individual fields on a roadmap item in db.json, write state.json, emit event.
@@ -2127,6 +2570,101 @@ async fn update_roadmap_item(
     Ok(())
 }
 
+/// Atomically update multiple roadmap items (priority + status) for a kanban drag operation.
+/// This reduces N IPC calls/writes/events to one command execution.
+#[tauri::command]
+async fn batch_reorder_items(
+    project_id: String,
+    items: Vec<BatchReorderInput>,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    let payload = {
+        let mut guard = app_state.lock().await;
+        let ts = guard.next_hlc();
+
+        let (changed, project_path) = {
+            let entry = guard
+                .db
+                .projects
+                .get_mut(&project_id)
+                .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+
+            // Validate duplicate item ids in request to avoid inconsistent state.
+            let mut seen_ids: HashSet<&str> = HashSet::new();
+            for input in &items {
+                if !seen_ids.insert(input.item_id.as_str()) {
+                    return Err(format!(
+                        "Duplicate roadmap item id '{}' in batch reorder payload",
+                        input.item_id
+                    ));
+                }
+            }
+
+            let mut changed = vec!["priority".to_string()];
+            let mut status_touched = false;
+
+            for input in &items {
+                let item = entry.roadmap_items.get_mut(&input.item_id).ok_or_else(|| {
+                    format!(
+                        "Roadmap item '{}' not found in project '{}'",
+                        input.item_id, project_id
+                    )
+                })?;
+
+                item.priority = input.new_priority;
+                item.priority_updated_at = ts;
+
+                if let Some(status) = &input.new_status {
+                    item.status = status.clone();
+                    item.status_updated_at = ts;
+                    status_touched = true;
+                }
+            }
+
+            if status_touched {
+                changed.push("status".to_string());
+            }
+
+            let path = PathBuf::from(&entry.project_path);
+            (changed, path)
+        }; // entry/item borrows released here
+
+        guard.mark_dirty();
+
+        // Push one history entry for the full batch mutation BEFORE write.
+        let pid = state::ProjectId(project_id.clone());
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let history = state::HistoryEntry {
+                timestamp: ts,
+                source: state::HistorySource::Ui,
+                changed_fields: changed.clone(),
+                state: state_json,
+            };
+            guard.push_history(&pid, history);
+        }
+
+        // Write one state.json projection.
+        write_state_json_for_project(&mut guard, &project_id, &project_path)?;
+
+        // Build one merged event payload.
+        build_merged_payload(&guard, &project_id, changed)
+    };
+
+    flush_handle.schedule_flush();
+
+    if let Some(payload) = payload {
+        let _ = app_handle.emit(watcher::EVENT_STATE_JSON_MERGED, payload);
+    }
+
+    Ok(())
+}
+
 /// Atomically update priority + status for a kanban drag operation.
 #[tauri::command]
 async fn reorder_item(
@@ -2202,6 +2740,191 @@ async fn reorder_item(
 // Phase 3 Migration commands
 // =============================================================================
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OnboardingReconciliationInvariants {
+    has_clawchestra_md: bool,
+    has_state_json: bool,
+    gitignore_has_clawchestra: bool,
+    migration_step_complete: bool,
+    no_legacy_project_md: bool,
+    pass: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OnboardingReconciliationProjectResult {
+    project_id: String,
+    project_path: String,
+    step_before: String,
+    step_after: String,
+    actions: Vec<String>,
+    warnings: Vec<String>,
+    invariants: OnboardingReconciliationInvariants,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OnboardingReconciliationReport {
+    generated_at: String,
+    total_projects: usize,
+    repaired_projects: usize,
+    flagged_projects: usize,
+    results: Vec<OnboardingReconciliationProjectResult>,
+}
+
+fn gitignore_has_clawchestra(project_dir: &Path) -> bool {
+    let gitignore_path = project_dir.join(".gitignore");
+    if !gitignore_path.exists() {
+        return false;
+    }
+
+    match fs::read_to_string(&gitignore_path) {
+        Ok(content) => content.lines().any(|line| {
+            let trimmed = line.trim();
+            trimmed == ".clawchestra/" || trimmed == ".clawchestra"
+        }),
+        Err(_) => false,
+    }
+}
+
+fn compute_onboarding_invariants(
+    project_dir: &Path,
+    step_after: &MigrationStep,
+) -> OnboardingReconciliationInvariants {
+    let has_clawchestra_md = project_dir.join("CLAWCHESTRA.md").exists();
+    let has_state_json = project_dir.join(".clawchestra").join("state.json").exists();
+    let gitignore_has_clawchestra = gitignore_has_clawchestra(project_dir);
+    let no_legacy_project_md = !project_dir.join("PROJECT.md").exists();
+    let migration_step_complete = *step_after == MigrationStep::Complete;
+    let pass = has_clawchestra_md
+        && has_state_json
+        && gitignore_has_clawchestra
+        && no_legacy_project_md
+        && migration_step_complete;
+
+    OnboardingReconciliationInvariants {
+        has_clawchestra_md,
+        has_state_json,
+        gitignore_has_clawchestra,
+        migration_step_complete,
+        no_legacy_project_md,
+        pass,
+    }
+}
+
+fn reconcile_tracked_projects(
+    app_state: &mut AppState,
+) -> (Vec<OnboardingReconciliationProjectResult>, bool) {
+    let projects: Vec<(String, String, String)> = app_state
+        .db
+        .projects
+        .iter()
+        .map(|(id, entry)| {
+            (
+                id.clone(),
+                entry.project_path.clone(),
+                entry.project.title.clone(),
+            )
+        })
+        .collect();
+
+    let mut results = Vec::new();
+    let mut db_mutated = false;
+
+    for (project_id, project_path, project_title) in projects {
+        let project_dir = PathBuf::from(&project_path);
+        let step_before = migration::derive_migration_step(&project_dir, &project_id, app_state);
+        let mut actions: Vec<String> = Vec::new();
+        let mut warnings: Vec<String> = Vec::new();
+
+        if step_before != MigrationStep::Complete {
+            let migration_result =
+                migration::run_project_migration(app_state, &project_id, &project_dir, &project_title);
+            if migration_result.step_after != migration_result.step_before
+                || migration_result.items_imported > 0
+            {
+                actions.push("run_migration".to_string());
+                db_mutated = true;
+            }
+            warnings.extend(migration_result.warnings);
+            if let Some(error) = migration_result.error {
+                warnings.push(format!("Migration error: {}", error));
+            }
+        }
+
+        if migration::uses_legacy_filename(&project_dir) {
+            match migration::rename_project_file(&project_dir) {
+                Ok(true) => actions.push("rename_project_md".to_string()),
+                Ok(false) => {}
+                Err(error) => warnings.push(format!(
+                    "Failed to rename PROJECT.md -> CLAWCHESTRA.md: {}",
+                    error
+                )),
+            }
+        }
+
+        if !gitignore_has_clawchestra(&project_dir) {
+            match migration::update_gitignore(&project_dir) {
+                Ok(()) => actions.push("update_gitignore".to_string()),
+                Err(error) => warnings.push(format!("Failed to update .gitignore: {}", error)),
+            }
+        }
+
+        let step_after = migration::derive_migration_step(&project_dir, &project_id, app_state);
+        let invariants = compute_onboarding_invariants(&project_dir, &step_after);
+        if !invariants.pass {
+            warnings.push("Project remains non-canonical after reconciliation pass".to_string());
+        }
+
+        results.push(OnboardingReconciliationProjectResult {
+            project_id,
+            project_path,
+            step_before: format!("{:?}", step_before),
+            step_after: format!("{:?}", step_after),
+            actions,
+            warnings,
+            invariants,
+        });
+    }
+
+    (results, db_mutated)
+}
+
+#[tauri::command]
+async fn run_onboarding_reconciliation(
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+) -> Result<OnboardingReconciliationReport, String> {
+    let (results, db_mutated) = {
+        let mut guard = app_state.lock().await;
+        let (results, db_mutated) = reconcile_tracked_projects(&mut guard);
+        if db_mutated {
+            guard.mark_dirty();
+        }
+        (results, db_mutated)
+    };
+
+    if db_mutated {
+        flush_handle.schedule_flush();
+    }
+
+    let total_projects = results.len();
+    let repaired_projects = results.iter().filter(|entry| !entry.actions.is_empty()).count();
+    let flagged_projects = results
+        .iter()
+        .filter(|entry| !entry.invariants.pass || !entry.warnings.is_empty())
+        .count();
+
+    Ok(OnboardingReconciliationReport {
+        generated_at: chrono::Local::now().to_rfc3339(),
+        total_projects,
+        repaired_projects,
+        flagged_projects,
+        results,
+    })
+}
+
 /// Response type for migration status of a single project.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -2212,26 +2935,63 @@ struct MigrationStatus {
     uses_legacy_filename: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationStatusResponse {
+    discovery_scope: String,
+    tracked_project_count: usize,
+    non_db_candidate_count: usize,
+    statuses: Vec<MigrationStatus>,
+}
+
 /// Get the derived migration status for all known projects.
 #[tauri::command]
 async fn get_migration_status(
     app_state: tauri::State<'_, SharedAppState>,
-) -> Result<Vec<MigrationStatus>, String> {
-    let guard = app_state.lock().await;
-    let mut statuses = Vec::new();
+) -> Result<MigrationStatusResponse, String> {
+    let (statuses, tracked_project_count, tracked_project_paths): (
+        Vec<MigrationStatus>,
+        usize,
+        HashSet<String>,
+    ) = {
+        let guard = app_state.lock().await;
+        let mut statuses = Vec::new();
+        let mut tracked_project_paths = HashSet::new();
 
-    for (id, entry) in &guard.db.projects {
-        let project_dir = Path::new(&entry.project_path);
-        let step = migration::derive_migration_step(project_dir, id, &guard);
-        statuses.push(MigrationStatus {
-            project_id: id.clone(),
-            project_path: entry.project_path.clone(),
-            step: format!("{:?}", step),
-            uses_legacy_filename: migration::uses_legacy_filename(project_dir),
-        });
-    }
+        for (id, entry) in &guard.db.projects {
+            let project_dir = Path::new(&entry.project_path);
+            let step = migration::derive_migration_step(project_dir, id, &guard);
+            statuses.push(MigrationStatus {
+                project_id: id.clone(),
+                project_path: entry.project_path.clone(),
+                step: format!("{:?}", step),
+                uses_legacy_filename: migration::uses_legacy_filename(project_dir),
+            });
+            tracked_project_paths.insert(normalize_path_for_compare(&entry.project_path));
+        }
 
-    Ok(statuses)
+        (statuses, guard.db.projects.len(), tracked_project_paths)
+    };
+
+    let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
+    let non_db_candidate_count = scan_projects(settings.scan_paths)
+        .map(|scan_result| {
+            scan_result
+                .projects
+                .into_iter()
+                .filter(|project_path| {
+                    !tracked_project_paths.contains(&normalize_path_for_compare(project_path))
+                })
+                .count()
+        })
+        .unwrap_or(0);
+
+    Ok(MigrationStatusResponse {
+        discovery_scope: "tracked-db-projects-only".to_string(),
+        tracked_project_count,
+        non_db_candidate_count,
+        statuses,
+    })
 }
 
 /// Run migration for a single project. Returns the migration result.
@@ -2247,6 +3007,7 @@ async fn run_migration(
     if !project_dir.is_absolute() {
         return Err("project_path must be absolute".to_string());
     }
+    validate_project_path_in_scan_paths(&project_dir)?;
     let result = {
         let mut guard = app_state.lock().await;
         migration::run_project_migration(
@@ -2331,6 +3092,7 @@ fn rename_project_md(project_path: String) -> Result<bool, String> {
     if !project_dir.is_absolute() {
         return Err("project_path must be absolute".to_string());
     }
+    validate_project_path_in_scan_paths(&project_dir)?;
     migration::rename_project_file(&project_dir)
 }
 
@@ -2754,9 +3516,40 @@ async fn export_debug_info(
     }
     lines.push(String::new());
 
-    // File watcher status
-    lines.push("--- File Watcher ---".to_string());
-    lines.push("  (event tracking not yet implemented — watcher is active if started at boot)".to_string());
+    // Sync event buffer
+    lines.push("--- Sync Events (recent) ---".to_string());
+    if guard.sync_event_log.is_empty() {
+        lines.push("  (no sync events captured)".to_string());
+    } else {
+        for entry in guard.sync_event_log.iter() {
+            lines.push(format!(
+                "  [{}] event={} success={} remoteFields={} message={}",
+                entry.timestamp,
+                entry.event,
+                entry.success,
+                entry.fields_from_remote,
+                entry.message
+            ));
+        }
+    }
+    lines.push(String::new());
+
+    // Watcher event buffer
+    lines.push("--- Watcher Events (recent) ---".to_string());
+    if guard.watcher_event_log.is_empty() {
+        lines.push("  (no watcher events captured)".to_string());
+    } else {
+        for entry in guard.watcher_event_log.iter() {
+            lines.push(format!(
+                "  [{}] event={} projectId={} path={} detail={}",
+                entry.timestamp,
+                entry.event,
+                entry.project_id.as_deref().unwrap_or("-"),
+                entry.path.as_deref().unwrap_or("-"),
+                entry.detail.as_deref().unwrap_or("-"),
+            ));
+        }
+    }
     lines.push(String::new());
 
     lines.push("=== End Debug Export ===".to_string());
@@ -2842,6 +3635,13 @@ pub fn run() {
         }
     }
 
+    // 2.6 Startup migration sweep (Part Two): auto-migrate unresolved legacy projects.
+    // Idempotent by design — it advances each project based on derived migration step.
+    let launch_migration_summary = run_startup_migration_sweep(&mut app_state, &settings);
+    for warning in &launch_migration_summary.warnings {
+        tracing::warn!("Startup migration warning: {}", warning);
+    }
+
     // 2.1 Ensure client identity (Phase 6.4)
     if app_state.db.clients.is_empty() {
         let (uuid, hostname) = sync::ensure_client_identity();
@@ -2890,16 +3690,23 @@ pub fn run() {
     }
     // Remote mode launch sync is handled by TypeScript (has fetch built in).
 
+    let startup_flush_needed = app_state.dirty;
+
     let shared_state: SharedAppState = Arc::new(tokio::sync::Mutex::new(app_state));
 
     // 3. Start debounced DB flush
     let flush_handle: SharedFlushHandle = Arc::new(
         db_persistence::DbFlushHandle::start(shared_state.clone()),
     );
+    if startup_flush_needed {
+        flush_handle.schedule_flush();
+    }
 
     // 3.1 Start continuous sync (Phase 6.6) — debounced 2s after mutations
+    let sync_mode = settings.openclaw_sync_mode.clone();
+    let sync_interval_ms = settings.openclaw_sync_interval_ms;
     let sync_handle: SharedSyncHandle = Arc::new(
-        sync::SyncHandle::start(shared_state.clone()),
+        sync::SyncHandle::start(shared_state.clone(), sync_mode, sync_interval_ms),
     );
 
     // Watcher shutdown infrastructure (Phase 6.6 — graceful watcher drain on close)
@@ -2913,6 +3720,7 @@ pub fn run() {
     let shared_state_for_ready = shared_state.clone();
     let flush_for_setup = flush_handle.clone();
     let sync_for_events = sync_handle.clone();
+    let launch_migration_summary_for_setup = launch_migration_summary.clone();
 
     // Clones for the on_window_event closure (watcher drain + sync shutdown)
     let watcher_shutdown_for_close = watcher_shutdown.clone();
@@ -2970,6 +3778,7 @@ pub fn run() {
             // 5. Emit clawchestra-ready event
             let ready_handle = app.handle().clone();
             let ready_state = shared_state_for_ready.clone();
+            let launch_migration_summary = launch_migration_summary_for_setup.clone();
             tauri::async_runtime::spawn(async move {
                 // Small delay to let frontend mount event listeners
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -2981,10 +3790,11 @@ pub fn run() {
                     "clawchestra-ready",
                     serde_json::json!({
                         "projectCount": project_count,
-                        "migratedCount": 0,
+                        "migratedCount": launch_migration_summary.migrated_count,
                         "syncStatus": "ok"
                     }),
                 );
+                let _ = ready_handle.emit("migration-launch-summary", launch_migration_summary);
             });
 
             Ok(())
@@ -3140,11 +3950,13 @@ pub fn run() {
             create_project_with_state,
             // Phase 5.16 mutation commands
             update_roadmap_item,
+            batch_reorder_items,
             reorder_item,
             // Phase 3 migration commands
             get_migration_status,
             run_migration,
             run_all_migrations,
+            run_onboarding_reconciliation,
             rename_project_md,
             get_project_migration_step,
             // Phase 4 injection commands
@@ -3159,6 +3971,8 @@ pub fn run() {
             ensure_sync_identity,
             write_openclaw_system_context,
             get_openclaw_bearer_token,
+            set_openclaw_bearer_token,
+            clear_openclaw_bearer_token,
             // Phase 7 logging & debug commands
             export_debug_info,
             get_validation_history,
@@ -3228,6 +4042,250 @@ mod hardening_tests {
         .expect("stale lock should be removed and replaced");
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn startup_migration_sweep_clears_not_started_projects() {
+        let root = test_dir("startup-migration-root");
+        let project_dir = root.join("legacy-project");
+        fs::create_dir_all(&project_dir).expect("create project dir");
+
+        fs::write(
+            project_dir.join("CLAWCHESTRA.md"),
+            "---\ntitle: Legacy Project\nstatus: pending\ntype: project\npriority: 1\nlastActivity: 2026-02-24\n---\n",
+        )
+        .expect("write CLAWCHESTRA.md");
+        fs::write(project_dir.join("ROADMAP.md"), "---\nitems: []\n---\n")
+            .expect("write ROADMAP.md");
+
+        let mut app_state = AppState::default();
+        let mut settings = default_settings();
+        settings.scan_paths = vec![root.to_string_lossy().to_string()];
+
+        let summary = run_startup_migration_sweep(&mut app_state, &settings);
+        let project_id =
+            infer_project_id_from_dir(&project_dir).expect("infer project id from directory");
+        let step_after = migration::derive_migration_step(&project_dir, &project_id, &app_state);
+
+        assert_eq!(summary.scanned_project_count, 1);
+        assert!(summary.migrated_count >= 1);
+        assert_ne!(step_after, MigrationStep::NotStarted);
+        assert!(
+            project_dir.join(".clawchestra").join("state.json").exists(),
+            "state.json projection should exist after startup sweep",
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn onboarding_path_policy_allows_paths_inside_scan_roots() {
+        let root = test_dir("onboarding-scan-root");
+        let project_dir = root.join("child-project");
+        fs::create_dir_all(&project_dir).expect("create project dir");
+
+        let result = validate_project_path_in_scan_paths_with_settings(
+            &project_dir,
+            &[root.to_string_lossy().to_string()],
+        );
+        assert!(result.is_ok(), "expected project path to be allowed");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn onboarding_path_policy_rejects_paths_outside_scan_roots() {
+        let root = test_dir("onboarding-scan-root-reject");
+        let outside = test_dir("onboarding-outside-root");
+
+        let result = validate_project_path_in_scan_paths_with_settings(
+            &outside,
+            &[root.to_string_lossy().to_string()],
+        );
+        assert!(result.is_err(), "expected project path to be rejected");
+        let message = result.unwrap_err();
+        assert!(
+            message.contains("outside configured scan paths"),
+            "unexpected error message: {message}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    fn make_test_db_entry(project_id: &str, project_path: &str) -> state::DbProjectEntry {
+        state::DbProjectEntry {
+            project_path: project_path.to_string(),
+            state_json_migrated: true,
+            project: state::DbProjectData {
+                id: project_id.to_string(),
+                title: project_id.to_string(),
+                title_updated_at: 1,
+                status: "pending".to_string(),
+                status_updated_at: 1,
+                description: String::new(),
+                description_updated_at: 1,
+                parent_id: None,
+                parent_id_updated_at: 1,
+                tags: vec![],
+                tags_updated_at: 1,
+            },
+            roadmap_items: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn registration_identity_same_id_same_path_is_no_op() {
+        let root = test_dir("registration-identity-no-op");
+        let project_path = root.join("existing");
+        fs::create_dir_all(&project_path).expect("create project path");
+
+        let mut db = state::DbJson::default();
+        db.projects.insert(
+            "existing".to_string(),
+            make_test_db_entry("existing", &project_path.to_string_lossy()),
+        );
+
+        let result = check_registration_identity_conflicts(
+            &db,
+            "existing",
+            &project_path.to_string_lossy(),
+        );
+        assert_eq!(result, Ok(RegistrationIdentityCheck::NoOp));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn registration_identity_same_id_different_path_is_error() {
+        let root = test_dir("registration-identity-same-id-different-path");
+        let project_path_a = root.join("a");
+        let project_path_b = root.join("b");
+        fs::create_dir_all(&project_path_a).expect("create project path a");
+        fs::create_dir_all(&project_path_b).expect("create project path b");
+
+        let mut db = state::DbJson::default();
+        db.projects.insert(
+            "existing".to_string(),
+            make_test_db_entry("existing", &project_path_a.to_string_lossy()),
+        );
+
+        let result = check_registration_identity_conflicts(
+            &db,
+            "existing",
+            &project_path_b.to_string_lossy(),
+        );
+        assert!(result.is_err(), "expected conflict error");
+        assert!(
+            result
+                .unwrap_err()
+                .contains("already exists at a different path"),
+            "unexpected conflict message"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn registration_identity_same_path_different_id_is_error() {
+        let root = test_dir("registration-identity-same-path-different-id");
+        let project_path = root.join("existing");
+        fs::create_dir_all(&project_path).expect("create project path");
+
+        let mut db = state::DbJson::default();
+        db.projects.insert(
+            "existing".to_string(),
+            make_test_db_entry("existing", &project_path.to_string_lossy()),
+        );
+
+        let result = check_registration_identity_conflicts(
+            &db,
+            "another-id",
+            &project_path.to_string_lossy(),
+        );
+        assert!(result.is_err(), "expected path conflict error");
+        assert!(
+            result
+                .unwrap_err()
+                .contains("already tracked under project id"),
+            "unexpected conflict message"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn seed_non_canonical_tracked_project(root: &Path, project_id: &str) -> (AppState, PathBuf) {
+        let project_dir = root.join(project_id);
+        fs::create_dir_all(&project_dir).expect("create project dir");
+        fs::write(
+            project_dir.join("PROJECT.md"),
+            "---\ntitle: Legacy Project\nstatus: pending\ntype: project\n---\n",
+        )
+        .expect("write PROJECT.md");
+        fs::write(project_dir.join(".gitignore"), "node_modules\n").expect("write .gitignore");
+
+        let mut app_state = AppState::default();
+        app_state.db.projects.insert(
+            project_id.to_string(),
+            make_test_db_entry(project_id, &project_dir.to_string_lossy()),
+        );
+
+        (app_state, project_dir)
+    }
+
+    #[test]
+    fn reconciliation_audit_discovers_non_canonical_state() {
+        let root = test_dir("reconciliation-audit-discovers");
+        let (mut app_state, project_dir) = seed_non_canonical_tracked_project(&root, "legacy-project");
+
+        let (results, _mutated) = reconcile_tracked_projects(&mut app_state);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].step_before, "Imported");
+        assert!(
+            !results[0].actions.is_empty(),
+            "expected reconciliation actions for non-canonical project"
+        );
+
+        let _ = fs::remove_dir_all(project_dir);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reconciliation_transitions_project_to_canonical_invariants() {
+        let root = test_dir("reconciliation-transitions-canonical");
+        let (mut app_state, project_dir) = seed_non_canonical_tracked_project(&root, "legacy-project");
+
+        let (results, _mutated) = reconcile_tracked_projects(&mut app_state);
+        assert_eq!(results.len(), 1);
+        let result = &results[0];
+        assert_eq!(result.step_after, "Complete");
+        assert!(result.invariants.pass, "expected canonical invariants to pass");
+        assert!(project_dir.join("CLAWCHESTRA.md").exists());
+        assert!(project_dir.join(".clawchestra").join("state.json").exists());
+        assert!(!migration::uses_legacy_filename(&project_dir));
+
+        let _ = fs::remove_dir_all(project_dir);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reconciliation_rerun_is_idempotent() {
+        let root = test_dir("reconciliation-idempotent");
+        let (mut app_state, project_dir) = seed_non_canonical_tracked_project(&root, "legacy-project");
+
+        let (_first, _mutated_first) = reconcile_tracked_projects(&mut app_state);
+        let (second, _mutated_second) = reconcile_tracked_projects(&mut app_state);
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].step_before, "Complete");
+        assert_eq!(second[0].step_after, "Complete");
+        assert!(
+            second[0].actions.is_empty(),
+            "expected idempotent rerun to avoid additional repair actions"
+        );
+        assert!(second[0].invariants.pass);
+
+        let _ = fs::remove_dir_all(project_dir);
+        let _ = fs::remove_dir_all(root);
     }
 
     // -----------------------------------------------------------------------

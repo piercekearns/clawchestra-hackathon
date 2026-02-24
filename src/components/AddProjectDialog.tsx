@@ -28,6 +28,7 @@ interface AddProjectDialogProps {
 type WizardMode = 'create-new' | 'add-existing';
 
 const STATUS_OPTIONS: readonly ProjectStatus[] = PROJECT_STATUSES;
+const normalizePath = (value: string): string => value.replace(/\/+$/g, '');
 
 export function AddProjectDialog({
   open,
@@ -51,7 +52,6 @@ export function AddProjectDialog({
   const [status, setStatus] = useState<ProjectStatus>('up-next');
   const [priority, setPriority] = useState('');
   const [initializeGit, setInitializeGit] = useState(true);
-  const [createRoadmap, setCreateRoadmap] = useState(true);
   const [createAgents, setCreateAgents] = useState(true);
 
   const [existingFolderPath, setExistingFolderPath] = useState('');
@@ -62,7 +62,6 @@ export function AddProjectDialog({
   const [existingStatus, setExistingStatus] = useState<ProjectStatus>('pending');
   const [addMissingProjectMd, setAddMissingProjectMd] = useState(true);
   const [addMissingFrontmatter, setAddMissingFrontmatter] = useState(true);
-  const [addMissingRoadmap, setAddMissingRoadmap] = useState(true);
   const [addMissingAgents, setAddMissingAgents] = useState(true);
   const [initGitIfMissing, setInitGitIfMissing] = useState(false);
   const [allowDirtyOverride, setAllowDirtyOverride] = useState(false);
@@ -77,8 +76,13 @@ export function AddProjectDialog({
     [compatibility?.inferredId, existingId],
   );
   const hasExistingIdConflict = useMemo(
-    () => existingProjects.some((project) => project.id === canonicalExistingId),
-    [existingProjects, canonicalExistingId],
+    () => {
+      const targetPath = normalizePath((compatibility?.folderPath || existingFolderPath).trim());
+      return existingProjects.some((project) =>
+        project.id === canonicalExistingId
+        && normalizePath(project.dirPath) !== targetPath);
+    },
+    [existingProjects, canonicalExistingId, compatibility?.folderPath, existingFolderPath],
   );
   const canCreate =
     title.trim().length > 0
@@ -128,7 +132,6 @@ export function AddProjectDialog({
       setExistingStatus(report.detectedStatus ?? report.inferredStatus);
       setAddMissingProjectMd(!report.hasProjectMd);
       setAddMissingFrontmatter(report.projectMdStatus === 'missing-frontmatter');
-      setAddMissingRoadmap(!report.hasRoadmapMd);
       setAddMissingAgents(!report.hasAgentsMd);
       setInitGitIfMissing(!report.isGitRepo);
       setAllowDirtyOverride(false);
@@ -258,6 +261,9 @@ export function AddProjectDialog({
               />
               Create AGENTS.md
             </label>
+            <p className="text-xs text-neutral-500">
+              CLAUDE.md guidance injection is attempted automatically for git repos and does not block project creation.
+            </p>
 
             {isReservedProjectId(canonicalCreateId) && (
               <p className="text-xs text-status-danger">This id is reserved. Use another folder name.</p>
@@ -286,12 +292,14 @@ export function AddProjectDialog({
                         status,
                         priority: priority.trim() ? Number(priority) : undefined,
                         initializeGit,
-                        createRoadmap,
                         createAgents,
                       },
                       existingProjects,
                     );
-                    await onComplete(`Created ${result.id}`);
+                    const message = result.notes.length > 0
+                      ? `Created ${result.id} — ${result.notes.join(' ')}`
+                      : `Created ${result.id}`;
+                    await onComplete(message);
                     onClose();
                   } catch (value) {
                     setError(value instanceof Error ? value.message : 'Create failed');
@@ -348,7 +356,10 @@ export function AddProjectDialog({
                 <div className="rounded-lg border border-neutral-200 p-3 text-xs dark:border-neutral-700">
                   <p className="font-semibold">Compatibility Report</p>
                   <p>Git repo: {compatibility.isGitRepo ? 'yes' : 'no'}</p>
-                  <p>CLAWCHESTRA.md: {compatibility.hasProjectMd ? (compatibility.projectMdStatus ?? 'found') : 'missing'}</p>
+                  <p>CLAWCHESTRA.md: {compatibility.hasClawchestraMd ? 'found' : 'missing'}</p>
+                  <p>Legacy PROJECT.md: {compatibility.hasLegacyProjectMd ? 'found' : 'missing'}</p>
+                  <p>Legacy ROADMAP.md: {compatibility.hasRoadmapMd ? 'found (migration required)' : 'missing'}</p>
+                  <p>state.json: {compatibility.hasStateJson ? 'found' : 'missing'}</p>
                   <p>AGENTS.md: {compatibility.hasAgentsMd ? 'found' : 'missing'}</p>
                   <p>Scan policy: {compatibility.insideScanPaths ? 'inside scan paths' : 'outside scan paths'}</p>
                   {compatibility.actions.length > 0 && (
@@ -401,7 +412,7 @@ export function AddProjectDialog({
                     onChange={(event) => setAddMissingFrontmatter(event.target.checked)}
                     className="h-4 w-4 rounded border-neutral-300"
                   />
-                  Add CLAWCHESTRA.md frontmatter when missing
+                  Add PROJECT.md frontmatter when missing (legacy only)
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input
@@ -421,6 +432,9 @@ export function AddProjectDialog({
                   />
                   Initialize git if missing
                 </label>
+                <p className="text-xs text-neutral-500">
+                  Guidance injection into CLAUDE.md is automatic for git repos and remains non-fatal.
+                </p>
 
                 {compatibility.isWorkingTreeDirty && (
                   <label className="inline-flex items-center gap-2 text-sm text-status-danger">
@@ -459,14 +473,16 @@ export function AddProjectDialog({
                             fallbackStatus: existingStatus,
                             addMissingProjectMd,
                             addMissingFrontmatter,
-                            addMissingRoadmap,
                             addMissingAgents,
                             initGitIfMissing,
                             allowDirtyOverride,
                           },
                           existingProjects,
                         );
-                        await onComplete(`Added ${result.id}`);
+                        const message = result.notes.length > 0
+                          ? `Added ${result.id} — ${result.notes.join(' ')}`
+                          : `Added ${result.id}`;
+                        await onComplete(message);
                         onClose();
                       } catch (value) {
                         setError(value instanceof Error ? value.message : 'Add existing failed');

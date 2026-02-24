@@ -78,6 +78,12 @@ export type RoadmapItemChanges = {
   completedAt?: string;
 };
 
+export type BatchReorderItemChange = {
+  itemId: string;
+  newPriority: number;
+  newStatus?: string | null;
+};
+
 type TauriCommands = {
   get_dashboard_settings: { args: Record<string, never>; return: DashboardSettings };
   update_dashboard_settings: { args: { settings: DashboardSettings }; return: DashboardSettings };
@@ -85,6 +91,23 @@ type TauriCommands = {
   get_openclaw_gateway_config: {
     args: Record<string, never>;
     return: { ws_url: string; token?: string; session_key: string };
+  };
+  get_openclaw_ws_device_auth: {
+    args: {
+      nonce: string;
+      clientId: string;
+      clientMode: string;
+      role: string;
+      scopes: string[];
+      token?: string | null;
+    };
+    return: {
+      id: string;
+      publicKey: string;
+      signature: string;
+      signedAt: number;
+      nonce: string;
+    };
   };
   openclaw_ping: { args: Record<string, never>; return: void };
   openclaw_chat: {
@@ -222,12 +245,16 @@ type TauriCommands = {
     return: void;
   };
   // Phase 3 migration commands
-  get_migration_status: { args: Record<string, never>; return: MigrationStatusEntry[] };
+  get_migration_status: { args: Record<string, never>; return: MigrationStatusResponse };
   run_migration: {
     args: { projectId: string; projectPath: string; projectTitle: string };
     return: MigrationResultEntry;
   };
   run_all_migrations: { args: Record<string, never>; return: MigrationResultEntry[] };
+  run_onboarding_reconciliation: {
+    args: Record<string, never>;
+    return: OnboardingReconciliationReport;
+  };
   rename_project_md: { args: { projectPath: string }; return: boolean };
   get_project_migration_step: {
     args: { projectId: string; projectPath: string };
@@ -245,6 +272,9 @@ type TauriCommands = {
     args: { clientUuid: string; hostname: string; platform: string };
     return: void;
   };
+  get_openclaw_bearer_token: { args: Record<string, never>; return: string };
+  set_openclaw_bearer_token: { args: { token: string }; return: void };
+  clear_openclaw_bearer_token: { args: Record<string, never>; return: void };
   // Phase 2/5 data commands
   get_all_projects: { args: Record<string, never>; return: ProjectSummary[] };
   get_project: { args: { projectId: string }; return: ProjectWithContent };
@@ -272,6 +302,13 @@ type TauriCommands = {
       itemId: string;
       newPriority: number;
       newStatus?: string | null;
+    };
+    return: void;
+  };
+  batch_reorder_items: {
+    args: {
+      projectId: string;
+      items: BatchReorderItemChange[];
     };
     return: void;
   };
@@ -331,6 +368,30 @@ export async function getOpenClawGatewayConfig(): Promise<{
     token: result.token,
     sessionKey: result.session_key,
   };
+}
+
+export async function getOpenClawWsDeviceAuth(params: {
+  nonce: string;
+  clientId: string;
+  clientMode: string;
+  role: string;
+  scopes: string[];
+  token?: string;
+}): Promise<{
+  id: string;
+  publicKey: string;
+  signature: string;
+  signedAt: number;
+  nonce: string;
+}> {
+  return typedInvoke('get_openclaw_ws_device_auth', {
+    nonce: params.nonce,
+    clientId: params.clientId,
+    clientMode: params.clientMode,
+    role: params.role,
+    scopes: params.scopes,
+    token: params.token ?? null,
+  });
 }
 
 export async function checkOpenClawGatewayConnection(): Promise<boolean> {
@@ -597,6 +658,13 @@ export interface MigrationStatusEntry {
   usesLegacyFilename: boolean;
 }
 
+export interface MigrationStatusResponse {
+  discoveryScope: string;
+  trackedProjectCount: number;
+  nonDbCandidateCount: number;
+  statuses: MigrationStatusEntry[];
+}
+
 export interface MigrationResultEntry {
   projectPath: string;
   stepBefore: string;
@@ -606,7 +674,34 @@ export interface MigrationResultEntry {
   error: string | null;
 }
 
-export async function getMigrationStatus(): Promise<MigrationStatusEntry[]> {
+export interface OnboardingReconciliationInvariants {
+  hasClawchestraMd: boolean;
+  hasStateJson: boolean;
+  gitignoreHasClawchestra: boolean;
+  migrationStepComplete: boolean;
+  noLegacyProjectMd: boolean;
+  pass: boolean;
+}
+
+export interface OnboardingReconciliationProjectResult {
+  projectId: string;
+  projectPath: string;
+  stepBefore: string;
+  stepAfter: string;
+  actions: string[];
+  warnings: string[];
+  invariants: OnboardingReconciliationInvariants;
+}
+
+export interface OnboardingReconciliationReport {
+  generatedAt: string;
+  totalProjects: number;
+  repairedProjects: number;
+  flaggedProjects: number;
+  results: OnboardingReconciliationProjectResult[];
+}
+
+export async function getMigrationStatus(): Promise<MigrationStatusResponse> {
   return typedInvoke('get_migration_status');
 }
 
@@ -620,6 +715,10 @@ export async function runMigration(
 
 export async function runAllMigrations(): Promise<MigrationResultEntry[]> {
   return typedInvoke('run_all_migrations');
+}
+
+export async function runOnboardingReconciliation(): Promise<OnboardingReconciliationReport> {
+  return typedInvoke('run_onboarding_reconciliation');
 }
 
 export async function renameProjectMd(projectPath: string): Promise<boolean> {
@@ -673,6 +772,18 @@ export async function writeOpenclawSystemContext(
   return typedInvoke('write_openclaw_system_context', { clientUuid, hostname, platform });
 }
 
+export async function getOpenclawBearerToken(): Promise<string> {
+  return typedInvoke('get_openclaw_bearer_token');
+}
+
+export async function setOpenclawBearerToken(token: string): Promise<void> {
+  return typedInvoke('set_openclaw_bearer_token', { token });
+}
+
+export async function clearOpenclawBearerToken(): Promise<void> {
+  return typedInvoke('clear_openclaw_bearer_token');
+}
+
 // Phase 2/5 data commands
 
 export async function getAllProjects(): Promise<ProjectSummary[]> {
@@ -714,6 +825,13 @@ export async function reorderItem(
   newStatus?: string | null,
 ): Promise<void> {
   return typedInvoke('reorder_item', { projectId, itemId, newPriority, newStatus });
+}
+
+export async function batchReorderItems(
+  projectId: string,
+  items: BatchReorderItemChange[],
+): Promise<void> {
+  return typedInvoke('batch_reorder_items', { projectId, items });
 }
 
 export interface BranchInjectionResult {
