@@ -87,7 +87,6 @@
     -ms-overflow-style: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
-    scrollbar-gutter: stable both-edges;
   }
 
   .kanban-scroll::-webkit-scrollbar {
