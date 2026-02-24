@@ -52,7 +52,6 @@
   body {
     font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
     overflow: hidden;
-    position: relative;
     background-image: radial-gradient(
         circle at 50% -28%,
         rgba(223, 255, 0, 0.12),
@@ -62,43 +61,13 @@
     @apply bg-neutral-0 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
   }
 
-  #root {
-    position: relative;
-    z-index: 1;
-  }
-
   .dark body {
-    background-image: linear-gradient(180deg, #0a0a0a 0%, #101010 100%);
-  }
-
-  .dark body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
     background-image: radial-gradient(
-      circle at 50% -24%,
-      rgba(223, 255, 0, 0.18),
-      rgba(223, 255, 0, 0) 48%
-    );
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' viewBox='0 0 4 4'%3E%3Crect width='1' height='1' x='0' y='0' fill='rgba(0,0,0,0.00)'/%3E%3Crect width='1' height='1' x='1' y='0' fill='rgba(0,0,0,0.50)'/%3E%3Crect width='1' height='1' x='2' y='0' fill='rgba(0,0,0,0.12)'/%3E%3Crect width='1' height='1' x='3' y='0' fill='rgba(0,0,0,0.62)'/%3E%3Crect width='1' height='1' x='0' y='1' fill='rgba(0,0,0,0.75)'/%3E%3Crect width='1' height='1' x='1' y='1' fill='rgba(0,0,0,0.25)'/%3E%3Crect width='1' height='1' x='2' y='1' fill='rgba(0,0,0,0.87)'/%3E%3Crect width='1' height='1' x='3' y='1' fill='rgba(0,0,0,0.37)'/%3E%3Crect width='1' height='1' x='0' y='2' fill='rgba(0,0,0,0.18)'/%3E%3Crect width='1' height='1' x='1' y='2' fill='rgba(0,0,0,0.68)'/%3E%3Crect width='1' height='1' x='2' y='2' fill='rgba(0,0,0,0.06)'/%3E%3Crect width='1' height='1' x='3' y='2' fill='rgba(0,0,0,0.56)'/%3E%3Crect width='1' height='1' x='0' y='3' fill='rgba(0,0,0,0.93)'/%3E%3Crect width='1' height='1' x='1' y='3' fill='rgba(0,0,0,0.43)'/%3E%3Crect width='1' height='1' x='2' y='3' fill='rgba(0,0,0,0.81)'/%3E%3Crect width='1' height='1' x='3' y='3' fill='rgba(0,0,0,0.31)'/%3E%3C/svg%3E");
-    mask-size: 4px 4px;
-    mask-repeat: repeat;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' viewBox='0 0 4 4'%3E%3Crect width='1' height='1' x='0' y='0' fill='rgba(0,0,0,0.00)'/%3E%3Crect width='1' height='1' x='1' y='0' fill='rgba(0,0,0,0.50)'/%3E%3Crect width='1' height='1' x='2' y='0' fill='rgba(0,0,0,0.12)'/%3E%3Crect width='1' height='1' x='3' y='0' fill='rgba(0,0,0,0.62)'/%3E%3Crect width='1' height='1' x='0' y='1' fill='rgba(0,0,0,0.75)'/%3E%3Crect width='1' height='1' x='1' y='1' fill='rgba(0,0,0,0.25)'/%3E%3Crect width='1' height='1' x='2' y='1' fill='rgba(0,0,0,0.87)'/%3E%3Crect width='1' height='1' x='3' y='1' fill='rgba(0,0,0,0.37)'/%3E%3Crect width='1' height='1' x='0' y='2' fill='rgba(0,0,0,0.18)'/%3E%3Crect width='1' height='1' x='1' y='2' fill='rgba(0,0,0,0.68)'/%3E%3Crect width='1' height='1' x='2' y='2' fill='rgba(0,0,0,0.06)'/%3E%3Crect width='1' height='1' x='3' y='2' fill='rgba(0,0,0,0.56)'/%3E%3Crect width='1' height='1' x='0' y='3' fill='rgba(0,0,0,0.93)'/%3E%3Crect width='1' height='1' x='1' y='3' fill='rgba(0,0,0,0.43)'/%3E%3Crect width='1' height='1' x='2' y='3' fill='rgba(0,0,0,0.81)'/%3E%3Crect width='1' height='1' x='3' y='3' fill='rgba(0,0,0,0.31)'/%3E%3C/svg%3E");
-    -webkit-mask-size: 4px 4px;
-    -webkit-mask-repeat: repeat;
-    opacity: 0.9;
-  }
-
-  @supports (color: oklch(0.5 0.2 120)) {
-    .dark body::before {
-      background-image: radial-gradient(
         circle at 50% -24%,
-        oklch(0.92 0.22 110 / 0.18),
-        oklch(0.92 0.22 110 / 0) 48%
-      );
-    }
+        rgba(223, 255, 0, 0.13),
+        rgba(223, 255, 0, 0) 48%
+      ),
+      linear-gradient(180deg, #0a0a0a 0%, #101010 100%);
   }
 
   code,
