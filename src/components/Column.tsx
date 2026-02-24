@@ -85,13 +85,13 @@ export function Column<T extends BoardItem>({
                 <ChevronsRightLeft className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="mt-1 flex min-h-0 w-full flex-1 items-start justify-center gap-1">
-              <span className="[text-orientation:mixed] [writing-mode:vertical-rl] text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
-                {column.label}
-              </span>
-              <span className="[text-orientation:mixed] [writing-mode:vertical-rl] rounded-full bg-neutral-200 px-1.5 py-1 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                {items.length}
-              </span>
+            <div className="mt-1 flex min-h-0 w-full flex-1 items-start justify-center">
+              <div className="[text-orientation:mixed] [writing-mode:vertical-rl] whitespace-nowrap text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+                <span>{column.label}</span>
+                <span className="ml-1 inline-flex rounded-full bg-neutral-200 px-1.5 py-1 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                  {items.length}
+                </span>
+              </div>
             </div>
           </>
         ) : (
