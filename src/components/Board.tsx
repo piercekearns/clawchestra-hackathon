@@ -408,11 +408,11 @@ export function Board<T extends BoardItem>({
       onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
-      <div className="kanban-scroll h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden pb-3">
+      <div className="kanban-scroll h-full min-h-0 min-w-0 overflow-x-auto overflow-y-hidden">
         <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
           <div
             ref={gridRef}
-            className="grid h-full min-h-0 w-full gap-4 pr-2"
+            className="grid h-full min-h-0 w-full gap-4"
             style={{
               gridTemplateColumns,
               gridTemplateRows: 'minmax(0, 1fr)',

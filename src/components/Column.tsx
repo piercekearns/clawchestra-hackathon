@@ -71,7 +71,7 @@ export function Column<T extends BoardItem>({
       >
         {minimized ? (
           <>
-            <div className="flex w-full shrink-0 items-center justify-center">
+            <div className="flex w-full shrink-0 items-center justify-center pt-1">
               <button
                 type="button"
                 className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
@@ -85,8 +85,8 @@ export function Column<T extends BoardItem>({
                 <ChevronsRightLeft className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="mt-[6px] flex min-h-0 w-full flex-1 items-start justify-center overflow-visible">
-              <div className="origin-top-left [transform:rotate(90deg)] whitespace-nowrap">
+            <div className="relative mt-[6px] min-h-0 w-full flex-1 overflow-visible">
+              <div className="absolute left-1/2 top-0 origin-top -translate-x-1/2 [transform:rotate(90deg)] whitespace-nowrap">
                 <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
                   <span>{column.label}</span>
                   <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
