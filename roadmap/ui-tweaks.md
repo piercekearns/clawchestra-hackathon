@@ -336,8 +336,8 @@ Replace the paper‑plane send icon with an **up arrow**, slightly reduce the ro
 14. Sidebar/settings background uses app default — ✅ done (2026‑02‑24)
 15. Sidebar divider notch above modal overlay — ✅ done (2026‑02‑24)
 16. Chat drawer tooltips removed — ✅ done (2026‑02‑24)
-17. Title bar error details modal
-18. Chat bar height: remove inner field shell
+17. Title bar error details modal — ⏳ pending
+18. Chat bar height: remove inner field shell — ⏳ pending
 19. Chat send button: up arrow + bottom-right anchor — ✅ done (2026‑02‑24)
 20. Model selector (if/when) — higher risk, depends on item 6
 21. Context window usage — higher risk, depends on item 6
