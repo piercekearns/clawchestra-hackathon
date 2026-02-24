@@ -323,11 +323,11 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             aria-label={sending ? 'Queue message' : 'Send message'}
             className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
               sending
-                ? 'bg-revival-accent/70 text-neutral-900 hover:bg-revival-accent/90'
+                ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
                 : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
             }`}
           >
-            {sending ? <Clock className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+            {sending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
           </button>
         </div>
 
