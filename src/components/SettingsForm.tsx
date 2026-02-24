@@ -8,7 +8,11 @@ import type {
   SyncMode,
   UpdateMode,
 } from '../lib/settings';
-import { exportDebugInfo } from '../lib/tauri';
+import {
+  clearOpenclawBearerToken,
+  exportDebugInfo,
+  setOpenclawBearerToken,
+} from '../lib/tauri';
 
 interface SettingsFormProps {
   active: boolean;
@@ -39,6 +43,9 @@ export function SettingsForm({
     useState<OpenClawContextPolicy>('selected-project-first');
   const [syncMode, setSyncMode] = useState<SyncMode>('Local');
   const [remoteUrl, setRemoteUrl] = useState('');
+  const [syncIntervalMs, setSyncIntervalMs] = useState(2000);
+  const [remoteBearerToken, setRemoteBearerToken] = useState('');
+  const [clearRemoteToken, setClearRemoteToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [debugCopied, setDebugCopied] = useState(false);
@@ -51,6 +58,9 @@ export function SettingsForm({
     openclawContextPolicy: OpenClawContextPolicy;
     syncMode: SyncMode;
     remoteUrl: string;
+    syncIntervalMs: number;
+    remoteBearerToken: string;
+    clearRemoteToken: boolean;
   } | null>(null);
   const saveButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -63,6 +73,9 @@ export function SettingsForm({
       openclawContextPolicy: OpenClawContextPolicy;
       syncMode: SyncMode;
       remoteUrl: string;
+      syncIntervalMs: number;
+      remoteBearerToken: string;
+      clearRemoteToken: boolean;
     }) => ({
       scanPaths: values.scanPaths.map((p) => p.trim()),
       openclawWorkspacePath: values.openclawWorkspacePath.trim(),
@@ -71,6 +84,9 @@ export function SettingsForm({
       openclawContextPolicy: values.openclawContextPolicy,
       syncMode: values.syncMode,
       remoteUrl: values.remoteUrl.trim(),
+      syncIntervalMs: Math.min(60_000, Math.max(1_000, Math.trunc(values.syncIntervalMs))),
+      remoteBearerToken: values.remoteBearerToken.trim(),
+      clearRemoteToken: values.clearRemoteToken,
     });
   }, []);
 
@@ -84,6 +100,7 @@ export function SettingsForm({
       setOpenclawContextPolicy('selected-project-first');
       setSyncMode('Local');
       setRemoteUrl('');
+      setSyncIntervalMs(2000);
       baselineRef.current = buildSnapshot({
         scanPaths: [''],
         openclawWorkspacePath: '',
@@ -92,6 +109,9 @@ export function SettingsForm({
         openclawContextPolicy: 'selected-project-first',
         syncMode: 'Local',
         remoteUrl: '',
+        syncIntervalMs: 2000,
+        remoteBearerToken: '',
+        clearRemoteToken: false,
       });
       setIsDirty(false);
       onDirtyChange?.(false);
@@ -106,6 +126,9 @@ export function SettingsForm({
     setOpenclawContextPolicy(settings.openclawContextPolicy);
     setSyncMode(settings.openclawSyncMode);
     setRemoteUrl(settings.openclawRemoteUrl ?? '');
+    setSyncIntervalMs(settings.openclawSyncIntervalMs);
+    setRemoteBearerToken('');
+    setClearRemoteToken(false);
     baselineRef.current = buildSnapshot({
       scanPaths: nextScanPaths,
       openclawWorkspacePath: settings.openclawWorkspacePath ?? '',
@@ -114,6 +137,9 @@ export function SettingsForm({
       openclawContextPolicy: settings.openclawContextPolicy,
       syncMode: settings.openclawSyncMode,
       remoteUrl: settings.openclawRemoteUrl ?? '',
+      syncIntervalMs: settings.openclawSyncIntervalMs,
+      remoteBearerToken: '',
+      clearRemoteToken: false,
     });
     setIsDirty(false);
     onDirtyChange?.(false);
@@ -131,6 +157,9 @@ export function SettingsForm({
       openclawContextPolicy,
       syncMode,
       remoteUrl,
+      syncIntervalMs,
+      remoteBearerToken,
+      clearRemoteToken,
     });
     const dirty = JSON.stringify(baseline) !== JSON.stringify(current);
     if (dirty !== isDirty) {
@@ -145,8 +174,11 @@ export function SettingsForm({
     onDirtyChange,
     openclawContextPolicy,
     openclawWorkspacePath,
+    clearRemoteToken,
     remoteUrl,
+    remoteBearerToken,
     scanPaths,
+    syncIntervalMs,
     syncMode,
     updateMode,
   ]);
@@ -284,15 +316,70 @@ export function SettingsForm({
             </label>
 
             {syncMode === 'Remote' && (
-              <label className="grid gap-1 text-sm">
-                <span>Remote URL</span>
-                <Input
-                  value={remoteUrl}
-                  onChange={(event) => setRemoteUrl(event.target.value)}
-                  placeholder="http://192.168.1.x:18789"
-                />
-              </label>
+              <>
+                <label className="grid gap-1 text-sm">
+                  <span>Remote URL</span>
+                  <Input
+                    value={remoteUrl}
+                    onChange={(event) => setRemoteUrl(event.target.value)}
+                    placeholder="http://192.168.1.x:18789"
+                  />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span>Bearer Token (keychain)</span>
+                  <Input
+                    type="password"
+                    value={remoteBearerToken}
+                    onChange={(event) => {
+                      setRemoteBearerToken(event.target.value);
+                      if (event.target.value.trim().length > 0) {
+                        setClearRemoteToken(false);
+                      }
+                    }}
+                    placeholder="Leave blank to keep existing token"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                      Stored in OS keychain. Enter a new token to replace.
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => {
+                        setRemoteBearerToken('');
+                        setClearRemoteToken(true);
+                      }}
+                    >
+                      Clear token
+                    </Button>
+                  </div>
+                </label>
+              </>
             )}
+
+            <label className="grid gap-1 text-sm">
+              <span>Sync Interval (ms)</span>
+              <Input
+                type="number"
+                min={1000}
+                max={60000}
+                step={500}
+                value={String(syncIntervalMs)}
+                onChange={(event) => {
+                  const parsed = Number.parseInt(event.target.value, 10);
+                  if (Number.isNaN(parsed)) {
+                    setSyncIntervalMs(2000);
+                  } else {
+                    setSyncIntervalMs(parsed);
+                  }
+                }}
+              />
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Applies to local continuous sync polling. Allowed range: 1000-60000ms.
+              </span>
+            </label>
           </div>
 
           {/* Advanced section */}
@@ -406,7 +493,17 @@ export function SettingsForm({
                   openclawContextPolicy,
                   openclawSyncMode: syncMode,
                   openclawRemoteUrl: remoteUrl.trim() || null,
+                  openclawSyncIntervalMs: syncIntervalMs,
                 });
+
+                if (syncMode === 'Remote') {
+                  if (clearRemoteToken) {
+                    await clearOpenclawBearerToken();
+                  } else if (remoteBearerToken.trim().length > 0) {
+                    await setOpenclawBearerToken(remoteBearerToken.trim());
+                  }
+                }
+
                 baselineRef.current = buildSnapshot({
                   scanPaths: validScanPaths,
                   openclawWorkspacePath,
@@ -415,7 +512,12 @@ export function SettingsForm({
                   openclawContextPolicy,
                   syncMode,
                   remoteUrl,
+                  syncIntervalMs,
+                  remoteBearerToken: '',
+                  clearRemoteToken: false,
                 });
+                setRemoteBearerToken('');
+                setClearRemoteToken(false);
                 setIsDirty(false);
                 onDirtyChange?.(false);
                 onSaved?.();
@@ -473,11 +575,6 @@ function SettingsSelect({
       document.removeEventListener('keydown', handleKey, true);
     };
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    setOpen(false);
-  }, [value, open]);
 
   return (
     <div className="relative">
