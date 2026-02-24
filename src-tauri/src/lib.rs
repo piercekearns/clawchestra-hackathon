@@ -2494,6 +2494,11 @@ async fn update_roadmap_item(
                 item.status = status;
                 item.status_updated_at = ts;
                 changed.push("status".to_string());
+                if item.status == "complete" && item.completed_at.is_none() {
+                    item.completed_at = Some(chrono::Local::now().format("%Y-%m-%d").to_string());
+                    item.completed_at_updated_at = Some(ts);
+                    changed.push("completedAt".to_string());
+                }
             }
             if let Some(priority) = changes.priority {
                 item.priority = priority;
@@ -2608,6 +2613,7 @@ async fn batch_reorder_items(
 
             let mut changed = vec!["priority".to_string()];
             let mut status_touched = false;
+            let mut completed_at_touched = false;
 
             for input in &items {
                 let item = entry.roadmap_items.get_mut(&input.item_id).ok_or_else(|| {
@@ -2624,11 +2630,20 @@ async fn batch_reorder_items(
                     item.status = status.clone();
                     item.status_updated_at = ts;
                     status_touched = true;
+                    if item.status == "complete" && item.completed_at.is_none() {
+                        item.completed_at =
+                            Some(chrono::Local::now().format("%Y-%m-%d").to_string());
+                        item.completed_at_updated_at = Some(ts);
+                        completed_at_touched = true;
+                    }
                 }
             }
 
             if status_touched {
                 changed.push("status".to_string());
+            }
+            if completed_at_touched {
+                changed.push("completedAt".to_string());
             }
 
             let path = PathBuf::from(&entry.project_path);
@@ -2700,6 +2715,11 @@ async fn reorder_item(
                 item.status = status;
                 item.status_updated_at = ts;
                 changed.push("status".to_string());
+                if item.status == "complete" && item.completed_at.is_none() {
+                    item.completed_at = Some(chrono::Local::now().format("%Y-%m-%d").to_string());
+                    item.completed_at_updated_at = Some(ts);
+                    changed.push("completedAt".to_string());
+                }
             }
 
             let path = PathBuf::from(&entry.project_path);

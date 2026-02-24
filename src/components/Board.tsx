@@ -4,6 +4,7 @@ import {
   DragOverlay,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useSensor,
   useSensors,
   type CollisionDetection,
@@ -63,6 +64,8 @@ const scopedCollision: CollisionDetection = (args) => {
   const cardTargets = args.droppableContainers.filter(
     (c) => !String(c.id).startsWith('col:'),
   );
+  const pointerHits = pointerWithin({ ...args, droppableContainers: cardTargets });
+  if (pointerHits.length > 0) return pointerHits;
   return closestCorners({ ...args, droppableContainers: cardTargets });
 };
 
