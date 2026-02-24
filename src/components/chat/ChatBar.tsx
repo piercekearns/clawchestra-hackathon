@@ -283,7 +283,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
       )}
 
       <div className="min-h-0 p-2">
-        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:44px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2+2px)] ${
+        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:44px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2+4px)] ${
           sending 
             ? 'border-revival-accent/50' 
             : 'border-neutral-300/70 dark:border-neutral-600'
