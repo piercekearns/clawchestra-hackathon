@@ -240,6 +240,18 @@ Allow limited markdown formatting in the **chat toast preview bubble** (e.g., bo
 
 ---
 
+## 14 — Sidebar/Settings Background Uses App Default
+
+Remove the special dark-grey background from sidebars and the settings page so the **global app background** shows through. Boundaries should be defined only by divider lines.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Sidebars and settings should feel like part of one continuous canvas, not separate panels.
+- Use dividers/shadows sparingly; no additional background blocks.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -255,5 +267,6 @@ Allow limited markdown formatting in the **chat toast preview bubble** (e.g., bo
 11. Column card list collapse (per-column toggle)
 12. Sticky modal close button (hover only)
 13. Chat toast preview: basic markdown
-14. Model selector (if/when) — higher risk, depends on item 6
-15. Context window usage — higher risk, depends on item 6
+14. Sidebar/settings background uses app default
+15. Model selector (if/when) — higher risk, depends on item 6
+16. Context window usage — higher risk, depends on item 6
