@@ -305,6 +305,19 @@ The bottom chat bar currently has a nested inner field; instead, the **outer con
 
 ---
 
+## 19 — Chat Send Button: Up Arrow + Bottom-Right Anchor
+
+Replace the paper‑plane send icon with an **up arrow**, slightly reduce the rounded‑square button size, and keep it anchored to the **bottom‑right** of the chat field as the textarea grows (so it visually rides with the bottom edge, not centered vertically).
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Use a simple up‑arrow icon (lucide).
+- Button stays inset from the right and bottom edges as the input grows.
+- Keep hover/active styling consistent with current send button.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -325,5 +338,6 @@ The bottom chat bar currently has a nested inner field; instead, the **outer con
 16. Chat drawer tooltips removed — ✅ done (2026‑02‑24)
 17. Title bar error details modal
 18. Chat bar height: remove inner field shell
-19. Model selector (if/when) — higher risk, depends on item 6
-20. Context window usage — higher risk, depends on item 6
+19. Chat send button: up arrow + bottom-right anchor
+20. Model selector (if/when) — higher risk, depends on item 6
+21. Context window usage — higher risk, depends on item 6
