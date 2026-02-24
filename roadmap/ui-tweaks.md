@@ -293,6 +293,18 @@ Top-bar error messages (e.g., build failures) are hard to copy. Replace full err
 
 ---
 
+## 18 — Chat Bar Height: Remove Inner Field Shell
+
+The bottom chat bar currently has a nested inner field; instead, the **outer container should be the input**, so the default chat bar height matches the input height. This should reduce the overall bar height and tighten the UI.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- The outer chat bar should align to the input’s default height.
+- Keep the same focus/hover styling; just remove the extra shell layer.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -312,5 +324,6 @@ Top-bar error messages (e.g., build failures) are hard to copy. Replace full err
 15. Sidebar divider notch above modal overlay
 16. Chat drawer resize helper hidden when expanded
 17. Title bar error details modal
-18. Model selector (if/when) — higher risk, depends on item 6
-19. Context window usage — higher risk, depends on item 6
+18. Chat bar height: remove inner field shell
+19. Model selector (if/when) — higher risk, depends on item 6
+20. Context window usage — higher risk, depends on item 6
