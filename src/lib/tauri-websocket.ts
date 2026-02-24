@@ -15,7 +15,7 @@ import { useDashboardStore } from './store';
 import { getOpenClawGatewayConfig } from './tauri';
 
 const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
-const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 5_000;
+const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 12_000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_CLIENT_VERSION = '0.1.0';
 const OPENCLAW_CLIENT_MODE = 'webchat';
@@ -112,6 +112,23 @@ async function getOpenClawWsDeviceAuth(params: {
 }
 
 type MessageHandler = (event: string, payload: unknown) => void;
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function shouldRetryWithDeviceChallenge(error: unknown): boolean {
+  const message = toErrorMessage(error).toLowerCase();
+  return (
+    message.includes('missing scope') ||
+    message.includes('scope') ||
+    message.includes('challenge') ||
+    message.includes('nonce') ||
+    message.includes('device') ||
+    message.includes('auth')
+  );
+}
 
 export class TauriOpenClawConnection {
   private ws: Awaited<ReturnType<typeof WebSocket.connect>> | null = null;
@@ -241,7 +258,7 @@ export class TauriOpenClawConnection {
     });
   }
 
-  private waitForConnectChallenge(): Promise<string> {
+  private waitForConnectChallenge(timeoutMs = OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS): Promise<string> {
     if (this.connectChallengeNonce) {
       return Promise.resolve(this.connectChallengeNonce);
     }
@@ -253,15 +270,31 @@ export class TauriOpenClawConnection {
         timer: setTimeout(() => {
           this.connectChallengeWaiters.delete(waiter);
           reject(new Error('Timed out waiting for gateway connect challenge'));
-        }, OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS),
+        }, timeoutMs),
       };
       this.connectChallengeWaiters.add(waiter);
     });
   }
 
-  private handleConnectChallengeEvent(payload: unknown): void {
+  private extractChallengeNonce(payload: unknown): string | null {
     const record = payload as GatewayConnectChallengePayload | null;
     const nonce = typeof record?.nonce === 'string' ? record.nonce.trim() : '';
+    if (nonce) return nonce;
+
+    const object = payload as Record<string, unknown> | null;
+    const nested = object?.payload ?? object?.params ?? object?.data;
+    if (typeof nested === 'object' && nested !== null) {
+      const nestedNonce = typeof (nested as Record<string, unknown>).nonce === 'string'
+        ? (nested as Record<string, unknown>).nonce as string
+        : '';
+      if (nestedNonce.trim()) return nestedNonce.trim();
+    }
+
+    return null;
+  }
+
+  private handleConnectChallengeEvent(payload: unknown): void {
+    const nonce = this.extractChallengeNonce(payload);
     if (!nonce) return;
 
     this.connectChallengeNonce = nonce;
@@ -272,6 +305,34 @@ export class TauriOpenClawConnection {
     pending.forEach((waiter) => {
       clearTimeout(waiter.timer);
       waiter.resolve(nonce);
+    });
+  }
+
+  private async sendConnect(deviceProof?: GatewayDeviceAuthProof): Promise<void> {
+    await this.request<{ ok?: boolean; error?: { message?: string } }>('connect', {
+      minProtocol: 3,
+      maxProtocol: 3,
+      client: {
+        id: OPENCLAW_CLIENT_ID,
+        version: OPENCLAW_CLIENT_VERSION,
+        platform: 'tauri',
+        mode: OPENCLAW_CLIENT_MODE,
+      },
+      role: OPENCLAW_CLIENT_ROLE,
+      scopes: OPENCLAW_CLIENT_SCOPES,
+      auth: this.token ? { token: this.token } : undefined,
+      ...(deviceProof ? { device: deviceProof } : {}),
+      userAgent: 'Pipeline-Dashboard/1.0',
+      locale: 'en-US',
+    });
+  }
+
+  private async verifyGatewayScopes(): Promise<void> {
+    await this.request('sessions.list', {
+      search: this.sessionKey,
+      limit: 1,
+      includeGlobal: false,
+      includeUnknown: true,
     });
   }
 
@@ -313,33 +374,50 @@ export class TauriOpenClawConnection {
     // is returned before the async task inserts it into the ConnectionManager.
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    const connectNonce = await this.waitForConnectChallenge();
-    const deviceProof = await getOpenClawWsDeviceAuth({
-      nonce: connectNonce,
-      clientId: OPENCLAW_CLIENT_ID,
-      clientMode: OPENCLAW_CLIENT_MODE,
-      role: OPENCLAW_CLIENT_ROLE,
-      scopes: OPENCLAW_CLIENT_SCOPES,
-      token: this.token,
-    });
+    try {
+      const connectNonce = await this.waitForConnectChallenge();
+      const deviceProof = await getOpenClawWsDeviceAuth({
+        nonce: connectNonce,
+        clientId: OPENCLAW_CLIENT_ID,
+        clientMode: OPENCLAW_CLIENT_MODE,
+        role: OPENCLAW_CLIENT_ROLE,
+        scopes: OPENCLAW_CLIENT_SCOPES,
+        token: this.token,
+      });
+      await this.sendConnect(deviceProof);
+      await this.verifyGatewayScopes();
+    } catch (error) {
+      if (!shouldRetryWithDeviceChallenge(error)) {
+        this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`);
+        throw error;
+      }
 
-    // Send connect message with auth (required by OpenClaw gateway protocol)
-    await this.request<{ ok?: boolean; error?: { message?: string } }>('connect', {
-      minProtocol: 3,
-      maxProtocol: 3,
-      client: {
-        id: OPENCLAW_CLIENT_ID,
-        version: OPENCLAW_CLIENT_VERSION,
-        platform: 'tauri',
-        mode: OPENCLAW_CLIENT_MODE,
-      },
-      role: OPENCLAW_CLIENT_ROLE,
-      scopes: OPENCLAW_CLIENT_SCOPES,
-      auth: this.token ? { token: this.token } : undefined,
-      device: deviceProof,
-      userAgent: 'Pipeline-Dashboard/1.0',
-      locale: 'en-US',
-    });
+      // Some gateway builds don't emit challenge immediately; fall back to auth-only connect.
+      try {
+        await this.sendConnect();
+        await this.verifyGatewayScopes();
+      } catch (fallbackError) {
+        if (this.connectChallengeNonce && shouldRetryWithDeviceChallenge(fallbackError)) {
+          try {
+            const deviceProof = await getOpenClawWsDeviceAuth({
+              nonce: this.connectChallengeNonce,
+              clientId: OPENCLAW_CLIENT_ID,
+              clientMode: OPENCLAW_CLIENT_MODE,
+              role: OPENCLAW_CLIENT_ROLE,
+              scopes: OPENCLAW_CLIENT_SCOPES,
+              token: this.token,
+            });
+            await this.sendConnect(deviceProof);
+            await this.verifyGatewayScopes();
+            // Recovered with device-auth challenge; continue with normal connected flow.
+          } catch {
+            // Fall through to normal reconnect/error path.
+          }
+        }
+        this.forceReconnect(`handshake failed: ${toErrorMessage(fallbackError)}`);
+        throw fallbackError;
+      }
+    }
 
     this.setState('connected');
     this.reconnectAttempt = 0;
@@ -385,7 +463,7 @@ export class TauriOpenClawConnection {
       // Handle events (type: 'event')
       if (type === 'event') {
         const eventName = message.event as string;
-        const eventData = message.payload;
+        const eventData = message.payload ?? message.params ?? message.data;
         if (eventName === 'connect.challenge') {
           this.handleConnectChallengeEvent(eventData);
         }
@@ -398,6 +476,16 @@ export class TauriOpenClawConnection {
             handler(eventName, eventData);
           });
         }
+        return;
+      }
+
+      // Tolerate alternate challenge message envelopes across gateway builds.
+      if (
+        type === 'connect.challenge' ||
+        type === 'challenge' ||
+        (message.event as string | undefined) === 'connect.challenge'
+      ) {
+        this.handleConnectChallengeEvent(message.payload ?? message.params ?? message.data ?? message);
       }
     } catch (e) {
       console.error('[TauriWS] Failed to parse message:', e);
