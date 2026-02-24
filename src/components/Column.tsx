@@ -86,7 +86,7 @@ export function Column<T extends BoardItem>({
               </button>
             </div>
             <div className="relative mt-[6px] min-h-0 w-full flex-1 overflow-visible">
-              <div className="absolute left-1/2 top-0 origin-top -translate-x-1/2 [transform:rotate(90deg)] whitespace-nowrap">
+              <div className="absolute left-1/2 top-0 origin-top [transform:translateX(-50%)_rotate(90deg)] whitespace-nowrap">
                 <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
                   <span>{column.label}</span>
                   <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
