@@ -235,7 +235,7 @@ Keep the modal close **X** button pinned to the top-right of the modal viewport 
 
 Allow limited markdown formatting in the **chat toast preview bubble** (e.g., bold/italic) so `**All fixed**` renders as bold instead of showing the asterisks.
 
-**Status:** ⏳ Pending (added 2026‑02‑24)
+**Status:** ✅ Fixed (2026‑02‑24)
 
 **Notes:**
 - Keep it lightweight — support inline styles only (bold, italic, inline code), no block elements.
