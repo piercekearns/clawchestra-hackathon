@@ -129,7 +129,7 @@ Surface the currently active OpenClaw model somewhere in the Clawchestra UI, wit
 
 **What to show:**
 - Active model name (e.g. `claude-sonnet-4-6`, or a friendly alias)
-- Optionally: context window usage — tokens used / total (e.g. `42k / 200k`) or a progress bar
+- Optional: context window usage as a **ring loader inside the model badge** (only when connected and usage > 0)
 
 **Placement — TBD, candidates:**
 - Title bar (compact — model name only, maybe with a small usage bar on hover)
@@ -143,14 +143,18 @@ Surface the currently active OpenClaw model somewhere in the Clawchestra UI, wit
 
 **Data source:**
 - OpenClaw exposes current model via `session_status` tool and gateway config
-- Context window usage may need polling or a WebSocket event — check what the gateway surfaces
-- Fallback: derive from `openclaw.json` `agents.defaults.model.primary` if live session data isn't available
+- **Context window usage is NOT reliably surfaced today** in chat events. Gateway events only include `tokens` on announce metadata (background jobs), not per‑turn usage.
+- Options if we want live usage:
+  - Add a **gateway event** that includes per‑session usage/limit on `chat.final` (ideal)
+  - Poll the OpenClaw CLI `usage` command (heavier, not per‑turn)
+- Fallback: hide the ring unless usage data is present
 
 **Open questions:**
 - Where exactly does it live? (Decide at implementation time — Pierce to call)
 - Model selector or read-only first?
-- Show context usage as a number, a bar, or both?
+- **Ring vs number vs both?** (proposal: ring inside badge only when connected + usage present)
 - Should it show the *session-pinned* model or the *configured default*? (Could differ if a session override is active)
+- Do we want usage per **session key** or global account usage?
 
 ---
 
