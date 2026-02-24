@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { watch } from '@tauri-apps/plugin-fs';
 import { Check, Clock4, GitBranch } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
