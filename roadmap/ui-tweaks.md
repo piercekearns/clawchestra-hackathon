@@ -5,7 +5,7 @@ status: pending
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
 nextAction: "Next: settings page (full board) — model selector/context usage pending"
-lastActivity: "2026-02-23"
+lastActivity: "2026-02-24"
 ---
 
 # UI Tweaks
@@ -198,6 +198,20 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 
 ---
 
+## 11 — Column Card List Collapse (Not Column Collapse)
+
+Add a header toggle to collapse/expand the **card list within a column** (cards hide/reveal) without changing the column width or rotating the header.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Distinct from **Collapsible Kanban Columns** (the vertical header / narrow column feature already shipped).
+- When collapsed, keep the full-width header visible and show the column title + count.
+- Collapse is per-column and should persist like other UI prefs (new key; don’t reuse `collapsedColumns`).
+- **Icon:** prefer a vertical toggle like `chevrons-down-up` (exists) or `chevron-down` / `chevron-up`. `chevrons-right-left` is also available if we want a horizontal metaphor.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -210,5 +224,6 @@ In the Git Sync modal, file names can wrap horizontally on a single line, which 
 8. Right sidebar toggle — ✅ done (2026‑02‑23)
 9. Theme colour relocation — ✅ done (2026‑02‑23)
 10. Settings as page — larger UI change
-11. Model selector (if/when) — higher risk, depends on item 6
-12. Context window usage — higher risk, depends on item 6
+11. Column card list collapse (per-column toggle)
+12. Model selector (if/when) — higher risk, depends on item 6
+13. Context window usage — higher risk, depends on item 6
