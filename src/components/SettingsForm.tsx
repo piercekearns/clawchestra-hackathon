@@ -12,6 +12,7 @@ import type {
 import {
   clearOpenclawBearerToken,
   exportDebugInfo,
+  isTauriRuntime,
   setOpenclawBearerToken,
 } from '../lib/tauri';
 
@@ -64,6 +65,42 @@ export function SettingsForm({
     clearRemoteToken: boolean;
   } | null>(null);
   const saveButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const copyText = async (text: string): Promise<boolean> => {
+    if (!text) return false;
+
+    if (isTauriRuntime()) {
+      try {
+        const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
+        await writeText(text);
+        return true;
+      } catch (error) {
+        console.warn('[Clipboard] Tauri clipboard write failed:', error);
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall through to legacy execCommand path.
+      }
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      return document.execCommand('copy');
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  };
 
   const buildSnapshot = useMemo(() => {
     return (values: {
@@ -396,8 +433,12 @@ export function SettingsForm({
                   variant="outline"
                   size="sm"
                   className="h-7 px-2"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(settings.clientUuid ?? '');
+                  onClick={async () => {
+                    const ok = await copyText(settings.clientUuid ?? '');
+                    if (!ok) {
+                      onNotify?.('error', 'Clipboard write failed');
+                      return;
+                    }
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   }}
@@ -424,26 +465,7 @@ export function SettingsForm({
               onClick={async () => {
                 try {
                   const info = await exportDebugInfo();
-                  let copiedOk = false;
-                  try {
-                    await navigator.clipboard.writeText(info);
-                    copiedOk = true;
-                  } catch {
-                    // Fallback: legacy clipboard path
-                    const textarea = document.createElement('textarea');
-                    textarea.value = info;
-                    textarea.style.position = 'fixed';
-                    textarea.style.opacity = '0';
-                    document.body.appendChild(textarea);
-                    textarea.focus();
-                    textarea.select();
-                    try {
-                      copiedOk = document.execCommand('copy');
-                    } finally {
-                      document.body.removeChild(textarea);
-                    }
-                  }
-
+                  const copiedOk = await copyText(info);
                   if (!copiedOk) {
                     throw new Error('Clipboard write failed');
                   }
