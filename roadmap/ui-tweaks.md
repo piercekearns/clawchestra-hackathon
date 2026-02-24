@@ -214,6 +214,19 @@ Add a header toggle to collapse/expand the **card list within a column** (cards 
 
 ---
 
+## 12 — Sticky Modal Close Button (Hover Only)
+
+Keep the modal close **X** button pinned to the top-right of the modal viewport while scrolling, so it’s always reachable without scrolling back to the top.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Show the X button on hover/focus of the modal (or when the modal is active), so it doesn’t obscure content when idle.
+- Ensure it stays in the same relative position as the user scrolls within the modal.
+- Applies to all board-scoped modals.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -227,5 +240,6 @@ Add a header toggle to collapse/expand the **card list within a column** (cards 
 9. Theme colour relocation — ✅ done (2026‑02‑23)
 10. Settings as page — larger UI change
 11. Column card list collapse (per-column toggle)
-12. Model selector (if/when) — higher risk, depends on item 6
-13. Context window usage — higher risk, depends on item 6
+12. Sticky modal close button (hover only)
+13. Model selector (if/when) — higher risk, depends on item 6
+14. Context window usage — higher risk, depends on item 6
