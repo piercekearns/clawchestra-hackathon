@@ -8,14 +8,14 @@
  * and Zustand bridge for UI state propagation.
  */
 
-import WebSocket from '@tauri-apps/plugin-websocket';
-import { invoke } from '@tauri-apps/api/core';
+import WebSocket, { type Message as TauriWsMessage } from '@tauri-apps/plugin-websocket';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import type { ChatConnectionState } from '../components/chat/types';
 import { useDashboardStore } from './store';
 import { getOpenClawGatewayConfig } from './tauri';
 
 const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
-const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 12_000;
+const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 2_000;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_CLIENT_VERSION = '0.1.0';
 const OPENCLAW_CLIENT_MODE = 'webchat';
@@ -113,6 +113,43 @@ async function getOpenClawWsDeviceAuth(params: {
 
 type MessageHandler = (event: string, payload: unknown) => void;
 
+type TauriSocketConnection = {
+  socket: Awaited<ReturnType<typeof WebSocket.connect>>;
+  removeListener: () => void;
+};
+
+async function connectTauriSocketWithEarlyListener(
+  url: string,
+  headers: Record<string, string>,
+  onMessage: (message: TauriWsMessage) => void,
+): Promise<TauriSocketConnection> {
+  const listeners = new Set<(message: TauriWsMessage) => void>();
+  listeners.add(onMessage);
+
+  const channel = new Channel<TauriWsMessage>();
+  channel.onmessage = (message) => {
+    listeners.forEach((listener) => {
+      listener(message);
+    });
+  };
+
+  const id = await invoke<number>('plugin:websocket|connect', {
+    url,
+    onMessage: channel,
+    config: {
+      headers: Object.entries(headers),
+    },
+  });
+
+  const socket = new WebSocket(id, listeners);
+  return {
+    socket,
+    removeListener: () => {
+      listeners.delete(onMessage);
+    },
+  };
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -132,6 +169,7 @@ function shouldRetryWithDeviceChallenge(error: unknown): boolean {
 
 export class TauriOpenClawConnection {
   private ws: Awaited<ReturnType<typeof WebSocket.connect>> | null = null;
+  private removeWsListener: (() => void) | null = null;
   private handlers: Set<MessageHandler> = new Set();
   private requestCallbacks: Map<string, {
     resolve: (v: unknown) => void;
@@ -336,6 +374,39 @@ export class TauriOpenClawConnection {
     });
   }
 
+  private handleSocketMessage(msg: TauriWsMessage): void {
+    if (msg.type === 'Close') {
+      console.warn('[TauriWS] Server sent Close frame');
+      this.stopKeepalive();
+      this.removeWsListener?.();
+      this.removeWsListener = null;
+      this.ws = null;
+      this.rejectPendingCallbacks('WebSocket closed');
+      this.clearConnectChallengeState(new Error('WebSocket closed'));
+      this.scheduleReconnect();
+      return;
+    }
+
+    this.markSocketActivity();
+
+    if (msg.type === 'Text' && typeof msg.data === 'string') {
+      this.handleMessage(msg.data);
+      return;
+    }
+
+    if (msg.type === 'Binary' && Array.isArray(msg.data)) {
+      try {
+        const text = new TextDecoder().decode(new Uint8Array(msg.data));
+        if (text) {
+          this.handleMessage(text);
+        }
+      } catch (error) {
+        console.warn('[TauriWS] Failed to decode binary message:', error);
+      }
+      return;
+    }
+  }
+
   async connect(): Promise<void> {
     const connectUrl = this.wsUrl;
     console.log('[TauriWS] Connecting to:', connectUrl);
@@ -343,36 +414,20 @@ export class TauriOpenClawConnection {
     this.clearConnectChallengeState();
 
     try {
-      this.ws = await WebSocket.connect(connectUrl, {
-        headers: {
-          'Origin': 'tauri://localhost',
+      const { socket, removeListener } = await connectTauriSocketWithEarlyListener(
+        connectUrl,
+        {
+          Origin: 'tauri://localhost',
           'User-Agent': 'Pipeline-Dashboard/1.0',
         },
-      });
+        (msg) => this.handleSocketMessage(msg),
+      );
+      this.ws = socket;
+      this.removeWsListener = removeListener;
     } catch (err) {
       console.error('[TauriWS] Connection failed:', err);
       throw err;
     }
-
-    this.ws.addListener((msg) => {
-      if (msg.type === 'Close') {
-        console.warn('[TauriWS] Server sent Close frame');
-        this.stopKeepalive();
-        this.ws = null;
-        this.rejectPendingCallbacks('WebSocket closed');
-        this.clearConnectChallengeState(new Error('WebSocket closed'));
-        this.scheduleReconnect();
-        return;
-      }
-      this.markSocketActivity();
-      if (msg.type === 'Text' && typeof msg.data === 'string') {
-        this.handleMessage(msg.data);
-      }
-    });
-
-    // WORKAROUND: Tauri WebSocket plugin has a race condition - the connection ID
-    // is returned before the async task inserts it into the ConnectionManager.
-    await new Promise((resolve) => setTimeout(resolve, 500));
 
     try {
       const connectNonce = await this.waitForConnectChallenge();
@@ -625,6 +680,8 @@ export class TauriOpenClawConnection {
     this.setState('disconnected');  // Notify listeners BEFORE clearing them
     this.rejectPendingCallbacks('Connection disposed');
     if (this.ws) {
+      this.removeWsListener?.();
+      this.removeWsListener = null;
       await this.ws.disconnect();
       this.ws = null;
     }
