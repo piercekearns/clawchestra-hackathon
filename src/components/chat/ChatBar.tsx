@@ -328,7 +328,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                   ? 'Message OpenClaw (Enter sends, Shift+Enter newline)...'
                   : 'Gateway offline. You can still draft here.'
             }
-            className="max-h-[210px] min-h-[44px] w-full resize-none border-0 bg-transparent px-3 py-2 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+            className="max-h-[210px] min-h-[44px] w-full resize-none border-0 bg-transparent px-3 pb-2 pt-2 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
           />
 
           <button
@@ -336,7 +336,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             disabled={!hasContent}
             onClick={onSubmit}
             aria-label={sending ? 'Queue message' : 'Send message'}
-            className={`absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+            className={`absolute bottom-[10px] right-2 inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
               sending
                 ? 'bg-revival-accent/70 text-neutral-900 hover:bg-revival-accent/90'
                 : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
