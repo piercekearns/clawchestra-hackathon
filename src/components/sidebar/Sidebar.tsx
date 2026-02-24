@@ -13,9 +13,10 @@ interface SidebarProps {
   mode?: 'default' | 'settings';
   onOpenSettings: () => void;
   onBack?: () => void;
+  elevated?: boolean;
 }
 
-export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: SidebarProps) {
+export function Sidebar({ side, mode = 'default', onOpenSettings, onBack, elevated = false }: SidebarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const sidebarWidth = useDashboardStore((s) => s.sidebarWidth);
   const themePreference = useDashboardStore((s) => s.themePreference);
@@ -70,7 +71,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack }: Side
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative z-20 flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing || isHandleHover ? 'border-revival-accent-600/70 dark:border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing || isHandleHover ? 'border-revival-accent-600/70 dark:border-revival-accent-400/50' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className="flex h-full w-full flex-col overflow-hidden">

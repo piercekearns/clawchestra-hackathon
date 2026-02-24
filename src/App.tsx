@@ -400,6 +400,12 @@ export default function App() {
   );
 
   const isRoadmapView = viewContext.type === 'roadmap';
+  const boardModalOpen = sidebarOpen && (
+    Boolean(selectedRoadmapItemId)
+    || Boolean(selectedProject)
+    || addDialogOpen
+    || syncDialogOpen
+  );
   const activeRoadmapProject = useMemo(() => {
     if (viewContext.type !== 'roadmap') return undefined;
     return allProjects.find((project) => project.id === viewContext.projectId);
@@ -2053,6 +2059,7 @@ export default function App() {
             mode={settingsPageOpen ? 'settings' : 'default'}
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
+            elevated={boardModalOpen}
           />
         ) : null}
         <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'px-4 pb-4 pt-4 md:px-6'}`}>
@@ -2339,6 +2346,7 @@ export default function App() {
             mode={settingsPageOpen ? 'settings' : 'default'}
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
+            elevated={boardModalOpen}
           />
         ) : null}
       </div>
