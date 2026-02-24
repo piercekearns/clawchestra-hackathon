@@ -2381,6 +2381,8 @@ async function sendViaTauriWs(
   let sawRunOwnedProgress = false;
   let sawUnscopedAgentProgress = false;
   let sawRunOwnedContent = false;
+  let sawAbortedEvent = false;
+  let abortedEventAt = 0;
   let lastObservedRunActivityAt = sendRequestedAt;
   let terminalProcessFailureMessage: string | null = null;
   const baselineMessageIds = new Set<string>();
@@ -3101,16 +3103,20 @@ async function sendViaTauriWs(
             console.log('[Gateway] Ignoring unscoped aborted event during active send');
             return;
           }
-          transitionLifecycle('fail');
-          console.log('[Gateway] REJECT via aborted event');
-          finalizeTurn(turnToken, 'failed', {
+          sawAbortedEvent = true;
+          abortedEventAt = Date.now();
+          transitionLifecycle('awaiting_output');
+          console.log('[Gateway] Aborted event received — switching to history recovery');
+          upsertTurn(turnToken, {
             sessionKey,
             runId,
+            status: 'awaiting_output',
             completionReason: 'chat_aborted_event',
           });
+          setAgentActivity('working', onActivityChange);
           cleanup('abortedEvent');
           clearActiveSendRun(runId);
-          reject(new Error('OpenClaw chat aborted'));
+          resolve();
           return;
         }
 
@@ -3224,7 +3230,7 @@ async function sendViaTauriWs(
     // - observed run activity -> 12 minutes
     if (assistantMessages.length === 0 && !streamedTrimmed) {
       const sawAnyProgress =
-        sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent;
+        sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent || sawAbortedEvent;
       const hardDeadline = sendRequestedAt + (
         sawAnyProgress ? ACTIVE_RUN_NO_FINAL_TIMEOUT_MS : NO_EVENTS_AFTER_SEND_TIMEOUT_MS
       );
