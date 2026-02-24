@@ -101,6 +101,7 @@ prepare_clean_worktree() {
 build_app_bundle() {
   local dir="$1"
   cd "$dir"
+  pnpm install --frozen-lockfile
   pnpm tauri build --bundles app
 }
 
