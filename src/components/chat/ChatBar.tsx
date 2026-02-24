@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Send, X, Clock, RotateCcw } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronUp, X, Clock, RotateCcw } from 'lucide-react';
 import { ActivityIndicator } from './ActivityIndicator';
 import { CommandDropdown } from './CommandDropdown';
 import { StatusBadge } from './StatusBadge';
@@ -328,7 +328,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                   ? 'Message OpenClaw (Enter sends, Shift+Enter newline)...'
                   : 'Gateway offline. You can still draft here.'
             }
-            className="max-h-[210px] w-full resize-none border-0 bg-transparent px-3 pb-[8px] pt-[12px] pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+            className="max-h-[210px] min-h-[44px] w-full resize-none border-0 bg-transparent px-3 py-2 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
           />
 
           <button
@@ -336,14 +336,13 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             disabled={!hasContent}
             onClick={onSubmit}
             aria-label={sending ? 'Queue message' : 'Send message'}
-            title={sending ? 'Queue message (agent is working)' : 'Send message'}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+            className={`absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
               sending
                 ? 'bg-revival-accent/70 text-neutral-900 hover:bg-revival-accent/90'
                 : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
             }`}
           >
-            {sending ? <Clock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            {sending ? <Clock className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
           </button>
         </div>
 
