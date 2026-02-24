@@ -182,7 +182,7 @@ export function RoadmapItemDialog({
   if (!item || !enrichedItem) return null;
 
   const backdropClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 bg-black/40 backdrop-blur-sm`;
-  const dialogClass = `${boardScoped ? 'absolute' : 'fixed'} inset-x-4 top-[5%] z-50 mx-auto ${boardScoped ? 'max-h-[90%]' : 'max-h-[90vh]'} max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900`;
+  const dialogClass = `${boardScoped ? 'absolute' : 'fixed'} inset-x-4 top-[5%] z-50 mx-auto ${boardScoped ? 'max-h-[90%]' : 'max-h-[90vh]'} max-w-6xl rounded-xl border border-neutral-200 bg-neutral-0 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 relative group overflow-hidden`;
 
   return (
     <>
@@ -203,24 +203,26 @@ export function RoadmapItemDialog({
       >
         <button
           type="button"
-          className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 opacity-0 transition-opacity hover:bg-neutral-100 hover:text-neutral-800 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-events-none dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           onClick={onClose}
           aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <RoadmapItemDetail
-          item={enrichedItem}
-          projectTitle={projectTitle}
-          onBack={onClose}
-          onStatusChange={onStatusChange}
-          fetchDocContent={fetchDocContent}
-          getDocContent={getDocContent}
-          getSourceBranch={getSourceBranch}
-          getContentSource={getContentSource}
-          docLoading={docLoading}
-        />
+        <div className="max-h-full overflow-y-auto p-6">
+          <RoadmapItemDetail
+            item={enrichedItem}
+            projectTitle={projectTitle}
+            onBack={onClose}
+            onStatusChange={onStatusChange}
+            fetchDocContent={fetchDocContent}
+            getDocContent={getDocContent}
+            getSourceBranch={getSourceBranch}
+            getContentSource={getContentSource}
+            docLoading={docLoading}
+          />
+        </div>
       </div>
     </>
   );

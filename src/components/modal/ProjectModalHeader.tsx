@@ -33,6 +33,7 @@ interface ProjectModalHeaderProps {
   localStatus: ProjectStatus;
   onStatusChange: (status: ProjectStatus) => void;
   onClose: () => void;
+  showClose?: boolean;
 }
 
 export function ProjectModalHeader({
@@ -40,6 +41,7 @@ export function ProjectModalHeader({
   localStatus,
   onStatusChange,
   onClose,
+  showClose = true,
 }: ProjectModalHeaderProps) {
   return (
     <div className="mb-4">
@@ -61,14 +63,16 @@ export function ProjectModalHeader({
             onChange={onStatusChange}
           />
         </div>
-        <button
-          type="button"
-          className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
-          onClick={onClose}
-          aria-label="Close modal"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        {showClose ? (
+          <button
+            type="button"
+            className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-revival-accent-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        ) : null}
       </div>
 
       {project.blockedBy && (
