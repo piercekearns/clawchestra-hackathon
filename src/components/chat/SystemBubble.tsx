@@ -39,7 +39,7 @@ export function SystemBubble({ meta, content, timestamp }: SystemBubbleProps) {
   const ariaRole = meta.kind === 'failure' ? 'alert' : 'status';
 
   return (
-    <div className="flex justify-center px-4 py-2" role={ariaRole}>
+    <div className="flex justify-center px-4 pt-2 pb-4" role={ariaRole}>
       <div
         className={cn(
           'max-w-[85%] rounded-lg border px-3 py-2',
