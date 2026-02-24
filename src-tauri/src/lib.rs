@@ -998,6 +998,33 @@ async fn openclaw_chat(
     .map_err(|e| format!("Chat task panicked: {}", e))?
 }
 
+#[tauri::command]
+async fn openclaw_sessions_list(
+    search: Option<String>,
+    limit: Option<u64>,
+    include_global: Option<bool>,
+    include_unknown: Option<bool>,
+) -> Result<Value, String> {
+    tokio::task::spawn_blocking(move || {
+        let normalized_search = search
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| DEFAULT_SESSION_KEY.to_string());
+
+        gateway_call(
+            "sessions.list",
+            &json!({
+                "search": normalized_search,
+                "limit": limit.unwrap_or(8),
+                "includeGlobal": include_global.unwrap_or(true),
+                "includeUnknown": include_unknown.unwrap_or(true),
+            }),
+        )
+    })
+    .await
+    .map_err(|e| format!("sessions.list task panicked: {}", e))?
+}
+
 fn openclaw_chat_blocking(
     message: String,
     attachments: Vec<OpenClawChatAttachmentInput>,
@@ -2955,6 +2982,7 @@ pub fn run() {
             get_openclaw_gateway_config,
             openclaw_ping,
             openclaw_chat,
+            openclaw_sessions_list,
             // Git commands (commands/git.rs)
             commands::git::probe_repo,
             commands::git::get_git_status,

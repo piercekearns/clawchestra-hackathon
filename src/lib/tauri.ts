@@ -95,6 +95,15 @@ type TauriCommands = {
     };
     return: string;
   };
+  openclaw_sessions_list: {
+    args: {
+      search?: string;
+      limit?: number;
+      includeGlobal?: boolean;
+      includeUnknown?: boolean;
+    };
+    return: unknown;
+  };
   read_file: { args: { path: string }; return: string };
   write_file: { args: { path: string; content: string }; return: void };
   delete_file: { args: { path: string }; return: void };
@@ -339,6 +348,15 @@ export async function sendOpenClawMessage(args: {
   sessionKey?: string;
 }): Promise<string> {
   return typedInvoke('openclaw_chat', args);
+}
+
+export async function getOpenClawSessionsList(args?: {
+  search?: string;
+  limit?: number;
+  includeGlobal?: boolean;
+  includeUnknown?: boolean;
+}): Promise<unknown> {
+  return typedInvoke('openclaw_sessions_list', args ?? {});
 }
 
 export async function readFile(path: string): Promise<string> {

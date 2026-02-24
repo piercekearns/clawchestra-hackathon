@@ -4,6 +4,7 @@ import {
   chatPendingTurnsLoad,
   chatRecoveryCursorGet,
   checkOpenClawGatewayConnection,
+  getOpenClawSessionsList,
   getOpenClawGatewayConfig,
   isTauriRuntime,
   sendOpenClawMessage,
@@ -1375,16 +1376,90 @@ export interface SessionModelSnapshot {
   sessionKey: string;
   model: string | null;
   provider: string | null;
+  source: 'exact' | 'defaults' | 'unknown';
+  updatedAt: number | null;
+}
+
+function toSessionModelSnapshot(
+  payload: unknown,
+  sessionKey: string,
+  allowDefaultsFallback: boolean,
+): SessionModelSnapshot {
+  const record = extractOptionalRecord(payload);
+  const defaultsRecord = extractOptionalRecord(record?.defaults);
+  const sessionsRaw = Array.isArray(record?.sessions) ? record?.sessions ?? [] : [];
+  const sessions = sessionsRaw
+    .map((entry) => extractOptionalRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+
+  const exactMatch =
+    sessions.find((entry) => extractOptionalString(entry.key) === sessionKey) ?? null;
+
+  if (exactMatch) {
+    const model =
+      extractOptionalString(exactMatch.model) ??
+      (allowDefaultsFallback ? extractOptionalString(defaultsRecord?.model) : null);
+    const provider =
+      extractOptionalString(exactMatch.modelProvider) ??
+      (allowDefaultsFallback ? extractOptionalString(defaultsRecord?.modelProvider) : null);
+    const updatedAt = typeof exactMatch.updatedAt === 'number' ? exactMatch.updatedAt : null;
+    return {
+      sessionKey,
+      model,
+      provider,
+      source: 'exact',
+      updatedAt,
+    };
+  }
+
+  if (allowDefaultsFallback) {
+    return {
+      sessionKey,
+      model: extractOptionalString(defaultsRecord?.model),
+      provider: extractOptionalString(defaultsRecord?.modelProvider),
+      source: 'defaults',
+      updatedAt: null,
+    };
+  }
+
+  return {
+    sessionKey,
+    model: null,
+    provider: null,
+    source: 'unknown',
+    updatedAt: null,
+  };
+}
+
+async function fetchSessionModelViaTauriCli(
+  sessionKey: string,
+  allowDefaultsFallback: boolean,
+): Promise<SessionModelSnapshot | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const payload = await getOpenClawSessionsList({
+      search: sessionKey,
+      limit: 8,
+      includeGlobal: true,
+      includeUnknown: true,
+    });
+    return toSessionModelSnapshot(payload, sessionKey, allowDefaultsFallback);
+  } catch (error) {
+    console.warn('[Gateway] Failed to fetch session model via Tauri CLI fallback:', error);
+    return null;
+  }
 }
 
 export async function fetchSessionModel(options?: {
   transport?: GatewayTransport;
   sessionKey?: string;
+  allowDefaultsFallback?: boolean;
 }): Promise<SessionModelSnapshot | null> {
   const transport = await resolveTransport(options?.transport);
   const transportSessionKey =
     'sessionKey' in transport ? transport.sessionKey?.trim() : undefined;
   const sessionKey = options?.sessionKey?.trim() || transportSessionKey || DEFAULT_SESSION_KEY;
+  const allowDefaultsFallback = options?.allowDefaultsFallback ?? true;
   if (!sessionKey) return null;
 
   if (transport.mode === 'tauri-ws') {
@@ -1402,24 +1477,10 @@ export async function fetchSessionModel(options?: {
         includeGlobal: true,
         includeUnknown: true,
       })) as unknown;
-
-      const record = extractOptionalRecord(payload);
-      const defaultsRecord = extractOptionalRecord(record?.defaults) ?? {};
-      const sessionsRaw = Array.isArray(record?.sessions) ? record?.sessions ?? [] : [];
-      const sessions = sessionsRaw
-        .map((entry) => extractOptionalRecord(entry))
-        .filter((entry): entry is Record<string, unknown> => Boolean(entry));
-      const exactMatch = sessions.find((entry) => entry.key === sessionKey) ?? sessions[0];
-      const model =
-        extractOptionalString(exactMatch?.model) ?? extractOptionalString(defaultsRecord.model);
-      const provider =
-        extractOptionalString(exactMatch?.modelProvider) ??
-        extractOptionalString(defaultsRecord.modelProvider);
-
-      return { sessionKey, model, provider };
+      return toSessionModelSnapshot(payload, sessionKey, allowDefaultsFallback);
     } catch (error) {
       console.warn('[Gateway] Failed to fetch session model:', error);
-      return null;
+      return fetchSessionModelViaTauriCli(sessionKey, allowDefaultsFallback);
     }
   }
 
@@ -1432,21 +1493,7 @@ export async function fetchSessionModel(options?: {
         includeGlobal: true,
         includeUnknown: true,
       });
-
-      const record = extractOptionalRecord(payload);
-      const defaultsRecord = extractOptionalRecord(record?.defaults) ?? {};
-      const sessionsRaw = Array.isArray(record?.sessions) ? record?.sessions ?? [] : [];
-      const sessions = sessionsRaw
-        .map((entry) => extractOptionalRecord(entry))
-        .filter((entry): entry is Record<string, unknown> => Boolean(entry));
-      const exactMatch = sessions.find((entry) => entry.key === sessionKey) ?? sessions[0];
-      const model =
-        extractOptionalString(exactMatch?.model) ?? extractOptionalString(defaultsRecord.model);
-      const provider =
-        extractOptionalString(exactMatch?.modelProvider) ??
-        extractOptionalString(defaultsRecord.modelProvider);
-
-      return { sessionKey, model, provider };
+      return toSessionModelSnapshot(payload, sessionKey, allowDefaultsFallback);
     } catch (error) {
       console.warn('[Gateway] Failed to fetch session model:', error);
       return null;
