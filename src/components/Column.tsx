@@ -58,7 +58,7 @@ export function Column<T extends BoardItem>({
       <header
         className={`cursor-grab rounded-lg bg-neutral-100 transition-colors hover:bg-neutral-200/80 active:cursor-grabbing dark:bg-neutral-800 dark:hover:bg-neutral-700/80 ${
           minimized
-            ? 'flex h-full min-h-0 flex-col items-center px-1 py-2'
+            ? 'flex h-full min-h-0 flex-col items-center px-1 pb-2 pt-3'
             : 'mb-3 mr-[1px] flex items-center gap-1.5 px-3 py-2'
         }`}
         role="button"
@@ -85,12 +85,14 @@ export function Column<T extends BoardItem>({
                 <ChevronsRightLeft className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="mt-1 flex min-h-0 w-full flex-1 items-start justify-center">
-              <div className="[text-orientation:mixed] [writing-mode:vertical-rl] whitespace-nowrap text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
-                <span>{column.label}</span>
-                <span className="ml-1 inline-flex rounded-full bg-neutral-200 px-1.5 py-1 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                  {items.length}
-                </span>
+            <div className="mt-[6px] flex min-h-0 w-full flex-1 items-start justify-center overflow-visible">
+              <div className="origin-top-left [transform:rotate(90deg)] whitespace-nowrap">
+                <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+                  <span>{column.label}</span>
+                  <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                    {items.length}
+                  </span>
+                </div>
               </div>
             </div>
           </>
