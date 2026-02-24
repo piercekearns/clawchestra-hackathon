@@ -58,7 +58,7 @@ export function Column<T extends BoardItem>({
       <header
         className={`cursor-grab rounded-lg bg-neutral-100 transition-colors hover:bg-neutral-200/80 active:cursor-grabbing dark:bg-neutral-800 dark:hover:bg-neutral-700/80 ${
           minimized
-            ? 'flex h-full min-h-0 flex-col items-center px-1 pb-2 pt-4'
+            ? 'flex h-full min-h-0 flex-col items-center px-1 pb-2 pt-[15px]'
             : 'mb-3 mr-[1px] flex items-center gap-1.5 px-3 py-2'
         }`}
         role="button"
