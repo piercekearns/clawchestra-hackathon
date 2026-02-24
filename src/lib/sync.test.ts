@@ -110,7 +110,9 @@ describe('clock skew detection', () => {
 
   function detectClockSkew(remoteTimestamp: number): string | null {
     const localNow = Date.now();
-    const diff = Math.abs(localNow - remoteTimestamp);
+    // Only future remote timestamps indicate dangerous skew. Past timestamps
+    // are usually stale sync metadata and should not trigger warnings.
+    const diff = remoteTimestamp - localNow;
     if (diff > CLOCK_SKEW_THRESHOLD_MS) {
       return `Clock difference detected between devices (${diff}ms). Sync results may be unexpected.`;
     }
@@ -130,10 +132,10 @@ describe('clock skew detection', () => {
     expect(warning).toBeNull();
   });
 
-  it('detects past clock skew', () => {
+  it('does not warn for past timestamps', () => {
     const pastTs = Date.now() - 10_000; // 10 seconds in the past
     const warning = detectClockSkew(pastTs);
-    expect(warning).not.toBeNull();
+    expect(warning).toBeNull();
   });
 });
 

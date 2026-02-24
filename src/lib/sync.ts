@@ -95,6 +95,18 @@ const CLOSE_SYNC_TIMEOUT_MS = 3_000;
 
 /** Timeout for remote sync on launch (milliseconds). */
 const LAUNCH_SYNC_TIMEOUT_MS = 10_000;
+const CLOCK_DIFFERENCE_WARNING_PREFIX = 'Clock difference detected between devices (';
+
+function sanitizeSyncWarnings(warnings: string[]): string[] {
+  return warnings.filter((warning) => !warning.startsWith(CLOCK_DIFFERENCE_WARNING_PREFIX));
+}
+
+function withSanitizedWarnings(result: SyncResult): SyncResult {
+  return {
+    ...result,
+    warnings: sanitizeSyncWarnings(result.warnings),
+  };
+}
 
 /**
  * Perform the full sync-on-launch sequence.
@@ -130,7 +142,7 @@ export async function performSyncOnLaunch(
   }
 
   if (syncMode === 'Local') {
-    return syncLocalLaunch();
+    return withSanitizedWarnings(await syncLocalLaunch());
   }
 
   // Remote mode
@@ -144,7 +156,7 @@ export async function performSyncOnLaunch(
     };
   }
 
-  return performRemoteSyncOnLaunch(remoteUrl, bearerToken ?? undefined);
+  return withSanitizedWarnings(await performRemoteSyncOnLaunch(remoteUrl, bearerToken ?? undefined));
 }
 
 /**
@@ -209,7 +221,7 @@ async function performRemoteSyncOnLaunch(
     return {
       success: true,
       message: 'No remote data found. Pushed local DB to remote.',
-      warnings,
+      warnings: sanitizeSyncWarnings(warnings),
       fieldsFromRemote: 0,
       fieldsFromLocal: 0,
     };
@@ -230,7 +242,7 @@ async function performRemoteSyncOnLaunch(
   // Combine warnings
   result.warnings = [...warnings, ...result.warnings];
 
-  return result;
+  return withSanitizedWarnings(result);
 }
 
 /**
@@ -268,7 +280,7 @@ export async function performSyncOnClose(
   if (syncMode === 'Local') {
     // Rust handles local sync on close via the window event handler.
     // This is a backup call from TypeScript.
-    return syncLocalClose();
+    return withSanitizedWarnings(await syncLocalClose());
   }
 
   // Remote mode
@@ -282,7 +294,7 @@ export async function performSyncOnClose(
     };
   }
 
-  return performRemoteSyncOnClose(remoteUrl, bearerToken ?? undefined);
+  return withSanitizedWarnings(await performRemoteSyncOnClose(remoteUrl, bearerToken ?? undefined));
 }
 
 /**
