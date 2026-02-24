@@ -210,6 +210,7 @@ Add a header toggle to collapse/expand the **card list within a column** (cards 
 - Collapse is per-column and should persist like other UI prefs (new key; don’t reuse `collapsedColumns`).
 - **Icon:** use `chevrons-right-left` (preferred over up/down since those already map to card visibility toggles elsewhere).
 - **Header layout:** remove the 2×3 drag dots; move the count badge to the right (into the dots’ slot), and place the chevrons button where the count currently sits.
+- Keep the hand cursor on the header to preserve the draggable affordance even without the dots.
 
 ---
 
