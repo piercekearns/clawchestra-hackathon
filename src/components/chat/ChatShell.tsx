@@ -665,7 +665,7 @@ export function ChatShell({
             </section>
           </>
         ) : (
-          <div className="relative z-50">
+          <div className="relative z-40">
           <ChatBar
             ref={textareaRef}
             variant="floating"
