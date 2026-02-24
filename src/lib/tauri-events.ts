@@ -36,6 +36,17 @@ export interface GitStatusChangedPayload {
   projectPath: string;
 }
 
+function safeUnlisten(unlisten: UnlistenFn): void {
+  try {
+    const result = (unlisten as unknown as (() => Promise<void> | void))();
+    void Promise.resolve(result).catch((error) => {
+      console.warn('[TauriEvents] Listener cleanup failed:', error);
+    });
+  } catch (error) {
+    console.warn('[TauriEvents] Listener cleanup failed:', error);
+  }
+}
+
 /**
  * Set up listeners for all Tauri events emitted by the Rust backend.
  *
@@ -122,7 +133,7 @@ export async function setupTauriEventListeners(handlers: {
 
   return () => {
     for (const unlisten of unlisteners) {
-      unlisten();
+      safeUnlisten(unlisten);
     }
   };
 }

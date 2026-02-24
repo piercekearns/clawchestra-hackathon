@@ -534,13 +534,13 @@ export default function App() {
     return `${activeSessionProvider} · ${model}`;
   }, [activeSessionModel, activeSessionProvider]);
 
-  const pushToast = (kind: Toast['kind'], message: string) => {
+  const pushToast = useCallback((kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
     setToasts((current) => [...current, { id, kind, message }]);
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, 3600);
-  };
+  }, []);
 
   const refreshActiveSessionModel = useCallback(async () => {
     if (!isTauriRuntime()) return;

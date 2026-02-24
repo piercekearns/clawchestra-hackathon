@@ -16,6 +16,7 @@ import { getOpenClawGatewayConfig } from './tauri';
 
 const WS_KEEPALIVE_INTERVAL_MS = 20_000;  // Ping every 20s to prevent idle drops
 const OPENCLAW_CONNECT_CHALLENGE_TIMEOUT_MS = 2_000;
+const WS_VERBOSE_LOGS = import.meta.env.DEV;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 const OPENCLAW_CLIENT_VERSION = '0.1.0';
 const OPENCLAW_CLIENT_MODE = 'webchat';
@@ -487,8 +488,7 @@ export class TauriOpenClawConnection {
       const type = message.type as string;
       const id = message.id as string | undefined;
       
-      // Log all incoming WS messages for diagnostics
-      if (type !== 'event') {
+      if (WS_VERBOSE_LOGS && type !== 'event') {
         console.log(`[TauriWS] Message: type=${type}, id=${id ?? 'none'}`);
       }
 
@@ -525,7 +525,11 @@ export class TauriOpenClawConnection {
         const chatState = typeof eventData === 'object' && eventData !== null
           ? (eventData as Record<string, unknown>).state
           : undefined;
-        console.log(`[TauriWS] Event received: ${eventName}, state=${chatState ?? '?'}, handlers=${this.handlers.size}`);
+        if (WS_VERBOSE_LOGS) {
+          console.log(
+            `[TauriWS] Event received: ${eventName}, state=${chatState ?? '?'}, handlers=${this.handlers.size}`,
+          );
+        }
         if (eventName) {
           this.handlers.forEach((handler) => {
             handler(eventName, eventData);
