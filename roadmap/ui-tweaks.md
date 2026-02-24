@@ -276,6 +276,19 @@ The "Drag to resize" helper text still appears on hover over the chat drawer’s
 
 ---
 
+## 17 — Title Bar Error Details: Click for Copyable Modal
+
+Top-bar error messages (e.g., build failures) are hard to copy. Replace full error text with a compact “X happened — click for details” affordance that opens a small modal containing the full error details for easy copy/paste.
+
+**Status:** ⏳ Pending (added 2026‑02‑24)
+
+**Notes:**
+- Keep the title bar concise; avoid long error strings.
+- Modal should allow easy text selection + copy.
+- OK to reuse existing modal styles.
+
+---
+
 ## Priority Order (suggested)
 
 1. Pending column card clipping — ✅ done (1px gutter)
@@ -294,5 +307,6 @@ The "Drag to resize" helper text still appears on hover over the chat drawer’s
 14. Sidebar/settings background uses app default
 15. Sidebar divider notch above modal overlay
 16. Chat drawer resize helper hidden when expanded
-17. Model selector (if/when) — higher risk, depends on item 6
-18. Context window usage — higher risk, depends on item 6
+17. Title bar error details modal
+18. Model selector (if/when) — higher risk, depends on item 6
+19. Context window usage — higher risk, depends on item 6
