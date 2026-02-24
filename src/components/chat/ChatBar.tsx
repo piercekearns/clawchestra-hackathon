@@ -205,8 +205,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             </span>
           ) : null}
           {queueIndicator ? (
-            <span className="rounded-full border border-[#DFFF00]/80 bg-[#DFFF00] px-2 py-0.5 text-[10px] text-neutral-900 flex items-center gap-1 shadow-sm">
-              <Clock className="h-3 w-3" />
+            <span className="rounded-full border border-revival-accent/50 bg-revival-accent/10 px-2 py-0.5 text-[10px] text-revival-accent flex items-center gap-1">
+              <Clock className="h-3 w-3 text-[#DFFF00]" />
               {queueIndicator}
             </span>
           ) : null}
@@ -237,8 +237,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             </span>
           ) : null}
           {queueIndicator ? (
-            <span className="rounded-full border border-[#DFFF00]/80 bg-[#DFFF00] px-2 py-0.5 text-[10px] text-neutral-900 flex items-center gap-1 shadow-sm">
-              <Clock className="h-3 w-3" />
+            <span className="rounded-full border border-revival-accent/50 bg-revival-accent/10 px-2 py-0.5 text-[10px] text-revival-accent flex items-center gap-1">
+              <Clock className="h-3 w-3 text-[#DFFF00]" />
               {queueIndicator}
             </span>
           ) : null}
