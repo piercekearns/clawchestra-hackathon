@@ -591,7 +591,6 @@ export function ChatShell({
                   if (event.touches.length > 0) startResize(event.touches[0].clientY);
                 }}
                 aria-label="Resize drawer"
-                title="Drag to resize"
               >
                 <button
                   type="button"

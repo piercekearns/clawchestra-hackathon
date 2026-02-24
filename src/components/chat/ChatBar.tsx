@@ -266,7 +266,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                   type="button"
                   onClick={() => onRetryQueuedMessage(item.id)}
                   className="text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200 p-0.5"
-                  title="Retry queued message"
                 >
                   <RotateCcw className="h-3 w-3" />
                 </button>
@@ -275,7 +274,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                 type="button"
                 onClick={() => onRemoveFromQueue(item.id)}
                 className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 p-0.5"
-                title="Remove from queue"
               >
                 <X className="h-3 w-3" />
               </button>

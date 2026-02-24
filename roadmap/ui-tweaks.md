@@ -260,7 +260,7 @@ Remove the special dark-grey background from sidebars and the settings page so t
 
 When a board-scoped modal is open with the sidebar visible, the divider notch/line gets visually cut in half (overlay/blur sits on top of the board side). Ensure the notch renders **above** the modal overlay so the divider is continuous.
 
-**Status:** ⏳ Pending (added 2026‑02‑24)
+**Status:** ✅ Fixed (2026‑02‑24)
 
 **Notes:**
 - Likely z-index / stacking context issue with the modal blur container.
@@ -268,15 +268,15 @@ When a board-scoped modal is open with the sidebar visible, the divider notch/li
 
 ---
 
-## 16 — Chat Drawer Resize Helper Text Should Not Show When Expanded
+## 16 — Chat Drawer: Remove All Tooltips
 
-The "Drag to resize" helper text still appears on hover over the chat drawer’s top lip when the drawer is fully expanded. It should not show in the expanded state.
+Remove all chat drawer/tooltips (resize, open, dismiss, queue actions). Icons and hover states are sufficient and no tooltip should appear in any drawer state.
 
-**Status:** ⏳ Pending (added 2026‑02‑24)
+**Status:** ✅ Fixed (2026‑02‑24)
 
 **Notes:**
-- Hide helper on hover when drawer is open/expanded.
-- Keep behaviour as-is for the collapsed/closed state.
+- Remove hover titles entirely for chat drawer interactions.
+- Applies to resize handle, queue actions, and preview toast.
 
 ---
 
@@ -321,8 +321,8 @@ The bottom chat bar currently has a nested inner field; instead, the **outer con
 12. Sticky modal close button (hover only) — ✅ done (2026‑02‑24)
 13. Chat toast preview: basic markdown — ✅ done (2026‑02‑24)
 14. Sidebar/settings background uses app default — ✅ done (2026‑02‑24)
-15. Sidebar divider notch above modal overlay
-16. Chat drawer resize helper hidden when expanded
+15. Sidebar divider notch above modal overlay — ✅ done (2026‑02‑24)
+16. Chat drawer tooltips removed — ✅ done (2026‑02‑24)
 17. Title bar error details modal
 18. Chat bar height: remove inner field shell
 19. Model selector (if/when) — higher risk, depends on item 6
