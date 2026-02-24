@@ -90,7 +90,7 @@ export function Column<T extends BoardItem>({
                 <span className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
                   {column.label}
                 </span>
-                <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-neutral-200 px-2 text-[11px] font-semibold leading-none text-neutral-700 [writing-mode:horizontal-tb] dark:bg-neutral-700 dark:text-neutral-200">
                   {items.length}
                 </span>
               </div>
