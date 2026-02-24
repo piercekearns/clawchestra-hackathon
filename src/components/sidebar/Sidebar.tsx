@@ -71,7 +71,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack, elevat
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#b5d400] dark:border-[#b5d400]' : isHandleHover ? 'border-revival-accent-400/40 dark:border-revival-accent-400/40' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className="flex h-full w-full flex-col overflow-hidden">
@@ -157,7 +157,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack, elevat
           className={`group absolute top-0 h-full w-[6px] cursor-col-resize ${isRight ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`}
         >
           <div
-            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-[#DFFF00]' : 'bg-[#b5d400]'}`}
+            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-[#DFFF00]' : 'bg-[#a7c400]'}`}
           />
         </div>
       )}
