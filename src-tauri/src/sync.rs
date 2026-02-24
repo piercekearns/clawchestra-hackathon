@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use crate::db_persistence::flush_db_json;
-use crate::state::{AppState, DbJson, DbProjectData, DbRoadmapItem};
+use crate::state::{AppState, DbJson, DbProjectData, DbRoadmapItem, SyncEventLogEntry};
 use crate::util::write_json_atomic;
 
 // ---------------------------------------------------------------------------
@@ -757,9 +757,9 @@ pub fn sync_local_on_close(db: &DbJson) -> SyncResult {
 // 6.6 Continuous sync handle (Phase 6.6)
 // ---------------------------------------------------------------------------
 
-/// Manages the 2-second continuous sync loop.
+/// Manages the continuous sync loop.
 ///
-/// Polls every 2 seconds, checking if the HLC counter has changed since the
+/// Polls on the configured interval, checking if the HLC counter has changed since the
 /// last sync. If yes, syncs to the OpenClaw data directory. This approach
 /// avoids wiring sync triggers into every mutation command — the polling
 /// interval naturally debounces rapid mutations.
@@ -772,14 +772,27 @@ pub struct SyncHandle {
 
 impl SyncHandle {
     /// Start the continuous sync loop. Returns a handle for shutdown.
-    pub fn start(state: Arc<Mutex<AppState>>) -> Self {
+    pub fn start(state: Arc<Mutex<AppState>>, sync_mode: crate::SyncMode, interval_ms: u64) -> Self {
         let shutdown = Arc::new(AtomicBool::new(false));
-        let shutdown_clone = shutdown.clone();
+        if sync_mode != crate::SyncMode::Local {
+            tracing::info!(
+                "Continuous sync loop disabled for mode {:?}",
+                sync_mode
+            );
+            return Self { shutdown };
+        }
 
+        let shutdown_clone = shutdown.clone();
+        let interval_ms = interval_ms.max(1_000);
         tauri::async_runtime::spawn(async move {
             let mut last_synced_hlc: u64 = 0;
+            let mut ticker = tokio::time::interval(Duration::from_millis(interval_ms));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            // Consume immediate first tick so the first sync happens after interval_ms.
+            ticker.tick().await;
+
             loop {
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                ticker.tick().await;
                 if shutdown_clone.load(Ordering::SeqCst) {
                     break;
                 }
@@ -833,6 +846,23 @@ async fn perform_continuous_sync(state: &Arc<Mutex<AppState>>) {
             // No remote file yet — just write local
             if let Err(e) = write_local_openclaw_db(&db_snapshot) {
                 tracing::warn!("Continuous sync: failed to write initial sync file: {}", e);
+                append_sync_event(
+                    state,
+                    "continuous-sync-initial-write",
+                    false,
+                    0,
+                    format!("Failed to write initial sync file: {e}"),
+                )
+                .await;
+            } else {
+                append_sync_event(
+                    state,
+                    "continuous-sync-initial-write",
+                    true,
+                    0,
+                    "Wrote initial local snapshot to OpenClaw data directory".to_string(),
+                )
+                .await;
             }
             return;
         }
@@ -852,6 +882,14 @@ async fn perform_continuous_sync(state: &Arc<Mutex<AppState>>) {
     // Write to OpenClaw location
     if let Err(e) = write_local_openclaw_db(&merged) {
         tracing::warn!("Continuous sync: failed to write to OpenClaw: {}", e);
+        append_sync_event(
+            state,
+            "continuous-sync-write-openclaw",
+            false,
+            from_remote as u64,
+            format!("Failed to write merged state to OpenClaw: {e}"),
+        )
+        .await;
         return;
     }
 
@@ -884,6 +922,33 @@ async fn perform_continuous_sync(state: &Arc<Mutex<AppState>>) {
         "Continuous sync completed: {} fields from remote",
         from_remote
     );
+    drop(guard);
+
+    append_sync_event(
+        state,
+        "continuous-sync-cycle",
+        true,
+        from_remote as u64,
+        format!("Continuous sync completed (remote fields merged: {})", from_remote),
+    )
+    .await;
+}
+
+async fn append_sync_event(
+    state: &Arc<Mutex<AppState>>,
+    event: &str,
+    success: bool,
+    fields_from_remote: u64,
+    message: String,
+) {
+    let mut guard = state.lock().await;
+    guard.push_sync_event(SyncEventLogEntry {
+        timestamp: 0,
+        event: event.to_string(),
+        success,
+        fields_from_remote,
+        message,
+    });
 }
 
 // ---------------------------------------------------------------------------

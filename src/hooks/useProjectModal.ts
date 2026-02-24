@@ -6,11 +6,15 @@ import type {
   RoadmapItemWithDocs,
   RoadmapStatus,
 } from '../lib/schema';
-import { readRoadmap, writeRoadmap } from '../lib/roadmap';
 import { resolveDocFiles, enrichItemsWithDocs } from '../lib/doc-resolution';
-import { migrateCompletedItem } from '../lib/changelog';
-import { parseChangelog } from '../lib/changelog';
-import { readFile, gitReadFileAtRef, gitGetBranchStates, updateRoadmapItem, reorderItem, getProject } from '../lib/tauri';
+import {
+  batchReorderItems,
+  readFile,
+  gitReadFileAtRef,
+  gitGetBranchStates,
+  updateRoadmapItem,
+  getProject,
+} from '../lib/tauri';
 import { useDashboardStore } from '../lib/store';
 import { mapToRoadmapItemsWithDocs } from '../lib/roadmap-item-mapper';
 import type { ProjectModalActions } from '../components/modal/types';
@@ -46,8 +50,6 @@ export function useProjectModal(
   const [localStatus, setLocalStatus] = useState<ProjectStatus>('up-next');
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItemWithDocs[]>([]);
   const [roadmapLoading, setRoadmapLoading] = useState(false);
-  const [roadmapFilePath, setRoadmapFilePath] = useState<string | null>(null);
-  const [roadmapNotes, setRoadmapNotes] = useState('');
   const [roadmapError, setRoadmapError] = useState<string | null>(null);
   const [modalView, setModalView] = useState<ModalView>({ kind: 'list' });
   const [docContentCache, setDocContentCache] = useState<Record<string, string>>({});
@@ -77,111 +79,56 @@ export function useProjectModal(
   useEffect(() => {
     if (!project) {
       setRoadmapItems([]);
-      setRoadmapFilePath(null);
-      setRoadmapNotes('');
       setRoadmapError(null);
       return;
     }
 
-    // Migrated projects: read from Zustand store (populated from db.json via get_all_projects)
-    if (project.stateJsonMigrated) {
-      const items = storeRoadmapItems[project.id] || [];
-      const mapped = mapToRoadmapItemsWithDocs(items);
-
-      // Resolve doc file paths for mapped items
-      let cancelled = false;
-      setRoadmapLoading(true);
-      setRoadmapError(null);
-      setRoadmapFilePath(null);
-      setRoadmapNotes('');
-
-      const resolveAndSet = async () => {
-        try {
-          if (project.dirPath && mapped.length > 0) {
-            const docsMap = await resolveDocFiles(project.dirPath, mapped, project.frontmatter);
-            if (cancelled) return;
-            setRoadmapItems(enrichItemsWithDocs(mapped, docsMap));
-          } else {
-            if (cancelled) return;
-            setRoadmapItems(mapped);
-          }
-        } catch {
-          if (!cancelled) setRoadmapItems(mapped);
-        } finally {
-          if (!cancelled) setRoadmapLoading(false);
-        }
-      };
-
-      void resolveAndSet();
-      return () => { cancelled = true; };
-    }
-
-    // Unmigrated projects: legacy ROADMAP.md path
-    if (!project.hasRoadmap || !project.roadmapFilePath) {
-      setRoadmapItems([]);
-      setRoadmapFilePath(null);
-      setRoadmapNotes('');
-      setRoadmapError(null);
-      return;
-    }
+    const items = storeRoadmapItems[project.id] || [];
+    const mapped = mapToRoadmapItemsWithDocs(items);
 
     let cancelled = false;
     setRoadmapLoading(true);
     setRoadmapError(null);
 
-    const load = async () => {
+    const resolveAndSet = async () => {
       try {
-        const roadmap = await readRoadmap(project.roadmapFilePath!);
-        if (cancelled) return;
-
-        setRoadmapFilePath(roadmap.filePath);
-        setRoadmapNotes(roadmap.notes);
-
-        const dirPath = project.dirPath;
-        if (dirPath) {
-          const docsMap = await resolveDocFiles(dirPath, roadmap.items, project.frontmatter);
+        if (project.dirPath && mapped.length > 0) {
+          const docsMap = await resolveDocFiles(project.dirPath, mapped, project.frontmatter);
           if (cancelled) return;
-          setRoadmapItems(enrichItemsWithDocs(roadmap.items, docsMap));
+          setRoadmapItems(enrichItemsWithDocs(mapped, docsMap));
         } else {
-          setRoadmapItems(roadmap.items.map((item) => ({ ...item, docs: {} })));
+          if (cancelled) return;
+          setRoadmapItems(mapped);
         }
-      } catch (error) {
-        if (!cancelled) {
-          setRoadmapItems([]);
-          setRoadmapError(
-            error instanceof Error ? error.message : 'Could not load roadmap',
-          );
-        }
+      } catch {
+        if (!cancelled) setRoadmapItems(mapped);
       } finally {
         if (!cancelled) setRoadmapLoading(false);
       }
     };
 
-    void load();
+    void resolveAndSet();
     return () => { cancelled = true; };
-  }, [project?.id, project?.stateJsonMigrated, project?.hasRoadmap, project?.roadmapFilePath, storeRoadmapItems]);
+  }, [project?.id, project?.dirPath, project?.frontmatter, storeRoadmapItems]);
 
-  // Load changelog when project changes
+  // Completed roadmap entries from db.json (post-migration canonical source).
   useEffect(() => {
-    if (!project?.hasChangelog || !project.changelogFilePath) {
+    if (!project) {
       setChangelogEntries([]);
       return;
     }
 
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const changelog = await parseChangelog(project.changelogFilePath!);
-        if (!cancelled) setChangelogEntries(changelog.entries);
-      } catch {
-        if (!cancelled) setChangelogEntries([]);
-      }
-    };
-
-    void load();
-    return () => { cancelled = true; };
-  }, [project?.id, project?.hasChangelog, project?.changelogFilePath]);
+    const items = storeRoadmapItems[project.id] || [];
+    const completed = items
+      .filter((item) => item.status === 'complete')
+      .map<ChangelogEntry>((item) => ({
+        id: item.id,
+        title: item.title,
+        completedAt: item.completedAt ?? '',
+      }))
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+    setChangelogEntries(completed);
+  }, [project, storeRoadmapItems]);
 
   const updateProjectStatus = useCallback(
     (next: ProjectStatus) => {
@@ -196,34 +143,20 @@ export function useProjectModal(
     [project, localStatus, actions],
   );
 
-  // Persist roadmap changes — migrated uses Tauri commands, unmigrated uses writeRoadmap
+  // Persist roadmap changes through the db/state.json command path.
   const persistRoadmap = useCallback(
     async (items: RoadmapItemWithDocs[]) => {
-      if (project?.stateJsonMigrated) {
-        // Migrated: call reorderItem per item
-        await Promise.all(
-          items.map((item, index) =>
-            reorderItem(project.id, item.id, index + 1, item.status),
-          ),
-        );
-        return;
-      }
-
-      // Unmigrated: legacy writeRoadmap
-      if (!roadmapFilePath) return;
-      const normalized = items.map((item, index) => ({
-        id: item.id,
-        title: item.title,
-        status: item.status,
-        priority: index + 1,
-        nextAction: item.nextAction,
-        blockedBy: item.blockedBy,
-        tags: item.tags,
-        icon: item.icon,
-      }));
-      await writeRoadmap({ filePath: roadmapFilePath, items: normalized, notes: roadmapNotes });
+      if (!project) return;
+      await batchReorderItems(
+        project.id,
+        items.map((item, index) => ({
+          itemId: item.id,
+          newPriority: index + 1,
+          newStatus: item.status,
+        })),
+      );
     },
-    [project?.id, project?.stateJsonMigrated, roadmapFilePath, roadmapNotes],
+    [project],
   );
 
   const reorderRoadmapItems = useCallback(
@@ -240,70 +173,32 @@ export function useProjectModal(
 
   const updateRoadmapItemStatus = useCallback(
     (itemId: string, status: RoadmapStatus) => {
-      if (project?.stateJsonMigrated) {
-        // Migrated: call Tauri command to update status
-        const previous = roadmapItems;
+      if (!project) return;
+      const previous = roadmapItems;
 
-        if (status === 'complete') {
-          // Completion is a status change — no cross-file migration needed
-          const today = new Date().toISOString().split('T')[0];
-          setRoadmapItems(roadmapItems.filter((item) => item.id !== itemId));
+      if (status === 'complete') {
+        const today = new Date().toISOString().split('T')[0];
+        setRoadmapItems(roadmapItems.filter((item) => item.id !== itemId));
 
-          void updateRoadmapItem(project.id, itemId, {
-            status: 'complete',
-            completedAt: today,
-          }).catch(() => {
-            setRoadmapItems(previous);
-          });
-          return;
-        }
-
-        const updated = roadmapItems.map((item) =>
-          item.id === itemId ? { ...item, status } : item,
-        );
-        setRoadmapItems(updated);
-
-        void updateRoadmapItem(project.id, itemId, { status }).catch(() => {
+        void updateRoadmapItem(project.id, itemId, {
+          status: 'complete',
+          completedAt: today,
+        }).catch(() => {
           setRoadmapItems(previous);
         });
         return;
       }
 
-      // Unmigrated: legacy path
-      // If marking as complete, trigger changelog migration
-      if (status === 'complete' && roadmapFilePath && project?.changelogFilePath) {
-        const previous = roadmapItems;
-
-        // Optimistic: remove from list immediately
-        setRoadmapItems(roadmapItems.filter((item) => item.id !== itemId));
-
-        void migrateCompletedItem(roadmapFilePath, project.changelogFilePath, itemId)
-          .then(async () => {
-            // Refresh changelog entries
-            try {
-              const changelog = await parseChangelog(project.changelogFilePath!);
-              setChangelogEntries(changelog.entries);
-            } catch {
-              // Best effort
-            }
-          })
-          .catch(() => {
-            setRoadmapItems(previous);
-          });
-        return;
-      }
-
-      const previous = roadmapItems;
       const updated = roadmapItems.map((item) =>
         item.id === itemId ? { ...item, status } : item,
       );
       setRoadmapItems(updated);
 
-      void persistRoadmap(updated).catch(() => {
+      void updateRoadmapItem(project.id, itemId, { status }).catch(() => {
         setRoadmapItems(previous);
       });
     },
-    [roadmapItems, persistRoadmap, roadmapFilePath, project?.id, project?.stateJsonMigrated, project?.changelogFilePath],
+    [project, roadmapItems],
   );
 
   // View navigation

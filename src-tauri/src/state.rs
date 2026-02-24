@@ -260,6 +260,8 @@ pub fn db_json_path() -> Result<PathBuf, String> {
 ///
 /// Hardcoded state history buffer size (Round 6 decision — no settings UI for this).
 pub const HISTORY_BUFFER_SIZE: usize = 20;
+/// Bounded runtime debug event buffer size for sync + watcher logs.
+pub const EVENT_LOG_BUFFER_SIZE: usize = 100;
 
 /// All project/roadmap data lives here at runtime. db.json is the persistence
 /// layer (debounced writes). state.json files are projections for agent
@@ -283,6 +285,10 @@ pub struct AppState {
     /// SHA-256 hashes of recently written-back files (Phase 6.6 echo prevention).
     /// Keyed by absolute file path. Cleared after the watcher processes the echo.
     pub writeback_hashes: HashMap<String, String>,
+    /// Bounded runtime sync event log (for debug export).
+    pub sync_event_log: VecDeque<SyncEventLogEntry>,
+    /// Bounded runtime watcher event log (for debug export).
+    pub watcher_event_log: VecDeque<WatcherEventLogEntry>,
 }
 
 impl Default for AppState {
@@ -296,6 +302,8 @@ impl Default for AppState {
             client_uuid: String::new(),
             validation_rejections: HashMap::new(),
             writeback_hashes: HashMap::new(),
+            sync_event_log: VecDeque::new(),
+            watcher_event_log: VecDeque::new(),
         }
     }
 }
@@ -349,6 +357,34 @@ impl AppState {
             .and_then(|buf| buf.iter().rev().nth(n))
     }
 
+    /// Push a sync runtime event into the bounded buffer.
+    pub fn push_sync_event(&mut self, mut entry: SyncEventLogEntry) {
+        if entry.timestamp == 0 {
+            entry.timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+        }
+        if self.sync_event_log.len() >= EVENT_LOG_BUFFER_SIZE {
+            self.sync_event_log.pop_front();
+        }
+        self.sync_event_log.push_back(entry);
+    }
+
+    /// Push a watcher runtime event into the bounded buffer.
+    pub fn push_watcher_event(&mut self, mut entry: WatcherEventLogEntry) {
+        if entry.timestamp == 0 {
+            entry.timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+        }
+        if self.watcher_event_log.len() >= EVENT_LOG_BUFFER_SIZE {
+            self.watcher_event_log.pop_front();
+        }
+        self.watcher_event_log.push_back(entry);
+    }
+
     /// Project a StateJson document from the DB for a given project.
     pub fn project_state_json(&self, project_id: &str) -> Option<StateJson> {
         let entry = self.db.projects.get(project_id)?;
@@ -392,6 +428,28 @@ impl AppState {
         })
     }
 
+}
+
+/// Runtime sync event entry (exported in debug info, not persisted).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncEventLogEntry {
+    pub timestamp: u64,
+    pub event: String,
+    pub success: bool,
+    pub fields_from_remote: u64,
+    pub message: String,
+}
+
+/// Runtime watcher event entry (exported in debug info, not persisted).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatcherEventLogEntry {
+    pub timestamp: u64,
+    pub event: String,
+    pub project_id: Option<String>,
+    pub path: Option<String>,
+    pub detail: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

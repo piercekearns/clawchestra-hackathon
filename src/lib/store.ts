@@ -152,6 +152,19 @@ function isCompactionSystemBubble(message: ChatMessage): boolean {
   return message.role === 'system' && message.systemMeta?.kind === 'compaction';
 }
 
+function sortChatMessagesChronologically(messages: ChatMessage[]): ChatMessage[] {
+  return [...messages].sort((a, b) => {
+    const aTimestamp = a.timestamp ?? 0;
+    const bTimestamp = b.timestamp ?? 0;
+    if (aTimestamp !== bTimestamp) return aTimestamp - bTimestamp;
+
+    const aId = a._id ?? '';
+    const bId = b._id ?? '';
+    if (aId && bId && aId !== bId) return aId.localeCompare(bId);
+    return 0;
+  });
+}
+
 function canMergeProgressiveMessage(existing: ChatMessage, incoming: ChatMessage): boolean {
   if (existing.role !== 'assistant' && existing.role !== 'user') return false;
   return isLikelyDuplicateMessage(existing, incoming, CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS);
@@ -439,13 +452,16 @@ export const useDashboardStore = create<DashboardState>()(
           timestamp,
         });
         const duplicateById = existingMessages.some((existing) => existing._id === id);
-        const duplicateByContentAndTime = existingMessages.some((existing) => {
-          const existingSignature = messageIdentitySignature(existing);
-          return (
-            existingSignature === incomingSignature &&
-            Math.abs((existing.timestamp ?? 0) - timestamp) <= CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS
-          );
-        });
+        const shouldDedupeByContentAndTime = !normalizedMessage._id;
+        const duplicateByContentAndTime =
+          shouldDedupeByContentAndTime &&
+          existingMessages.some((existing) => {
+            const existingSignature = messageIdentitySignature(existing);
+            return (
+              existingSignature === incomingSignature &&
+              Math.abs((existing.timestamp ?? 0) - timestamp) <= CHAT_PROGRESSIVE_DEDUPE_WINDOW_MS
+            );
+          });
 
         if (duplicateById || duplicateByContentAndTime) {
           return;
@@ -459,7 +475,9 @@ export const useDashboardStore = create<DashboardState>()(
         
         // Add to state immediately (optimistic)
         set((state) => ({
-          chatMessages: collapseChatDuplicates([...state.chatMessages, messageWithMeta]),
+          chatMessages: collapseChatDuplicates(
+            sortChatMessagesChronologically([...state.chatMessages, messageWithMeta]),
+          ),
         }));
         
         // Persist to SQLite if in Tauri (fire-and-forget, acceptable if lost on quick close)
@@ -513,7 +531,11 @@ export const useDashboardStore = create<DashboardState>()(
           const total = await chatMessagesCount();
           
           set({
-            chatMessages: collapseChatDuplicates(messages.map((m) => deserializePersistedMessage(m))),
+            chatMessages: collapseChatDuplicates(
+              sortChatMessagesChronologically(
+                messages.map((m) => deserializePersistedMessage(m)),
+              ),
+            ),
             chatHasMore: messages.length < total,
           });
           
@@ -561,7 +583,9 @@ export const useDashboardStore = create<DashboardState>()(
             .map((m) => deserializePersistedMessage(m));
           
           set((state) => ({
-            chatMessages: collapseChatDuplicates([...newMessages, ...state.chatMessages]),
+            chatMessages: collapseChatDuplicates(
+              sortChatMessagesChronologically([...newMessages, ...state.chatMessages]),
+            ),
             chatLoadingMore: false,
             chatHasMore: olderMessages.length === 50,
           }));

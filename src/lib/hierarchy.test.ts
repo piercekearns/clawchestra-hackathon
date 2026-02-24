@@ -22,7 +22,6 @@ function project(
     },
     content: '',
     hasRoadmap: false,
-    hasChangelog: false,
     hasGit: false,
     children: [],
     isStale: false,

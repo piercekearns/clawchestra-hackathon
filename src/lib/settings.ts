@@ -20,6 +20,8 @@ export interface DashboardSettings {
   openclawRemoteUrl: string | null;
   /** Bearer token for authenticating with the remote OpenClaw instance */
   openclawBearerToken: string | null;
+  /** Continuous sync polling interval (milliseconds, clamped in backend) */
+  openclawSyncIntervalMs: number;
   /** Size of the per-project state history buffer (default: 20) */
   stateHistoryBufferSize: number;
 }

@@ -121,16 +121,9 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
         idToDir.set(id, [dirPath]);
       }
 
-      // Detect companion files
-      const roadmapFilePath = `${dirPath}/ROADMAP.md`;
-      const changelogFilePath = `${dirPath}/CHANGELOG.md`;
       const gitDir = `${dirPath}/.git`;
 
-      const [hasRoadmap, hasChangelog, hasGit] = await Promise.all([
-        pathExists(roadmapFilePath),
-        pathExists(changelogFilePath),
-        pathExists(gitDir),
-      ]);
+      const hasGit = await pathExists(gitDir);
 
       const gitStatus = hasGit ? await fetchGitStatus(dirPath) : undefined;
 
@@ -148,10 +141,7 @@ export async function getProjects(scanPaths: string[]): Promise<ProjectLoadResul
         dirPath,
         frontmatter,
         content,
-        roadmapFilePath: hasRoadmap ? roadmapFilePath : undefined,
-        hasRoadmap,
-        changelogFilePath: hasChangelog ? changelogFilePath : undefined,
-        hasChangelog,
+        hasRoadmap: false,
         hasGit,
         gitStatus,
         children: [],

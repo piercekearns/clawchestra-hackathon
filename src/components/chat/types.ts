@@ -29,6 +29,9 @@ export interface QueuedMessage {
   text: string;
   attachments: ChatAttachment[];
   queuedAt: number;
+  attemptCount: number;
+  status: 'queued' | 'failed';
+  lastError?: string;
 }
 
 let queueIdCounter = 0;

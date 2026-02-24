@@ -22,7 +22,7 @@ use tokio::sync::Mutex;
 
 use crate::db_persistence::DbFlushHandle;
 use crate::merge::merge_state_json;
-use crate::state::{AppState, ProjectId, StateJson};
+use crate::state::{AppState, ProjectId, StateJson, WatcherEventLogEntry};
 use crate::util::write_str_atomic;
 use crate::validation::MAX_STATE_JSON_SIZE;
 
@@ -232,6 +232,13 @@ fn categorize_and_handle(
                 == Some(".clawchestra")
             {
                 if let Some(project_dir) = clawchestra_dir.parent() {
+                    append_watcher_event(
+                        state,
+                        "state-json-change-detected",
+                        None,
+                        Some(path.to_string_lossy().to_string()),
+                        Some("Queued async state.json merge handler".to_string()),
+                    );
                     // Track in-flight async tasks for graceful shutdown (Phase 6.6)
                     in_flight.fetch_add(1, Ordering::SeqCst);
                     // Spawn async: avoids block_on deadlock when acquiring tokio Mutex
@@ -272,6 +279,13 @@ fn categorize_and_handle(
                     file_name: file_name.to_string(),
                 },
             );
+            append_watcher_event(
+                state,
+                "project-file-changed",
+                None,
+                Some(project_dir.to_string_lossy().to_string()),
+                Some(file_name.to_string()),
+            );
             return;
         }
     }
@@ -289,8 +303,36 @@ fn categorize_and_handle(
                     project_path: project_dir.to_string_lossy().to_string(),
                 },
             );
+            append_watcher_event(
+                state,
+                "git-status-changed",
+                None,
+                Some(project_dir.to_string_lossy().to_string()),
+                Some(path.to_string_lossy().to_string()),
+            );
         }
     }
+}
+
+fn append_watcher_event(
+    state: &Arc<Mutex<AppState>>,
+    event: &str,
+    project_id: Option<String>,
+    path: Option<String>,
+    detail: Option<String>,
+) {
+    let state = state.clone();
+    let event = event.to_string();
+    tauri::async_runtime::spawn(async move {
+        let mut guard = state.lock().await;
+        guard.push_watcher_event(WatcherEventLogEntry {
+            timestamp: 0,
+            event,
+            project_id,
+            path,
+            detail,
+        });
+    });
 }
 
 /// Handle a state.json change event (async — spawned from categorize_and_handle).

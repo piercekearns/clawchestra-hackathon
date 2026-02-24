@@ -149,12 +149,14 @@ interface ChatShellProps {
   drawerOpen: boolean;
   responseToastMessage: string | null;
   isAgentWorking: boolean; // True when agent is processing
+  showPendingBubble?: boolean;
   queue: QueuedMessage[];
   hasMoreMessages?: boolean;
   loadingMoreMessages?: boolean;
   onSend: (payload: ChatSendPayload) => Promise<boolean>;
   onQueueMessage: (payload: ChatSendPayload) => void;
   onRemoveFromQueue: (id: string) => void;
+  onRetryQueuedMessage: (id: string) => void;
   onDrawerOpenChange: (open: boolean) => void;
   onDismissResponseToast: () => void;
   onLoadMore?: () => void;
@@ -173,12 +175,14 @@ export function ChatShell({
   drawerOpen,
   responseToastMessage,
   isAgentWorking,
+  showPendingBubble = false,
   queue,
   hasMoreMessages,
   loadingMoreMessages,
   onSend,
   onQueueMessage,
   onRemoveFromQueue,
+  onRetryQueuedMessage,
   onDrawerOpenChange,
   onDismissResponseToast,
   onLoadMore,
@@ -616,8 +620,8 @@ export function ChatShell({
               <MessageList
                 ref={messageListRef}
                 messages={displayMessages}
-                // Show reading indicator when agent is working but no text has streamed yet
-                showReadingIndicator={isAgentWorking && !streamingContent}
+                // Show the synthetic pending bubble until visible streamed text arrives.
+                showReadingIndicator={showPendingBubble && !streamingContent}
                 className="flex-1"
                 hasMore={hasMoreMessages}
                 loadingMore={loadingMoreMessages}
@@ -654,6 +658,7 @@ export function ChatShell({
                     setAttachmentNotice(null);
                   }}
                   onRemoveFromQueue={onRemoveFromQueue}
+                  onRetryQueuedMessage={onRetryQueuedMessage}
                   onPasteFiles={appendImages}
                   onDropFiles={appendImages}
                   onDragStateChange={(active) => {
@@ -692,6 +697,7 @@ export function ChatShell({
               setAttachmentNotice(null);
             }}
             onRemoveFromQueue={onRemoveFromQueue}
+            onRetryQueuedMessage={onRetryQueuedMessage}
             onPasteFiles={appendImages}
             onDropFiles={appendImages}
             onDragStateChange={(active) => {

@@ -35,6 +35,11 @@ Project orchestration state lives in `.clawchestra/state.json` (gitignored, alwa
 
 **After writing:** If your changes don't appear in state.json after writing, check `.clawchestra/last-rejection.json` for validation errors.
 
+**Deprecated files (DO NOT create):**
+- `PROJECT.md` — do NOT create
+- `ROADMAP.md` — do NOT create
+- `CHANGELOG.md` — do NOT create
+
 **Do NOT edit:** CLAWCHESTRA.md (human documentation only), any files in `.clawchestra/` other than state.json."#;
 
 /// The section header used for idempotency detection.
@@ -69,8 +74,12 @@ const AGENTS_MD_REPLACEMENTS: &[(&str, &str)] = &[
         "read PROJECT.md",
         "read CLAWCHESTRA.md for documentation, .clawchestra/state.json for machine-readable state",
     ),
+    ("ROADMAP.md/CHANGELOG.md", ".clawchestra/state.json"),
+    ("ROADMAP.md and CHANGELOG.md", ".clawchestra/state.json"),
+    ("ROADMAP.md + CHANGELOG.md", ".clawchestra/state.json"),
     ("PROJECT.md", "CLAWCHESTRA.md"),
     ("ROADMAP.md", ".clawchestra/state.json"),
+    ("CHANGELOG.md", ".clawchestra/state.json"),
     ("YAML frontmatter", "JSON"),
 ];
 
@@ -577,7 +586,7 @@ mod injection_tests {
 
     #[test]
     fn agents_md_replacements_apply_correctly() {
-        let content = "Read PROJECT.md for details.\nEdit ROADMAP.md to update.\nUses YAML frontmatter format.\nAlso read PROJECT.md here.\n";
+        let content = "Read PROJECT.md for details.\nEdit ROADMAP.md/CHANGELOG.md to update.\nUses YAML frontmatter format.\nAlso read PROJECT.md here.\n";
         let mut result = content.to_string();
         for &(old, new) in AGENTS_MD_REPLACEMENTS {
             result = result.replace(old, new);
@@ -588,8 +597,17 @@ mod injection_tests {
         // ROADMAP.md references become .clawchestra/state.json
         assert!(result.contains(".clawchestra/state.json"));
         assert!(!result.contains("ROADMAP.md"));
+        assert!(!result.contains("CHANGELOG.md"));
         assert!(result.contains("JSON format"));
         assert!(!result.contains("YAML frontmatter"));
+    }
+
+    #[test]
+    fn claude_section_contains_deprecated_file_block() {
+        assert!(CLAUDE_MD_SECTION.contains("Deprecated files (DO NOT create):"));
+        assert!(CLAUDE_MD_SECTION.contains("`PROJECT.md` — do NOT create"));
+        assert!(CLAUDE_MD_SECTION.contains("`ROADMAP.md` — do NOT create"));
+        assert!(CLAUDE_MD_SECTION.contains("`CHANGELOG.md` — do NOT create"));
     }
 
     #[test]
@@ -705,7 +723,7 @@ mod injection_tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             dir.join("AGENTS.md"),
-            "# AGENTS.md\n\nRead ROADMAP.md for items.\nEdit PROJECT.md for project info.\nUses YAML frontmatter format.\n",
+            "# AGENTS.md\n\nRead ROADMAP.md and CHANGELOG.md for items.\nEdit PROJECT.md for project info.\nUses YAML frontmatter format.\n",
         )
         .unwrap();
 
@@ -714,6 +732,7 @@ mod injection_tests {
 
         let content = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
         assert!(!content.contains("ROADMAP.md"));
+        assert!(!content.contains("CHANGELOG.md"));
         assert!(content.contains(".clawchestra/state.json"));
         assert!(!content.contains("PROJECT.md"));
         assert!(content.contains("CLAWCHESTRA.md"));

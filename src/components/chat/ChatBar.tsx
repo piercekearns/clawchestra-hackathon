@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Send, X, Clock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Send, X, Clock, RotateCcw } from 'lucide-react';
 import { ActivityIndicator } from './ActivityIndicator';
 import { CommandDropdown } from './CommandDropdown';
 import { StatusBadge } from './StatusBadge';
@@ -40,6 +40,7 @@ interface ChatBarProps {
   onSubmit: () => void;
   onRemoveImage: (index: number) => void;
   onRemoveFromQueue: (id: string) => void;
+  onRetryQueuedMessage: (id: string) => void;
   onPasteFiles: (files: File[]) => Promise<void>;
   onDropFiles: (files: File[]) => Promise<void>;
   onDragStateChange: (active: boolean) => void;
@@ -67,6 +68,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     onSubmit,
     onRemoveImage,
     onRemoveFromQueue,
+    onRetryQueuedMessage,
     onPasteFiles,
     onDropFiles,
     onDragStateChange,
@@ -133,6 +135,10 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const expanded = composerHeight > 72;
   const isFloating = variant === 'floating';
   const hasContent = input.trim() || images.length > 0;
+  const queuedCount = queue.filter((item) => item.status === 'queued').length;
+  const failedCount = queue.length - queuedCount;
+  const queueBadgeLabel =
+    queuedCount > 0 ? `${queuedCount} queued` : failedCount > 0 ? `${failedCount} failed` : null;
 
   return (
     <div
@@ -197,10 +203,10 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               {images.length} image{images.length === 1 ? '' : 's'} attached
             </span>
           ) : null}
-          {queue.length > 0 ? (
+          {queueBadgeLabel ? (
             <span className="rounded-full border border-revival-accent/50 bg-revival-accent/10 px-2 py-0.5 text-[10px] text-revival-accent flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {queue.length} queued
+              {queueBadgeLabel}
             </span>
           ) : null}
           {showToggle ? (
@@ -229,10 +235,10 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               {images.length} image{images.length === 1 ? '' : 's'} attached
             </span>
           ) : null}
-          {queue.length > 0 ? (
+          {queueBadgeLabel ? (
             <span className="rounded-full border border-revival-accent/50 bg-revival-accent/10 px-2 py-0.5 text-[10px] text-revival-accent flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {queue.length} queued
+              {queueBadgeLabel}
             </span>
           ) : null}
         </div>
@@ -252,7 +258,19 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               <Clock className="h-3 w-3 text-neutral-400 flex-shrink-0" />
               <span className="flex-1 truncate text-neutral-700 dark:text-neutral-300 text-xs">
                 {item.text || `[${item.attachments.length} image${item.attachments.length === 1 ? '' : 's'}]`}
+                {item.status === 'queued' && item.attemptCount > 0 ? ' (retrying...)' : ''}
+                {item.status === 'failed' ? ' (failed)' : ''}
               </span>
+              {item.status === 'failed' ? (
+                <button
+                  type="button"
+                  onClick={() => onRetryQueuedMessage(item.id)}
+                  className="text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200 p-0.5"
+                  title="Retry queued message"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onRemoveFromQueue(item.id)}

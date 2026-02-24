@@ -2,7 +2,8 @@ import { gitCommit } from './tauri';
 import type { GitStatus } from './schema';
 
 /** Allowed files for auto-commit — only structural Kanban paths. Never broaden this. */
-const AUTO_COMMIT_ALLOWED = new Set(['CLAWCHESTRA.md']);
+export const AUTO_COMMIT_ALLOWED_FILES = ['CLAWCHESTRA.md'] as const;
+const AUTO_COMMIT_ALLOWED = new Set<string>(AUTO_COMMIT_ALLOWED_FILES);
 
 /**
  * Auto-commit structural Kanban changes for local-only projects (no remote).

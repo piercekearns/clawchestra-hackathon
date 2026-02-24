@@ -14,7 +14,7 @@ import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { SettingsPage } from './components/SettingsPage';
 import { SyncDialog } from './components/SyncDialog';
-import { getSyncStatusForDisplay } from './lib/sync';
+import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
 import type { SearchableRoadmapItem } from './components/search';
@@ -31,6 +31,7 @@ import {
 import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
+  consumePendingTurnMigrationNotice,
   DEFAULT_SESSION_KEY,
   fetchSessionModel,
   finalizeActiveTurnsForSession,
@@ -50,7 +51,6 @@ import {
 } from './lib/gateway';
 import { commitPlanningDocs, fetchAllRepos, pushRepo } from './lib/git';
 import { reorderProjects, updateProject, type ProjectUpdate } from './lib/projects';
-import { readRoadmap, writeRoadmap } from './lib/roadmap';
 import { enrichItemsWithDocs, resolveDocFiles } from './lib/doc-resolution';
 import { autoCommitIfLocalOnly } from './lib/auto-commit';
 import { RoadmapItemDialog } from './components/modal/RoadmapItemDialog';
@@ -59,20 +59,20 @@ import type {
   GitStatus,
   ProjectStatus,
   ProjectViewModel,
-  RoadmapDocument,
   RoadmapItemWithDocs,
   ThemePreference,
 } from './lib/schema';
 import type { DashboardSettings } from './lib/settings';
 import { useDashboardStore } from './lib/store';
 import {
+  batchReorderItems,
   chatRecoveryCursorAdvance,
+  getOpenclawBearerToken,
   getAppUpdateLockState,
   getDashboardSettings,
   getValidationHistory,
   isTauriRuntime,
   markRejectionResolved,
-  reorderItem,
   updateDashboardSettings,
   type ValidationRejection,
 } from './lib/tauri';
@@ -228,6 +228,22 @@ function extractBackgroundSessionKeys(content: string): string[] {
   return [...new Set(matches)].filter((key) => key !== DEFAULT_SESSION_KEY);
 }
 
+function summarizeAttemptedChatPayload(payload: ChatSendPayload): string {
+  const trimmedText = payload.text.trim();
+  if (trimmedText.length > 0) {
+    return trimmedText.length > 180 ? `${trimmedText.slice(0, 177)}...` : trimmedText;
+  }
+  if (payload.images.length > 0) {
+    return `[image-only message: ${payload.images.length} attachment${payload.images.length === 1 ? '' : 's'}]`;
+  }
+  return '[empty message]';
+}
+
+interface SendChatOptions {
+  idempotencyKey?: string;
+  queueAttempt?: number;
+}
+
 export default function App() {
   const projects = useDashboardStore((state) => state.projects);
   const errors = useDashboardStore((state) => state.errors);
@@ -272,11 +288,13 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
-  const [roadmapDocument, setRoadmapDocument] = useState<RoadmapDocument | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [lastSyncError, setLastSyncError] = useState<string | null>(null);
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItemWithDocs[]>([]);
   const [selectedRoadmapItemId, setSelectedRoadmapItemId] = useState<string | null>(null);
   const [chatStreamingContent, setChatStreamingContent] = useState<string | null>(null);
   const [chatSending, setChatSending] = useState(false); // Track if agent is working
+  const [chatPendingBubbleVisible, setChatPendingBubbleVisible] = useState(false);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [chatPrefillRequest, setChatPrefillRequest] = useState<ChatPrefillRequest | null>(null);
   const [chatResponseToastMessage, setChatResponseToastMessage] = useState<string | null>(null);
@@ -293,7 +311,9 @@ export default function App() {
   const backgroundSessionLastSeenRef = useRef<Map<string, number>>(new Map());
   const failureBubbleDedupeRef = useRef<Map<string, number>>(new Map());
   const queueDrainInFlightRef = useRef(false);
-  const blockedQueueMessageIdRef = useRef<string | null>(null);
+  const launchSyncStartedRef = useRef(false);
+  const launchMigrationToastShownRef = useRef(false);
+  const closeSyncInFlightRef = useRef(false);
   const hardClearTimerRef = useRef<number | null>(null);
   const lastGatewayActiveTurnsRef = useRef(gatewayActiveTurns);
   const sessionModelRefreshInFlightRef = useRef<Promise<void> | null>(null);
@@ -320,38 +340,20 @@ export default function App() {
     const gatherRoadmapItems = async () => {
       const items: SearchableRoadmapItem[] = [];
       for (const project of allProjects) {
-        // Migrated projects: read from Zustand store
-        if (project.stateJsonMigrated) {
-          const storeItems = storeRoadmapItems[project.id] || [];
-          for (const si of storeItems) {
-            items.push({
-              id: si.id,
-              title: si.title,
-              status: si.status,
-              priority: si.priority ?? undefined,
-              icon: si.icon ?? undefined,
-              nextAction: si.nextAction ?? undefined,
-              blockedBy: si.blockedBy ?? undefined,
-              tags: si.tags ?? undefined,
-              projectId: project.id,
-              projectTitle: project.title,
-            });
-          }
-          continue;
-        }
-        // Unmigrated projects: legacy ROADMAP.md path
-        if (!project.hasRoadmap || !project.roadmapFilePath) continue;
-        try {
-          const roadmap = await readRoadmap(project.roadmapFilePath);
-          for (const item of roadmap.items) {
-            items.push({
-              ...item,
-              projectId: project.id,
-              projectTitle: project.title,
-            });
-          }
-        } catch {
-          // Skip projects with unreadable roadmaps
+        const storeItems = storeRoadmapItems[project.id] || [];
+        for (const si of storeItems) {
+          items.push({
+            id: si.id,
+            title: si.title,
+            status: si.status,
+            priority: si.priority ?? undefined,
+            icon: si.icon ?? undefined,
+            nextAction: si.nextAction ?? undefined,
+            blockedBy: si.blockedBy ?? undefined,
+            tags: si.tags ?? undefined,
+            projectId: project.id,
+            projectTitle: project.title,
+          });
         }
       }
       if (!cancelled) setAllSearchableRoadmapItems(items);
@@ -408,15 +410,15 @@ export default function App() {
   const refreshRoadmapDocsRef = useRef<() => Promise<void>>(() => Promise.resolve());
   useEffect(() => {
     refreshRoadmapDocsRef.current = async () => {
-      if (!activeRoadmapProject || !roadmapDocument) return;
+      if (!activeRoadmapProject || roadmapItems.length === 0) return;
       try {
         const docsMap = await resolveDocFiles(
           activeRoadmapProject.dirPath,
-          roadmapDocument.items,
+          roadmapItems,
           activeRoadmapProject.frontmatter,
         );
         setRoadmapItems((prev) => {
-          const enriched = enrichItemsWithDocs(roadmapDocument.items, docsMap);
+          const enriched = enrichItemsWithDocs(roadmapItems, docsMap);
           // Preserve current ordering/status from prev (user may have dragged items)
           const docsById = new Map(enriched.map((item) => [item.id, item.docs]));
           return prev.map((item) => ({ ...item, docs: docsById.get(item.id) ?? item.docs }));
@@ -425,7 +427,7 @@ export default function App() {
         // silently fail — items keep existing docs
       }
     };
-  }, [activeRoadmapProject, roadmapDocument]);
+  }, [activeRoadmapProject, roadmapItems]);
 
   const loadProjectsTimeoutRef = useRef<number | null>(null);
   const docsRefreshTimeoutRef = useRef<number | null>(null);
@@ -548,8 +550,14 @@ export default function App() {
       const snapshot = await fetchSessionModel({
         allowDefaultsFallback: false,
       });
-      if (!snapshot) return;
-      if (!snapshot.model && !snapshot.provider) return;
+      if (!snapshot) {
+        setActiveSessionModel(null, null);
+        return;
+      }
+      if (!snapshot.model && !snapshot.provider) {
+        setActiveSessionModel(null, null);
+        return;
+      }
       setActiveSessionModel(snapshot.model, snapshot.provider);
     })().finally(() => {
       sessionModelRefreshInFlightRef.current = null;
@@ -616,8 +624,14 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    void hydratePendingTurns(DEFAULT_SESSION_KEY);
-  }, []);
+    void hydratePendingTurns(DEFAULT_SESSION_KEY).then(() => {
+      const migrationNotice = consumePendingTurnMigrationNotice();
+      if (!migrationNotice) return;
+      void addSystemBubble('info', 'Recovered pending chat state', {
+        Note: migrationNotice,
+      });
+    });
+  }, [addSystemBubble]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -718,6 +732,117 @@ export default function App() {
 
     void loadSettings();
   }, [addError]);
+
+  // Sync-on-launch for configured mode (Local/Remote) once per app session.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    if (!dashboardSettings) return;
+    if (launchSyncStartedRef.current) return;
+
+    let cancelled = false;
+    launchSyncStartedRef.current = true;
+
+    const runLaunchSync = async () => {
+      let bearerToken: string | null = null;
+      if (dashboardSettings.openclawSyncMode === 'Remote') {
+        try {
+          bearerToken = await getOpenclawBearerToken();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to read bearer token';
+          if (!cancelled) {
+            setLastSyncError(message);
+            pushToast('error', message);
+          }
+          return;
+        }
+      }
+
+      const result = await performSyncOnLaunch(
+        dashboardSettings.openclawSyncMode,
+        dashboardSettings.openclawRemoteUrl,
+        bearerToken,
+      );
+      if (cancelled) return;
+
+      if (result.success) {
+        setLastSyncError(null);
+        if (
+          dashboardSettings.openclawSyncMode !== 'Disabled' &&
+          dashboardSettings.openclawSyncMode !== 'Unknown'
+        ) {
+          setLastSyncedAt(Date.now());
+        }
+      } else {
+        setLastSyncError(result.message);
+      }
+
+      for (const warning of result.warnings) {
+        pushToast('error', warning);
+      }
+    };
+
+    void runLaunchSync();
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardSettings]);
+
+  // Best-effort sync-on-close for remote/local modes (frontend-managed path).
+  const runCloseSync = useCallback(async () => {
+    if (!isTauriRuntime()) return;
+    if (!dashboardSettings) return;
+    if (closeSyncInFlightRef.current) return;
+
+    closeSyncInFlightRef.current = true;
+    try {
+      let bearerToken: string | null = null;
+      if (dashboardSettings.openclawSyncMode === 'Remote') {
+        try {
+          bearerToken = await getOpenclawBearerToken();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to read bearer token';
+          setLastSyncError(message);
+          return;
+        }
+      }
+
+      const result = await performSyncOnClose(
+        dashboardSettings.openclawSyncMode,
+        dashboardSettings.openclawRemoteUrl,
+        bearerToken,
+      );
+
+      if (result.success) {
+        if (
+          dashboardSettings.openclawSyncMode !== 'Disabled' &&
+          dashboardSettings.openclawSyncMode !== 'Unknown'
+        ) {
+          setLastSyncedAt(Date.now());
+        }
+        setLastSyncError(null);
+      } else {
+        setLastSyncError(result.message);
+      }
+    } finally {
+      closeSyncInFlightRef.current = false;
+    }
+  }, [dashboardSettings]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    if (!dashboardSettings) return;
+
+    const handlePageExit = () => {
+      void runCloseSync();
+    };
+
+    window.addEventListener('beforeunload', handlePageExit);
+    window.addEventListener('pagehide', handlePageExit);
+    return () => {
+      window.removeEventListener('beforeunload', handlePageExit);
+      window.removeEventListener('pagehide', handlePageExit);
+    };
+  }, [dashboardSettings, runCloseSync]);
 
   // Initial connection attempt — wires Zustand bridge via getTauriOpenClawConnection
   useEffect(() => {
@@ -1084,6 +1209,33 @@ export default function App() {
         onClawchestraReady: () => {
           void loadProjects();
         },
+        onMigrationLaunchSummary: (payload) => {
+          if (launchMigrationToastShownRef.current) return;
+          if (
+            payload.migratedCount <= 0 &&
+            payload.warningCount <= 0 &&
+            payload.legacyRenamedCount <= 0
+          ) {
+            return;
+          }
+          launchMigrationToastShownRef.current = true;
+
+          if (payload.warningCount > 0) {
+            const noun = payload.warningCount === 1 ? 'warning' : 'warnings';
+            pushToast(
+              'error',
+              `Startup migration completed with ${payload.warningCount} ${noun}`,
+            );
+            return;
+          }
+
+          const totalTouched = payload.migratedCount + payload.legacyRenamedCount;
+          const projectNoun = totalTouched === 1 ? 'project' : 'projects';
+          pushToast(
+            'success',
+            `Startup migration processed ${totalTouched} ${projectNoun}`,
+          );
+        },
         onProjectFileChanged: () => {
           scheduleLoadProjects();
           scheduleDocsRefresh();
@@ -1107,7 +1259,7 @@ export default function App() {
       disposed = true;
       cleanup?.();
     };
-  }, [loadProjects, scheduleDocsRefresh, scheduleLoadProjects, updateProjectFromEvent]);
+  }, [loadProjects, pushToast, scheduleDocsRefresh, scheduleLoadProjects, updateProjectFromEvent]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -1198,7 +1350,6 @@ export default function App() {
         if (isRoadmapView) {
           event.preventDefault();
           setViewContext(defaultView());
-          setRoadmapDocument(null);
           setRoadmapItems([]);
           return;
         }
@@ -1257,63 +1408,29 @@ export default function App() {
 
   const resetToProjectBoard = () => {
     setViewContext(defaultView());
-    setRoadmapDocument(null);
     setRoadmapItems([]);
   };
 
   const openRoadmapView = async (project: ProjectViewModel) => {
-    if (project.stateJsonMigrated) {
-      // New path: read from Zustand store (db.json via get_all_projects)
-      const items = storeRoadmapItems[project.id] || [];
-      if (items.length === 0) {
-        pushToast('error', `No roadmap data found for ${project.title}`);
-        return;
-      }
-      const enrichedItems = mapToRoadmapItemsWithDocs(items);
-      // Enrich with doc paths if project has git
-      try {
-        const docsMap = await resolveDocFiles(project.dirPath, enrichedItems, project.frontmatter);
-        const withDocs = enrichItemsWithDocs(enrichedItems, docsMap);
-        setRoadmapItems(withDocs);
-      } catch {
-        setRoadmapItems(enrichedItems);
-      }
-      setRoadmapDocument(null); // No ROADMAP.md document for migrated projects
-      setViewContext(projectRoadmapView(project.id, project.title));
-      setSelectedProjectId(undefined);
-    } else {
-      // Legacy path: read from ROADMAP.md
-      if (!project.roadmapFilePath || !project.hasRoadmap) {
-        pushToast('error', `No roadmap data found for ${project.title}`);
-        return;
-      }
-
-      try {
-        const roadmap = await readRoadmap(project.roadmapFilePath);
-        let enrichedRoadmapItems: RoadmapItemWithDocs[];
-
-        try {
-          const docsMap = await resolveDocFiles(project.dirPath, roadmap.items, project.frontmatter);
-          enrichedRoadmapItems = enrichItemsWithDocs(roadmap.items, docsMap);
-        } catch {
-          enrichedRoadmapItems = roadmap.items.map((item) => ({ ...item, docs: {} }));
-        }
-
-        setRoadmapDocument(roadmap);
-        setRoadmapItems(enrichedRoadmapItems);
-        setViewContext(projectRoadmapView(project.id, project.title));
-        setSelectedProjectId(undefined);
-      } catch (error) {
-        pushToast(
-          'error',
-          error instanceof Error ? error.message : `Failed to open roadmap for ${project.title}`,
-        );
-      }
+    const items = storeRoadmapItems[project.id] || [];
+    if (items.length === 0) {
+      pushToast('error', `No roadmap data found for ${project.title}`);
+      return;
     }
+    const enrichedItems = mapToRoadmapItemsWithDocs(items);
+    try {
+      const docsMap = await resolveDocFiles(project.dirPath, enrichedItems, project.frontmatter);
+      const withDocs = enrichItemsWithDocs(enrichedItems, docsMap);
+      setRoadmapItems(withDocs);
+    } catch {
+      setRoadmapItems(enrichedItems);
+    }
+    setViewContext(projectRoadmapView(project.id, project.title));
+    setSelectedProjectId(undefined);
   };
 
   useEffect(() => {
-    if (!activeRoadmapProject?.stateJsonMigrated) return;
+    if (!activeRoadmapProject) return;
     const items = storeRoadmapItems[activeRoadmapProject.id];
     if (!items) return;
 
@@ -1323,9 +1440,11 @@ export default function App() {
       const docsById = new Map(prev.map((item) => [item.id, item.docs]));
       return mapped.map((item) => ({ ...item, docs: docsById.get(item.id) ?? item.docs }));
     });
-  }, [activeRoadmapProject?.id, activeRoadmapProject?.stateJsonMigrated, storeRoadmapItems]);
+  }, [activeRoadmapProject, storeRoadmapItems]);
 
   const persistRoadmapChanges = async (nextItems: RoadmapItemWithDocs[]) => {
+    if (!activeRoadmapProject) return;
+
     const orderedByColumn: RoadmapItemWithDocs[] = [];
     for (const column of viewContext.columns) {
       const itemsInColumn = nextItems
@@ -1340,38 +1459,22 @@ export default function App() {
     const previousItems = roadmapItems;
     setRoadmapItems(orderedByColumn);
 
-    if (activeRoadmapProject?.stateJsonMigrated) {
-      // New path: write via Tauri commands (db.json → state.json projection)
-      try {
-        for (const item of orderedByColumn) {
-          await reorderItem(activeRoadmapProject.id, item.id, item.priority ?? 0, item.status);
-        }
-        pushToast('success', 'Roadmap saved');
-      } catch (error) {
-        setRoadmapItems(previousItems);
-        pushToast(
-          'error',
-          error instanceof Error ? error.message : 'Failed to save roadmap changes',
-        );
-      }
-    } else {
-      // Legacy path: write to ROADMAP.md
-      if (!roadmapDocument) return;
-      const nextDocument: RoadmapDocument = {
-        ...roadmapDocument,
-        items: orderedByColumn.map(({ docs: _docs, ...item }) => item),
-      };
-      try {
-        await writeRoadmap(nextDocument);
-        setRoadmapDocument(nextDocument);
-        pushToast('success', 'Roadmap saved');
-      } catch (error) {
-        setRoadmapItems(previousItems);
-        pushToast(
-          'error',
-          error instanceof Error ? error.message : 'Failed to save roadmap changes',
-        );
-      }
+    try {
+      await batchReorderItems(
+        activeRoadmapProject.id,
+        orderedByColumn.map((item) => ({
+          itemId: item.id,
+          newPriority: item.priority ?? 0,
+          newStatus: item.status,
+        })),
+      );
+      pushToast('success', 'Roadmap saved');
+    } catch (error) {
+      setRoadmapItems(previousItems);
+      pushToast(
+        'error',
+        error instanceof Error ? error.message : 'Failed to save roadmap changes',
+      );
     }
   };
 
@@ -1487,22 +1590,41 @@ export default function App() {
 
   // Queue a message while agent is working
   const queueChatMessage = (payload: ChatSendPayload) => {
-    blockedQueueMessageIdRef.current = null;
     const queued: QueuedMessage = {
       id: createQueueId(),
       text: payload.text,
       attachments: payload.images,
       queuedAt: Date.now(),
+      attemptCount: 0,
+      status: 'queued',
     };
     setChatQueue((current) => [...current, queued]);
   };
 
   // Remove a message from the queue
   const removeFromChatQueue = (id: string) => {
-    if (blockedQueueMessageIdRef.current === id) {
-      blockedQueueMessageIdRef.current = null;
-    }
     setChatQueue((current) => current.filter((item) => item.id !== id));
+  };
+
+  const retryQueuedMessage = (id: string) => {
+    setChatQueue((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: 'queued',
+              attemptCount: 0,
+              lastError: undefined,
+              queuedAt: Date.now(),
+            }
+          : item,
+      ),
+    );
+    if (!isChatBusy) {
+      window.setTimeout(() => {
+        void processNextQueuedMessage();
+      }, 50);
+    }
   };
 
   // Process the next queued message (called after a send completes)
@@ -1510,25 +1632,41 @@ export default function App() {
     if (queueDrainInFlightRef.current) return;
     if (isChatBusy) return;
 
-    const next = chatQueueRef.current[0];
-    if (!next) return;
-    if (blockedQueueMessageIdRef.current === next.id) return;
+    const nextIndex = chatQueueRef.current.findIndex((item) => item.status === 'queued');
+    if (nextIndex < 0) return;
+    const next = chatQueueRef.current[nextIndex];
 
     queueDrainInFlightRef.current = true;
-    setChatQueue((current) => current.slice(1));
+    setChatQueue((current) => current.filter((_, index) => index !== nextIndex));
 
     // Let UI settle after dequeue before issuing next send.
     try {
       await new Promise((resolve) => setTimeout(resolve, 100));
-      const ok = await sendChatMessage({ text: next.text, images: next.attachments });
+      const ok = await sendChatMessage(
+        { text: next.text, images: next.attachments },
+        { idempotencyKey: next.id, queueAttempt: next.attemptCount },
+      );
 
       if (!ok) {
-        // Reinsert at the front and block auto-drain for this item so we
-        // don't enter a tight retry loop on persistent transport failures.
-        blockedQueueMessageIdRef.current = next.id;
-        setChatQueue((current) => [next, ...current]);
-      } else {
-        blockedQueueMessageIdRef.current = null;
+        if (next.attemptCount < 1) {
+          const retryItem: QueuedMessage = {
+            ...next,
+            attemptCount: next.attemptCount + 1,
+            status: 'queued',
+            lastError: undefined,
+          };
+          setChatQueue((current) => [retryItem, ...current]);
+          window.setTimeout(() => {
+            void processNextQueuedMessage();
+          }, 250);
+        } else {
+          const failedItem: QueuedMessage = {
+            ...next,
+            status: 'failed',
+            lastError: 'Send failed after retry',
+          };
+          setChatQueue((current) => [failedItem, ...current]);
+        }
       }
     } finally {
       queueDrainInFlightRef.current = false;
@@ -1536,10 +1674,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (chatQueue.length === 0) return;
+    if (!chatQueue.some((item) => item.status === 'queued')) return;
     if (isChatBusy) return;
     void processNextQueuedMessage();
-  }, [chatQueue.length, isChatBusy]);
+  }, [chatQueue, isChatBusy]);
 
   useEffect(() => {
     if (activeBackgroundSessions.size === 0) return;
@@ -1605,9 +1743,17 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeBackgroundSessions, addSystemBubble, chatSending, gatewayActiveTurns]);
 
-  const sendChatMessage = async (payload: ChatSendPayload) => {
+  const sendChatMessage = async (
+    payload: ChatSendPayload,
+    options?: SendChatOptions,
+  ) => {
     const text = payload.text.trim();
     if (!text && payload.images.length === 0) return false;
+    const attemptedMessageSummary = summarizeAttemptedChatPayload(payload);
+    const isQueuedFirstAttempt = Boolean(
+      (options?.queueAttempt ?? 0) === 0 && options?.idempotencyKey,
+    );
+    let runtimeTruthApplied = false;
 
     const imageSummary =
       payload.images.length > 0
@@ -1632,6 +1778,7 @@ export default function App() {
     const priorMessages = useDashboardStore.getState().chatMessages;
 
     setChatSending(true);
+    setChatPendingBubbleVisible(true);
     setChatStreamingContent(null);
     setChatResponseToastMessage(null);
 
@@ -1648,7 +1795,11 @@ export default function App() {
         },
         {
           attachments,
+          idempotencyKey: options?.idempotencyKey,
           onStreamDelta: (content) => {
+            if (content.trim().length > 0) {
+              setChatPendingBubbleVisible(false);
+            }
             setChatStreamingContent(content);
           },
         },
@@ -1656,7 +1807,6 @@ export default function App() {
 
       setChatStreamingContent(null);
       setGatewayConnected(true);
-      blockedQueueMessageIdRef.current = null;
 
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {
@@ -1750,6 +1900,11 @@ export default function App() {
       if (!chatDrawerOpenRef.current && result.lastContent) {
         setChatResponseToastMessage(result.lastContent);
       }
+      if (result.runtimeModel || result.runtimeProvider) {
+        runtimeTruthApplied = true;
+        setActiveSessionModel(result.runtimeModel ?? null, result.runtimeProvider ?? null);
+      }
+      setChatPendingBubbleVisible(false);
       await loadProjects();
       void processNextQueuedMessage();
       return true;
@@ -1771,17 +1926,34 @@ export default function App() {
       }
       void refreshActiveSessionModel();
       addError({ type: 'gateway_down', message: messageText });
-      void addSystemBubble(
-        'failure',
-        isConnectionError ? 'Gateway error' : classifiedFailure.title,
-        { Error: messageText },
-        isConnectionError ? ['Check logs for details'] : [classifiedFailure.action],
-      );
+      if (!isQueuedFirstAttempt) {
+        void addSystemBubble(
+          'failure',
+          isConnectionError ? 'Gateway error' : classifiedFailure.title,
+          {
+            Message: attemptedMessageSummary,
+            Error: messageText,
+          },
+          isConnectionError ? ['Check logs for details'] : [classifiedFailure.action],
+        );
+        pushToast(
+          'error',
+          `Failed to send: "${attemptedMessageSummary}" (${classifiedFailure.title})`,
+        );
+      }
+      setChatPendingBubbleVisible(false);
       return false;
     } finally {
       setChatSending(false);
+      setChatPendingBubbleVisible(false);
       setChatStreamingContent(null);
-      void refreshActiveSessionModel();
+      if (runtimeTruthApplied) {
+        window.setTimeout(() => {
+          void refreshActiveSessionModel();
+        }, 10_000);
+      } else {
+        void refreshActiveSessionModel();
+      }
     }
   };
 
@@ -1927,8 +2099,8 @@ export default function App() {
           onOpenSync={() => setSyncDialogOpen(true)}
           syncStatus={dashboardSettings ? getSyncStatusForDisplay(
             dashboardSettings.openclawSyncMode,
-            null, // lastSyncedAt — populated from clawchestra-ready event
-            null, // lastSyncError
+            lastSyncedAt,
+            lastSyncError,
           ) : undefined}
         />
 
@@ -2098,6 +2270,7 @@ export default function App() {
           drawerOpen={chatDrawerOpen}
           responseToastMessage={chatResponseToastMessage}
           isAgentWorking={isChatBusy}
+          showPendingBubble={chatPendingBubbleVisible}
           queue={chatQueue}
           hasMoreMessages={chatHasMore}
           loadingMoreMessages={chatLoadingMore}
@@ -2106,6 +2279,7 @@ export default function App() {
           onSend={sendChatMessage}
           onQueueMessage={queueChatMessage}
           onRemoveFromQueue={removeFromChatQueue}
+          onRetryQueuedMessage={retryQueuedMessage}
           onLoadMore={loadMoreChatMessages}
           onRetryConnection={retryGatewayConnection}
         />

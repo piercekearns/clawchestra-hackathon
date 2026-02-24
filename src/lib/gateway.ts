@@ -41,6 +41,9 @@ export interface ChatMessage {
 export interface SendResult {
   messages: ChatMessage[];
   lastContent: string; // For backward compatibility / streaming display
+  runtimeModel?: string | null;
+  runtimeProvider?: string | null;
+  runtimeSource?: 'run' | 'session';
 }
 
 export interface GatewayImageAttachment {
@@ -60,6 +63,7 @@ interface GatewayOptions {
   transport?: GatewayTransport;
   onStreamDelta?: (content: string) => void;
   onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
+  idempotencyKey?: string;
 }
 
 interface ChatCompletionMessagePartText {
@@ -162,8 +166,35 @@ const OPENCLAW_SCOPES = [
   'chat.history',
 ];
 const TURN_TERMINAL_RETENTION_MS = 60_000;
+const LEGACY_TERMINAL_TURN_STATUSES = new Set([
+  'completed',
+  'failed',
+  'timed_out',
+  'timeout',
+  'aborted',
+  'cancelled',
+  'canceled',
+  'error',
+  'terminal',
+]);
+const LEGACY_ACTIVE_TURN_STATUS_MAP: Record<string, Extract<TurnStatus, 'queued' | 'running' | 'awaiting_output'>> = {
+  queued: 'queued',
+  queue: 'queued',
+  pending: 'queued',
+  sending: 'running',
+  sent: 'running',
+  running: 'running',
+  streaming: 'running',
+  working: 'running',
+  typing: 'running',
+  awaiting_output: 'awaiting_output',
+  awaiting_first_visible_output: 'awaiting_output',
+  awaiting_settle: 'awaiting_output',
+  settling: 'awaiting_output',
+};
 
 let cachedOpenClawTransportPromise: Promise<GatewayTransport | null> | null = null;
+let pendingTurnMigrationNotice: string | null = null;
 
 interface AnnounceMetadata {
   label?: string;
@@ -464,7 +495,7 @@ function mapSendAckError(error: unknown): Error {
 
   if (lower.includes('missing scope')) {
     return new Error(
-      'OpenClaw websocket operator scopes are insufficient (require operator.read/operator.write). Update gateway token/scopes and reconnect.',
+      'OpenClaw websocket scopes are insufficient (require operator.read/operator.write). Repair local device pairing or gateway auth scopes, then retry.',
     );
   }
 
@@ -696,6 +727,44 @@ function isPendingTurnExpiredForHydration(turn: {
   return now - turn.lastSignalAt > HYDRATION_STALE_MS;
 }
 
+function normalizeHydratedTurnStatus(
+  status: string,
+): {
+  normalizedStatus: TurnStatus | null;
+  migrated: boolean;
+  terminalized: boolean;
+} {
+  const normalized = status.trim().toLowerCase();
+  const mapped = LEGACY_ACTIVE_TURN_STATUS_MAP[normalized];
+  if (mapped) {
+    return {
+      normalizedStatus: mapped,
+      migrated: mapped !== normalized,
+      terminalized: false,
+    };
+  }
+
+  if (LEGACY_TERMINAL_TURN_STATUSES.has(normalized)) {
+    return {
+      normalizedStatus: null,
+      migrated: false,
+      terminalized: true,
+    };
+  }
+
+  return {
+    normalizedStatus: null,
+    migrated: false,
+    terminalized: true,
+  };
+}
+
+export function consumePendingTurnMigrationNotice(): string | null {
+  const notice = pendingTurnMigrationNotice;
+  pendingTurnMigrationNotice = null;
+  return notice;
+}
+
 export function getActiveTurnCount(): number {
   let count = 0;
   for (const turn of turnRegistry.values()) {
@@ -739,32 +808,61 @@ export async function hydratePendingTurns(sessionKey?: string): Promise<PendingT
     turnRegistry.clear();
     turnLastPersistAt.clear();
     const now = Date.now();
+    let migratedCount = 0;
+    let terminalizedCount = 0;
+    let expiredCount = 0;
+
     for (const turn of persisted) {
-      if (!isTurnActive(turn.status as TurnStatus)) continue;
+      const statusMapping = normalizeHydratedTurnStatus(turn.status);
+      if (!statusMapping.normalizedStatus) {
+        terminalizedCount += 1;
+        removePersistedPendingTurn(turn.turnToken);
+        continue;
+      }
+
+      if (statusMapping.migrated) {
+        migratedCount += 1;
+      }
+
       if (
         isPendingTurnExpiredForHydration(
           {
-            status: turn.status as TurnStatus,
+            status: statusMapping.normalizedStatus,
             lastSignalAt: turn.lastSignalAt,
           },
           now,
         )
       ) {
+        expiredCount += 1;
         removePersistedPendingTurn(turn.turnToken);
         continue;
       }
+
       turnRegistry.set(turn.turnToken, {
         turnToken: turn.turnToken,
         sessionKey: turn.sessionKey,
         runId: turn.runId,
-        status: turn.status as TurnStatus,
+        status: statusMapping.normalizedStatus,
         submittedAt: turn.submittedAt,
         lastSignalAt: turn.lastSignalAt,
         completedAt: turn.completedAt,
         hasAssistantOutput: turn.hasAssistantOutput,
-        completionReason: turn.completionReason,
+        completionReason:
+          turn.completionReason ??
+          (statusMapping.migrated ? `migrated_${turn.status.toLowerCase()}` : undefined),
       });
     }
+
+    if (terminalizedCount > 0) {
+      const noteParts: string[] = [];
+      if (terminalizedCount > 0) noteParts.push(`terminalized ${terminalizedCount} incompatible turn(s)`);
+      if (migratedCount > 0) noteParts.push(`migrated ${migratedCount} legacy turn(s)`);
+      if (expiredCount > 0) noteParts.push(`cleared ${expiredCount} stale turn(s)`);
+      pendingTurnMigrationNotice = `Recovered pending chat state: ${noteParts.join(', ')}.`;
+    } else {
+      pendingTurnMigrationNotice = null;
+    }
+
     emitTurnRegistry();
   } catch (error) {
     console.warn('[Gateway] Failed to hydrate pending turns:', error);
@@ -773,7 +871,8 @@ export async function hydratePendingTurns(sessionKey?: string): Promise<PendingT
   return snapshotTurnRegistry();
 }
 
-function extractText(content: unknown): string {
+function extractText(content: unknown, depth: number = 0): string {
+  if (depth > 8) return '';
   if (typeof content === 'string') return content;
 
   if (Array.isArray(content)) {
@@ -783,7 +882,12 @@ function extractText(content: unknown): string {
         if (typeof part !== 'object' || part === null) return '';
         const record = part as Record<string, unknown>;
         if (typeof record.text === 'string') return record.text;
+        if (typeof record.delta === 'string') return record.delta;
+        if (typeof record.message === 'string') return record.message;
         if (record.type === 'text' && typeof record.content === 'string') return record.content;
+        if (record.content !== undefined) return extractText(record.content, depth + 1);
+        if (record.delta !== undefined) return extractText(record.delta, depth + 1);
+        if (record.message !== undefined) return extractText(record.message, depth + 1);
         return '';
       })
       .filter(Boolean)
@@ -793,7 +897,46 @@ function extractText(content: unknown): string {
   if (typeof content === 'object' && content !== null) {
     const record = content as Record<string, unknown>;
     if (typeof record.text === 'string') return record.text;
-    if (record.content !== undefined) return extractText(record.content);
+    if (typeof record.delta === 'string') return record.delta;
+    if (typeof record.message === 'string') return record.message;
+    if (record.content !== undefined) return extractText(record.content, depth + 1);
+    if (record.delta !== undefined) return extractText(record.delta, depth + 1);
+    if (record.message !== undefined) return extractText(record.message, depth + 1);
+    if (record.output !== undefined) return extractText(record.output, depth + 1);
+    if (record.data !== undefined) return extractText(record.data, depth + 1);
+  }
+
+  return '';
+}
+
+function extractChatEventMessageText(chat: Record<string, unknown>): string {
+  const directCandidates: unknown[] = [
+    chat.message,
+    chat.delta,
+    chat.content,
+    chat.text,
+    chat.output,
+    chat.final,
+  ];
+  for (const candidate of directCandidates) {
+    const text = extractText(candidate).trim();
+    if (text.length > 0) return text;
+  }
+
+  const payloadRecord = extractOptionalRecord(chat.payload);
+  if (payloadRecord) {
+    const payloadCandidates: unknown[] = [
+      payloadRecord.message,
+      payloadRecord.delta,
+      payloadRecord.content,
+      payloadRecord.text,
+      payloadRecord.output,
+      payloadRecord.final,
+    ];
+    for (const candidate of payloadCandidates) {
+      const text = extractText(candidate).trim();
+      if (text.length > 0) return text;
+    }
   }
 
   return '';
@@ -1410,6 +1553,39 @@ function extractOptionalRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function extractRuntimeModelProvider(
+  payload: unknown,
+): { model: string | null; provider: string | null } {
+  const record = extractOptionalRecord(payload);
+  if (!record) {
+    return { model: null, provider: null };
+  }
+
+  const model =
+    extractOptionalString(record.model) ??
+    extractOptionalString(record.modelId) ??
+    extractOptionalString(record.modelName) ??
+    extractOptionalString(record.resolvedModel);
+  const provider =
+    extractOptionalString(record.provider) ??
+    extractOptionalString(record.modelProvider) ??
+    extractOptionalString(record.resolvedProvider);
+
+  if (model || provider) {
+    return { model: model ?? null, provider: provider ?? null };
+  }
+
+  const nestedCandidates = [record.payload, record.meta, record.data, record.output];
+  for (const candidate of nestedCandidates) {
+    const nested = extractRuntimeModelProvider(candidate);
+    if (nested.model || nested.provider) {
+      return nested;
+    }
+  }
+
+  return { model: null, provider: null };
+}
+
 export interface SessionModelSnapshot {
   sessionKey: string;
   model: string | null;
@@ -1518,7 +1694,7 @@ export async function fetchSessionModel(options?: {
       return toSessionModelSnapshot(payload, sessionKey, allowDefaultsFallback);
     } catch (error) {
       console.warn('[Gateway] Failed to fetch session model:', error);
-      return fetchSessionModelViaTauriCli(sessionKey, allowDefaultsFallback);
+      return null;
     }
   }
 
@@ -1631,15 +1807,15 @@ async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
     cachedOpenClawTransportPromise = (async () => {
       try {
         const config = await getOpenClawGatewayConfig();
-
-        // Use Tauri WebSocket for streaming support
-        console.log('[Gateway] Using tauri-ws transport');
-        return {
+        const wsTransport: GatewayTransport = {
           mode: 'tauri-ws',
           wsUrl: config.wsUrl,
           token: config.token,
           sessionKey: config.sessionKey,
-        } as GatewayTransport;
+        };
+
+        console.log('[Gateway] Using tauri-ws transport');
+        return wsTransport;
       } catch {
         return null;
       }
@@ -1719,10 +1895,7 @@ export async function wireSystemEventBus(): Promise<void> {
       // causing the activity indicator to stay on permanently.
       if (!announce) return;
 
-      const messageText =
-        typeof eventRecord.message === 'string'
-          ? eventRecord.message
-          : extractText(eventRecord.message);
+      const messageText = extractChatEventMessageText(eventRecord);
 
       if (shouldSuppressForActiveSend(runId)) {
         return;
@@ -1784,7 +1957,7 @@ export async function wireSystemEventBus(): Promise<void> {
     }
 
     if (state === 'error' || state === 'error-stop') {
-      const fallbackMessage = extractText(eventRecord.message).trim();
+      const fallbackMessage = extractChatEventMessageText(eventRecord);
       emit({
         kind: 'error',
         sessionKey,
@@ -1798,10 +1971,7 @@ export async function wireSystemEventBus(): Promise<void> {
     }
 
     if (announce) {
-      const messageText =
-        typeof eventRecord.message === 'string'
-          ? eventRecord.message
-          : extractText(eventRecord.message);
+      const messageText = extractChatEventMessageText(eventRecord);
       emit({
         kind: 'announce',
         sessionKey: announce.sessionKey ?? sessionKey,
@@ -2035,7 +2205,7 @@ async function waitForOpenClawRun(
       const state = typeof chat.state === 'string' ? chat.state : '';
 
       if (state === 'delta') {
-        const deltaText = stripAssistantControlDirectives(extractText(chat.message));
+        const deltaText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
         if (deltaText && deltaText.length >= streamedText.length) {
           streamedText = deltaText;
           // Call the streaming callback if provided
@@ -2062,7 +2232,7 @@ async function waitForOpenClawRun(
 
       if (state === 'final') {
         // Extract final content if present - the final event may contain the complete message
-        const finalText = stripAssistantControlDirectives(extractText(chat.message));
+        const finalText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
         if (finalText && finalText.length >= streamedText.length) {
           streamedText = finalText;
           if (onStreamDelta) {
@@ -2159,6 +2329,7 @@ async function sendViaTauriWs(
   messageText: string,
   attachments: GatewayImageAttachment[],
   transport: GatewayTransport,
+  idempotencyKey?: string,
   onStreamDelta?: (content: string) => void,
   onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void,
 ): Promise<SendResult> {
@@ -2174,12 +2345,15 @@ async function sendViaTauriWs(
   );
 
   const sessionKey = transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
-  const turnToken = getRequestId();
+  const turnToken = idempotencyKey?.trim() || getRequestId();
   const sendId = turnToken;
   const sendTag = `[Gateway][send:${sendId}]`;
   const logSend = (...args: unknown[]) => console.log(sendTag, ...args);
   const warnSend = (...args: unknown[]) => console.warn(sendTag, ...args);
   let runId = turnToken;
+  let runtimeModel: string | null = null;
+  let runtimeProvider: string | null = null;
+  let runtimeSource: 'run' | 'session' | null = null;
   const sendRequestedAt = Date.now();
   const lifecycle = new TurnLifecycleEngine('queued', sendRequestedAt);
   const transitionLifecycle = (
@@ -2219,6 +2393,14 @@ async function sendViaTauriWs(
     hasAssistantOutput: false,
     completionReason: 'queued',
   });
+
+  const captureRuntimeTruth = (payload: unknown, source: 'run' | 'session') => {
+    const truth = extractRuntimeModelProvider(payload);
+    if (!truth.model && !truth.provider) return;
+    runtimeModel = truth.model;
+    runtimeProvider = truth.provider;
+    runtimeSource = source;
+  };
 
   try {
     const historyBefore = (await connection.request('chat.history', {
@@ -2260,7 +2442,7 @@ async function sendViaTauriWs(
         sessionKey,
         message: messageText,
         deliver: false,
-        idempotencyKey: runId,
+        idempotencyKey: turnToken,
         attachments: attachments.length > 0 ? toOpenClawAttachments(attachments) : undefined,
       };
       const estimatedFrameBytes = estimateChatSendFrameBytes(sendParams);
@@ -2280,6 +2462,7 @@ async function sendViaTauriWs(
         | Record<string, unknown>
         | undefined;
       sendAcked = true;
+      captureRuntimeTruth(sendResponse, 'run');
       const ackRunId = typeof sendResponse?.runId === 'string' ? sendResponse.runId : undefined;
       if (ackRunId && ackRunId !== runId) {
         runId = ackRunId;
@@ -2295,7 +2478,6 @@ async function sendViaTauriWs(
       logSend('chat.send acknowledged');
     } catch (sendErr) {
       if (isFatalSendAckError(sendErr)) {
-        warnSend('[reason=fatal_send_ack] chat.send failed with fatal auth/scope error:', sendErr);
         throw mapSendAckError(sendErr);
       }
       warnSend('[reason=failed_unacked_send] chat.send failed — will poll for response:', sendErr);
@@ -2404,6 +2586,8 @@ async function sendViaTauriWs(
       let processPollCapability: ProcessPollCapability = 'unknown';
       let processPollFailCount = 0;
       const PROCESS_POLL_MAX_FAILURES = 3;
+      let lastDeltaTime = 0; // Timestamp of most recent delta/state content event
+      let lastContentSignalAt = 0; // Most recent timestamp where we extracted visible content
 
       // Aggressive poll fallback — events may not be delivered reliably
       // (WS drops, event subscription issues), so poll frequently.
@@ -2413,13 +2597,15 @@ async function sendViaTauriWs(
       const pollInterval = setInterval(async () => {
         if (completed) return;
 
-        // If events are actively arriving (content deltas OR agent tool-use
-        // events), let them drive — only poll as backup. The streamedText check
-        // was previously required, but agent events during pure tool work (no
-        // content yet) are equally valid indicators of an active send.
+        // If we recently extracted actual content from delta/final events, let
+        // event-streaming drive updates and keep polling as backup only.
+        // Do NOT gate on generic agent chatter, or polling can starve while
+        // content remains invisible in the drawer.
         if (sendAcked && !sawFinal) {
-          const timeSinceLastEvent = Date.now() - lastEventTime;
-          if (timeSinceLastEvent < 5000) {
+          const timeSinceContentSignal = Date.now() - lastContentSignalAt;
+          const hasRecentContentSignal =
+            lastContentSignalAt > 0 && timeSinceContentSignal < 5000;
+          if (hasRecentContentSignal) {
             return;
           }
         }
@@ -2471,7 +2657,20 @@ async function sendViaTauriWs(
               .join('|');
 
             if (combined.length > 0 && combined.length >= streamedText.length) {
+              const grew = combined.length > streamedText.length;
               streamedText = combined;
+              lastContentSignalAt = Date.now();
+              sawRunOwnedContent = true;
+              upsertTurn(turnToken, {
+                sessionKey,
+                runId,
+                status: 'running',
+                hasAssistantOutput: true,
+                completionReason: 'history_poll_content',
+              });
+              if (grew) {
+                transitionLifecycle('stream_delta');
+              }
               if (onStreamDelta) onStreamDelta(streamedText);
             }
 
@@ -2672,8 +2871,6 @@ async function sendViaTauriWs(
       let sawToolSinceLastContent = false;
       let contentBlockOffset = 0; // Byte offset where the current content block starts within streamedText
 
-      let lastDeltaTime = 0; // Timestamp of most recent content delta
-
       const eventHandler = (eventName: string, payload: unknown) => {
         if (completed) return;
 
@@ -2779,6 +2976,19 @@ async function sendViaTauriWs(
           return;
         }
         if (
+          eventRunId === runId ||
+          (
+            !eventRunId &&
+            typeof chat.sessionKey === 'string' &&
+            chat.sessionKey === sessionKey
+          )
+        ) {
+          captureRuntimeTruth(chat, 'run');
+          if (chat.payload !== undefined) {
+            captureRuntimeTruth(chat.payload, 'run');
+          }
+        }
+        if (
           state &&
           state !== 'final' &&
           (
@@ -2816,8 +3026,7 @@ async function sendViaTauriWs(
 
         const announce = parseAnnounceMetadata(chat, true);
         if (announce) {
-          const messageText =
-            typeof chat.message === 'string' ? chat.message : extractText(chat.message);
+          const messageText = extractChatEventMessageText(chat);
           emit({
             kind: 'announce',
             sessionKey: announce.sessionKey ?? sessionKey,
@@ -2833,10 +3042,11 @@ async function sendViaTauriWs(
 
         if (state === 'delta' || state === 'content' || state === 'streaming') {
           lastDeltaTime = Date.now();
-          const deltaText = stripAssistantControlDirectives(extractText(chat.message));
+          const deltaText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
           if (deltaText) {
             transitionLifecycle('stream_delta');
             sawRunOwnedContent = true;
+            lastContentSignalAt = Date.now();
             upsertTurn(turnToken, {
               sessionKey,
               runId,
@@ -2909,7 +3119,7 @@ async function sendViaTauriWs(
             console.log('[Gateway] Ignoring unscoped final event during active send');
             return;
           }
-          const finalText = stripAssistantControlDirectives(extractText(chat.message));
+          const finalText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
           const timeSinceSend = Date.now() - sendRequestedAt;
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, eventRunId=${eventRunId ?? 'none'}, timeSinceSend=${timeSinceSend}ms`);
 
@@ -2928,6 +3138,7 @@ async function sendViaTauriWs(
 
           if (finalText && finalText.length >= streamedText.length) {
             streamedText = finalText;
+            lastContentSignalAt = Date.now();
             if (onStreamDelta) {
               onStreamDelta(streamedText);
             }
@@ -3177,11 +3388,31 @@ async function sendViaTauriWs(
     setAgentActivity('idle', onActivityChange);
     clearActiveSendRun(runId);
 
+    if (!runtimeModel && !runtimeProvider) {
+      try {
+        const snapshot = await fetchSessionModel({
+          transport,
+          sessionKey,
+          allowDefaultsFallback: false,
+        });
+        if (snapshot && (snapshot.model || snapshot.provider)) {
+          runtimeModel = snapshot.model;
+          runtimeProvider = snapshot.provider;
+          runtimeSource = 'session';
+        }
+      } catch {
+        // Keep runtime truth unknown when snapshot probe fails.
+      }
+    }
+
     return {
       messages: assistantMessages,
       lastContent: assistantMessages.length > 0
         ? assistantMessages[assistantMessages.length - 1].content
         : finalStreamedText,
+      runtimeModel,
+      runtimeProvider,
+      ...(runtimeSource ? { runtimeSource } : {}),
     };
   } catch (error) {
     const existingTurn = turnRegistry.get(turnToken);
@@ -3219,10 +3450,18 @@ export async function sendMessage(messages: ChatMessage[], options?: GatewayOpti
   const messageText = latestUserContent(messages);
   const onStreamDelta = options?.onStreamDelta;
   const onActivityChange = options?.onActivityChange;
+  const idempotencyKey = options?.idempotencyKey;
 
   if (transport.mode === 'tauri-ws') {
     if (!messageText) throw new Error('No message content to send');
-    return sendViaTauriWs(messageText, attachments, transport, onStreamDelta, onActivityChange);
+    return sendViaTauriWs(
+      messageText,
+      attachments,
+      transport,
+      idempotencyKey,
+      onStreamDelta,
+      onActivityChange,
+    );
   }
 
   if (transport.mode === 'tauri-openclaw') {
@@ -3265,6 +3504,7 @@ export async function sendMessageWithContext(
   const attachments = options?.attachments ?? [];
   const onStreamDelta = options?.onStreamDelta;
   const onActivityChange = options?.onActivityChange;
+  const idempotencyKey = options?.idempotencyKey;
   const policy = context.openclawContextPolicy ?? 'selected-project-first';
   const workspacePath = context.openclawWorkspacePath?.trim();
   const contextMessage =
@@ -3285,7 +3525,14 @@ export async function sendMessageWithContext(
     if (!userText) throw new Error('No message content to send');
 
     const composed = composeContextWrappedUserMessage(contextMessage, userText);
-    return sendViaTauriWs(composed, attachments, transport, onStreamDelta, onActivityChange);
+    return sendViaTauriWs(
+      composed,
+      attachments,
+      transport,
+      idempotencyKey,
+      onStreamDelta,
+      onActivityChange,
+    );
   }
 
   if (transport.mode === 'tauri-openclaw') {
@@ -3405,9 +3652,12 @@ export function subscribeConnectionState(
 
 export const __gatewayTestUtils = {
   extractAssistantMessagesForTurn,
+  extractChatEventMessageText,
+  extractRuntimeModelProvider,
   likelyNeedsFinalSettlePass,
   parseProcessPollSnapshot,
   classifyProcessPollCapability,
+  normalizeHydratedTurnStatus,
   applyRecoveryCursorFilter,
   collectInternalNoReplyRunIds,
   shouldSuppressNoReplyRunAssistantMessage,

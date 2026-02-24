@@ -163,10 +163,7 @@ export interface ProjectViewModel extends BoardItem {
   dirPath: string;
   frontmatter: ProjectFrontmatter;
   content: string;
-  roadmapFilePath?: string;
   hasRoadmap: boolean;
-  changelogFilePath?: string;
-  hasChangelog: boolean;
   hasGit: boolean;
   gitStatus?: GitStatus;
   children: ProjectViewModel[];
@@ -174,7 +171,7 @@ export interface ProjectViewModel extends BoardItem {
   needsReview: boolean;
   /** True if frontmatter.repo is set (GitHub-linked) */
   hasRepo: boolean;
-  /** True after ROADMAP.md→state.json migration completes (Phase 5). Gates new vs legacy data path. */
+  /** True after ROADMAP.md→state.json migration completes (Phase 5). */
   stateJsonMigrated: boolean;
 }
 

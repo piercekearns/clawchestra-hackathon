@@ -352,41 +352,31 @@ pub(crate) fn chat_pending_turns_load(
     let conn = guard.as_ref().ok_or("Database not initialized")?;
     let mut turns: Vec<PendingTurn> = Vec::new();
 
-    let active_statuses = ["queued", "running", "awaiting_output"];
-
     if let Some(session) = session_key {
         let mut stmt = conn
             .prepare(
                 "SELECT turn_token, session_key, run_id, status, submitted_at, last_signal_at,
                         completed_at, has_assistant_output, completion_reason
                  FROM pending_turns
-                 WHERE session_key = ?1 AND status IN (?2, ?3, ?4)
+                 WHERE session_key = ?1
                  ORDER BY submitted_at ASC",
             )
             .map_err(|e| e.to_string())?;
 
         let rows = stmt
-            .query_map(
-                params![
-                    session,
-                    active_statuses[0],
-                    active_statuses[1],
-                    active_statuses[2]
-                ],
-                |row| {
-                    Ok(PendingTurn {
-                        turn_token: row.get(0)?,
-                        session_key: row.get(1)?,
-                        run_id: row.get(2)?,
-                        status: row.get(3)?,
-                        submitted_at: row.get(4)?,
-                        last_signal_at: row.get(5)?,
-                        completed_at: row.get(6)?,
-                        has_assistant_output: row.get::<_, i64>(7)? != 0,
-                        completion_reason: row.get(8)?,
-                    })
-                },
-            )
+            .query_map(params![session], |row| {
+                Ok(PendingTurn {
+                    turn_token: row.get(0)?,
+                    session_key: row.get(1)?,
+                    run_id: row.get(2)?,
+                    status: row.get(3)?,
+                    submitted_at: row.get(4)?,
+                    last_signal_at: row.get(5)?,
+                    completed_at: row.get(6)?,
+                    has_assistant_output: row.get::<_, i64>(7)? != 0,
+                    completion_reason: row.get(8)?,
+                })
+            })
             .map_err(|e| e.to_string())?;
 
         for row in rows {
@@ -398,28 +388,24 @@ pub(crate) fn chat_pending_turns_load(
                 "SELECT turn_token, session_key, run_id, status, submitted_at, last_signal_at,
                         completed_at, has_assistant_output, completion_reason
                  FROM pending_turns
-                 WHERE status IN (?1, ?2, ?3)
                  ORDER BY submitted_at ASC",
             )
             .map_err(|e| e.to_string())?;
 
         let rows = stmt
-            .query_map(
-                params![active_statuses[0], active_statuses[1], active_statuses[2]],
-                |row| {
-                    Ok(PendingTurn {
-                        turn_token: row.get(0)?,
-                        session_key: row.get(1)?,
-                        run_id: row.get(2)?,
-                        status: row.get(3)?,
-                        submitted_at: row.get(4)?,
-                        last_signal_at: row.get(5)?,
-                        completed_at: row.get(6)?,
-                        has_assistant_output: row.get::<_, i64>(7)? != 0,
-                        completion_reason: row.get(8)?,
-                    })
-                },
-            )
+            .query_map([], |row| {
+                Ok(PendingTurn {
+                    turn_token: row.get(0)?,
+                    session_key: row.get(1)?,
+                    run_id: row.get(2)?,
+                    status: row.get(3)?,
+                    submitted_at: row.get(4)?,
+                    last_signal_at: row.get(5)?,
+                    completed_at: row.get(6)?,
+                    has_assistant_output: row.get::<_, i64>(7)? != 0,
+                    completion_reason: row.get(8)?,
+                })
+            })
             .map_err(|e| e.to_string())?;
 
         for row in rows {

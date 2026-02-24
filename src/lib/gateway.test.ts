@@ -154,6 +154,88 @@ describe('gateway client', () => {
     });
   });
 
+  it('extracts chat event text from delta-shaped payloads', () => {
+    const text = __gatewayTestUtils.extractChatEventMessageText({
+      state: 'delta',
+      payload: {
+        delta: {
+          text: 'stream chunk',
+        },
+      },
+    });
+
+    expect(text).toBe('stream chunk');
+  });
+
+  it('extracts chat event text from direct delta/message fields', () => {
+    expect(
+      __gatewayTestUtils.extractChatEventMessageText({
+        state: 'delta',
+        delta: 'first chunk',
+      }),
+    ).toBe('first chunk');
+
+    expect(
+      __gatewayTestUtils.extractChatEventMessageText({
+        state: 'final',
+        message: {
+          content: 'final content',
+        },
+      }),
+    ).toBe('final content');
+  });
+
+  it('extracts runtime model/provider truth from nested payloads', () => {
+    expect(
+      __gatewayTestUtils.extractRuntimeModelProvider({
+        payload: {
+          model: 'claude-sonnet-4.6',
+          modelProvider: 'github-copilot',
+        },
+      }),
+    ).toEqual({
+      model: 'claude-sonnet-4.6',
+      provider: 'github-copilot',
+    });
+
+    expect(
+      __gatewayTestUtils.extractRuntimeModelProvider({
+        data: {
+          modelId: 'gpt-5.2-codex',
+          provider: 'openai',
+        },
+      }),
+    ).toEqual({
+      model: 'gpt-5.2-codex',
+      provider: 'openai',
+    });
+  });
+
+  it('maps legacy hydrated statuses and terminalizes unknown statuses', () => {
+    expect(__gatewayTestUtils.normalizeHydratedTurnStatus('streaming')).toEqual({
+      normalizedStatus: 'running',
+      migrated: true,
+      terminalized: false,
+    });
+    expect(__gatewayTestUtils.normalizeHydratedTurnStatus('awaiting_first_visible_output')).toEqual({
+      normalizedStatus: 'awaiting_output',
+      migrated: true,
+      terminalized: false,
+    });
+
+    expect(__gatewayTestUtils.normalizeHydratedTurnStatus('completed')).toEqual({
+      normalizedStatus: null,
+      migrated: false,
+      terminalized: true,
+    });
+
+    expect(__gatewayTestUtils.normalizeHydratedTurnStatus('mystery_state')).toEqual({
+      normalizedStatus: null,
+      migrated: false,
+      terminalized: true,
+    });
+  });
+
   it('returns false when gateway is unreachable', async () => {
     globalThis.fetch = mock(
       () => Promise.reject(new Error('offline')),
