@@ -157,7 +157,7 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack, elevat
           className={`group absolute top-0 h-full w-[6px] cursor-col-resize ${isRight ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`}
         >
           <div
-            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-revival-accent-500 dark:bg-revival-accent-300' : 'bg-revival-accent-600 dark:bg-revival-accent-400'}`}
+            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-[#DFFF00]' : 'bg-[#c8e600]'}`}
           />
         </div>
       )}
