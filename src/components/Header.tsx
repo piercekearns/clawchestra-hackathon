@@ -39,7 +39,7 @@ export function Header({
             className="pr-14"
           />
           <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 select-none rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-neutral-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-            ⌘ + K
+            {'⌘\u00A0\u00A0K'}
           </kbd>
         </div>
 
