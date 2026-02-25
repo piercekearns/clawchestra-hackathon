@@ -1990,12 +1990,14 @@ function toSessionUsageSnapshot(payload: unknown, sessionKey: string): UsageSnap
   };
 }
 
+type OpenClawRequestFn = (method: string, params: Record<string, unknown>) => Promise<unknown>;
+
 async function fetchSessionUsageFromSessionsList(
-  connection: OpenClawConnection,
+  request: OpenClawRequestFn,
   sessionKey: string,
 ): Promise<UsageSnapshot | null> {
   try {
-    const payload = await connection.request('sessions.list', {
+    const payload = await request('sessions.list', {
       search: sessionKey,
       limit: 8,
       includeGlobal: true,
@@ -3617,7 +3619,10 @@ async function sendViaTauriWs(
     }
 
     if (!runtimeUsage) {
-      runtimeUsage = await fetchSessionUsageFromSessionsList(connection, sessionKey);
+      runtimeUsage = await fetchSessionUsageFromSessionsList(
+        (method, params) => connection.request(method, params),
+        sessionKey,
+      );
     }
 
     let assistantMessages = extractAssistantMessagesForTurn(allMessages, {
