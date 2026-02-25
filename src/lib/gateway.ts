@@ -164,10 +164,8 @@ const BACKFILL_POLL_MAX_MS = 15000;
 const BACKFILL_JITTER_RATIO = 0.2;
 const TURN_PERSIST_THROTTLE_MS = 1500;
 const GATEWAY_DEBUG_STORAGE_KEY = 'clawchestra.gateway.debug';
-const GATEWAY_DEBUG_LOG =
-  import.meta.env.DEV ||
-  import.meta.env.VITE_GATEWAY_DEBUG === '1' ||
-  readGatewayDebugStorageFlag();
+const GATEWAY_DEBUG_AUTO_STORAGE_KEY = 'clawchestra.gateway.debug.auto';
+let gatewayDebugAutoRemaining = readGatewayDebugAutoFlag() ? 2 : 0;
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
 
 function readGatewayDebugStorageFlag(): boolean {
@@ -178,6 +176,50 @@ function readGatewayDebugStorageFlag(): boolean {
     return false;
   }
 }
+
+function readGatewayDebugAutoFlag(): boolean {
+  try {
+    if (typeof sessionStorage === 'undefined') return false;
+    const existing = sessionStorage.getItem(GATEWAY_DEBUG_AUTO_STORAGE_KEY);
+    if (existing === null) {
+      sessionStorage.setItem(GATEWAY_DEBUG_AUTO_STORAGE_KEY, '1');
+      return true;
+    }
+    return existing === '1';
+  } catch {
+    return false;
+  }
+}
+
+function disableGatewayDebugAuto(): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(GATEWAY_DEBUG_AUTO_STORAGE_KEY, '0');
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function isGatewayVerboseDebugEnabled(): boolean {
+  return (
+    import.meta.env.DEV ||
+    import.meta.env.VITE_GATEWAY_DEBUG === '1' ||
+    readGatewayDebugStorageFlag()
+  );
+}
+
+function isGatewayDebugLogEnabled(): boolean {
+  return isGatewayVerboseDebugEnabled() || gatewayDebugAutoRemaining > 0;
+}
+
+function consumeGatewayDebugAuto(): void {
+  if (gatewayDebugAutoRemaining <= 0) return;
+  gatewayDebugAutoRemaining -= 1;
+  if (gatewayDebugAutoRemaining <= 0) {
+    disableGatewayDebugAuto();
+  }
+}
+
 const OPENCLAW_SCOPES = [
   'operator.read',
   'operator.write',
@@ -3407,7 +3449,7 @@ async function sendViaTauriWs(
           const finalText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
           const timeSinceSend = Date.now() - sendRequestedAt;
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, eventRunId=${eventRunId ?? 'none'}, timeSinceSend=${timeSinceSend}ms`);
-          if (GATEWAY_DEBUG_LOG) {
+          if (isGatewayDebugLogEnabled()) {
             const usageSnapshot =
               extractUsageSnapshot(chat) ??
               (chat.payload !== undefined ? extractUsageSnapshot(chat.payload) : null);
@@ -3416,6 +3458,7 @@ async function sendViaTauriWs(
               usageSnapshot,
               summary,
             });
+            consumeGatewayDebugAuto();
           }
 
           // Guard against suspiciously early empty finals. The gateway may
@@ -3471,7 +3514,7 @@ async function sendViaTauriWs(
 
     if (!runtimeUsage) {
       runtimeUsage = extractUsageFromHistory(allMessages, runId);
-      if (GATEWAY_DEBUG_LOG) {
+      if (isGatewayDebugLogEnabled()) {
         const lastAssistant = [...allMessages]
           .reverse()
           .find((message) => message.role === 'assistant');
@@ -3482,6 +3525,7 @@ async function sendViaTauriWs(
             extractOptionalRecord(lastAssistant)?.payload,
           ),
         });
+        consumeGatewayDebugAuto();
       }
     }
 
@@ -3500,7 +3544,7 @@ async function sendViaTauriWs(
     console.log(
       `[Gateway] Post-send: history found ${assistantMessages.length} messages (${historyTotalLength} chars), streamed ${streamedText.trim().length} chars`,
     );
-    if (GATEWAY_DEBUG_LOG && assistantMessages.length > 0) {
+    if (isGatewayVerboseDebugEnabled() && assistantMessages.length > 0) {
       for (let i = 0; i < assistantMessages.length; i += 1) {
         console.log(`[Gateway][debug] History msg[${i}] len=${assistantMessages[i].content.length}`);
       }
