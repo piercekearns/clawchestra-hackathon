@@ -83,6 +83,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
 ) {
   const [composerHeight, setComposerHeight] = useState(MIN_INPUT_HEIGHT);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const prevInputRef = useRef(input);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const showDropdown = shouldShowCommandDropdown(input) && !dropdownDismissed;
@@ -290,11 +291,11 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
 
       <div className="min-h-0">
         <div
-          className={`relative mx-2 my-2 rounded-lg border bg-neutral-0/80 dark:bg-neutral-950/70 focus-within:ring-1 focus-within:ring-revival-accent-400/40 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
+          className={`relative mx-2 my-2 rounded-lg border bg-neutral-0/80 dark:bg-neutral-950/70 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
             sending
               ? 'border-revival-accent/50'
               : 'border-neutral-300/70 dark:border-neutral-600'
-          }`}
+          } ${composerFocused ? 'ring-1 ring-revival-accent-400/40' : ''}`}
         >
           {/* Slash command dropdown */}
           {showDropdown && (
@@ -317,6 +318,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             }}
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
+            onFocus={() => setComposerFocused(true)}
+            onBlur={() => setComposerFocused(false)}
             onPaste={async (event) => {
               const files = Array.from(event.clipboardData.files ?? []);
               if (files.length === 0) return;
