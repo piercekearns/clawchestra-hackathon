@@ -163,8 +163,21 @@ const BACKFILL_POLL_SLOW_MS = 5000;
 const BACKFILL_POLL_MAX_MS = 15000;
 const BACKFILL_JITTER_RATIO = 0.2;
 const TURN_PERSIST_THROTTLE_MS = 1500;
-const GATEWAY_DEBUG_LOG = import.meta.env.DEV || import.meta.env.VITE_GATEWAY_DEBUG === '1';
+const GATEWAY_DEBUG_STORAGE_KEY = 'clawchestra.gateway.debug';
+const GATEWAY_DEBUG_LOG =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_GATEWAY_DEBUG === '1' ||
+  readGatewayDebugStorageFlag();
 const OPENCLAW_CLIENT_ID = 'openclaw-control-ui';
+
+function readGatewayDebugStorageFlag(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' &&
+      localStorage.getItem(GATEWAY_DEBUG_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 const OPENCLAW_SCOPES = [
   'operator.read',
   'operator.write',
@@ -1654,6 +1667,28 @@ function extractOptionalRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') return null;
   if (Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+function extractRecordKeys(value: unknown): string[] {
+  const record = extractOptionalRecord(value);
+  return record ? Object.keys(record) : [];
+}
+
+function summarizeUsagePayload(value: unknown): Record<string, unknown> | null {
+  const record = extractOptionalRecord(value);
+  if (!record) return null;
+  const summary: Record<string, unknown> = {
+    keys: Object.keys(record),
+  };
+  const payloadRecord = extractOptionalRecord(record.payload);
+  if (payloadRecord) {
+    summary.payloadKeys = Object.keys(payloadRecord);
+  }
+  const usageRecord = extractOptionalRecord(record.usage ?? record.contextUsage ?? record.stats);
+  if (usageRecord) {
+    summary.usageKeys = Object.keys(usageRecord);
+  }
+  return summary;
 }
 
 function extractOptionalNumber(value: unknown): number | null {
@@ -3372,6 +3407,16 @@ async function sendViaTauriWs(
           const finalText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
           const timeSinceSend = Date.now() - sendRequestedAt;
           console.log(`[Gateway] Final event: finalLen=${finalText?.length ?? 0}, streamedLen=${streamedText.length}, eventRunId=${eventRunId ?? 'none'}, timeSinceSend=${timeSinceSend}ms`);
+          if (GATEWAY_DEBUG_LOG) {
+            const usageSnapshot =
+              extractUsageSnapshot(chat) ??
+              (chat.payload !== undefined ? extractUsageSnapshot(chat.payload) : null);
+            const summary = summarizeUsagePayload(chat);
+            console.log('[Gateway][debug] Final event usage snapshot:', {
+              usageSnapshot,
+              summary,
+            });
+          }
 
           // Guard against suspiciously early empty finals. The gateway may
           // emit these when the session is already busy with another agent
@@ -3426,6 +3471,18 @@ async function sendViaTauriWs(
 
     if (!runtimeUsage) {
       runtimeUsage = extractUsageFromHistory(allMessages, runId);
+      if (GATEWAY_DEBUG_LOG) {
+        const lastAssistant = [...allMessages]
+          .reverse()
+          .find((message) => message.role === 'assistant');
+        console.log('[Gateway][debug] Usage from history:', {
+          runtimeUsage,
+          lastAssistantKeys: extractRecordKeys(lastAssistant),
+          lastAssistantPayloadKeys: extractRecordKeys(
+            extractOptionalRecord(lastAssistant)?.payload,
+          ),
+        });
+      }
     }
 
     let assistantMessages = extractAssistantMessagesForTurn(allMessages, {
