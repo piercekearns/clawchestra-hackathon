@@ -20,7 +20,8 @@ When the user highlights text anywhere in the app, show a small tooltip near the
   - Quote icon
   - “Ask OpenClaw” label
 - **Click action:** Clicking the tooltip inserts the selected text into the chat composer as a **reference snippet**.
-- **Reference clarity:** The composer should visually distinguish referenced text (e.g. quoted block, chip, or “Referenced text” pill) so it’s obvious the message relates to that selection.
+- **Reference clarity (user):** The composer should visually distinguish referenced text (e.g. quoted block, chip, or “Referenced text” pill) so it’s obvious the message relates to that selection.
+- **Reference clarity (OpenClaw):** The referenced text **must be included in the actual prompt payload** sent to OpenClaw, so the model sees the highlighted context (not just the user’s reply).
 - **Chat focus:** Optionally open the drawer and focus the input after insertion.
 - **Dismissal:** Tooltip hides when selection clears or on click.
 
