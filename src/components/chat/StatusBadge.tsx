@@ -49,7 +49,7 @@ export function StatusBadge({
   const circumference = 2 * Math.PI * radius;
   const dash = (clampedUsage / 100) * circumference;
 
-  const ring = (
+  const ringSlot = (
     <span className="relative flex h-2.5 w-2.5 flex-none items-center justify-center text-revival-accent-400">
       <svg className="absolute inset-0" viewBox="0 0 10 10" aria-hidden>
         <circle
@@ -90,12 +90,14 @@ export function StatusBadge({
       {showUsage ? (
         usageTooltip ? (
           <Tooltip text={usageTooltip} className="inline-flex items-center self-center text-current">
-            {ring}
+            {ringSlot}
           </Tooltip>
         ) : (
-          ring
+          ringSlot
         )
-      ) : null}
+      ) : (
+        <span className="inline-flex h-2.5 w-2.5 flex-none opacity-0" aria-hidden />
+      )}
     </span>
   );
 }
