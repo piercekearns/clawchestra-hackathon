@@ -37,7 +37,7 @@ export function ThinSidebar({
       style={{ width: THIN_SIDEBAR_WIDTH }}
       aria-label="Thin sidebar"
     >
-      <div className="mt-1 flex flex-col items-center gap-2">
+      <div className="mt-1 flex flex-col items-center gap-1">
         <ThinSidebarButton
           icon={Search}
           label={
