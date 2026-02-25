@@ -601,16 +601,24 @@ export default function App() {
     const watchPath = activeRoadmapProject.stateJsonMigrated
       ? `${activeRoadmapProject.dirPath}/.clawchestra/state.json`
       : `${activeRoadmapProject.dirPath}/ROADMAP.md`;
-    let unwatch: (() => void) | null = null;
+    const roadmapDir = `${activeRoadmapProject.dirPath}/roadmap`;
+    let unwatchRoadmap: (() => void) | null = null;
+    let unwatchDetails: (() => void) | null = null;
     (async () => {
       try {
-        unwatch = await watch(watchPath, () => scheduleRoadmapRefresh('visible'), { delayMs: 200 });
+        unwatchRoadmap = await watch(watchPath, () => scheduleRoadmapRefresh('visible'), { delayMs: 200 });
       } catch (error) {
         console.warn('[Roadmap] Failed to watch roadmap file:', error);
       }
+      try {
+        unwatchDetails = await watch(roadmapDir, () => scheduleRoadmapRefresh('all'), { delayMs: 200 });
+      } catch (error) {
+        console.warn('[Roadmap] Failed to watch roadmap detail files:', error);
+      }
     })();
     return () => {
-      if (unwatch) unwatch();
+      if (unwatchRoadmap) unwatchRoadmap();
+      if (unwatchDetails) unwatchDetails();
     };
   }, [activeRoadmapProject?.id, activeRoadmapProject?.stateJsonMigrated, isRoadmapView, scheduleRoadmapRefresh]);
 
