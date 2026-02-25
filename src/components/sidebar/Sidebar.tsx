@@ -91,7 +91,7 @@ export function Sidebar({
       className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : sidebarOpen ? 'border-neutral-200 dark:border-neutral-700' : 'border-transparent'} ${isResizing ? '' : 'transition-[width,border-color] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
-      <div className={`flex h-full w-full flex-col overflow-hidden transition-opacity duration-150 ${sidebarOpen ? 'opacity-100 delay-75' : 'pointer-events-none opacity-0 delay-0'}`}>
+      <div className="flex h-full flex-col overflow-hidden" style={{ width: sidebarWidth }}>
         {/* Settings back button */}
         {sidebarOpen && isSettingsMode && onBack && (
           <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
@@ -150,11 +150,11 @@ export function Sidebar({
         {/* Main content area — empty for Phase 1 */}
         <div className="flex-1" />
 
-        {/* Theme toggle + Settings pinned to bottom */}
+        {/* Theme toggle — own section above settings */}
         {sidebarOpen && !isSettingsMode && (
           <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
             <div
-              className={`pointer-events-auto mb-2 flex ${isRight ? 'justify-end' : 'justify-start'}`}
+              className={`pointer-events-auto flex ${isRight ? 'justify-end' : 'justify-start'} ${isRight ? 'mr-1' : 'ml-1'}`}
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600">
@@ -181,6 +181,12 @@ export function Sidebar({
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Settings button — own section */}
+        {sidebarOpen && !isSettingsMode && (
+          <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
             <button
               type="button"
               onClick={onOpenSettings}
