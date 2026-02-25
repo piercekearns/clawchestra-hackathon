@@ -4,7 +4,7 @@ id: ui-tweaks
 status: in-progress
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Remaining: item 17 title bar error details modal, item 18 chat bar height shell removal, item 22 search row container removal. Model selector (20) deferred."
+nextAction: "Remaining: item 17 title bar error details modal, item 18 chat bar height shell removal. Model selector (20) deferred."
 lastActivity: "2026-02-25"
 ---
 
@@ -327,7 +327,7 @@ Replace the paper‑plane send icon with an **up arrow**, slightly reduce the ro
 
 Remove the container around the “Search by title, id tag, next action…” row (search input + Refresh + Add Project buttons). The row should remain, but without its surrounding container, and a thin divider line should sit underneath to separate it from the Kanban board.
 
-**Status:** ⏳ Pending (added 2026‑02‑25)
+**Status:** ✅ Fixed (2026‑02‑25)
 
 **Notes:**
 - Expand the row width so the search field aligns to the **outer edge of the Kanban board** (match the current container’s left/right edges).
@@ -359,4 +359,4 @@ Remove the container around the “Search by title, id tag, next action…” ro
 19. Chat send button: up arrow + bottom-right anchor — ✅ done (2026‑02‑24)
 20. Model selector (if/when) — higher risk, depends on item 6
 21. Context window usage — ✅ done (2026‑02‑25)
-22. Search row container removal — ⏳ pending
+22. Search row container removal — ✅ done (2026‑02‑25)
