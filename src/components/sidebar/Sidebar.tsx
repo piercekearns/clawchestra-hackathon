@@ -108,7 +108,7 @@ export function Sidebar({
         )}
 
         {sidebarOpen && !isSettingsMode && actions.length > 0 && (
-          <div className={`flex flex-col gap-1 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
+          <div className={`flex flex-col gap-0.5 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
             {actions.map((action) => {
               const Icon = action.icon;
               const iconEl = (
