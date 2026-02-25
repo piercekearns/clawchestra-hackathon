@@ -107,42 +107,8 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Theme toggle pinned to top */}
-        {sidebarOpen && !isSettingsMode && (
-          <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
-            <div
-              className={`pointer-events-auto flex ${isRight ? 'justify-end' : 'justify-start'}`}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600">
-                <ThemeButton
-                  pref="light"
-                  current={themePreference}
-                  onClick={setThemePreference}
-                  icon={Sun}
-                  label="Light theme"
-                />
-                <ThemeButton
-                  pref="dark"
-                  current={themePreference}
-                  onClick={setThemePreference}
-                  icon={Moon}
-                  label="Dark theme"
-                />
-                <ThemeButton
-                  pref="system"
-                  current={themePreference}
-                  onClick={setThemePreference}
-                  icon={Monitor}
-                  label="System theme"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
         {sidebarOpen && !isSettingsMode && actions.length > 0 && (
-          <div className={`flex flex-col gap-1 p-2 ${isRight ? 'items-end' : 'items-start'}`}>
+          <div className={`flex flex-col gap-2 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
             {actions.map((action) => {
               const Icon = action.icon;
               const iconEl = (
@@ -184,16 +150,45 @@ export function Sidebar({
         {/* Main content area — empty for Phase 1 */}
         <div className="flex-1" />
 
-        {/* Settings button pinned to bottom — only rendered when open to keep out of tab order */}
+        {/* Theme toggle + Settings pinned to bottom */}
         {sidebarOpen && !isSettingsMode && (
           <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
+            <div
+              className={`pointer-events-auto mb-2 flex ${isRight ? 'justify-end' : 'justify-start'}`}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600">
+                <ThemeButton
+                  pref="light"
+                  current={themePreference}
+                  onClick={setThemePreference}
+                  icon={Sun}
+                  label="Light theme"
+                />
+                <ThemeButton
+                  pref="dark"
+                  current={themePreference}
+                  onClick={setThemePreference}
+                  icon={Moon}
+                  label="Dark theme"
+                />
+                <ThemeButton
+                  pref="system"
+                  current={themePreference}
+                  onClick={setThemePreference}
+                  icon={Monitor}
+                  label="System theme"
+                />
+              </div>
+            </div>
             <button
               type="button"
               onClick={onOpenSettings}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
+              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${isRight ? 'justify-end' : 'justify-start'}`}
             >
-              <Settings className="h-4 w-4" />
+              {!isRight && <Settings className="h-4 w-4" />}
               Settings
+              {isRight && <Settings className="h-4 w-4" />}
             </button>
           </div>
         )}
