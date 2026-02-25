@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
-import { ChevronDown, ChevronUp, ChevronsRightLeft, Grip } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsRightLeft, GripVertical } from 'lucide-react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { Card } from './Card';
 
@@ -155,7 +155,7 @@ export function Column<T extends BoardItem>({
                     <ChevronsRightLeft className="h-3.5 w-3.5" />
                   </button>
                   <span className="shrink-0 rounded p-0.5 text-neutral-400 dark:text-neutral-500">
-                    <Grip className="h-3.5 w-3.5" />
+                    <GripVertical className="h-3.5 w-3.5" />
                   </span>
                 </div>
               </>
