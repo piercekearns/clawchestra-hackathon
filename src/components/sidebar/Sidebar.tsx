@@ -87,7 +87,7 @@ export function Sidebar({
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
+      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${sidebarOpen ? (isRight ? 'border-l' : 'border-r') : ''} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : 'border-neutral-200 dark:border-neutral-700'} ${isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className="flex h-full w-full flex-col overflow-hidden">
