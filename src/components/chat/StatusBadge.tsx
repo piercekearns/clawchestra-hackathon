@@ -77,8 +77,12 @@ export function StatusBadge({
     </span>
   );
 
+  const badgePaddingClass = showUsage ? 'pr-5' : 'pr-2';
+
   return (
-    <span className="inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300 overflow-hidden">
+    <span
+      className={`relative inline-flex flex-none items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300 ${badgePaddingClass}`}
+    >
       <span className="relative flex h-3 w-3 items-center justify-center">
         {config.animate ? (
           <Loader2 className={`h-2.5 w-2.5 animate-spin ${config.colorClass}`} />
@@ -86,18 +90,21 @@ export function StatusBadge({
           <Circle className={`h-2.5 w-2.5 ${config.colorClass}`} />
         )}
       </span>
-      <span className="leading-none">{label}</span>
+      <span>{label}</span>
       {showUsage ? (
         usageTooltip ? (
-          <Tooltip text={usageTooltip} className="inline-flex items-center self-center text-current">
+          <Tooltip
+            text={usageTooltip}
+            className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center"
+          >
             {ringSlot}
           </Tooltip>
         ) : (
-          ringSlot
+          <span className="absolute right-2 top-1/2 -translate-y-1/2">
+            {ringSlot}
+          </span>
         )
-      ) : (
-        <span className="inline-flex h-2.5 w-2.5 flex-none opacity-0" aria-hidden />
-      )}
+      ) : null}
     </span>
   );
 }
