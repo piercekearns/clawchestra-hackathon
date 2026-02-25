@@ -31,13 +31,13 @@ export function ThinSidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col items-center justify-between border-neutral-200 bg-neutral-0/95 py-3 dark:border-neutral-700 dark:bg-neutral-950/90 ${
+      className={`flex shrink-0 flex-col items-center justify-between border-neutral-200 py-3 dark:border-neutral-700 ${
         isRight ? 'border-l' : 'border-r'
       }`}
       style={{ width: THIN_SIDEBAR_WIDTH }}
       aria-label="Thin sidebar"
     >
-      <div className="mt-1.5 flex flex-col items-center gap-2">
+      <div className="mt-1 flex flex-col items-center gap-2">
         <ThinSidebarButton
           icon={Search}
           label={
@@ -77,7 +77,7 @@ export function ThinSidebar({
         />
       </div>
 
-      <div className="mb-0.5 flex flex-col items-center gap-2">
+      <div className="mb-1 flex flex-col items-center gap-2">
         <ThinSidebarButton
           icon={Settings}
           label="Settings"

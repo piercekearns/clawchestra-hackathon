@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
-import { ArrowLeftRight, Check, Clock4, GitBranch, Github, Plus, RefreshCcw, Search } from 'lucide-react';
+import { Check, Clock4, GitBranch, Github, Plus, RefreshCcw, Search } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
@@ -1525,19 +1525,12 @@ export default function App() {
         onClick: handleOpenSync,
         badgeCount: syncBadgeCount > 0 ? syncBadgeCount : undefined,
       },
-      {
-        id: 'switch-side',
-        label: 'Switch panel side',
-        icon: ArrowLeftRight,
-        onClick: handleSwitchThinSidebarSide,
-      },
     ],
     [
       handleAddProjectOpen,
       handleOpenSync,
       handleRefreshProjects,
       handleSearchOpen,
-      handleSwitchThinSidebarSide,
       syncBadgeCount,
     ],
   );
