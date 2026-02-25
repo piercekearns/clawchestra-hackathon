@@ -89,7 +89,7 @@ export function Header({
           Add Project
         </Button>
       </div>
-      <div className="mt-3 h-px w-full bg-neutral-200/70 dark:bg-neutral-700/70" />
+      <div className="mt-4 h-px w-full bg-neutral-200/70 dark:bg-neutral-700/70" />
     </header>
   );
 }
