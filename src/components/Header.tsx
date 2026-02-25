@@ -29,7 +29,7 @@ export function Header({
   syncStatus,
 }: HeaderProps) {
   return (
-    <header className="mb-4 rounded-2xl border border-neutral-200 bg-neutral-0/95 p-4 backdrop-blur dark:border-neutral-700 dark:bg-neutral-950/95">
+    <header className="mb-4">
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Input
@@ -89,6 +89,7 @@ export function Header({
           Add Project
         </Button>
       </div>
+      <div className="mt-3 h-px w-full bg-neutral-200/70 dark:bg-neutral-700/70" />
     </header>
   );
 }

@@ -323,7 +323,7 @@ Replace the paper‑plane send icon with an **up arrow**, slightly reduce the ro
 
 ---
 
-## 20 — Search Row Container Removal
+## 22 — Search Row Container Removal
 
 Remove the container around the “Search by title, id tag, next action…” row (search input + Refresh + Add Project buttons). The row should remain, but without its surrounding container, and a thin divider line should sit underneath to separate it from the Kanban board.
 
