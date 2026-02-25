@@ -2366,7 +2366,8 @@ export default function App() {
         <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
         {settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
-            <div className="h-full min-h-0 overflow-y-auto">
+            <div className={`h-full min-h-0 overflow-y-auto ${sidebarSide === 'right' ? '[direction:rtl]' : ''}`}>
+              <div className={sidebarSide === 'right' ? '[direction:ltr]' : ''}>
               <SettingsPage
                 active={settingsPageOpen}
                 settings={dashboardSettings}
@@ -2385,6 +2386,7 @@ export default function App() {
                   }
                 }}
               />
+              </div>
             </div>
           </main>
         ) : (
