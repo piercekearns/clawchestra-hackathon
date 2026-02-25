@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ArrowDown, Loader2 } from 'lucide-react';
 import type { ChatMessage } from '../../lib/gateway';
 import { cn } from '../../lib/utils';
@@ -14,14 +14,10 @@ interface MessageListProps {
   onLoadMore?: () => void;
 }
 
-export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function MessageList({ 
-  messages, 
-  className, 
-  hasMore, 
-  loadingMore,
-  showReadingIndicator,
-  onLoadMore 
-}, ref) {
+const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function MessageList(
+  { messages, className, hasMore, loadingMore, showReadingIndicator, onLoadMore },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Expose the scroll container to parent via ref
@@ -230,3 +226,6 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
     </div>
   );
 });
+
+export const MessageList = memo(MessageListInner);
+MessageList.displayName = 'MessageList';
