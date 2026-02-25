@@ -38,12 +38,19 @@ export interface ChatMessage {
   systemMeta?: SystemBubbleMeta;
 }
 
+export interface UsageSnapshot {
+  used: number;
+  max: number;
+  percent: number;
+}
+
 export interface SendResult {
   messages: ChatMessage[];
   lastContent: string; // For backward compatibility / streaming display
   runtimeModel?: string | null;
   runtimeProvider?: string | null;
   runtimeSource?: 'run' | 'session';
+  usage?: UsageSnapshot | null;
 }
 
 export interface GatewayImageAttachment {
@@ -208,7 +215,7 @@ interface AnnounceMetadata {
   runId?: string;
 }
 
-export type SystemEventKind = 'compaction' | 'error' | 'announce';
+export type SystemEventKind = 'compaction' | 'error' | 'announce' | 'usage';
 
 export interface SystemEvent {
   kind: SystemEventKind;
@@ -220,6 +227,7 @@ export interface SystemEvent {
   status?: string;
   runtime?: string;
   tokens?: string;
+  usage?: UsageSnapshot;
   raw?: Record<string, unknown>;
 }
 
@@ -1150,6 +1158,24 @@ function toChronologicalHistory(
   return [...messages];
 }
 
+function extractUsageFromHistory(
+  messages: GatewayHistoryMessage[],
+  expectedRunId?: string,
+): UsageSnapshot | null {
+  const chronological = toChronologicalHistory(messages);
+  for (let index = chronological.length - 1; index >= 0; index -= 1) {
+    const message = chronological[index];
+    if (message.role !== 'assistant') continue;
+    const messageRunId = getHistoryMessageRunId(message);
+    if (expectedRunId && messageRunId && messageRunId !== expectedRunId) {
+      continue;
+    }
+    const usage = extractUsageSnapshot(message);
+    if (usage) return usage;
+  }
+  return null;
+}
+
 type CompactionState = 'compacting' | 'compacted' | 'compaction_complete';
 
 function resolveCompactionPresentation(
@@ -1630,6 +1656,102 @@ function extractOptionalRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function extractOptionalNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+function extractNumberFromRecord(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = extractOptionalNumber(record[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function clampUsagePercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
+
+function extractUsageFromRecord(record: Record<string, unknown>): UsageSnapshot | null {
+  const used = extractNumberFromRecord(record, [
+    'used',
+    'usedTokens',
+    'used_tokens',
+    'totalTokens',
+    'total_tokens',
+    'tokensUsed',
+    'tokenUsage',
+    'contextTokens',
+    'context_tokens',
+    'contextUsed',
+    'context_used_tokens',
+  ]);
+  const max = extractNumberFromRecord(record, [
+    'max',
+    'maxTokens',
+    'max_tokens',
+    'contextWindow',
+    'context_window',
+    'contextLength',
+    'context_length',
+    'contextLimit',
+    'context_limit',
+    'tokenLimit',
+    'limitTokens',
+  ]);
+  const percent = extractNumberFromRecord(record, [
+    'percent',
+    'usagePercent',
+    'contextPercent',
+    'context_percent',
+    'contextUsagePercent',
+    'context_usage_percent',
+  ]);
+
+  if (used === null || max === null || max <= 0) return null;
+
+  const resolvedPercent = clampUsagePercent(percent ?? (used / max) * 100);
+  return { used, max, percent: resolvedPercent };
+}
+
+function extractUsageSnapshot(payload: unknown): UsageSnapshot | null {
+  const record = extractOptionalRecord(payload);
+  if (!record) return null;
+
+  const direct = extractUsageFromRecord(record);
+  if (direct) return direct;
+
+  const nestedCandidates = [
+    record.usage,
+    record.contextUsage,
+    record.context_window,
+    record.contextWindow,
+    record.context,
+    record.stats,
+    record.meta,
+    record.data,
+    record.payload,
+    record.output,
+  ];
+
+  for (const candidate of nestedCandidates) {
+    const nestedRecord = extractOptionalRecord(candidate);
+    if (!nestedRecord) continue;
+    const nested = extractUsageFromRecord(nestedRecord);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
 function extractRuntimeModelProvider(
   payload: unknown,
 ): { model: string | null; provider: string | null } {
@@ -2066,6 +2188,21 @@ export async function wireSystemEventBus(): Promise<void> {
       });
     }
 
+    if (state === 'final') {
+      const usage =
+        extractUsageSnapshot(eventRecord) ??
+        (eventRecord.payload !== undefined ? extractUsageSnapshot(eventRecord.payload) : null);
+      if (usage) {
+        emit({
+          kind: 'usage',
+          sessionKey,
+          runId,
+          usage,
+          raw: eventRecord,
+        });
+      }
+    }
+
     if (announce) {
       const messageText = extractChatEventMessageText(eventRecord);
       emit({
@@ -2451,6 +2588,7 @@ async function sendViaTauriWs(
   let runtimeModel: string | null = null;
   let runtimeProvider: string | null = null;
   let runtimeSource: 'run' | 'session' | null = null;
+  let runtimeUsage: UsageSnapshot | null = null;
   const sendRequestedAt = Date.now();
   const lifecycle = new TurnLifecycleEngine('queued', sendRequestedAt);
   const transitionLifecycle = (
@@ -2499,6 +2637,12 @@ async function sendViaTauriWs(
     runtimeModel = truth.model;
     runtimeProvider = truth.provider;
     runtimeSource = source;
+  };
+
+  const captureRuntimeUsage = (payload: unknown) => {
+    const usage = extractUsageSnapshot(payload);
+    if (!usage) return;
+    runtimeUsage = usage;
   };
 
   try {
@@ -2562,6 +2706,7 @@ async function sendViaTauriWs(
         | undefined;
       sendAcked = true;
       captureRuntimeTruth(sendResponse, 'run');
+      captureRuntimeUsage(sendResponse);
       const ackRunId = typeof sendResponse?.runId === 'string' ? sendResponse.runId : undefined;
       if (ackRunId && ackRunId !== runId) {
         runId = ackRunId;
@@ -3083,8 +3228,10 @@ async function sendViaTauriWs(
           )
         ) {
           captureRuntimeTruth(chat, 'run');
+          captureRuntimeUsage(chat);
           if (chat.payload !== undefined) {
             captureRuntimeTruth(chat.payload, 'run');
+            captureRuntimeUsage(chat.payload);
           }
         }
         if (
@@ -3276,6 +3423,10 @@ async function sendViaTauriWs(
     const allMessages = Array.isArray(historyAfter.messages)
       ? historyAfter.messages.filter(isHistoryMessage)
       : [];
+
+    if (!runtimeUsage) {
+      runtimeUsage = extractUsageFromHistory(allMessages, runId);
+    }
 
     let assistantMessages = extractAssistantMessagesForTurn(allMessages, {
       baselineIds: baselineMessageIds,
@@ -3516,6 +3667,7 @@ async function sendViaTauriWs(
       runtimeModel,
       runtimeProvider,
       ...(runtimeSource ? { runtimeSource } : {}),
+      usage: runtimeUsage ?? null,
     };
   } catch (error) {
     if (!recoveryAttempted && shouldAutoRecoverFromSendError(error)) {

@@ -67,6 +67,32 @@ Use this section as the canonical marker for post-fix triage.
 
 When appending future bug updates, include: `Post-fix baseline: 2026-02-22` so we can quickly separate pre-existing context from new regressions.
 
+## Latest Fix Round Baseline (2026-02-24)
+
+Use this section as the canonical marker for post-upgrade triage.
+
+- **Baseline timestamp:** 2026-02-24 (local)
+- **Intent:** isolate behavior observed after OpenClaw upgrade + bridge hardening from all prior chat reliability rounds.
+- **Scope:** OpenClaw runtime upgraded to `2026.2.22-2` and Clawchestra chat bridge/store fixes applied in this round.
+
+### Fixed in code (pending verification)
+- **OPENCLAW-UPGRADE-001** — OpenClaw upgraded from `2026.2.17` to `2026.2.22-2`; LaunchAgent reinstalled to point at the new entrypoint path.
+- **OPENCLAW-SCOPE-001** — Tauri WS `connect` scopes now include `operator.read` (plus explicit read/write/chat scopes in shared gateway scope list) to restore `chat.history` / `sessions.list` access under newer OpenClaw scope enforcement.
+- **BUG-001/BUG-002 overlap** — recovery merge ordering hardened: recovered chat inserts are now sorted chronologically before duplicate collapse to reduce stale/old messages appearing as the latest visible turn.
+- **BUG-003/BUG-006 overlap** — streaming visibility hardened:
+  - chat event text extraction now supports additional delta/final payload shapes
+  - poll fallback is no longer suppressed by non-content agent chatter, so stream updates can still surface when events are noisy but content parsing is sparse
+- **MODEL-BADGE-ACCURACY-001** — active model badge now clears stale model/provider state when exact session model snapshot is unavailable (prevents stale labels after provider/model fallback changes).
+- **REPLY-DEDUP-001** — store-level content/time dedupe now only applies to id-less incoming messages; distinct id-bearing assistant replies are no longer dropped as duplicates.
+- **LEGACY-TURN-MIGRATION-001** — hydration now normalizes legacy pending-turn statuses, clears incompatible/stale records, and emits a startup recovery notice instead of leaving queue-blocking phantom-active state.
+- **QUEUE-RETRY-001** — queued sends now auto-retry once with the same idempotency key; retry-exhausted sends remain as failed queue rows for manual retry/removal and no longer disappear silently.
+- **MODEL-TRUTH-PIPELINE-002** — send pipeline now captures run-level model/provider truth from gateway payloads and defers snapshot reconciliation, reducing stale badge truth during fallback/provider shifts.
+
+### Pending verification focus
+- First-open recovery path after restart/update (BUG-001/BUG-002 symptoms)
+- Long-running turns with tool chatter and sparse delta payloads (BUG-003/BUG-006 symptoms)
+- Model/provider badge behavior across provider fallback transitions
+
 ---
 
 ## Bug Log

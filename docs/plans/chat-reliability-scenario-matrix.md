@@ -8,10 +8,10 @@ This matrix defines repeatable scenarios for validating chat reliability behavio
 
 ---
 
-**Roadmap Item:** `chat-integration-reliability`
+**Roadmap Item:** `chat-infrastructure`
 **Status:** Ready
 **Created:** 2026-02-19
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-24
 
 ---
 
@@ -93,6 +93,48 @@ Expected:
 2. If acceptance cannot be proven within bounded window, explicit failure bubble appears.
 3. No silent pending state.
 
+### Scenario 6: Queued send auto-retry
+
+Goal: validate one-shot queue retry semantics and deterministic failure surfacing.
+
+Steps:
+1. Queue at least one message while an active run is in progress.
+2. Induce transient dispatch failure on first queued attempt.
+3. Observe retry behavior and final queue state.
+
+Expected:
+1. First queued failure triggers exactly one automatic retry.
+2. Retry uses the same idempotency key as the first attempt.
+3. If retry fails, user gets explicit failure notification and queue unblocks.
+
+### Scenario 7: Legacy pending-turn hydration migration
+
+Goal: ensure startup hydration cannot leave phantom-active blockers.
+
+Steps:
+1. Seed pending turn records with legacy/unknown statuses.
+2. Launch app and allow hydration path to run.
+3. Observe active turn count and queue behavior.
+
+Expected:
+1. Deterministic legacy status mapping to active states when valid.
+2. Incompatible records terminalized and removed from active blockers.
+3. App reports concise recovery notice and remains send-capable.
+
+### Scenario 8: Runtime model/provider truth
+
+Goal: validate badge truth under fallback and missing run metadata.
+
+Steps:
+1. Run a turn where provider/model fallback occurs.
+2. Run a turn where runtime model metadata is sparse/missing.
+3. Observe badge updates during and after send.
+
+Expected:
+1. Run-level truth is reflected when available.
+2. Snapshot fallback updates truth when exact session data is available.
+3. If neither is available, badge does not show stale configured model.
+
 ## Required Log Artifacts
 
 Capture at minimum:
@@ -101,6 +143,7 @@ Capture at minimum:
 3. `sessionKey`
 4. terminal reason code
 5. `process.poll` capability reason transitions (if encountered)
+6. runtime model/provider source (`run` or `session`, when available)
 
 ## Pass/Fail Gates
 
@@ -109,6 +152,9 @@ Capture at minimum:
 3. 0 duplicate assistant bubbles from stream/recovery overlap.
 4. Activity clears within <= 10 seconds after verified terminal completion with no active sessions.
 5. FIFO queue ordering preserved in queued-message tests.
+6. 0 queue stalls after retry-exhausted queued sends.
+7. 0 startup phantom-active blockers from legacy pending turns.
+8. 0 stale-config model badges shown as active truth in fallback tests.
 
 ## Notes for Regression Tracking
 
@@ -129,4 +175,16 @@ Automated gates executed on 2026-02-19:
 2. `bun test src/lib/gateway.test.ts src/lib/chat-turn-engine.test.ts src/lib/chat-message-identity.test.ts src/lib/chat-normalization.test.ts` — pass (46 tests)
 3. `pnpm -s build` — pass
 
-Manual scenario validation for Scenarios 1-5 remains a runtime verification step in Clawchestra + OpenClaw dashboard.
+Manual scenario validation for Scenarios 1-8 remains a runtime verification step in Clawchestra + OpenClaw dashboard.
+
+## Validation Run (Cycle 3)
+
+Automated gates executed on 2026-02-24:
+
+1. `bun test src/lib/gateway.test.ts src/lib/store.test.ts src/App.test.tsx` — pass
+2. `bun test` — pass
+3. `npx tsc --noEmit` — pass
+4. `pnpm build` — pass
+5. `cargo check` (from `src-tauri/`) — pass
+
+Manual scenario validation for Scenarios 1-8 remains required.

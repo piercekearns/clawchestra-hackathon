@@ -664,11 +664,11 @@ export default function App() {
     return `${activeSessionProvider} · ${model}`;
   }, [activeSessionModel, activeSessionProvider]);
 
-  const activeModelUsage = null as {
+  const [activeModelUsage, setActiveModelUsage] = useState<{
     used: number;
     max: number;
     percent: number;
-  } | null;
+  } | null>(null);
 
   const pushToast = useCallback((kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
@@ -1013,6 +1013,17 @@ export default function App() {
         return;
       }
 
+      if (event.kind === 'usage') {
+        const currentSessionKey = getResolvedDefaultSessionKey();
+        if (event.sessionKey && event.sessionKey !== currentSessionKey) {
+          return;
+        }
+        if (event.usage) {
+          setActiveModelUsage(event.usage);
+        }
+        return;
+      }
+
       if (event.kind === 'error') {
         const detailsMessage = event.message ?? 'Unknown error';
         const classified = classifyUpstreamFailure(detailsMessage);
@@ -1115,7 +1126,7 @@ export default function App() {
       unsubscribeConnectionState();
       teardownSystemEventBus();
     };
-  }, [addSystemBubble, registerBackgroundSession]);
+  }, [addSystemBubble, registerBackgroundSession, setActiveModelUsage]);
 
   // System bubbles for connection state transitions
   useEffect(() => {
@@ -2045,6 +2056,9 @@ export default function App() {
       if (result.runtimeModel || result.runtimeProvider) {
         runtimeTruthApplied = true;
         setActiveSessionModel(result.runtimeModel ?? null, result.runtimeProvider ?? null);
+      }
+      if (result.usage !== undefined) {
+        setActiveModelUsage(result.usage);
       }
       setChatPendingBubbleVisible(false);
       await loadProjects();
