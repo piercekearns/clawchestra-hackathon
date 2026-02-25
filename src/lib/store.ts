@@ -34,7 +34,7 @@ import {
   unwrapUserContentForDisplay,
 } from './chat-message-identity';
 
-export const SIDEBAR_MIN_WIDTH = 200;
+export const SIDEBAR_MIN_WIDTH = 220;
 export const SIDEBAR_MAX_WIDTH = 480;
 export const SIDEBAR_DEFAULT_WIDTH = 280;
 

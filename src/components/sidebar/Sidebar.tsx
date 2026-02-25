@@ -146,10 +146,10 @@ export function Sidebar({
             {actions.map((action) => {
               const Icon = action.icon;
               const iconEl = (
-                <span className="relative inline-flex shrink-0">
+                <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
                   <Icon className={action.iconClassName ?? 'h-4 w-4'} />
                   {action.badgeCount && action.badgeCount > 0 ? (
-                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#DFFF00] px-1 text-[10px] font-semibold text-neutral-900">
+                    <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#DFFF00] px-0.5 text-[9px] font-semibold text-neutral-900">
                       {action.badgeCount}
                     </span>
                   ) : null}
@@ -166,13 +166,13 @@ export function Sidebar({
                 >
                   {isRight ? (
                     <>
-                      <span className="text-right">{action.label}</span>
+                      <span className="min-w-0 truncate text-right">{action.label}</span>
                       {iconEl}
                     </>
                   ) : (
                     <>
                       {iconEl}
-                      <span>{action.label}</span>
+                      <span className="min-w-0 truncate">{action.label}</span>
                     </>
                   )}
                 </button>
