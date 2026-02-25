@@ -12,6 +12,15 @@ import type {
 import type { DashboardSettings } from './settings';
 import type { ProjectSummary, ProjectWithContent } from './state-json';
 
+export interface AuthProfileCooldown {
+  profileId: string;
+  provider: string;
+  errorCount: number;
+  cooldownUntil: number | null;
+  lastFailureAt: number | null;
+  failureCounts: Record<string, number>;
+}
+
 export type SyncResult = {
   success: boolean;
   message: string;
@@ -275,6 +284,8 @@ type TauriCommands = {
   get_openclaw_bearer_token: { args: Record<string, never>; return: string };
   set_openclaw_bearer_token: { args: { token: string }; return: void };
   clear_openclaw_bearer_token: { args: Record<string, never>; return: void };
+  get_openclaw_auth_cooldowns: { args: Record<string, never>; return: AuthProfileCooldown[] };
+  reset_openclaw_auth_cooldown: { args: { profileId: string }; return: void };
   // Phase 2/5 data commands
   get_all_projects: { args: Record<string, never>; return: ProjectSummary[] };
   get_project: { args: { projectId: string }; return: ProjectWithContent };
@@ -418,6 +429,14 @@ export async function getOpenClawSessionsList(args?: {
   includeUnknown?: boolean;
 }): Promise<unknown> {
   return typedInvoke('openclaw_sessions_list', args ?? {});
+}
+
+export async function getOpenclawAuthCooldowns(): Promise<AuthProfileCooldown[]> {
+  return typedInvoke('get_openclaw_auth_cooldowns');
+}
+
+export async function resetOpenclawAuthCooldown(profileId: string): Promise<void> {
+  return typedInvoke('reset_openclaw_auth_cooldown', { profileId });
 }
 
 export async function readFile(path: string): Promise<string> {

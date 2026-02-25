@@ -1238,6 +1238,108 @@ fn clear_openclaw_bearer_token() -> Result<(), String> {
     }
 }
 
+// ── Auth-profile cooldown commands ──────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuthProfileCooldown {
+    profile_id: String,
+    provider: String,
+    error_count: u64,
+    cooldown_until: Option<u64>,
+    last_failure_at: Option<u64>,
+    failure_counts: HashMap<String, u64>,
+}
+
+fn auth_profiles_path() -> Result<PathBuf, String> {
+    let home = env::var("HOME").map_err(|e| e.to_string())?;
+    Ok(Path::new(&home)
+        .join(".openclaw")
+        .join("agents")
+        .join("main")
+        .join("agent")
+        .join("auth-profiles.json"))
+}
+
+#[tauri::command]
+fn get_openclaw_auth_cooldowns() -> Result<Vec<AuthProfileCooldown>, String> {
+    let path = auth_profiles_path()?;
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("Cannot read auth-profiles.json: {e}"))?;
+    let json: Value =
+        serde_json::from_str(&raw).map_err(|e| format!("Invalid auth-profiles.json: {e}"))?;
+
+    let profiles = json
+        .get("profiles")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let usage_stats = json
+        .get("usageStats")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut results = Vec::new();
+    for (profile_id, stats) in &usage_stats {
+        let provider = profiles
+            .get(profile_id)
+            .and_then(|p| p.get("provider"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let failure_counts: HashMap<String, u64> = stats
+            .get("failureCounts")
+            .and_then(|v| v.as_object())
+            .map(|obj| {
+                obj.iter()
+                    .filter_map(|(k, v)| v.as_u64().map(|n| (k.clone(), n)))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        results.push(AuthProfileCooldown {
+            profile_id: profile_id.clone(),
+            provider,
+            error_count: stats.get("errorCount").and_then(|v| v.as_u64()).unwrap_or(0),
+            cooldown_until: stats.get("cooldownUntil").and_then(|v| v.as_u64()),
+            last_failure_at: stats.get("lastFailureAt").and_then(|v| v.as_u64()),
+            failure_counts,
+        });
+    }
+    Ok(results)
+}
+
+#[tauri::command]
+fn reset_openclaw_auth_cooldown(profile_id: String) -> Result<(), String> {
+    let path = auth_profiles_path()?;
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("Cannot read auth-profiles.json: {e}"))?;
+    let mut json: Value =
+        serde_json::from_str(&raw).map_err(|e| format!("Invalid auth-profiles.json: {e}"))?;
+
+    let usage_stats = json
+        .get_mut("usageStats")
+        .and_then(|v| v.as_object_mut())
+        .ok_or_else(|| "No usageStats in auth-profiles.json".to_string())?;
+
+    if let Some(stats) = usage_stats.get_mut(&profile_id) {
+        if let Some(obj) = stats.as_object_mut() {
+            obj.insert("errorCount".to_string(), json!(0));
+            obj.remove("cooldownUntil");
+            obj.insert("failureCounts".to_string(), json!({}));
+        }
+    } else {
+        return Err(format!("Profile not found: {profile_id}"));
+    }
+
+    let serialized = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("Failed to serialize: {e}"))?;
+    fs::write(&path, serialized).map_err(|e| format!("Failed to write auth-profiles.json: {e}"))?;
+    Ok(())
+}
+
 fn extension_for_mime(mime_type: &str) -> &'static str {
     match mime_type {
         "image/jpeg" => "jpg",
@@ -3994,6 +4096,8 @@ pub fn run() {
             get_openclaw_bearer_token,
             set_openclaw_bearer_token,
             clear_openclaw_bearer_token,
+            get_openclaw_auth_cooldowns,
+            reset_openclaw_auth_cooldown,
             // Phase 7 logging & debug commands
             export_debug_info,
             get_validation_history,

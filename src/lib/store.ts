@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ChatConnectionState } from '../components/chat/types';
 import type { DashboardError } from './errors';
-import type { ChatMessage, SystemBubbleKind, SystemBubbleMeta } from './gateway';
+import type { ChatMessage, SystemBubbleAction, SystemBubbleKind, SystemBubbleMeta } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
 import type { StateJsonMergedPayload, ClawchestraReadyPayload, RoadmapItemState } from './state-json';
 import { createProject, getProjects, removeProject, updateProject, type ProjectUpdate } from './projects';
@@ -87,7 +87,7 @@ interface DashboardState {
     kind: SystemBubbleKind,
     title: string,
     details?: Record<string, string>,
-    actions?: string[],
+    actions?: SystemBubbleAction[],
     runId?: string,
     content?: string,
     loading?: boolean,

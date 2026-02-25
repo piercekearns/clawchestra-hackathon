@@ -12,10 +12,11 @@ interface MessageListProps {
   loadingMore?: boolean;
   showReadingIndicator?: boolean;
   onLoadMore?: () => void;
+  onSystemBubbleAction?: (actionId: string, payload?: Record<string, unknown>) => void;
 }
 
 const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function MessageList(
-  { messages, className, hasMore, loadingMore, showReadingIndicator, onLoadMore },
+  { messages, className, hasMore, loadingMore, showReadingIndicator, onLoadMore, onSystemBubbleAction },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -177,6 +178,7 @@ const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function M
               meta={message.systemMeta}
               content={message.content}
               timestamp={message.timestamp}
+              onAction={onSystemBubbleAction}
             />
           );
         }

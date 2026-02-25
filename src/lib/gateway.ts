@@ -21,11 +21,15 @@ import { TurnLifecycleEngine } from './chat-turn-engine';
 
 export type SystemBubbleKind = 'completion' | 'failure' | 'compaction' | 'decision' | 'info';
 
+export type SystemBubbleAction =
+  | string
+  | { label: string; actionId: string; payload?: Record<string, unknown> };
+
 export interface SystemBubbleMeta {
   kind: SystemBubbleKind;
   title: string;
   details?: Record<string, string>;
-  actions?: string[];
+  actions?: SystemBubbleAction[];
   runId?: string;
   loading?: boolean;
 }

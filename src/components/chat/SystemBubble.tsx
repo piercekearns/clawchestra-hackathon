@@ -1,5 +1,5 @@
 import { CheckCircle2, HelpCircle, Info, Layers, Loader2, XCircle } from 'lucide-react';
-import type { SystemBubbleKind, SystemBubbleMeta } from '../../lib/gateway';
+import type { SystemBubbleAction, SystemBubbleKind, SystemBubbleMeta } from '../../lib/gateway';
 import { cn } from '../../lib/utils';
 
 const ICONS: Record<SystemBubbleKind, typeof CheckCircle2> = {
@@ -30,9 +30,10 @@ interface SystemBubbleProps {
   meta: SystemBubbleMeta;
   content: string;
   timestamp?: number;
+  onAction?: (actionId: string, payload?: Record<string, unknown>) => void;
 }
 
-export function SystemBubble({ meta, content, timestamp }: SystemBubbleProps) {
+export function SystemBubble({ meta, content, timestamp, onAction }: SystemBubbleProps) {
   const Icon = ICONS[meta.kind];
   const iconColor = COLORS[meta.kind];
   const borderColor = BORDER_COLORS[meta.kind];
@@ -75,11 +76,30 @@ export function SystemBubble({ meta, content, timestamp }: SystemBubbleProps) {
 
         {meta.actions && meta.actions.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-2 pl-6">
-            {meta.actions.map((action) => (
-              <span key={action} className="text-[11px] text-neutral-400 dark:text-neutral-500">
-                {action}
-              </span>
-            ))}
+            {meta.actions.map((action, i) => {
+              if (typeof action === 'string') {
+                return (
+                  <span key={action} className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                    {action}
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={action.actionId}
+                  type="button"
+                  onClick={() => onAction?.(action.actionId, action.payload)}
+                  className={cn(
+                    'text-[11px] font-medium px-2 py-0.5 rounded',
+                    'bg-red-500/10 text-red-600 dark:text-red-400',
+                    'hover:bg-red-500/20 transition-colors',
+                    'cursor-pointer',
+                  )}
+                >
+                  {action.label}
+                </button>
+              );
+            })}
           </div>
         )}
 

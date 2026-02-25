@@ -48,6 +48,7 @@ import {
   teardownSystemEventBus,
   type ChatMessage,
   type GatewayImageAttachment,
+  type SystemBubbleAction,
   wireSystemEventBus,
 } from './lib/gateway';
 import { commitPlanningDocs, fetchAllRepos, pushRepo } from './lib/git';
@@ -75,6 +76,7 @@ import {
   getValidationHistory,
   isTauriRuntime,
   markRejectionResolved,
+  resetOpenclawAuthCooldown,
   updateDashboardSettings,
   type ValidationRejection,
 } from './lib/tauri';
@@ -87,6 +89,7 @@ import { CHAT_RELIABILITY_FLAGS } from './lib/chat-reliability-flags';
 import {
   buildFailureBubbleDedupeKey,
   classifyUpstreamFailure,
+  fetchRateLimitCooldownInfo,
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
@@ -1010,7 +1013,7 @@ export default function App() {
   useEffect(() => {
     void wireSystemEventBus();
 
-    const unsubscribeSystemEvents = subscribeSystemEvents((event) => {
+    const unsubscribeSystemEvents = subscribeSystemEvents(async (event) => {
       if (event.kind === 'compaction') {
         const semanticStatesEnabled = CHAT_RELIABILITY_FLAGS.chat.compaction_semantic_states;
         const isCompacting = semanticStatesEnabled && event.compactionState === 'compacting';
@@ -1060,14 +1063,32 @@ export default function App() {
           return;
         }
         failureBubbleDedupeRef.current.set(dedupeKey, now);
+
+        // Enrich rate-limit errors with actual cooldown duration
+        let bubbleTitle = classified.title;
+        let bubbleActions: SystemBubbleAction[] = [classified.action];
+        if (classified.type === 'rate_limit') {
+          const cooldownInfo = await fetchRateLimitCooldownInfo();
+          if (cooldownInfo) {
+            bubbleTitle = `Rate limited \u2014 cooldown expires in ${cooldownInfo.remainingFormatted}`;
+            bubbleActions = [
+              {
+                label: `Clear ${cooldownInfo.provider} rate limit`,
+                actionId: 'clear_rate_limit',
+                payload: { profileId: cooldownInfo.profileId },
+              },
+            ];
+          }
+        }
+
         void addSystemBubble(
           'failure',
-          classified.title,
+          bubbleTitle,
           {
             Error: detailsMessage,
             ...(event.label ? { Task: event.label } : {}),
           },
-          [classified.action],
+          bubbleActions,
           event.runId,
           detailsMessage,
         );
@@ -2171,14 +2192,34 @@ export default function App() {
       void refreshActiveSessionModel();
       addError({ type: 'gateway_down', message: messageText });
       if (!isQueuedFirstAttempt) {
+        // Enrich rate-limit errors with actual cooldown duration
+        let bubbleTitle = isConnectionError ? 'Gateway error' : classifiedFailure.title;
+        let bubbleActions: SystemBubbleAction[] = isConnectionError
+          ? ['Check logs for details']
+          : [classifiedFailure.action];
+
+        if (!isConnectionError && classifiedFailure.type === 'rate_limit') {
+          const cooldownInfo = await fetchRateLimitCooldownInfo();
+          if (cooldownInfo) {
+            bubbleTitle = `Rate limited \u2014 cooldown expires in ${cooldownInfo.remainingFormatted}`;
+            bubbleActions = [
+              {
+                label: `Clear ${cooldownInfo.provider} rate limit`,
+                actionId: 'clear_rate_limit',
+                payload: { profileId: cooldownInfo.profileId },
+              },
+            ];
+          }
+        }
+
         void addSystemBubble(
           'failure',
-          isConnectionError ? 'Gateway error' : classifiedFailure.title,
+          bubbleTitle,
           {
             Message: attemptedMessageSummary,
             Error: messageText,
           },
-          isConnectionError ? ['Check logs for details'] : [classifiedFailure.action],
+          bubbleActions,
         );
         pushToast(
           'error',
@@ -2204,6 +2245,23 @@ export default function App() {
   const sendChatText = async (message: string) => {
     return sendChatMessage({ text: message, images: [] });
   };
+
+  const handleSystemBubbleAction = useCallback(
+    async (actionId: string, payload?: Record<string, unknown>) => {
+      if (actionId === 'clear_rate_limit' && payload?.profileId) {
+        try {
+          await resetOpenclawAuthCooldown(payload.profileId as string);
+          pushToast('success', `Cleared rate limit for ${payload.profileId}`);
+        } catch (err) {
+          pushToast(
+            'error',
+            `Failed to clear rate limit: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    },
+    [pushToast],
+  );
 
   const projectModalActions: ProjectModalActions = {
     onSave: async (project, updates) => {
@@ -2521,6 +2579,7 @@ export default function App() {
           onRetryQueuedMessage={retryQueuedMessage}
           onLoadMore={loadMoreChatMessages}
           onRetryConnection={retryGatewayConnection}
+          onSystemBubbleAction={handleSystemBubbleAction}
         />
       </div>
 
