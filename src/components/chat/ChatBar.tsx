@@ -159,7 +159,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     <div
       className={`relative flex w-full flex-col ${
         isFloating
-          ? `max-h-[50vh] rounded-xl border border-neutral-300 bg-neutral-0/95 backdrop-blur transition-all dark:border-neutral-600 dark:bg-neutral-900/95 ${
+          ? `max-h-[50vh] rounded-xl bg-neutral-0/95 backdrop-blur transition-all dark:bg-neutral-900/95 ${
               expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
             }`
           : ''
