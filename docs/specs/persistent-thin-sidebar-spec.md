@@ -52,6 +52,6 @@ Introduce a thin, always-visible sidebar that hosts core actions as icons (searc
 
 ## Open Questions
 
-- Git Sync icon choice (GitHub mark vs neutral sync icon).
-- Cmd+K hint styling inside tooltip (chip vs subtle inline text).
-- Should thin sidebar width be user-configurable?
+- **Git Sync icon:** use the GitHub octocat icon from Lucide (thin `github` icon), with a small notification badge.
+- **Cmd+K hint:** subtle inline text in the tooltip (no chip).
+- **Thin sidebar width:** not user-configurable.
