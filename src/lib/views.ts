@@ -26,7 +26,6 @@ export function projectRoadmapView(projectId: string, projectTitle: string): Vie
     breadcrumbs: [
       { id: 'root', label: 'Dashboard' },
       { id: projectId, label: projectTitle },
-      { id: `${projectId}:roadmap`, label: 'Roadmap' },
     ],
     columns: ROADMAP_COLUMNS,
     type: 'roadmap',
