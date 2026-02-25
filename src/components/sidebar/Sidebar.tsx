@@ -8,15 +8,31 @@ import {
   SIDEBAR_DEFAULT_WIDTH,
 } from '../../lib/store';
 
+interface SidebarAction {
+  id: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  onClick: () => void;
+  badgeCount?: number;
+}
+
 interface SidebarProps {
   side: 'left' | 'right';
   mode?: 'default' | 'settings';
   onOpenSettings: () => void;
   onBack?: () => void;
   elevated?: boolean;
+  actions?: SidebarAction[];
 }
 
-export function Sidebar({ side, mode = 'default', onOpenSettings, onBack, elevated = false }: SidebarProps) {
+export function Sidebar({
+  side,
+  mode = 'default',
+  onOpenSettings,
+  onBack,
+  elevated = false,
+  actions = [],
+}: SidebarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const sidebarWidth = useDashboardStore((s) => s.sidebarWidth);
   const themePreference = useDashboardStore((s) => s.themePreference);
@@ -121,6 +137,32 @@ export function Sidebar({ side, mode = 'default', onOpenSettings, onBack, elevat
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {sidebarOpen && !isSettingsMode && actions.length > 0 && (
+          <div className={`flex flex-col gap-1 p-2 ${isRight ? 'items-end' : 'items-start'}`}>
+            {actions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={action.onClick}
+                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
+                    isRight ? 'justify-end text-right' : 'justify-start'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="flex-1">{action.label}</span>
+                  {action.badgeCount && action.badgeCount > 0 ? (
+                    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#DFFF00] px-1 text-[11px] font-semibold text-neutral-900">
+                      {action.badgeCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         )}
 

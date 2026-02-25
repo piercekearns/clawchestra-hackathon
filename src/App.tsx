@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
-import { Check, Clock4, GitBranch } from 'lucide-react';
+import { ArrowLeftRight, Check, Clock4, GitBranch, Github, Plus, RefreshCcw, Search } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
@@ -10,9 +10,9 @@ import { Breadcrumb } from './components/Breadcrumb';
 import { LifecycleActionBar } from './components/LifecycleActionBar';
 import { ProjectModal } from './components/modal';
 import type { ProjectModalActions } from './components/modal';
-import { Header } from './components/Header';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/sidebar/Sidebar';
+import { ThinSidebar } from './components/sidebar/ThinSidebar';
 import { SettingsPage } from './components/SettingsPage';
 import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
@@ -261,6 +261,7 @@ export default function App() {
   const selectedProjectId = useDashboardStore((state) => state.selectedProjectId);
   const sidebarOpen = useDashboardStore((state) => state.sidebarOpen);
   const sidebarSide = useDashboardStore((state) => state.sidebarSide);
+  const thinSidebarSide = useDashboardStore((state) => state.thinSidebarSide);
   const activeSessionModel = useDashboardStore((state) => state.activeSessionModel);
   const activeSessionProvider = useDashboardStore((state) => state.activeSessionProvider);
   const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
@@ -282,6 +283,7 @@ export default function App() {
   const chatLoadingMore = useDashboardStore((state) => state.chatLoadingMore);
   const setSelectedProjectId = useDashboardStore((state) => state.setSelectedProjectId);
   const updateProjectAndReload = useDashboardStore((state) => state.updateProjectAndReload);
+  const setThinSidebarSide = useDashboardStore((state) => state.setThinSidebarSide);
   const deleteProjectAndReload = useDashboardStore((state) => state.deleteProjectAndReload);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -382,6 +384,11 @@ export default function App() {
   // Unresolved sync state (conflict/failed persisted in localStorage)
   const [unresolvedSyncCount, setUnresolvedSyncCount] = useState(0);
 
+  const syncBadgeCount = useMemo(
+    () => (unresolvedSyncCount > 0 ? unresolvedSyncCount : dirtyProjects.length),
+    [dirtyProjects.length, unresolvedSyncCount],
+  );
+
   // Validation rejection history (Phase 7.3)
   const [validationRejections, setValidationRejections] = useState<
     Record<string, ValidationRejection[]>
@@ -411,6 +418,8 @@ export default function App() {
     || addDialogOpen
     || syncDialogOpen
   );
+
+  const showThinSidebar = !sidebarOpen;
   const activeRoadmapProject = useMemo(() => {
     if (viewContext.type !== 'roadmap') return undefined;
     return allProjects.find((project) => project.id === viewContext.projectId);
@@ -1442,6 +1451,77 @@ export default function App() {
     setSettingsPageOpen(false);
   }, [settingsDirty]);
 
+  const handleSearchOpen = useCallback(() => {
+    setSearchOpen(true);
+  }, []);
+
+  const handleAddProjectOpen = useCallback(() => {
+    setAddDialogOpen(true);
+  }, []);
+
+  const handleRefreshProjects = useCallback(async () => {
+    await loadProjects();
+    void refreshRoadmapDocsRef.current();
+    const currentProjects = useDashboardStore.getState().projects;
+    const flat = flattenProjects(currentProjects);
+    void fetchAllRepos(flat).then(() => loadProjects());
+  }, [loadProjects]);
+
+  const handleOpenSync = useCallback(() => {
+    setSyncDialogOpen(true);
+  }, []);
+
+  const handleSwitchThinSidebarSide = useCallback(() => {
+    setThinSidebarSide(thinSidebarSide === 'left' ? 'right' : 'left');
+  }, [setThinSidebarSide, thinSidebarSide]);
+
+  const sidebarActions = useMemo(
+    () => [
+      {
+        id: 'search',
+        label: 'Search projects and roadmaps',
+        icon: Search,
+        onClick: handleSearchOpen,
+      },
+      {
+        id: 'add-project',
+        label: 'Add project',
+        icon: Plus,
+        onClick: handleAddProjectOpen,
+      },
+      {
+        id: 'refresh',
+        label: 'Refresh Clawchestra',
+        icon: RefreshCcw,
+        onClick: handleRefreshProjects,
+      },
+      {
+        id: 'git-sync',
+        label: 'Manage Git Syncs',
+        icon: Github,
+        onClick: handleOpenSync,
+        badgeCount: syncBadgeCount > 0 ? syncBadgeCount : undefined,
+      },
+      {
+        id: 'switch-side',
+        label: thinSidebarSide === 'left'
+          ? 'Switch panel to right side'
+          : 'Switch panel to left side',
+        icon: ArrowLeftRight,
+        onClick: handleSwitchThinSidebarSide,
+      },
+    ],
+    [
+      handleAddProjectOpen,
+      handleOpenSync,
+      handleRefreshProjects,
+      handleSearchOpen,
+      handleSwitchThinSidebarSide,
+      syncBadgeCount,
+      thinSidebarSide,
+    ],
+  );
+
   const handleSettingsDirtyChange = useCallback((dirty: boolean) => {
     setSettingsDirty(dirty);
   }, []);
@@ -2211,6 +2291,18 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
       <TitleBar settingsMode={settingsPageOpen} />
       <div className="flex min-h-0 flex-1">
+        {showThinSidebar && thinSidebarSide === 'left' ? (
+          <ThinSidebar
+            side="left"
+            onSearch={handleSearchOpen}
+            onAddProject={handleAddProjectOpen}
+            onRefresh={handleRefreshProjects}
+            onOpenSync={handleOpenSync}
+            onSwitchSide={handleSwitchThinSidebarSide}
+            onOpenSettings={handleSettingsOpen}
+            syncBadgeCount={syncBadgeCount}
+          />
+        ) : null}
         {sidebarSide === 'left' ? (
           <Sidebar
             side="left"
@@ -2218,6 +2310,7 @@ export default function App() {
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
+            actions={sidebarActions}
           />
         ) : null}
         <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
@@ -2246,29 +2339,6 @@ export default function App() {
           </main>
         ) : (
           <>
-        <Header
-          errors={errors}
-          onRefresh={async () => {
-            await loadProjects();
-            void refreshRoadmapDocsRef.current();
-            // Also fetch remotes and reload to pick up updated ahead/behind
-            const currentProjects = useDashboardStore.getState().projects;
-            const flat = flattenProjects(currentProjects);
-            void fetchAllRepos(flat).then(() => loadProjects());
-          }}
-          onAddProject={() => setAddDialogOpen(true)}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          dirtyProjectCount={dirtyProjects.length}
-          unresolvedSyncCount={unresolvedSyncCount}
-          onOpenSync={() => setSyncDialogOpen(true)}
-          syncStatus={dashboardSettings ? getSyncStatusForDisplay(
-            dashboardSettings.openclawSyncMode,
-            lastSyncedAt,
-            lastSyncError,
-          ) : undefined}
-        />
-
         <div className="mb-4 flex items-center justify-between gap-3 px-3 md:px-4">
           <Breadcrumb
             viewContext={viewContext}
@@ -2509,6 +2579,19 @@ export default function App() {
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
+            actions={sidebarActions}
+          />
+        ) : null}
+        {showThinSidebar && thinSidebarSide === 'right' ? (
+          <ThinSidebar
+            side="right"
+            onSearch={handleSearchOpen}
+            onAddProject={handleAddProjectOpen}
+            onRefresh={handleRefreshProjects}
+            onOpenSync={handleOpenSync}
+            onSwitchSide={handleSwitchThinSidebarSide}
+            onOpenSettings={handleSettingsOpen}
+            syncBadgeCount={syncBadgeCount}
           />
         ) : null}
       </div>

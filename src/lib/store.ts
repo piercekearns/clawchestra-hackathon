@@ -64,9 +64,11 @@ interface DashboardState {
   sidebarOpen: boolean;
   sidebarSide: 'left' | 'right';
   sidebarWidth: number;
+  thinSidebarSide: 'left' | 'right';
   setSidebarOpen: (open: boolean) => void;
   setSidebarSide: (side: 'left' | 'right') => void;
   setSidebarWidth: (width: number) => void;
+  setThinSidebarSide: (side: 'left' | 'right') => void;
 
   setProjects: (projects: ProjectViewModel[]) => void;
   setRoadmapItemsForProject: (projectId: string, items: RoadmapItemState[]) => void;
@@ -382,6 +384,7 @@ export const useDashboardStore = create<DashboardState>()(
       sidebarOpen: false,
       sidebarSide: 'left',
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+      thinSidebarSide: 'left',
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -682,6 +685,7 @@ export const useDashboardStore = create<DashboardState>()(
       setSidebarSide: (sidebarSide) => set({ sidebarSide }),
       setSidebarWidth: (width) =>
         set({ sidebarWidth: Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width)) }),
+      setThinSidebarSide: (thinSidebarSide) => set({ thinSidebarSide }),
 
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
@@ -764,6 +768,7 @@ export const useDashboardStore = create<DashboardState>()(
         columnOrder: state.columnOrder,
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,
+        thinSidebarSide: state.thinSidebarSide,
       }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<DashboardState>;
