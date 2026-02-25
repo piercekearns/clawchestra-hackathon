@@ -209,6 +209,10 @@ export function RoadmapItemDialog({
       });
     };
 
+    // Always refresh docs on open so modal reflects latest file changes,
+    // even if no watcher event fired while it was closed.
+    refreshPaths(docPaths);
+
     let unwatch: (() => void) | null = null;
     (async () => {
       try {
