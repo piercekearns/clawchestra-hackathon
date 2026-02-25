@@ -16,9 +16,9 @@ Surface an **app‑wide selection affordance** so that selecting text anywhere i
   - Quote icon + label: **“Ask OpenClaw”**
   - Tooltip appears only while the selection is active
 - Clicking the tooltip:
-  - Prefills the chat bar with a quoted snippet (e.g., `> selected text`)
+  - Inserts the selected text into the chat composer as a **reference snippet**
   - Optionally opens the chat drawer if closed
-  - Keeps the user’s selection context clear
+  - Makes it visually obvious the message references the selection (quoted block or reference chip)
 
 ## Scope & Safety
 
@@ -28,6 +28,6 @@ Surface an **app‑wide selection affordance** so that selecting text anywhere i
 
 ## Notes / Open Questions
 
-- Should long selections be truncated in the prefill?
+- Should long selections be truncated in the UI (but keep full text)?
 - Should the tooltip appear only after mouse‑up or also during drag?
 - Should it work inside modals and popovers (likely yes, if selection is inside the app surface)?
