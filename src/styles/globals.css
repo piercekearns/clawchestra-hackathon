@@ -155,3 +155,28 @@
     transform: translateY(-3px);
   }
 }
+
+/* Brand checkbox — chartreuse fill with dark tick */
+@layer utilities {
+  .checkbox-brand {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid rgb(163 163 163);
+    border-radius: 3px;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.1s, border-color 0.1s;
+  }
+  .checkbox-brand:checked {
+    background-color: #DFFF00;
+    border-color: #DFFF00;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23111827' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3 8.5l3 3L13 4.5'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 80%;
+  }
+  .checkbox-brand:focus-visible {
+    outline: 2px solid #DFFF00;
+    outline-offset: 1px;
+  }
+}
