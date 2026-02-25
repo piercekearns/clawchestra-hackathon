@@ -77,7 +77,7 @@ export function ThinSidebar({
         />
       </div>
 
-      <div className="mb-1 flex flex-col items-center gap-2">
+      <div className="mb-[5px] flex flex-col items-center gap-2">
         <ThinSidebarButton
           icon={Settings}
           label="Settings"
