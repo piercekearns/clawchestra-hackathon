@@ -1921,6 +1921,93 @@ function toSessionModelSnapshot(
   };
 }
 
+function matchSessionEntry(entry: Record<string, unknown>, sessionKey: string): boolean {
+  const key = extractOptionalString(entry.key);
+  if (key && key === sessionKey) return true;
+  const sessionId = extractOptionalString(entry.sessionId);
+  return Boolean(sessionId && sessionId === sessionKey);
+}
+
+function toSessionUsageSnapshot(payload: unknown, sessionKey: string): UsageSnapshot | null {
+  const record = extractOptionalRecord(payload);
+  const defaultsRecord = extractOptionalRecord(record?.defaults);
+  const sessionsRaw = Array.isArray(record?.sessions) ? record?.sessions ?? [] : [];
+  const sessions = sessionsRaw
+    .map((entry) => extractOptionalRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+
+  const exactMatch = sessions.find((entry) => matchSessionEntry(entry, sessionKey)) ?? null;
+  if (!exactMatch) return null;
+
+  const totalTokens = extractNumberFromRecord(exactMatch, [
+    'totalTokens',
+    'total_tokens',
+    'total',
+    'tokens',
+  ]);
+  const inputTokens = extractNumberFromRecord(exactMatch, [
+    'inputTokens',
+    'input_tokens',
+    'promptTokens',
+    'prompt_tokens',
+  ]);
+  const outputTokens = extractNumberFromRecord(exactMatch, [
+    'outputTokens',
+    'output_tokens',
+    'completionTokens',
+    'completion_tokens',
+  ]);
+  const usedTokens =
+    totalTokens ??
+    (inputTokens !== null || outputTokens !== null
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : null);
+
+  const maxTokens =
+    extractNumberFromRecord(exactMatch, [
+      'contextTokens',
+      'context_tokens',
+      'contextWindow',
+      'context_window',
+      'maxTokens',
+      'max_tokens',
+    ]) ??
+    extractNumberFromRecord(defaultsRecord ?? {}, [
+      'contextTokens',
+      'context_tokens',
+      'contextWindow',
+      'context_window',
+      'maxTokens',
+      'max_tokens',
+    ]);
+
+  if (usedTokens === null || maxTokens === null || maxTokens <= 0) return null;
+
+  return {
+    used: usedTokens,
+    max: maxTokens,
+    percent: clampUsagePercent((usedTokens / maxTokens) * 100),
+  };
+}
+
+async function fetchSessionUsageFromSessionsList(
+  connection: OpenClawConnection,
+  sessionKey: string,
+): Promise<UsageSnapshot | null> {
+  try {
+    const payload = await connection.request('sessions.list', {
+      search: sessionKey,
+      limit: 8,
+      includeGlobal: true,
+      includeUnknown: true,
+    });
+    return toSessionUsageSnapshot(payload, sessionKey);
+  } catch (error) {
+    console.warn('[Gateway] Failed to fetch session usage:', error);
+    return null;
+  }
+}
+
 async function fetchSessionModelViaTauriCli(
   sessionKey: string,
   allowDefaultsFallback: boolean,
@@ -3527,6 +3614,10 @@ async function sendViaTauriWs(
         });
         consumeGatewayDebugAuto();
       }
+    }
+
+    if (!runtimeUsage) {
+      runtimeUsage = await fetchSessionUsageFromSessionsList(connection, sessionKey);
     }
 
     let assistantMessages = extractAssistantMessagesForTurn(allMessages, {
