@@ -117,49 +117,27 @@ export function Column<T extends BoardItem>({
             <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
               {column.label}
             </h2>
-            {cardsCollapsed ? (
-              <div className="ml-auto flex items-center gap-1">
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleMinimize?.();
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  aria-label={`Minimize ${column.label} column`}
-                >
-                  <Minimize2 className="h-3.5 w-3.5" />
-                </button>
-                <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                  {items.length}
-                </span>
-              </div>
-            ) : (
-              <>
-                <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                  {items.length}
-                </span>
-                <div className="flex-1" />
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleMinimize?.();
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    aria-label={`Minimize ${column.label} column`}
-                  >
-                    <Minimize2 className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="shrink-0 rounded p-0.5 text-neutral-400 dark:text-neutral-500">
-                    <GripVertical className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-              </>
-            )}
+            <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+              {items.length}
+            </span>
+            <div className="flex-1" />
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMinimize?.();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`Minimize ${column.label} column`}
+              >
+                <Minimize2 className="h-3.5 w-3.5" />
+              </button>
+              <span className="shrink-0 rounded p-0.5 text-neutral-400 dark:text-neutral-500">
+                <GripVertical className="h-3.5 w-3.5" />
+              </span>
+            </div>
           </>
         )}
       </header>
