@@ -288,12 +288,12 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
         </div>
       )}
 
-      <div className="min-h-0 p-2">
-        <div className={`relative rounded-lg focus-within:ring-1 focus-within:ring-revival-accent-400/40 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
-          sending 
-            ? 'ring-revival-accent/40' 
-            : 'ring-revival-accent-400/40'
-        }`}>
+      <div className={`min-h-0 p-2 ${
+        sending 
+          ? 'ring-1 ring-revival-accent/40' 
+          : 'ring-1 ring-revival-accent-400/40'
+      }`}>
+        <div className="relative rounded-lg [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px]">
           {/* Slash command dropdown */}
           {showDropdown && (
             <CommandDropdown
