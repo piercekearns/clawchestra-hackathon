@@ -45,17 +45,16 @@ export function StatusBadge({
   const label = labelOverride ?? config.label;
   const showUsage = typeof usagePercent === 'number' && Number.isFinite(usagePercent);
   const clampedUsage = showUsage ? Math.min(100, Math.max(0, usagePercent)) : 0;
-  const radius = 5;
+  const radius = 4;
   const circumference = 2 * Math.PI * radius;
   const dash = (clampedUsage / 100) * circumference;
-  const usageStrokeClass = clampedUsage >= 85 ? 'stroke-white' : 'stroke-current';
 
   const ring = (
-    <span className="relative flex h-3.5 w-3.5 items-center justify-center">
-      <svg className="absolute inset-0" viewBox="0 0 12 12" aria-hidden>
+    <span className="relative flex h-2.5 w-2.5 items-center justify-center text-revival-accent-400">
+      <svg className="absolute inset-0" viewBox="0 0 10 10" aria-hidden>
         <circle
-          cx="6"
-          cy="6"
+          cx="5"
+          cy="5"
           r={radius}
           className="stroke-neutral-300/70 dark:stroke-neutral-600/70"
           strokeWidth="1.5"
@@ -63,15 +62,15 @@ export function StatusBadge({
         />
         {showUsage ? (
           <circle
-            cx="6"
-            cy="6"
+            cx="5"
+            cy="5"
             r={radius}
-            className={usageStrokeClass}
+            className="stroke-revival-accent-400"
             strokeWidth="1.5"
             fill="none"
             strokeDasharray={`${dash} ${circumference - dash}`}
             strokeLinecap="round"
-            transform="rotate(-90 6 6)"
+            transform="rotate(-90 5 5)"
           />
         ) : null}
       </svg>
