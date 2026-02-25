@@ -8,8 +8,8 @@ tags:
   - tauri
   - core
 icon: "\U0001F4CA"
-lastActivity: '2026-02-18'
-nextAction: Complete data retrofit for scan-based discovery
+lastActivity: '2026-02-25'
+nextAction: 'ui-tweaks: title bar error details modal + chat bar height shell removal'
 ---
 
 # Clawchestra

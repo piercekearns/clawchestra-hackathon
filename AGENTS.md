@@ -280,6 +280,8 @@ When you create or update an artifact for a roadmap item (spec, plan, etc.), **a
 
 The `nextAction` is what humans see in the UI. If you write a spec but leave `nextAction` saying "Spec needed", the user sees stale/contradictory info.
 
+**Also update the project-level `nextAction` in `CLAWCHESTRA.md`.** After any work session that changes roadmap state, update the `nextAction` field in `CLAWCHESTRA.md` frontmatter to reflect the current most-pressing action. Use the highest-priority `in-progress` item's next step as the source of truth. If nothing is `in-progress`, use the top `up-next` item. Format: `'item-title: what needs doing next'`.
+
 When the user says **"mark X as done"** or **"X is complete"**:
 1. Set `status: complete` and `completedAt: YYYY-MM-DD` on the item in `.clawchestra/state.json`
 2. The item remains in `roadmapItems` with `status: complete` — it is NOT removed
