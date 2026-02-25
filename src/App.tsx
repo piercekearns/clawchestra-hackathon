@@ -1462,6 +1462,7 @@ export default function App() {
   const handleSettingsOpen = useCallback(() => {
     setSettingsSaveNudge(false);
     setSettingsPageOpen(true);
+    useDashboardStore.getState().setSidebarOpen(true);
   }, []);
 
   const handleSettingsBack = useCallback(() => {
@@ -1500,7 +1501,7 @@ export default function App() {
     () => [
       {
         id: 'search',
-        label: 'Search projects and roadmaps',
+        label: 'Search projects',
         icon: Search,
         onClick: handleSearchOpen,
       },
@@ -1509,6 +1510,7 @@ export default function App() {
         label: 'Add project',
         icon: Plus,
         onClick: handleAddProjectOpen,
+        iconClassName: 'h-5 w-5',
       },
       {
         id: 'refresh',
@@ -1525,9 +1527,7 @@ export default function App() {
       },
       {
         id: 'switch-side',
-        label: thinSidebarSide === 'left'
-          ? 'Switch panel to right side'
-          : 'Switch panel to left side',
+        label: 'Switch panel side',
         icon: ArrowLeftRight,
         onClick: handleSwitchThinSidebarSide,
       },
@@ -1539,7 +1539,6 @@ export default function App() {
       handleSearchOpen,
       handleSwitchThinSidebarSide,
       syncBadgeCount,
-      thinSidebarSide,
     ],
   );
 

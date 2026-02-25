@@ -26,7 +26,7 @@ export function ThinSidebar({
   syncBadgeCount = 0,
 }: ThinSidebarProps) {
   const isRight = side === 'right';
-  const switchLabel = isRight ? 'Switch panel to left side' : 'Switch panel to right side';
+  const switchLabel = 'Switch panel side';
   const hasSyncBadge = syncBadgeCount > 0;
 
   return (
@@ -42,7 +42,7 @@ export function ThinSidebar({
           icon={Search}
           label={
             <span className="inline-flex items-center gap-1">
-              Search projects and roadmaps
+              Search projects
               <span className="text-[10px] text-neutral-400">⌘K</span>
             </span>
           }

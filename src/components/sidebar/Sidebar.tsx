@@ -14,6 +14,7 @@ interface SidebarAction {
   icon: ComponentType<{ className?: string }>;
   onClick: () => void;
   badgeCount?: number;
+  iconClassName?: string;
 }
 
 interface SidebarProps {
@@ -144,22 +145,36 @@ export function Sidebar({
           <div className={`flex flex-col gap-1 p-2 ${isRight ? 'items-end' : 'items-start'}`}>
             {actions.map((action) => {
               const Icon = action.icon;
+              const iconEl = (
+                <span className="relative inline-flex shrink-0">
+                  <Icon className={action.iconClassName ?? 'h-4 w-4'} />
+                  {action.badgeCount && action.badgeCount > 0 ? (
+                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#DFFF00] px-1 text-[10px] font-semibold text-neutral-900">
+                      {action.badgeCount}
+                    </span>
+                  ) : null}
+                </span>
+              );
               return (
                 <button
                   key={action.id}
                   type="button"
                   onClick={action.onClick}
                   className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
-                    isRight ? 'justify-end text-right' : 'justify-start'
+                    isRight ? 'justify-end' : 'justify-start'
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1">{action.label}</span>
-                  {action.badgeCount && action.badgeCount > 0 ? (
-                    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#DFFF00] px-1 text-[11px] font-semibold text-neutral-900">
-                      {action.badgeCount}
-                    </span>
-                  ) : null}
+                  {isRight ? (
+                    <>
+                      <span className="text-right">{action.label}</span>
+                      {iconEl}
+                    </>
+                  ) : (
+                    <>
+                      {iconEl}
+                      <span>{action.label}</span>
+                    </>
+                  )}
                 </button>
               );
             })}
