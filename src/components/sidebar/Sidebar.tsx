@@ -239,11 +239,11 @@ function ThemeButton({
   return (
     <button
       type="button"
-      className={`rounded p-1 ${pref === current ? 'bg-neutral-200 dark:bg-neutral-700' : ''}`}
+      className={`rounded p-1.5 ${pref === current ? 'bg-neutral-200 dark:bg-neutral-700' : ''}`}
       onClick={() => onClick(pref)}
       aria-label={label}
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-4 w-4" />
     </button>
   );
 }
