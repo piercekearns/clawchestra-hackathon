@@ -331,7 +331,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               sending
                 ? 'Type to queue another message...'
                 : gatewayConnected
-                  ? 'Message OpenClaw (Enter sends, Shift+Enter newline)...'
+                  ? 'Message OpenClaw'
                   : 'Gateway offline. You can still draft here.'
             }
             className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
