@@ -249,7 +249,7 @@ export function AddProjectDialog({
                 type="checkbox"
                 checked={initializeGit}
                 onChange={(event) => setInitializeGit(event.target.checked)}
-                className="h-4 w-4 rounded border-neutral-300"
+                className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
               />
               Initialize git repository
             </label>
@@ -258,7 +258,7 @@ export function AddProjectDialog({
                 type="checkbox"
                 checked={createAgents}
                 onChange={(event) => setCreateAgents(event.target.checked)}
-                className="h-4 w-4 rounded border-neutral-300"
+                className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
               />
               Create AGENTS.md
             </label>
@@ -402,7 +402,7 @@ export function AddProjectDialog({
                     type="checkbox"
                     checked={addMissingProjectMd}
                     onChange={(event) => setAddMissingProjectMd(event.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-300"
+                    className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
                   />
                   Create CLAWCHESTRA.md if missing
                 </label>
@@ -411,7 +411,7 @@ export function AddProjectDialog({
                     type="checkbox"
                     checked={addMissingFrontmatter}
                     onChange={(event) => setAddMissingFrontmatter(event.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-300"
+                    className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
                   />
                   Add PROJECT.md frontmatter when missing (legacy only)
                 </label>
@@ -420,7 +420,7 @@ export function AddProjectDialog({
                     type="checkbox"
                     checked={addMissingAgents}
                     onChange={(event) => setAddMissingAgents(event.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-300"
+                    className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
                   />
                   Create AGENTS.md when missing
                 </label>
@@ -429,7 +429,7 @@ export function AddProjectDialog({
                     type="checkbox"
                     checked={initGitIfMissing}
                     onChange={(event) => setInitGitIfMissing(event.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-300"
+                    className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
                   />
                   Initialize git if missing
                 </label>
@@ -443,7 +443,7 @@ export function AddProjectDialog({
                       type="checkbox"
                       checked={allowDirtyOverride}
                       onChange={(event) => setAllowDirtyOverride(event.target.checked)}
-                      className="h-4 w-4 rounded border-neutral-300"
+                      className="h-4 w-4 cursor-pointer rounded accent-[#DFFF00]"
                     />
                     Override dirty repo guard
                   </label>
