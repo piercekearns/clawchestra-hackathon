@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
-import { ChevronDown, ChevronUp, ChevronsRightLeft, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronUp, GripVertical, Minimize2 } from 'lucide-react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { Card } from './Card';
 
@@ -82,7 +82,7 @@ export function Column<T extends BoardItem>({
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label={`Restore ${column.label} column`}
               >
-                <ChevronsRightLeft className="h-3.5 w-3.5" />
+                <Minimize2 className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="mt-2 flex min-h-0 w-full flex-1 items-start justify-center overflow-hidden">
@@ -129,7 +129,7 @@ export function Column<T extends BoardItem>({
                   onPointerDown={(e) => e.stopPropagation()}
                   aria-label={`Minimize ${column.label} column`}
                 >
-                  <ChevronsRightLeft className="h-3.5 w-3.5" />
+                  <Minimize2 className="h-3.5 w-3.5" />
                 </button>
                 <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
                   {items.length}
@@ -152,7 +152,7 @@ export function Column<T extends BoardItem>({
                     onPointerDown={(e) => e.stopPropagation()}
                     aria-label={`Minimize ${column.label} column`}
                   >
-                    <ChevronsRightLeft className="h-3.5 w-3.5" />
+                    <Minimize2 className="h-3.5 w-3.5" />
                   </button>
                   <span className="shrink-0 rounded p-0.5 text-neutral-400 dark:text-neutral-500">
                     <GripVertical className="h-3.5 w-3.5" />
