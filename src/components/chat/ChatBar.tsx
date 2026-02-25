@@ -83,7 +83,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
 ) {
   const [composerHeight, setComposerHeight] = useState(MIN_INPUT_HEIGHT);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
-  const [composerFocused, setComposerFocused] = useState(false);
   const prevInputRef = useRef(input);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const showDropdown = shouldShowCommandDropdown(input) && !dropdownDismissed;
@@ -159,7 +158,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     <div
       className={`relative flex w-full flex-col ${
         isFloating
-          ? `max-h-[50vh] rounded-xl bg-neutral-0/95 backdrop-blur transition-all dark:bg-neutral-900/95 ${
+          ? `max-h-[50vh] rounded-xl border border-neutral-300 bg-neutral-0/95 backdrop-blur transition-all dark:border-neutral-600 dark:bg-neutral-900/95 ${
               expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
             }`
           : ''
@@ -289,14 +288,12 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
         </div>
       )}
 
-      <div className="min-h-0">
-        <div
-          className={`relative mx-2 my-2 rounded-lg border bg-neutral-0/80 dark:bg-neutral-950/70 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
-            sending
-              ? 'border-revival-accent/50'
-              : 'border-neutral-300/70 dark:border-neutral-600'
-          } ${composerFocused ? 'ring-1 ring-revival-accent-400/40' : ''}`}
-        >
+      <div className="min-h-0 p-2">
+        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
+          sending 
+            ? 'border-revival-accent/50' 
+            : 'border-neutral-300/70 dark:border-neutral-600'
+        }`}>
           {/* Slash command dropdown */}
           {showDropdown && (
             <CommandDropdown
@@ -318,8 +315,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             }}
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
-            onFocus={() => setComposerFocused(true)}
-            onBlur={() => setComposerFocused(false)}
             onPaste={async (event) => {
               const files = Array.from(event.clipboardData.files ?? []);
               if (files.length === 0) return;
@@ -358,7 +353,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
         </div>
 
         {images.length > 0 ? (
-          <div className="mt-2 mx-2 flex flex-wrap gap-1.5 px-1">
+          <div className="mt-2 flex flex-wrap gap-1.5 px-1">
             {images.map((image, index) => (
               <button
                 type="button"
@@ -374,7 +369,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           </div>
         ) : null}
         {attachmentNotice ? (
-          <div className="mt-1 mx-2 px-1 text-[11px] text-status-danger">{attachmentNotice}</div>
+          <div className="mt-1 px-1 text-[11px] text-status-danger">{attachmentNotice}</div>
         ) : null}
       </div>
     </div>
