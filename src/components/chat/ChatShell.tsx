@@ -162,6 +162,7 @@ interface ChatShellProps {
   onDismissResponseToast: () => void;
   onLoadMore?: () => void;
   onRetryConnection?: () => void;
+  onSystemBubbleAction?: (actionId: string, payload?: Record<string, unknown>) => void;
 }
 
 export function ChatShell({
@@ -189,6 +190,7 @@ export function ChatShell({
   onDismissResponseToast,
   onLoadMore,
   onRetryConnection,
+  onSystemBubbleAction,
 }: ChatShellProps) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -627,6 +629,7 @@ export function ChatShell({
                 hasMore={hasMoreMessages}
                 loadingMore={loadingMoreMessages}
                 onLoadMore={onLoadMore}
+                onSystemBubbleAction={onSystemBubbleAction}
               />
 
               <div
