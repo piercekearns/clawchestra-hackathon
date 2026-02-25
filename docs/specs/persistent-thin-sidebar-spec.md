@@ -45,6 +45,13 @@ Introduce a thin, always-visible sidebar that hosts core actions as icons (searc
 - Expanding the sidebar shows **icon + label tiles** for the same actions.
 - Settings remains pinned to the bottom of the expanded sidebar.
 
+## Git Sync Modal Behavior
+
+- The Git Sync button should **always** be available (even with zero notifications).
+- Clicking it opens the Git Sync modal; if there’s nothing to sync, the modal opens empty.
+- When notifications exist, the badge appears and the modal opens with details.
+- This modal becomes the future home for expanded git management functionality.
+
 ## UI Implications
 
 - Remove the search/refresh/add/git sync row from the board surface once this is live.
