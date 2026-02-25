@@ -57,7 +57,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     connectionState,
     activityLabel,
     activeModelLabel,
-    activeModelTooltip,
     activeModelUsage,
     drawerOpen,
     variant = 'floating',
@@ -145,9 +144,15 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     connectionState === 'connected' && activeModelUsage ? activeModelUsage.percent : null;
   const usageTooltip =
     connectionState === 'connected' && activeModelUsage
-      ? `Context window: ${Math.round(activeModelUsage.percent)}% full\n${formatUsageNumber(activeModelUsage.used)} / ${formatUsageNumber(activeModelUsage.max)} tokens used`
+      ? (
+        <span className="flex flex-col gap-0.5">
+          <span>Context window: {Math.round(activeModelUsage.percent)}% full</span>
+          <span>
+            {formatUsageNumber(activeModelUsage.used)} / {formatUsageNumber(activeModelUsage.max)} tokens used
+          </span>
+        </span>
+        )
       : null;
-  const modelTooltip = [activeModelTooltip, usageTooltip].filter(Boolean).join('\n') || undefined;
 
   return (
     <div
@@ -204,8 +209,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <StatusBadge
               state={connectionState}
               labelOverride={statusLabelOverride}
-              title={modelTooltip}
               usagePercent={usagePercent}
+              usageTooltip={usageTooltip}
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
@@ -232,8 +237,8 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <StatusBadge
               state={connectionState}
               labelOverride={statusLabelOverride}
-              title={modelTooltip}
               usagePercent={usagePercent}
+              usageTooltip={usageTooltip}
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
