@@ -4,7 +4,7 @@
 
 **Status:** Draft (comprehensive spec, Model D chosen)
 **Created:** 2026-02-21
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-02-25
 **Roadmap Item:** `embedded-agent-terminals`
 **Depends On:** `project-conversation-hub` (thread/container model)
 **Direction:** Model D (Parallel Tracks) — phased progression
@@ -587,15 +587,16 @@ Monitor ACP adoption, Claude Code protocol status, OpenClaw roadmap. Build termi
 6. **tmux vs direct PTY** — Should sessions use tmux for persistence (survive app close) or direct PTY (simpler, but tied to app lifecycle)?
 7. **Session storage** — Where do scrollback/session history files live? Alongside project files? In Clawchestra's app data?
 8. **OpenClaw integration depth** — Should OpenClaw be notified when a direct session starts/ends? Or just discover changes via filesystem?
+9. **Claude Code remote control handoff** — If Claude Code is launched via embedded terminal and later controlled remotely (cloud handoff), does Clawchestra’s project planning/kanban stay up to date with the remote changes? Needs workflow + sync implications testing.
 
 ### Ecosystem
-9. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent.
-10. **ACP stability** — Is ACP stable enough to build against, or will it change significantly?
+10. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent.
+11. **ACP stability** — Is ACP stable enough to build against, or will it change significantly?
 
 ### UX
-11. **Default experience** — Should the first-time experience be a terminal, or should we detect available agents and suggest a launch?
-12. **Session naming** — Auto-generate from context, or always ask the user to name?
-13. **Notification threshold** — How aggressively should we notify? Every approval request? Only errors? Configurable?
+12. **Default experience** — Should the first-time experience be a terminal, or should we detect available agents and suggest a launch?
+13. **Session naming** — Auto-generate from context, or always ask the user to name?
+14. **Notification threshold** — How aggressively should we notify? Every approval request? Only errors? Configurable?
 
 ## Relationship to Other Specs
 
