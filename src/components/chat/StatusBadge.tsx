@@ -77,7 +77,7 @@ export function StatusBadge({
     </span>
   );
 
-  const badgePaddingClass = showUsage ? 'pr-5' : 'pr-2';
+  const badgePaddingClass = showUsage ? 'pr-[21px]' : 'pr-2';
 
   return (
     <span
