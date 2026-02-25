@@ -33,10 +33,10 @@ import type { DashboardError } from './lib/errors';
 import {
   checkGatewayConnection,
   consumePendingTurnMigrationNotice,
-  DEFAULT_SESSION_KEY,
   fetchSessionModel,
   finalizeActiveTurnsForSession,
   getActiveTurnCount,
+  getResolvedDefaultSessionKey,
   hydratePendingTurns,
   pollProcessSessions,
   recoverRecentSessionMessages,
@@ -227,8 +227,9 @@ function pruneExpiredRuns(map: Map<string, number>, ttlMs: number): void {
 }
 
 function extractBackgroundSessionKeys(content: string): string[] {
+  const currentSessionKey = getResolvedDefaultSessionKey();
   const matches = content.match(SESSION_KEY_PATTERN) ?? [];
-  return [...new Set(matches)].filter((key) => key !== DEFAULT_SESSION_KEY);
+  return [...new Set(matches)].filter((key) => key !== currentSessionKey);
 }
 
 function summarizeAttemptedChatPayload(payload: ChatSendPayload): string {
@@ -323,7 +324,7 @@ export default function App() {
   const sessionModelRefreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
-    if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
+    if (!sessionKey || sessionKey === getResolvedDefaultSessionKey()) return;
     backgroundSessionLastSeenRef.current.set(sessionKey, Date.now());
 
     setActiveBackgroundSessions((prev) => {
@@ -762,7 +763,8 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    void hydratePendingTurns(DEFAULT_SESSION_KEY).then(() => {
+    const sessionKey = getResolvedDefaultSessionKey();
+    void hydratePendingTurns(sessionKey).then(() => {
       const migrationNotice = consumePendingTurnMigrationNotice();
       if (!migrationNotice) return;
       void addSystemBubble('info', 'Recovered pending chat state', {
@@ -781,13 +783,14 @@ export default function App() {
 
     const probeDefaultSession = async () => {
       try {
-        const { completed } = await pollProcessSessions([DEFAULT_SESSION_KEY]);
+        const sessionKey = getResolvedDefaultSessionKey();
+        const { completed } = await pollProcessSessions([sessionKey]);
         if (cancelled) return;
         const defaultSessionTerminal = completed.some(
-          (entry) => entry.sessionKey === DEFAULT_SESSION_KEY,
+          (entry) => entry.sessionKey === sessionKey,
         );
         if (defaultSessionTerminal) {
-          finalizeActiveTurnsForSession(DEFAULT_SESSION_KEY, 'session_process_terminal');
+          finalizeActiveTurnsForSession(sessionKey, 'session_process_terminal');
         }
       } catch {
         // Keep current turn state when probe transport is unavailable.
@@ -1044,7 +1047,8 @@ export default function App() {
       }
 
       if (event.kind === 'announce') {
-        if (event.sessionKey && event.sessionKey !== DEFAULT_SESSION_KEY) {
+        const currentSessionKey = getResolvedDefaultSessionKey();
+        if (event.sessionKey && event.sessionKey !== currentSessionKey) {
           registerBackgroundSession(event.sessionKey);
         }
         const status = (event.status ?? '').toLowerCase();
@@ -1073,7 +1077,7 @@ export default function App() {
         }
 
         const backgroundSessionKey = event.sessionKey;
-        if (isTerminal && backgroundSessionKey && backgroundSessionKey !== DEFAULT_SESSION_KEY) {
+        if (isTerminal && backgroundSessionKey && backgroundSessionKey !== currentSessionKey) {
           backgroundSessionLastSeenRef.current.delete(backgroundSessionKey);
           setActiveBackgroundSessions((prev) => {
             if (!prev.has(backgroundSessionKey)) return prev;
@@ -1262,7 +1266,7 @@ export default function App() {
         ) {
           try {
             await chatRecoveryCursorAdvance(
-              DEFAULT_SESSION_KEY,
+              getResolvedDefaultSessionKey(),
               lastMergedMessage.timestamp,
               lastMergedMessage._id,
             );
@@ -1982,7 +1986,7 @@ export default function App() {
       ) {
         try {
           await chatRecoveryCursorAdvance(
-            DEFAULT_SESSION_KEY,
+            getResolvedDefaultSessionKey(),
             latestCursorCandidate.timestamp,
             latestCursorCandidate._id,
           );

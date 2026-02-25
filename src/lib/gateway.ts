@@ -124,6 +124,8 @@ interface OpenClawConnection {
 }
 
 export const DEFAULT_SESSION_KEY = 'agent:main:clawchestra';
+const OPENCLAW_SESSION_KEY_OVERRIDE_STORAGE_KEY = 'clawchestra.openclaw.session_key_override';
+const OPENCLAW_SESSION_KEY_RECOVERY_SUFFIX = ':recovery:';
 const DEFAULT_HTTP_GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost:18789';
 const OPENCLAW_CONNECT_TIMEOUT_MS = 12000;
 const OPENCLAW_REQUEST_TIMEOUT_MS = 20000;
@@ -195,6 +197,7 @@ const LEGACY_ACTIVE_TURN_STATUS_MAP: Record<string, Extract<TurnStatus, 'queued'
 
 let cachedOpenClawTransportPromise: Promise<GatewayTransport | null> | null = null;
 let pendingTurnMigrationNotice: string | null = null;
+let cachedSessionKeyOverride: string | null | undefined;
 
 interface AnnounceMetadata {
   label?: string;
@@ -442,6 +445,80 @@ function normalizeErrorMessage(error: unknown): string {
   }
 
   return 'Unknown gateway error';
+}
+
+function readSessionKeyOverride(): string | null {
+  if (cachedSessionKeyOverride !== undefined) return cachedSessionKeyOverride;
+  if (typeof window === 'undefined') {
+    cachedSessionKeyOverride = null;
+    return null;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(OPENCLAW_SESSION_KEY_OVERRIDE_STORAGE_KEY);
+    cachedSessionKeyOverride = stored?.trim() || null;
+    return cachedSessionKeyOverride;
+  } catch {
+    cachedSessionKeyOverride = null;
+    return null;
+  }
+}
+
+function writeSessionKeyOverride(sessionKey: string | null): void {
+  const normalized = sessionKey?.trim() || null;
+  cachedSessionKeyOverride = normalized;
+
+  if (typeof window === 'undefined') return;
+  try {
+    if (normalized) {
+      window.localStorage.setItem(OPENCLAW_SESSION_KEY_OVERRIDE_STORAGE_KEY, normalized);
+    } else {
+      window.localStorage.removeItem(OPENCLAW_SESSION_KEY_OVERRIDE_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage may be unavailable in some runtimes.
+  }
+}
+
+function normalizeSessionKeyForRecovery(baseSessionKey: string): string {
+  const normalized = baseSessionKey.trim();
+  if (!normalized) return DEFAULT_SESSION_KEY;
+  const recoverySuffixIndex = normalized.indexOf(OPENCLAW_SESSION_KEY_RECOVERY_SUFFIX);
+  if (recoverySuffixIndex <= 0) return normalized;
+  return normalized.slice(0, recoverySuffixIndex);
+}
+
+export function getResolvedDefaultSessionKey(): string {
+  return readSessionKeyOverride() ?? DEFAULT_SESSION_KEY;
+}
+
+function buildRecoverySessionKey(baseSessionKey: string): string {
+  const root = normalizeSessionKeyForRecovery(baseSessionKey);
+  const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  return `${root}${OPENCLAW_SESSION_KEY_RECOVERY_SUFFIX}${stamp}`;
+}
+
+function rotateSessionKeyForRecovery(baseSessionKey: string): string {
+  const nextSessionKey = buildRecoverySessionKey(baseSessionKey);
+  writeSessionKeyOverride(nextSessionKey);
+  cachedOpenClawTransportPromise = null;
+  return nextSessionKey;
+}
+
+function shouldAutoRecoverFromSendError(error: unknown): boolean {
+  const lower = normalizeErrorMessage(error).toLowerCase();
+  return (
+    lower.includes('413 failed to parse request') ||
+    lower.includes('context overflow') ||
+    lower.includes('prompt too large for the model') ||
+    lower.includes('payload too large')
+  );
+}
+
+function withRetryIdempotencyKey(idempotencyKey?: string): string | undefined {
+  const base = idempotencyKey?.trim();
+  if (!base) return undefined;
+  return `${base}:retry`;
 }
 
 function classifyProcessPollCapability(
@@ -1807,11 +1884,12 @@ async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
     cachedOpenClawTransportPromise = (async () => {
       try {
         const config = await getOpenClawGatewayConfig();
+        const resolvedSessionKey = readSessionKeyOverride() ?? config.sessionKey;
         const wsTransport: GatewayTransport = {
           mode: 'tauri-ws',
           wsUrl: config.wsUrl,
           token: config.token,
-          sessionKey: config.sessionKey,
+          sessionKey: resolvedSessionKey,
         };
 
         console.log('[Gateway] Using tauri-ws transport');
@@ -1826,7 +1904,25 @@ async function getDefaultOpenClawTransport(): Promise<GatewayTransport | null> {
 }
 
 async function resolveTransport(explicit?: GatewayTransport): Promise<GatewayTransport> {
-  if (explicit) return explicit;
+  if (explicit) {
+    if (explicit.mode === 'tauri-ws') {
+      const explicitSessionKey = explicit.sessionKey?.trim();
+      return {
+        ...explicit,
+        sessionKey: explicitSessionKey || getResolvedDefaultSessionKey(),
+      };
+    }
+
+    if (explicit.mode === 'tauri-openclaw') {
+      const explicitSessionKey = explicit.sessionKey?.trim();
+      return {
+        ...explicit,
+        sessionKey: explicitSessionKey || getResolvedDefaultSessionKey(),
+      };
+    }
+
+    return explicit;
+  }
 
   const openclaw = await getDefaultOpenClawTransport();
   if (openclaw) return openclaw;
@@ -2332,6 +2428,7 @@ async function sendViaTauriWs(
   idempotencyKey?: string,
   onStreamDelta?: (content: string) => void,
   onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void,
+  recoveryAttempted: boolean = false,
 ): Promise<SendResult> {
   if (transport.mode !== 'tauri-ws') {
     throw new Error('Tauri WebSocket transport is not configured');
@@ -3421,6 +3518,26 @@ async function sendViaTauriWs(
       ...(runtimeSource ? { runtimeSource } : {}),
     };
   } catch (error) {
+    if (!recoveryAttempted && shouldAutoRecoverFromSendError(error)) {
+      const recoverySessionKey = rotateSessionKeyForRecovery(sessionKey);
+      console.warn(
+        `[Gateway] Auto-retrying send on fresh session after upstream overflow/413: ${sessionKey} -> ${recoverySessionKey}`,
+      );
+      return sendViaTauriWs(
+        messageText,
+        attachments,
+        {
+          ...transport,
+          mode: 'tauri-ws',
+          sessionKey: recoverySessionKey,
+        },
+        withRetryIdempotencyKey(idempotencyKey),
+        onStreamDelta,
+        onActivityChange,
+        true,
+      );
+    }
+
     const existingTurn = turnRegistry.get(turnToken);
     if (!existingTurn || isTurnActive(existingTurn.status)) {
       const message = normalizeErrorMessage(error);

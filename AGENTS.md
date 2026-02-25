@@ -391,6 +391,7 @@ The app integrates with OpenClaw Gateway via Tauri commands:
 - `openclaw_chat` — send message and poll for response
 - Messages support image attachments (base64 encoded)
 - Attachment guardrails (chat UI): max 4 images, ~300KB combined encoded image budget per message (to stay under gateway WebSocket payload limits)
+- On context-overflow / `413 failed to parse request`, the chat bridge auto-rotates to a fresh session key and retries once; avoid hardcoding the default session key in new chat logic.
 
 Current chat UX is drawer-based:
 - Collapsed bottom `ChatBar` for status + input
