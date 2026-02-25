@@ -288,12 +288,14 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
         </div>
       )}
 
-      <div className={`min-h-0 p-2 ${
-        sending 
-          ? 'ring-1 ring-revival-accent/40' 
-          : 'ring-1 ring-revival-accent-400/40'
-      }`}>
-        <div className="relative rounded-lg [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px]">
+      <div className="min-h-0">
+        <div
+          className={`relative mx-2 my-2 rounded-lg border bg-neutral-0/80 dark:bg-neutral-950/70 focus-within:ring-1 focus-within:ring-revival-accent-400/40 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
+            sending
+              ? 'border-revival-accent/50'
+              : 'border-neutral-300/70 dark:border-neutral-600'
+          }`}
+        >
           {/* Slash command dropdown */}
           {showDropdown && (
             <CommandDropdown
@@ -353,7 +355,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
         </div>
 
         {images.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-1.5 px-1">
+          <div className="mt-2 mx-2 flex flex-wrap gap-1.5 px-1">
             {images.map((image, index) => (
               <button
                 type="button"
@@ -369,7 +371,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           </div>
         ) : null}
         {attachmentNotice ? (
-          <div className="mt-1 px-1 text-[11px] text-status-danger">{attachmentNotice}</div>
+          <div className="mt-1 mx-2 px-1 text-[11px] text-status-danger">{attachmentNotice}</div>
         ) : null}
       </div>
     </div>
