@@ -78,7 +78,7 @@ export function StatusBadge({
   );
 
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] leading-none text-neutral-700 dark:border-neutral-600 dark:text-neutral-300">
+    <span className="inline-flex h-4 items-center gap-1.5 whitespace-nowrap rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] leading-none text-neutral-700 dark:border-neutral-600 dark:text-neutral-300 overflow-hidden">
       <span className="relative flex h-3 w-3 items-center justify-center">
         {config.animate ? (
           <Loader2 className={`h-2.5 w-2.5 animate-spin ${config.colorClass}`} />
