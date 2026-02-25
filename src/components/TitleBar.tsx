@@ -12,6 +12,7 @@ interface TitleBarProps {
 export function TitleBar({ settingsMode = false }: TitleBarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const sidebarSide = useDashboardStore((s) => s.sidebarSide);
+  const thinSidebarSide = useDashboardStore((s) => s.thinSidebarSide);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
   const setSidebarSide = useDashboardStore((s) => s.setSidebarSide);
   const { updateAvailable, updating, updateBlockedReason, updateFailureReason, handleUpdate } = useAppUpdate();
@@ -111,8 +112,8 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         )}
       </div>
 
-      {/* Right sidebar toggle */}
-      <div className="ml-auto flex items-center">
+      {/* Right sidebar toggle — shifts inward when thin sidebar is on the right */}
+      <div className={`ml-auto flex items-center ${thinSidebarSide === 'right' ? '-mr-2 md:-mr-4' : ''}`}>
         <button
           type="button"
           onClick={() => toggleSidebar('right')}
