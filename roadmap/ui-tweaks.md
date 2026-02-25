@@ -1,10 +1,10 @@
 ---
 title: UI Tweaks
 id: ui-tweaks
-status: complete
+status: in-progress
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Verified and shipped"
+nextAction: "Remaining: item 17 title bar error details modal, item 18 chat bar height shell removal. Model selector (20) deferred."
 lastActivity: "2026-02-25"
 ---
 
@@ -123,7 +123,7 @@ Kanban cards in the Pending column have their right border/stroke clipped at cer
 
 ## 7 — Active Model Indicator (+ Context Window Usage)
 
-**Status:** ✅ Fixed (2026‑02‑23)
+**Status:** ✅ Fixed (2026‑02‑25)
 
 Surface the currently active OpenClaw model somewhere in the Clawchestra UI, with optional context usage visibility.
 
@@ -148,6 +148,7 @@ Surface the currently active OpenClaw model somewhere in the Clawchestra UI, wit
   - Add a **gateway event** that includes per‑session usage/limit on `chat.final` (ideal)
   - Poll the OpenClaw CLI `usage` command (heavier, not per‑turn)
 - Fallback: hide the ring unless usage data is present
+- Implemented: use `sessions.list` totals (`totalTokens` / `contextTokens`) for the ring (matches Gateway dashboard).
 
 **Open questions:**
 - Where exactly does it live? (Decide at implementation time — Pierce to call)
@@ -329,7 +330,7 @@ Replace the paper‑plane send icon with an **up arrow**, slightly reduce the ro
 3. Git Sync file lists stack — ✅ done (stacked rows)
 4. Divider notch — ✅ done (visible handle)
 5. Live state.json watcher — ✅ done (instant updates)
-6. Active model indicator (read‑only) — ✅ done (2026‑02‑23)
+6. Active model indicator (read‑only) — ✅ done (2026‑02‑25)
 7. Modal scoping — ✅ done (2026‑02‑23)
 8. Right sidebar toggle — ✅ done (2026‑02‑23)
 9. Theme colour relocation — ✅ done (2026‑02‑23)
@@ -344,4 +345,4 @@ Replace the paper‑plane send icon with an **up arrow**, slightly reduce the ro
 18. Chat bar height: remove inner field shell — ⏳ pending
 19. Chat send button: up arrow + bottom-right anchor — ✅ done (2026‑02‑24)
 20. Model selector (if/when) — higher risk, depends on item 6
-21. Context window usage — higher risk, depends on item 6
+21. Context window usage — ✅ done (2026‑02‑25)
