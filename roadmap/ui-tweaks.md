@@ -1,11 +1,11 @@
 ---
 title: UI Tweaks
 id: ui-tweaks
-status: pending
+status: complete
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Items 4 and 11 shipped. Next: item 12 (sticky modal close button), then items 13-17."
-lastActivity: "2026-02-24"
+nextAction: "Verified and shipped"
+lastActivity: "2026-02-25"
 ---
 
 # UI Tweaks
