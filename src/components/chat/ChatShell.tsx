@@ -557,7 +557,7 @@ export function ChatShell({
   const showAsSending = sending || isAgentWorking;
 
   return (
-    <div className={`pointer-events-none z-40 flex shrink-0 justify-center ${drawerOpen ? 'absolute inset-x-0 bottom-0 px-4 pb-4 md:px-6' : ''}`}>
+    <div className="pointer-events-none z-40 flex shrink-0 justify-center absolute inset-x-0 bottom-0 px-4 pb-4 md:px-6">
       <div className="pointer-events-auto w-full">
         {latestResponsePreview && !drawerOpen ? (
           <ResponseToast
