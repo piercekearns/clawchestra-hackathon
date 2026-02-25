@@ -57,7 +57,7 @@ Introduce a thin, always-visible sidebar that hosts core actions as icons (searc
 - Remove the search/refresh/add/git sync row from the board surface once this is live.
 - Ensure tooltips are consistent with existing app tooltip styling.
 
-## Open Questions
+## Decisions
 
 - **Git Sync icon:** use the GitHub octocat icon from Lucide (thin `github` icon), with a small notification badge.
 - **Cmd+K hint:** subtle inline text in the tooltip (no chip).
