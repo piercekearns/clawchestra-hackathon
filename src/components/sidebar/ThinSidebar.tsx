@@ -114,7 +114,7 @@ function ThinSidebarButton({
       >
         <Icon className={iconClassName ?? 'h-4 w-4'} />
         {badgeCount && badgeCount > 0 ? (
-          <span className="absolute right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#DFFF00] px-1 text-[10px] font-semibold text-neutral-900">
+          <span className="absolute right-0.5 -top-0.5 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-[#DFFF00] px-0.5 text-[8px] font-semibold text-neutral-900">
             {badgeCount}
           </span>
         ) : null}
