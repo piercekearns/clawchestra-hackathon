@@ -13,7 +13,7 @@ interface ThinSidebarProps {
   syncBadgeCount?: number;
 }
 
-const THIN_SIDEBAR_WIDTH = 48;
+const THIN_SIDEBAR_WIDTH = 44;
 
 export function ThinSidebar({
   side,
@@ -31,13 +31,13 @@ export function ThinSidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col items-center justify-between border-neutral-200/80 bg-neutral-0/95 py-3 dark:border-neutral-700/80 dark:bg-neutral-950/90 ${
+      className={`flex shrink-0 flex-col items-center justify-between border-neutral-200 bg-neutral-0/95 py-3 dark:border-neutral-700 dark:bg-neutral-950/90 ${
         isRight ? 'border-l' : 'border-r'
       }`}
       style={{ width: THIN_SIDEBAR_WIDTH }}
       aria-label="Thin sidebar"
     >
-      <div className="flex flex-col items-center gap-2">
+      <div className="mt-2 flex flex-col items-center gap-2">
         <ThinSidebarButton
           icon={Search}
           label={
@@ -54,6 +54,7 @@ export function ThinSidebar({
           label="Add project"
           onClick={onAddProject}
           ariaLabel="Add project"
+          iconClassName="h-5 w-5"
         />
         <ThinSidebarButton
           icon={RefreshCcw}
@@ -94,12 +95,14 @@ function ThinSidebarButton({
   onClick,
   badgeCount,
   ariaLabel,
+  iconClassName,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: ReactNode;
   onClick: () => void;
   badgeCount?: number;
   ariaLabel: string;
+  iconClassName?: string;
 }) {
   return (
     <Tooltip text={label}>
@@ -109,7 +112,7 @@ function ThinSidebarButton({
         aria-label={ariaLabel}
         className="relative flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
       >
-        <Icon className="h-4 w-4" />
+        <Icon className={iconClassName ?? 'h-4 w-4'} />
         {badgeCount && badgeCount > 0 ? (
           <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#DFFF00] px-1 text-[10px] font-semibold text-neutral-900">
             {badgeCount}

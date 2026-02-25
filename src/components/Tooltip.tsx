@@ -36,14 +36,18 @@ export function Tooltip({ text, children, className }: TooltipProps) {
   }, []);
 
   // Once the tooltip renders, measure it and compute pixel-perfect position
+  // Clamps horizontally so the tooltip never escapes the viewport.
   const measureTooltip = useCallback(
     (el: HTMLSpanElement | null) => {
       (tooltipRef as React.MutableRefObject<HTMLSpanElement | null>).current = el;
       if (!el || !anchor) return;
       const w = el.offsetWidth;
       const h = el.offsetHeight;
+      const MARGIN = 8;
+      const rawLeft = Math.round(anchor.cx - w / 2);
+      const clampedLeft = Math.max(MARGIN, Math.min(rawLeft, window.innerWidth - w - MARGIN));
       setOffset({
-        left: Math.round(anchor.cx - w / 2),
+        left: clampedLeft,
         top: Math.round(anchor.top - h - 6),
       });
     },
