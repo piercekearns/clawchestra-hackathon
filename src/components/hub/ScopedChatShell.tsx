@@ -157,8 +157,8 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Messages — relative wrapper so MessageList's absolute inset-0 works */}
-      <div className="relative min-h-0 flex-1">
+      {/* Messages — flex-col so MessageList's flex-1 stretches; relative for empty-state positioning */}
+      <div className="relative min-h-0 flex-1 flex flex-col">
         {messages.length === 0 && !streamingContent ? (
           <div className="absolute inset-0 flex items-center justify-center px-4">
             <p className="text-center text-xs text-neutral-400 dark:text-neutral-500">
