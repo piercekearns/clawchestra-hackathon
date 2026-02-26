@@ -85,8 +85,11 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
 ) {
   const [composerHeight, setComposerHeight] = useState(MIN_INPUT_HEIGHT);
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
+  const [toggleRight, setToggleRight] = useState(false);
   const prevInputRef = useRef(input);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const headerRef = useRef<HTMLButtonElement>(null);
+  const leftContentRef = useRef<HTMLDivElement>(null);
   const showDropdown = shouldShowCommandDropdown(input) && !dropdownDismissed;
   const statusLabelOverride =
     connectionState === 'connected' ? activeModelLabel ?? null : null;
@@ -138,6 +141,25 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
       return nextHeight;
     });
   }, [input, onComposerHeightChange]);
+
+  // Measure whether centering the toggle would overlap the left content.
+  // If so, pin it to the right instead.
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (!headerRef.current || !leftContentRef.current) return;
+      const totalWidth = headerRef.current.offsetWidth;
+      const leftWidth = leftContentRef.current.offsetWidth;
+      // Toggle hover area is ~28px wide; centred means its left edge is at (50% - 14px)
+      const TOGGLE_HALF = 14;
+      const GAP = 12; // minimum clearance between left content and toggle
+      const centreLeft = totalWidth / 2 - TOGGLE_HALF;
+      setToggleRight(leftWidth + GAP >= centreLeft);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (headerRef.current) ro.observe(headerRef.current);
+    return () => ro.disconnect();
+  }, [activityLabel, images.length]);
 
   const expanded = composerHeight > 72;
   const isFloating = variant === 'floating';
@@ -195,37 +217,46 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
 
       {isFloating ? (
         <button
+          ref={headerRef}
           type="button"
           className="relative flex w-full flex-shrink-0 items-center gap-2 border-b border-neutral-300/80 px-3 py-2 text-left dark:border-neutral-700/80"
           onClick={onToggleDrawer}
           aria-expanded={drawerOpen}
           aria-label={drawerOpen ? 'Collapse chat drawer' : 'Open chat drawer'}
         >
-          <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
-            OpenClaw
-          </span>
-          <div
-            className="cursor-default"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            <StatusBadge
-              state={connectionState}
-              labelOverride={statusLabelOverride}
-              usagePercent={usagePercent}
-              usageTooltip={usageTooltip}
-            />
-          </div>
-          {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
-          {images.length > 0 ? (
-            <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
-              {images.length} image{images.length === 1 ? '' : 's'} attached
+          {/* Left content — measured to determine toggle placement */}
+          <div ref={leftContentRef} className="flex items-center gap-2">
+            <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
+              OpenClaw
             </span>
-          ) : null}
+            <div
+              className="cursor-default"
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              <StatusBadge
+                state={connectionState}
+                labelOverride={statusLabelOverride}
+                usagePercent={usagePercent}
+                usageTooltip={usageTooltip}
+              />
+            </div>
+            {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
+            {images.length > 0 ? (
+              <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
+                {images.length} image{images.length === 1 ? '' : 's'} attached
+              </span>
+            ) : null}
+          </div>
+          {/* Toggle — centred by default, right-pinned only when left content would collide */}
           {showToggle ? (
             <span
-              className="pointer-events-none ml-auto text-neutral-500 dark:text-neutral-300"
+              className={`absolute flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-200/80 dark:text-neutral-300 dark:hover:bg-neutral-700/80 ${
+                toggleRight
+                  ? 'right-[14px] top-1/2 -translate-y-1/2'
+                  : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
+              }`}
               aria-hidden
             >
               {drawerOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
