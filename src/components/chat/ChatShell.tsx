@@ -583,7 +583,7 @@ export function ChatShell({
             aria-label="Close chat drawer backdrop"
           />
 
-          <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:px-6">
+          <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:px-6 md:pb-6">
             <section
               className="relative flex w-full flex-col overflow-hidden rounded-xl border border-neutral-300/80 bg-neutral-0/95 shadow-2xl backdrop-blur dark:border-neutral-600 dark:bg-neutral-900/95"
               style={{ height: `${drawerHeightPx}px` }}
@@ -681,61 +681,63 @@ export function ChatShell({
         </>
       )}
 
-      {/* Collapsed chat bar — always in flow, reserves its natural height */}
-      <div className={`pointer-events-none z-40 flex shrink-0 justify-center ${drawerOpen ? 'invisible' : ''}`}>
-        <div className="pointer-events-auto w-full">
-          {latestResponsePreview && !drawerOpen ? (
-            <ResponseToast
-              message={latestResponsePreview}
-              onDismiss={onDismissResponseToast}
-              onOpen={() => {
-                onDismissResponseToast();
-                onDrawerOpenChange(true);
-                window.setTimeout(() => textareaRef.current?.focus(), 0);
-              }}
-            />
-          ) : null}
+      {/* Collapsed chat bar — only rendered when drawer is closed */}
+      {!drawerOpen && (
+        <div className="z-40 flex shrink-0 justify-center">
+          <div className="w-full">
+            {latestResponsePreview ? (
+              <ResponseToast
+                message={latestResponsePreview}
+                onDismiss={onDismissResponseToast}
+                onOpen={() => {
+                  onDismissResponseToast();
+                  onDrawerOpenChange(true);
+                  window.setTimeout(() => textareaRef.current?.focus(), 0);
+                }}
+              />
+            ) : null}
 
-          <div className="relative z-40">
-            <ChatBar
-              ref={drawerOpen ? undefined : textareaRef}
-              variant="floating"
-              showToggle
-              connectionState={connectionState}
-              activityLabel={activityLabel}
-              isCompacting={isCompacting}
-              activeModelLabel={activeModelLabel}
-              activeModelTooltip={activeModelTooltip}
-              activeModelUsage={activeModelUsage}
-              drawerOpen={drawerOpen}
-              input={input}
-              sending={showAsSending}
-              dragActive={dragActive}
-              images={images}
-              attachmentNotice={attachmentNotice}
-              gatewayConnected={gatewayConnected}
-              queue={queue}
-              onInputChange={setInput}
-              onToggleDrawer={() => onDrawerOpenChange(!drawerOpen)}
-              onSubmit={() => {
-                void submit();
-              }}
-              onRemoveImage={(index) => {
-                setImages((current) => current.filter((_, i) => i !== index));
-                setAttachmentNotice(null);
-              }}
-              onRemoveFromQueue={onRemoveFromQueue}
-              onRetryQueuedMessage={onRetryQueuedMessage}
-              onPasteFiles={appendImages}
-              onDropFiles={appendImages}
-              onDragStateChange={(active) => {
-                setDragActive(active);
-                if (!active) setDragDepth(0);
-              }}
-            />
+            <div className="relative z-40">
+              <ChatBar
+                ref={textareaRef}
+                variant="floating"
+                showToggle
+                connectionState={connectionState}
+                activityLabel={activityLabel}
+                isCompacting={isCompacting}
+                activeModelLabel={activeModelLabel}
+                activeModelTooltip={activeModelTooltip}
+                activeModelUsage={activeModelUsage}
+                drawerOpen={drawerOpen}
+                input={input}
+                sending={showAsSending}
+                dragActive={dragActive}
+                images={images}
+                attachmentNotice={attachmentNotice}
+                gatewayConnected={gatewayConnected}
+                queue={queue}
+                onInputChange={setInput}
+                onToggleDrawer={() => onDrawerOpenChange(!drawerOpen)}
+                onSubmit={() => {
+                  void submit();
+                }}
+                onRemoveImage={(index) => {
+                  setImages((current) => current.filter((_, i) => i !== index));
+                  setAttachmentNotice(null);
+                }}
+                onRemoveFromQueue={onRemoveFromQueue}
+                onRetryQueuedMessage={onRetryQueuedMessage}
+                onPasteFiles={appendImages}
+                onDropFiles={appendImages}
+                onDragStateChange={(active) => {
+                  setDragActive(active);
+                  if (!active) setDragDepth(0);
+                }}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
