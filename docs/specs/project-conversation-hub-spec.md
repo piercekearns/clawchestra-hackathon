@@ -123,16 +123,24 @@ The hub has two distinct row types with different visual structures and differen
 
 #### Project thread header row
 
+**Default state (no hover):**
+```
+[📁]  Project Name
+```
+
+**On hover:**
 ```
 [▾]  Project Name ···················  [+]  [⋯]
 ```
 
-| Zone | Element | Behaviour |
-|------|---------|-----------|
-| Far left | **Chevron `▾` / `▸`** | Toggle expand/collapse for the thread. Always visible. |
-| Middle | **Project name** | Always visible. Double-click to rename (inline edit). Truncates with `…` + hover scroll animation if too long. |
-| Right (hover) | **`+` add button** | Fades in on row hover. Opens a small type-picker: *OpenClaw chat* (default) or *Terminal session* (with agent selector). Creates the new chat/session within this thread. |
-| Far right (hover) | **`⋯` menu** | Fades in on row hover. See actions below. |
+| Zone | Element | Default | On Hover |
+|------|---------|---------|----------|
+| Far left | **Folder icon `📁` / Chevron `▾▸`** | Folder icon — always visible, signals this is a container | Replaced by chevron — click to expand/collapse thread |
+| Middle | **Project name** | Always visible. Double-click to rename. Truncates with `…` + hover scroll if too long. | Same, plus scroll animation plays |
+| Right | **`+` add button** | Hidden | Fades in. Opens type-picker: *OpenClaw chat* (default) or *Terminal session* (with agent selector). |
+| Far right | **`⋯` menu** | Hidden | Fades in. See actions below. |
+
+The folder icon and chevron occupy the same space — the folder icon is the resting state, the chevron is the hover state. The swap signals affordance without cluttering the default view.
 
 **Project header `⋯` menu:**
 - *Expand all / Collapse all* (toggle all threads at once)
