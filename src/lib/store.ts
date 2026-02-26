@@ -17,12 +17,13 @@ import {
   getAllProjects,
   getDashboardSettings,
   hubChatList,
+  hubChatMessageSave,
   injectAgentGuidance,
   isTauriRuntime,
   pathExists,
   type PersistedChatMessage,
 } from './tauri';
-import type { HubChat } from './hub-types';
+import type { HubChat, HubChatModelState } from './hub-types';
 import {
   trackChatPersistenceWrite,
 } from './chat-persistence';
@@ -81,6 +82,14 @@ interface DashboardState {
   hubChats: HubChat[];
   /** Transient set of chat IDs currently waiting for a response (not persisted). */
   hubBusyChatIds: Set<string>;
+  /** Transient per-chat message history — keyed by chatId (not persisted). */
+  hubChatMessages: Partial<Record<string, ChatMessage[]>>;
+  /** Transient per-chat model/usage badge state (not persisted). */
+  hubChatModelState: Partial<Record<string, HubChatModelState>>;
+  /** Transient set of chat IDs currently streaming a response — for sidebar indicator (not persisted). */
+  hubStreamingChatIds: Set<string>;
+  /** Tracks whether system context has been injected on first send for each chat (not persisted). */
+  hubChatContextInjected: Partial<Record<string, boolean>>;
   // Hub actions
   setSidebarMode: (mode: 'default' | 'settings') => void;
   setHubActiveChatId: (id: string | null) => void;
@@ -92,6 +101,20 @@ interface DashboardState {
   refreshHubChats: () => Promise<void>;
   addHubBusyChatId: (id: string) => void;
   removeHubBusyChatId: (id: string) => void;
+  /** Add a message to a hub chat — atomic dedup-then-append inside a single set() updater. */
+  addHubChatMessage: (chatId: string, message: ChatMessage) => void;
+  /** Bulk set (or merge) messages for a hub chat — used for cold-start SQLite load. */
+  setHubChatMessages: (chatId: string, messages: ChatMessage[], merge?: boolean) => void;
+  /** Partial-update model/tooltip/usage for a hub chat. */
+  setHubChatModelState: (chatId: string, update: Partial<HubChatModelState>) => void;
+  /** Mark system context as injected for a hub chat (first-send tracking). */
+  setHubChatContextInjected: (chatId: string, injected: boolean) => void;
+  /** Clean up all transient state for a deleted hub chat — prevents memory leaks. */
+  clearHubChatState: (chatId: string) => void;
+  /** Mark a hub chat as actively streaming (for sidebar indicator). */
+  addHubStreamingChatId: (id: string) => void;
+  /** Unmark a hub chat from streaming. */
+  removeHubStreamingChatId: (id: string) => void;
 
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
@@ -384,6 +407,21 @@ export const __storeTestUtils = {
   collapseChatDuplicates,
 };
 
+/** Stable empty array for hub chat selectors — avoids unstable `?? []` refs. */
+const EMPTY_HUB_MESSAGES: ChatMessage[] = [];
+
+/** Export for use in useScopedChatSession selectors. */
+export { EMPTY_HUB_MESSAGES };
+
+function toPersistedHubMessage(msg: ChatMessage): PersistedChatMessage {
+  return {
+    id: msg._id ?? generateMessageId(),
+    role: msg.role,
+    content: msg.content,
+    timestamp: msg.timestamp ?? Date.now(),
+  };
+}
+
 function normalizeBoardColumnState(value: unknown): Record<string, string[]> {
   if (!value || typeof value !== 'object') return {};
   const normalized: Record<string, string[]> = {};
@@ -431,6 +469,10 @@ export const useDashboardStore = create<DashboardState>()(
       hubThreadOrder: [],
       hubChats: [],
       hubBusyChatIds: new Set<string>(),
+      hubChatMessages: {},
+      hubChatModelState: {},
+      hubStreamingChatIds: new Set<string>(),
+      hubChatContextInjected: {},
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -793,6 +835,109 @@ export const useDashboardStore = create<DashboardState>()(
           const next = new Set(state.hubBusyChatIds);
           next.delete(id);
           return { hubBusyChatIds: next };
+        }),
+
+      // Hub chat message actions (Phase 2.x: unified scoped chat infrastructure)
+      addHubChatMessage: (chatId, message) => {
+        set((state) => {
+          // 1. Sanitize
+          const sanitized = sanitizeIncomingChatMessage(message);
+
+          // 2. Generate ID if missing
+          const id = sanitized._id ?? generateMessageId();
+          const timestamp = sanitized.timestamp ?? Date.now();
+          const messageWithMeta = { ...sanitized, _id: id, timestamp };
+
+          // 3. Dedup check — simple signature match against last 20 messages
+          const existing = state.hubChatMessages[chatId] ?? [];
+          const sig = messageIdentitySignature(messageWithMeta);
+          const isDupe = existing.slice(-20).some((m) => messageIdentitySignature(m) === sig);
+          if (isDupe) return state; // no-op
+
+          // 4. Append + sort (hub chats are mostly append-only, sort is cheap insurance)
+          const updated = sortChatMessagesChronologically([...existing, messageWithMeta]);
+
+          // 5. Persist (fire-and-forget with tracking)
+          if (isTauriRuntime()) {
+            void trackChatPersistenceWrite(
+              hubChatMessageSave(chatId, toPersistedHubMessage(messageWithMeta)),
+            ).catch((err) => {
+              console.warn('[Store] Failed to persist hub message:', err);
+            });
+          }
+
+          return { hubChatMessages: { ...state.hubChatMessages, [chatId]: updated } };
+        });
+      },
+
+      setHubChatMessages: (chatId, messages, merge = false) => {
+        set((state) => {
+          const existing = state.hubChatMessages[chatId] ?? [];
+          let final: ChatMessage[];
+          if (merge && existing.length > 0) {
+            // Merge loaded messages with any that arrived via WS during the async SQLite load
+            const seen = new Set<string>();
+            final = sortChatMessagesChronologically(
+              [...existing, ...messages].filter((m) => {
+                const sig = messageIdentitySignature(m);
+                if (seen.has(sig)) return false;
+                seen.add(sig);
+                return true;
+              }),
+            );
+          } else {
+            final = messages;
+          }
+          return { hubChatMessages: { ...state.hubChatMessages, [chatId]: final } };
+        });
+      },
+
+      setHubChatModelState: (chatId, update) => {
+        set((state) => {
+          const current = state.hubChatModelState[chatId] ?? { label: null, tooltip: null, usage: null };
+          return {
+            hubChatModelState: {
+              ...state.hubChatModelState,
+              [chatId]: { ...current, ...update },
+            },
+          };
+        });
+      },
+
+      setHubChatContextInjected: (chatId, injected) => {
+        set((state) => ({
+          hubChatContextInjected: { ...state.hubChatContextInjected, [chatId]: injected },
+        }));
+      },
+
+      clearHubChatState: (chatId) => {
+        set((state) => {
+          const { [chatId]: _msgs, ...restMsgs } = state.hubChatMessages;
+          const { [chatId]: _model, ...restModel } = state.hubChatModelState;
+          const { [chatId]: _ctx, ...restCtx } = state.hubChatContextInjected;
+          const newBusy = new Set(state.hubBusyChatIds);
+          newBusy.delete(chatId);
+          const newStreaming = new Set(state.hubStreamingChatIds);
+          newStreaming.delete(chatId);
+          return {
+            hubChatMessages: restMsgs,
+            hubChatModelState: restModel,
+            hubChatContextInjected: restCtx,
+            hubBusyChatIds: newBusy,
+            hubStreamingChatIds: newStreaming,
+          };
+        });
+      },
+
+      addHubStreamingChatId: (id) =>
+        set((state) => ({
+          hubStreamingChatIds: new Set(state.hubStreamingChatIds).add(id),
+        })),
+      removeHubStreamingChatId: (id) =>
+        set((state) => {
+          const next = new Set(state.hubStreamingChatIds);
+          next.delete(id);
+          return { hubStreamingChatIds: next };
         }),
 
       updateProjectAndReload: async (project, updates) => {

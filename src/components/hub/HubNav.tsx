@@ -168,6 +168,8 @@ export function HubNav({ onToast }: HubNavProps) {
 
   const handleDeleteChat = async (chatId: string) => {
     await hubChatDelete(chatId);
+    // Clean up transient store state for the deleted chat (prevents memory leaks)
+    useDashboardStore.getState().clearHubChatState(chatId);
     if (hubActiveChatId === chatId) {
       setHubActiveChatId(null);
       setHubDrawerOpen(false);
