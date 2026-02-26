@@ -63,6 +63,7 @@ import type {
   ProjectStatus,
   ProjectViewModel,
   RoadmapItemWithDocs,
+  RoadmapStatus,
   ThemePreference,
 } from './lib/schema';
 import type { RoadmapItemState } from './lib/state-json';
@@ -301,6 +302,8 @@ export default function App() {
   const [addRoadmapItemInitialStatus, setAddRoadmapItemInitialStatus] = useState<string | undefined>(undefined);
   const [showArchived, setShowArchived] = useState(false);
   const [deleteAllArchivedConfirmOpen, setDeleteAllArchivedConfirmOpen] = useState(false);
+  /** Maps item ID → status before archive, so Restore returns items to their original column. */
+  const [preArchiveStatus, setPreArchiveStatus] = useState<Record<string, RoadmapStatus>>({});
   const [settingsPageOpen, setSettingsPageOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaveNudge, setSettingsSaveNudge] = useState(false);
@@ -1728,6 +1731,7 @@ export default function App() {
     setViewContext(defaultView());
     setRoadmapItems([]);
     setShowArchived(false);
+    setPreArchiveStatus({});
   };
 
   const openRoadmapView = async (project: ProjectViewModel) => {
@@ -2596,10 +2600,12 @@ export default function App() {
                 const handleArchive = (item: RoadmapItemWithDocs) => {
                   const previousStatus = item.status;
                   const previousPriority = item.priority;
+                  setPreArchiveStatus((prev) => ({ ...prev, [item.id]: previousStatus }));
                   setRoadmapItems((prev) =>
                     prev.map((i) => (i.id === item.id ? { ...i, status: 'archived' } : i)),
                   );
                   void updateRoadmapItem(projectId, item.id, { status: 'archived' }).catch(() => {
+                    setPreArchiveStatus((prev) => { const next = { ...prev }; delete next[item.id]; return next; });
                     setRoadmapItems((prev) =>
                       prev.map((i) =>
                         i.id === item.id ? { ...i, status: previousStatus, priority: previousPriority } : i,
@@ -2610,6 +2616,7 @@ export default function App() {
                   pushToast('success', `"${item.title}" archived`, {
                     label: 'Undo',
                     onClick: () => {
+                      setPreArchiveStatus((prev) => { const next = { ...prev }; delete next[item.id]; return next; });
                       setRoadmapItems((prev) =>
                         prev.map((i) =>
                           i.id === item.id ? { ...i, status: previousStatus, priority: previousPriority } : i,
@@ -2621,8 +2628,8 @@ export default function App() {
                 };
 
                 const handleRestore = (item: RoadmapItemWithDocs) => {
-                  // Restore to pending by default (original status is lost once archived)
-                  const restoreTo = 'pending';
+                  const restoreTo = preArchiveStatus[item.id] ?? 'pending';
+                  setPreArchiveStatus((prev) => { const next = { ...prev }; delete next[item.id]; return next; });
                   setRoadmapItems((prev) =>
                     prev.map((i) => (i.id === item.id ? { ...i, status: restoreTo } : i)),
                   );
@@ -2632,7 +2639,8 @@ export default function App() {
                     );
                     pushToast('error', 'Failed to restore item');
                   });
-                  pushToast('success', `"${item.title}" restored to pending`);
+                  const columnLabel = viewContext.columns.find((c) => c.id === restoreTo)?.label ?? restoreTo;
+                  pushToast('success', `"${item.title}" restored to ${columnLabel}`);
                 };
 
                 const handleDeleteItem = (item: RoadmapItemWithDocs) => {
@@ -2769,10 +2777,10 @@ export default function App() {
                               <article
                                 key={item.id}
                                 onClick={() => setSelectedRoadmapItemId(item.id)}
-                                className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 opacity-60 shadow-sm transition hover:border-neutral-300 hover:opacity-80 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:border-neutral-600"
+                                className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 shadow-sm transition hover:border-revival-accent-400 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
                               >
                                 <div className="flex items-start justify-between gap-2">
-                                  <h3 className="text-sm font-semibold leading-tight text-neutral-600 line-through dark:text-neutral-400">
+                                  <h3 className="text-sm font-semibold leading-tight">
                                     {item.title}
                                     {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
                                   </h3>
