@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, Check, Home, MoreHorizontal, Pin } from 'lucide-react';
+import { Archive, Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import { InlineEdit } from './InlineEdit';
 
@@ -44,7 +44,7 @@ export function ChatEntryRow({
       } ${isItemComplete ? 'opacity-60' : ''}`}
       onClick={() => onSelect(chat.id)}
     >
-      {/* Icon slot: animated dots when busy, home icon for project chats, pin for others */}
+      {/* Icon slot: busy dots → type icon with unread overlay */}
       {isBusy ? (
         <span className="flex h-5 w-5 shrink-0 items-center justify-center gap-[2px]">
           <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
@@ -53,27 +53,28 @@ export function ChatEntryRow({
         </span>
       ) : isProjectChat ? (
         <span
-          className="flex h-5 w-5 shrink-0 items-center justify-center text-revival-accent-400/80 dark:text-revival-accent-400/70"
+          className="relative flex h-5 w-5 shrink-0 items-center justify-center text-revival-accent-400/80 dark:text-revival-accent-400/70"
           aria-label="Project chat"
         >
           <Home className="h-4 w-4" />
+          {chat.unread && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+          )}
+        </span>
+      ) : chat.pinned ? (
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-[#DFFF00]">
+          <Pin className="h-4 w-4" />
+          {chat.unread && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+          )}
         </span>
       ) : (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onTogglePin(chat.id, !chat.pinned);
-          }}
-          className={`flex h-5 w-5 shrink-0 items-center justify-center transition-opacity ${
-            chat.pinned
-              ? 'text-[#DFFF00] opacity-100'
-              : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
-          }`}
-          aria-label={chat.pinned ? 'Unpin' : 'Pin'}
-        >
-          <Pin className="h-4 w-4" />
-        </button>
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
+          <MessageSquare className="h-3.5 w-3.5" />
+          {chat.unread && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+          )}
+        </span>
       )}
 
       {/* Chat name — on hover, reserve space for action icons so text clips */}
@@ -85,16 +86,13 @@ export function ChatEntryRow({
           useScrollReveal
           onEditingChange={setIsEditing}
         />
-        {chat.unread && (
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#DFFF00]" />
-        )}
       </div>
 
       {isItemComplete && (
         <Check className="h-3 w-3 shrink-0 text-green-500" />
       )}
 
-      {/* Right hover actions — ⋯ first, then archive (archive hidden for project-level chats) */}
+      {/* Right hover actions — ⋯, pin toggle (non-project), archive (non-project) */}
       <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md px-0.5 transition-opacity ${
         isEditing ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
       } ${
@@ -105,6 +103,23 @@ export function ChatEntryRow({
           onMarkUnread={() => onMarkUnread(chat.id)}
           onDelete={() => onDelete(chat.id)}
         />
+        {!isProjectChat && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin(chat.id, !chat.pinned);
+            }}
+            className={`flex h-5 w-5 items-center justify-center rounded ${
+              chat.pinned
+                ? 'text-[#DFFF00] hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                : 'text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
+            }`}
+            aria-label={chat.pinned ? 'Unpin' : 'Pin'}
+          >
+            <Pin className="h-3 w-3" />
+          </button>
+        )}
         {!isProjectChat && (
           <button
             type="button"

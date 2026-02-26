@@ -106,7 +106,8 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
       setModelLabel(incoming?.modelLabel ?? null);
       setModelTooltip(incoming?.modelTooltip ?? null);
       setModelUsage(incoming?.usage ?? null);
-      setSending(false);
+      // Restore sending state — if the chat is still waiting for a response, keep the activity indicator
+      setSending(useDashboardStore.getState().hubBusyChatIds.has(chat.id));
       setStreamingContent(null);
       setContextLoaded(false);
       contextRef.current = null;
