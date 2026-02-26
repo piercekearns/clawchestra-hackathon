@@ -50,7 +50,7 @@ interface BoardProps<T extends BoardItem> {
 }
 
 const MIN_COLUMN_WIDTH = 300;
-const MINIMIZED_COLUMN_WIDTH = 78;
+const MINIMIZED_COLUMN_WIDTH = 74;
 const COLUMN_GAP = 16;
 const EMPTY_ARRAY: string[] = [];
 
