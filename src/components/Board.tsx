@@ -162,6 +162,7 @@ export function Board<T extends BoardItem>({
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+  const [activeColumnWidth, setActiveColumnWidth] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [cardDragOverColumnId, setCardDragOverColumnId] = useState<string | null>(null);
   const [itemsBeforeDrag, setItemsBeforeDrag] = useState<T[] | null>(null);
@@ -237,6 +238,7 @@ export function Board<T extends BoardItem>({
     const id = String(event.active.id);
     if (isColumnId(id)) {
       setActiveColumnId(id.replace(/^col:/, ''));
+      setActiveColumnWidth(event.active.rect.current.initial?.width ?? null);
     } else {
       setActiveCardId(id);
       setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
@@ -471,14 +473,7 @@ export function Board<T extends BoardItem>({
           <div
             className="flex flex-col overflow-hidden rounded-2xl border border-revival-accent-400 bg-neutral-100/90 p-3 shadow-2xl dark:bg-neutral-900/90"
             style={{
-              width: minimizedSet.has(activeColumn.id)
-                ? `${MINIMIZED_COLUMN_WIDTH}px`
-                : `${Math.max(
-                  MIN_COLUMN_WIDTH,
-                  gridRef.current
-                    ? (gridRef.current.clientWidth - (orderedColumns.length - 1) * COLUMN_GAP) / orderedColumns.length
-                    : MIN_COLUMN_WIDTH,
-                )}px`,
+              width: activeColumnWidth ? `${activeColumnWidth}px` : undefined,
               height: gridRef.current ? `${gridRef.current.clientHeight}px` : undefined,
             }}
           >

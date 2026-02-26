@@ -1761,7 +1761,6 @@ export default function App() {
           newStatus: item.status,
         })),
       );
-      pushToast('success', 'Roadmap saved');
     } catch (error) {
       setRoadmapItems(previousItems);
       pushToast(
