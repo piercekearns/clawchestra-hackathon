@@ -2545,6 +2545,7 @@ struct CreateRoadmapItemInput {
     next_action: Option<String>,
     tags: Option<Vec<String>>,
     icon: Option<String>,
+    spec_doc_content: Option<String>,
 }
 
 /// Create a new roadmap item in a project's db.json, write state.json, emit event.
@@ -2610,8 +2611,8 @@ async fn create_roadmap_item(
                 spec_doc_branch_updated_at: None,
                 plan_doc_branch: None,
                 plan_doc_branch_updated_at: None,
-                spec_doc_content: None,
-                spec_doc_content_updated_at: None,
+                spec_doc_content: item.spec_doc_content.clone(),
+                spec_doc_content_updated_at: item.spec_doc_content.as_ref().map(|_| ts),
                 plan_doc_content: None,
                 plan_doc_content_updated_at: None,
                 completed_at: None,

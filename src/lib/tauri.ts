@@ -82,6 +82,7 @@ export type CreateRoadmapItemInput = {
   nextAction?: string;
   tags?: string[];
   icon?: string;
+  specDocContent?: string;
 };
 
 /** Partial update payload for a roadmap item — only fields that are present are applied. */
