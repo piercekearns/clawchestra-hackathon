@@ -12,7 +12,7 @@ import {
   arrayMove,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
 import type { HubChat, HubThread } from '../../lib/hub-types';
@@ -28,7 +28,6 @@ export function HubNav({ onToast }: HubNavProps) {
   const hubCollapsedThreads = useDashboardStore((s) => s.hubCollapsedThreads);
   const hubActiveChatId = useDashboardStore((s) => s.hubActiveChatId);
   const hubThreadOrder = useDashboardStore((s) => s.hubThreadOrder);
-  const setSidebarMode = useDashboardStore((s) => s.setSidebarMode);
   const setHubActiveChatId = useDashboardStore((s) => s.setHubActiveChatId);
   const setHubDrawerOpen = useDashboardStore((s) => s.setHubDrawerOpen);
   const toggleHubThread = useDashboardStore((s) => s.toggleHubThread);
@@ -190,34 +189,19 @@ export function HubNav({ onToast }: HubNavProps) {
     setHubDrawerOpen(true);
   };
 
-  const handleBack = () => {
-    setSidebarMode('default');
-  };
-
   const threadIds = useMemo(() => threads.map((t) => t.projectId), [threads]);
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-700">
-        <div className="flex items-center gap-1.5">
-          <MessageSquare className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
-          <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
-            Conversations
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={handleBack}
-          className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-          aria-label="Close conversations"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+      <div className="flex items-center gap-1.5 px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Threads
+        </span>
       </div>
 
       {/* Thread list */}
-      <div className="flex-1 overflow-y-auto px-1 py-2">
+      <div className="flex-1 overflow-y-auto px-1 py-1">
         {threads.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
             <MessageSquare className="h-8 w-8 text-neutral-300 dark:text-neutral-600" />

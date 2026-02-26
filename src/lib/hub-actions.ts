@@ -22,7 +22,7 @@ export async function openOrCreateProjectChat(
 
   // Prefer the project-level chat (no itemId), fallback to first
   const target = chats.find((c) => !c.itemId) ?? chats[0];
-  store.setSidebarMode('hub');
+  store.setSidebarMode('default');
   store.setSidebarOpen(true);
   store.setHubActiveChatId(target.id);
   store.setHubDrawerOpen(true);
@@ -62,7 +62,7 @@ export async function openOrCreateItemChat(
 
   await store.refreshHubChats();
 
-  store.setSidebarMode('hub');
+  store.setSidebarMode('default');
   store.setSidebarOpen(true);
   store.setHubActiveChatId(itemChat.id);
   store.setHubDrawerOpen(true);

@@ -9,22 +9,12 @@ import {
 } from '../../lib/store';
 import { HubNav } from '../hub/HubNav';
 
-interface SidebarAction {
-  id: string;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  onClick: () => void;
-  badgeCount?: number;
-  iconClassName?: string;
-}
-
 interface SidebarProps {
   side: 'left' | 'right';
-  mode?: 'default' | 'settings' | 'hub';
+  mode?: 'default' | 'settings';
   onOpenSettings: () => void;
   onBack?: () => void;
   elevated?: boolean;
-  actions?: SidebarAction[];
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
 }
 
@@ -34,7 +24,6 @@ export function Sidebar({
   onOpenSettings,
   onBack,
   elevated = false,
-  actions = [],
   onToast,
 }: SidebarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
@@ -48,7 +37,6 @@ export function Sidebar({
   const [isHandleHover, setIsHandleHover] = useState(false);
   const isRight = side === 'right';
   const isSettingsMode = mode === 'settings';
-  const isHubMode = mode === 'hub';
   const BackIcon = isRight ? ArrowRight : ArrowLeft;
 
   const handleDragStart = useCallback(
@@ -96,13 +84,8 @@ export function Sidebar({
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className={`flex h-full flex-col overflow-hidden ${sidebarOpen ? '' : 'pointer-events-none'}`} style={{ width: sidebarWidth }}>
-        {/* Hub mode — full takeover */}
-        {sidebarOpen && isHubMode && (
-          <HubNav onToast={onToast} />
-        )}
-
         {/* Settings back button */}
-        {sidebarOpen && isSettingsMode && !isHubMode && onBack && (
+        {sidebarOpen && isSettingsMode && onBack && (
           <div className="border-b border-neutral-200 p-2 dark:border-neutral-700">
             <button
               type="button"
@@ -116,51 +99,16 @@ export function Sidebar({
           </div>
         )}
 
-        {sidebarOpen && !isSettingsMode && !isHubMode && actions.length > 0 && (
-          <div className={`flex flex-col gap-0.5 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
-            {actions.map((action) => {
-              const Icon = action.icon;
-              const iconEl = (
-                <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                  <Icon className={action.iconClassName ?? 'h-4 w-4'} />
-                  {action.badgeCount && action.badgeCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#DFFF00] px-0.5 text-[9px] font-semibold text-neutral-900">
-                      {action.badgeCount}
-                    </span>
-                  ) : null}
-                </span>
-              );
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  onClick={action.onClick}
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
-                    isRight ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  {isRight ? (
-                    <>
-                      <span className="min-w-0 truncate text-right">{action.label}</span>
-                      {iconEl}
-                    </>
-                  ) : (
-                    <>
-                      {iconEl}
-                      <span className="min-w-0 truncate">{action.label}</span>
-                    </>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        {/* Thread list — main content when not in settings */}
+        {sidebarOpen && !isSettingsMode && (
+          <HubNav onToast={onToast} />
         )}
 
-        {/* Main content area — empty for Phase 1 (hidden in hub mode) */}
-        {!isHubMode && <div className="flex-1" />}
+        {/* Flex spacer for settings mode */}
+        {isSettingsMode && <div className="flex-1" />}
 
-        {/* Theme toggle — own section above settings */}
-        {sidebarOpen && !isSettingsMode && !isHubMode && (
+        {/* Theme toggle */}
+        {sidebarOpen && !isSettingsMode && (
           <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
             <div
               className={`pointer-events-auto flex ${isRight ? 'justify-end' : 'justify-start'} ${isRight ? 'mr-1' : 'ml-1'}`}
@@ -193,8 +141,8 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Settings button — own section */}
-        {sidebarOpen && !isSettingsMode && !isHubMode && (
+        {/* Settings button */}
+        {sidebarOpen && !isSettingsMode && (
           <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
             <button
               type="button"

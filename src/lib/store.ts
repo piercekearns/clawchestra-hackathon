@@ -71,7 +71,7 @@ interface DashboardState {
   sidebarWidth: number;
   thinSidebarSide: 'left' | 'right';
   // Hub state
-  sidebarMode: 'default' | 'settings' | 'hub';
+  sidebarMode: 'default' | 'settings';
   hubActiveChatId: string | null;
   hubDrawerOpen: boolean;
   hubDrawerWidth: number;
@@ -79,7 +79,7 @@ interface DashboardState {
   hubThreadOrder: string[];
   hubChats: HubChat[];
   // Hub actions
-  setSidebarMode: (mode: 'default' | 'settings' | 'hub') => void;
+  setSidebarMode: (mode: 'default' | 'settings') => void;
   setHubActiveChatId: (id: string | null) => void;
   setHubDrawerOpen: (open: boolean) => void;
   setHubDrawerWidth: (width: number) => void;

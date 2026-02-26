@@ -1584,18 +1584,19 @@ export default function App() {
   }, [setThinSidebarSide, thinSidebarSide]);
 
   const handleToggleHub = useCallback(() => {
-    if (sidebarMode === 'hub') {
-      setSidebarMode('default');
+    const store = useDashboardStore.getState();
+    if (store.sidebarOpen && !settingsPageOpen) {
+      store.setSidebarOpen(false);
     } else {
       setSettingsPageOpen(false);
-      setSidebarMode('hub');
-      useDashboardStore.getState().setSidebarOpen(true);
+      setSidebarMode('default');
+      store.setSidebarOpen(true);
     }
-  }, [sidebarMode, setSidebarMode]);
+  }, [setSidebarMode, settingsPageOpen]);
 
   const handleQuickAccessSelectChat = useCallback((chatId: string) => {
     setSettingsPageOpen(false);
-    setSidebarMode('hub');
+    setSidebarMode('default');
     useDashboardStore.getState().setSidebarOpen(true);
     useDashboardStore.getState().setHubActiveChatId(chatId);
     useDashboardStore.getState().setHubDrawerOpen(true);
@@ -2500,7 +2501,6 @@ export default function App() {
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
-            actions={sidebarActions}
             onToast={pushToast}
           />
         ) : null}
@@ -3207,7 +3207,6 @@ export default function App() {
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
-            actions={sidebarActions}
             onToast={pushToast}
           />
         ) : null}
