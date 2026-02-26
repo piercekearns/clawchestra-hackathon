@@ -133,7 +133,7 @@ Ephemeral — resets when the user navigates away from the project's roadmap vie
 ### Icon Imports
 
 ```tsx
-import { Archive, CircleCheckBig } from 'lucide-react';
+import { Archive, ArchiveRestore, CircleCheckBig, Trash2 } from 'lucide-react';
 ```
 
 ### Status Value
@@ -171,3 +171,65 @@ The top-right item count element needs a hover state that swaps its content to t
 ### Phase 3: Restore on Archived Cards
 - Hover Restore button (`ArchiveRestore` or `RotateCcw`) on archived cards
 - Moves item back to its pre-archive status
+
+### Phase 4: Delete from Archive
+- Per-card delete and Delete All — see section below
+
+---
+
+## Delete from Archive
+
+The Archived column surfaces two delete paths — one per-card, one nuclear. Archive is soft removal; delete is permanent.
+
+### Delete All (column-level)
+
+A `Trash2` icon sits in the Archived column header, to the left of the Hide button.
+
+```
+[ Archive icon ]  Archived  (N)  ————————  [ 🗑 ]  [ Hide ]
+```
+
+- On hover: tooltip reads **"Delete all archived items"**
+- On click: opens a **destructive confirmation modal**
+
+#### Destructive Confirmation Modal
+
+```
+┌─────────────────────────────────────────┐
+│  Delete all archived items?             │
+│                                         │
+│  This will permanently delete N         │
+│  archived items. This action cannot     │
+│  be undone.                             │
+│                                         │
+│              [ Cancel ]  [ Delete all ] │
+└─────────────────────────────────────────┘
+```
+
+- Modal uses destructive styling: red/danger border, "Delete all" button in `bg-status-danger text-white`
+- Default focus on **Cancel** (safe default)
+- "Delete all" requires a deliberate click — no keyboard shortcut that could fire accidentally
+- On confirm: all archived items removed from state.json; Archived column closes; toggle resets to off; item count updates
+
+### Delete Individual (per-card)
+
+Each archived card surfaces a `Trash2` icon on hover, in the same position and style as other lifecycle hover buttons.
+
+```
+[ Restore ]  title / metadata  [ 🗑 ]
+```
+
+- On click: item is immediately removed from state.json
+- **No confirmation modal** — the toast provides the recovery window
+- Toast fires: **"Item deleted"** + **Undo** button
+- Undo TTL: matches the existing toast auto-dismiss duration (typically 5–8s); after dismissal, deletion is permanent
+- Undo re-inserts the item at its previous position in the archived column
+
+### What "Delete" Means for Files on Disk
+
+> **Deliberate decision**: deleting a roadmap item removes it from `state.json` only.  
+> Associated doc files (`docs/specs/item-spec.md`, `docs/plans/item-plan.md`) are **not touched**.
+
+Rationale: spec and plan docs are often useful reference material even after an item is gone. Deleting files is a higher-stakes, harder-to-undo operation. If the user wants to clean up files too, they can do so manually or via a future "Deep Clean" feature.
+
+This applies to both per-card delete and Delete All.
