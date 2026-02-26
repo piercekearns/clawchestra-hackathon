@@ -103,7 +103,7 @@ export function ProjectModal({ project, open, onClose, actions, boardScoped }: P
         {/* Main content area */}
         {hasRoadmap ? (
           <div className="mb-4">
-            {roadmapLoading ? (
+            {roadmapLoading && roadmapItems.length === 0 ? (
               <div className="flex flex-col gap-2">
                 {[1, 2, 3].map((n) => (
                   <div
