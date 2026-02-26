@@ -54,10 +54,15 @@ export default {
           '0%, 100%': { color: 'rgb(59, 130, 246)' },  // blue-500
           '50%': { color: 'rgb(147, 197, 253)' },  // blue-300
         },
+        dotBounce: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-6px)' },
+        },
       },
       animation: {
         textPulse: 'textPulse 2s ease-in-out infinite',
         textPulseBlue: 'textPulseBlue 2s ease-in-out infinite',
+        dotBounce: 'dotBounce 0.6s ease-in-out infinite',
       },
     },
   },

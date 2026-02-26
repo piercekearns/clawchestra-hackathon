@@ -47,9 +47,9 @@ export function ChatEntryRow({
       {/* Icon slot: animated dots when busy, home icon for project chats, pin for others */}
       {isBusy ? (
         <span className="flex h-5 w-5 shrink-0 items-center justify-center gap-[2px]">
-          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-bounce [animation-delay:0ms]" />
-          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-bounce [animation-delay:150ms]" />
-          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-bounce [animation-delay:300ms]" />
+          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
+          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:150ms]" />
+          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:300ms]" />
         </span>
       ) : isProjectChat ? (
         <span
