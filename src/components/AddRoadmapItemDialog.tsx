@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { ArrowUp, Clock } from 'lucide-react';
 import { ModalDragZone } from './ui/ModalDragZone';
 import { ROADMAP_ITEM_STATUSES, type RoadmapItemStatus } from '../lib/constants';
 import { canonicalSlugify } from '../lib/project-flows';
@@ -7,9 +7,7 @@ import { createRoadmapItem } from '../lib/tauri';
 import { sendMessage, type ChatMessage } from '../lib/gateway';
 import type { RoadmapItemWithDocs } from '../lib/schema';
 import { Button } from './ui/button';
-import { BrandedSelect } from './ui/branded-select';
 import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
 
 type CreationMode = 'ai' | 'manual';
 
@@ -24,8 +22,6 @@ interface AddRoadmapItemDialogProps {
   /** Pre-select the status dropdown from the column clicked */
   initialStatus?: RoadmapItemStatus;
 }
-
-const STATUS_OPTIONS: readonly RoadmapItemStatus[] = ROADMAP_ITEM_STATUSES;
 
 function buildContextMessage(
   projectId: string,
@@ -57,6 +53,13 @@ function buildContextMessage(
   return `[Roadmap Item Quick-Add Context]\n${JSON.stringify(context, null, 2)}`;
 }
 
+function getNextPriority(existingItems: RoadmapItemWithDocs[], targetStatus: string): number {
+  const columnItems = existingItems.filter((item) => item.status === targetStatus);
+  if (columnItems.length === 0) return 1;
+  const maxPriority = Math.max(...columnItems.map((item) => item.priority ?? 0));
+  return maxPriority + 1;
+}
+
 export function AddRoadmapItemDialog({
   open,
   projectId,
@@ -76,15 +79,16 @@ export function AddRoadmapItemDialog({
   const [aiMessages, setAiMessages] = useState<ChatMessage[]>([]);
   const [aiStreamingContent, setAiStreamingContent] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Manual fields state
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
-  const [status, setStatus] = useState<RoadmapItemStatus>(initialStatus ?? 'pending');
-  const [priority, setPriority] = useState('');
-  const [tags, setTags] = useState('');
+  const [priority, setPriority] = useState<number>(1);
   const [icon, setIcon] = useState('');
   const [nextAction, setNextAction] = useState('');
+
+  const targetStatus = initialStatus ?? 'pending';
 
   useEffect(() => {
     if (!open) return;
@@ -110,12 +114,10 @@ export function AddRoadmapItemDialog({
     // Reset manual state
     setSaving(false);
     setTitle('');
-    setStatus(initialStatus ?? 'pending');
-    setPriority('');
-    setTags('');
+    setPriority(getNextPriority(existingItems, targetStatus));
     setIcon('');
     setNextAction('');
-  }, [initialStatus, open]);
+  }, [existingItems, initialStatus, open, targetStatus]);
 
   // Auto-scroll chat messages
   useEffect(() => {
@@ -124,9 +126,17 @@ export function AddRoadmapItemDialog({
     node.scrollTop = node.scrollHeight;
   }, [aiMessages, aiStreamingContent]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [aiInput]);
+
   if (!open) return null;
 
-  const targetStatus = initialStatus ?? 'pending';
+  const hasAiContent = aiInput.trim().length > 0;
 
   const handleAiSend = async () => {
     const text = aiInput.trim();
@@ -177,17 +187,11 @@ export function AddRoadmapItemDialog({
     setError(null);
     setSaving(true);
     try {
-      const parsedTags = tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-
       await createRoadmapItem(projectId, {
         id: itemId,
         title: title.trim(),
-        status,
-        priority: priority.trim() ? Number(priority) : undefined,
-        tags: parsedTags.length > 0 ? parsedTags : undefined,
+        status: targetStatus,
+        priority,
         icon: icon.trim() || undefined,
         nextAction: nextAction.trim() || undefined,
       });
@@ -204,11 +208,9 @@ export function AddRoadmapItemDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
       <ModalDragZone />
-      <div className="flex w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
-        style={{ maxHeight: 'min(600px, 80vh)' }}
-      >
+      <div className="flex w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-700">
+        <div className="flex items-center justify-between px-5 py-3">
           <div>
             <h2 className="text-lg font-semibold">Add Roadmap Item</h2>
             <p className="text-xs text-neutral-500">
@@ -221,14 +223,14 @@ export function AddRoadmapItemDialog({
         </div>
 
         {/* Mode toggle */}
-        <div className="flex gap-2 border-b border-neutral-200 px-5 py-2 dark:border-neutral-700">
+        <div className="flex gap-2 border-b border-neutral-200 px-5 pb-3 dark:border-neutral-700">
           <Button
             type="button"
             variant={mode === 'ai' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setMode('ai')}
           >
-            Describe to AI
+            Create with OpenClaw
           </Button>
           <Button
             type="button"
@@ -236,61 +238,24 @@ export function AddRoadmapItemDialog({
             size="sm"
             onClick={() => setMode('manual')}
           >
-            Fill in manually
+            Create manually
           </Button>
         </div>
 
         {/* Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="p-5">
           {mode === 'ai' ? (
-            <div className="flex h-full flex-col gap-3">
-              {/* Chat messages */}
+            <div className="flex flex-col gap-3">
+              {/* Chat input — primary affordance, immediately visible */}
               <div
-                ref={scrollRef}
-                className="min-h-[120px] flex-1 space-y-2 overflow-y-auto"
+                className={`relative rounded-lg border bg-neutral-0/80 transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 ${
+                  aiSending
+                    ? 'border-revival-accent/50'
+                    : 'border-neutral-300/70 dark:border-neutral-600'
+                }`}
               >
-                {aiMessages.length === 0 && !aiStreamingContent ? (
-                  <p className="rounded-lg bg-neutral-100 px-3 py-2 text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-                    Describe the roadmap item you want to create. OpenClaw will structure it and add it to the board.
-                  </p>
-                ) : null}
-
-                {aiMessages.map((msg, i) => (
-                  <div
-                    key={`${msg.role}-${i}`}
-                    className={`rounded-lg px-3 py-2 text-sm ${
-                      msg.role === 'user'
-                        ? 'ml-6 bg-revival-accent-400 text-neutral-900'
-                        : 'mr-6 bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100'
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                ))}
-
-                {aiStreamingContent ? (
-                  <div className="mr-6 rounded-lg bg-neutral-200 px-3 py-2 text-sm text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100">
-                    {aiStreamingContent}
-                  </div>
-                ) : null}
-
-                {aiSending && !aiStreamingContent ? (
-                  <div className="mr-6 flex items-center gap-2 rounded-lg bg-neutral-200 px-3 py-2 text-sm text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
-                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
-                    Working...
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Chat input */}
-              <form
-                className="flex gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleAiSend();
-                }}
-              >
-                <Textarea
+                <textarea
+                  ref={textareaRef}
                   value={aiInput}
                   onChange={(event) => setAiInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -301,22 +266,63 @@ export function AddRoadmapItemDialog({
                   }}
                   placeholder={
                     gatewayConnected
-                      ? 'Describe the item you want to add...'
+                      ? 'Describe the item and OpenClaw will create the card for you \u2014 add as much context as you need.'
                       : 'Gateway disconnected'
                   }
-                  className="h-16 flex-1 resize-none"
+                  className="min-h-[40px] w-full resize-none border-0 bg-transparent px-3 py-2.5 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
                   disabled={!gatewayConnected || aiSending}
                   autoFocus
+                  rows={1}
                 />
-                <Button
-                  type="submit"
-                  disabled={!gatewayConnected || aiSending || !aiInput.trim()}
-                  className="inline-flex h-16 w-12 items-center justify-center px-0"
-                  aria-label="Send message"
+
+                <button
+                  type="button"
+                  disabled={!hasAiContent || !gatewayConnected}
+                  onClick={() => void handleAiSend()}
+                  aria-label={aiSending ? 'Working...' : 'Send message'}
+                  className={`absolute bottom-2.5 right-2.5 inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+                    aiSending
+                      ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
+                      : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
+                  }`}
                 >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
+                  {aiSending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {/* Chat messages — only shown after interaction */}
+              {(aiMessages.length > 0 || aiStreamingContent) && (
+                <div
+                  ref={scrollRef}
+                  className="max-h-[280px] space-y-2 overflow-y-auto"
+                >
+                  {aiMessages.map((msg, i) => (
+                    <div
+                      key={`${msg.role}-${i}`}
+                      className={`rounded-lg px-3 py-2 text-sm ${
+                        msg.role === 'user'
+                          ? 'ml-6 bg-revival-accent-400 text-neutral-900'
+                          : 'mr-6 bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
+                  ))}
+
+                  {aiStreamingContent ? (
+                    <div className="mr-6 rounded-lg bg-neutral-200 px-3 py-2 text-sm text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100">
+                      {aiStreamingContent}
+                    </div>
+                  ) : null}
+
+                  {aiSending && !aiStreamingContent ? (
+                    <div className="mr-6 flex items-center gap-2 rounded-lg bg-neutral-200 px-3 py-2 text-sm text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
+                      Working...
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           ) : (
             /* Manual fields */
@@ -338,34 +344,15 @@ export function AddRoadmapItemDialog({
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-sm">
-                  <span>Status</span>
-                  <BrandedSelect
-                    value={status}
-                    onChange={(value) => setStatus(value as RoadmapItemStatus)}
-                    options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  <span>Priority (optional)</span>
+                  <span>Priority</span>
                   <Input
+                    type="number"
+                    min={1}
                     value={priority}
-                    onChange={(event) => setPriority(event.target.value)}
-                    placeholder="Auto"
+                    onChange={(event) => setPriority(Number(event.target.value) || 1)}
                   />
                 </label>
-              </div>
 
-              <label className="grid gap-1 text-sm">
-                <span>Tags (comma-separated)</span>
-                <Input
-                  value={tags}
-                  onChange={(event) => setTags(event.target.value)}
-                  placeholder="feature, ux"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-sm">
                   <span>Icon (emoji)</span>
                   <Input
@@ -374,16 +361,16 @@ export function AddRoadmapItemDialog({
                     placeholder=""
                   />
                 </label>
-
-                <label className="grid gap-1 text-sm">
-                  <span>Next action</span>
-                  <Input
-                    value={nextAction}
-                    onChange={(event) => setNextAction(event.target.value)}
-                    placeholder="Write spec"
-                  />
-                </label>
               </div>
+
+              <label className="grid gap-1 text-sm">
+                <span>Next action</span>
+                <Input
+                  value={nextAction}
+                  onChange={(event) => setNextAction(event.target.value)}
+                  placeholder="Write spec"
+                />
+              </label>
 
               <div className="mt-2 flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={onClose}>
