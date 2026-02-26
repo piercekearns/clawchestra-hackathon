@@ -3850,6 +3850,7 @@ pub fn run() {
     let watcher_in_flight_notify_for_close = watcher_in_flight_notify.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
