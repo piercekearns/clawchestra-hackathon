@@ -115,6 +115,31 @@ The key UX insight: **the entry point is the card, not a sidebar hierarchy.**
 - **Chat switcher** — click any chat in the thread list to switch without closing the sidebar
 - Sidebar can coexist with the kanban view
 
+### Truncated Name Reveal (Hover Marquee)
+
+When a project or roadmap item name is too long to fit in the sidebar row, it truncates with `…`. On hover, instead of showing a static tooltip, the label plays a **smooth horizontal scroll animation** that pans the text left to reveal the hidden portion, then either holds or gently pans back.
+
+**Behaviour:**
+- **Default state:** `overflow: hidden`, `text-overflow: ellipsis`. Truncated with `…` at the clip boundary.
+- **On hover:** A CSS `translateX` animation slides the text left at a gentle pace (not a jarring flash) to reveal the full name. The `…` disappears once the scroll begins.
+- **End of reveal:** Animation either holds at the end of the text for ~0.5s, then slides back to start — or loops seamlessly if the name is very long.
+- **On hover-out:** Immediately snaps (or fast-fades) back to the default truncated state. No lingering mid-scroll.
+- **No tooltip fallback needed** — the animation *is* the tooltip. Cleaner and more delightful than a floating box.
+
+**Implementation notes:**
+- Pure CSS via `@keyframes` with `transform: translateX(calc(-100% + <container-width>px))` — no JS needed for the basic case.
+- Container clips with `overflow: hidden`. The inner text element animates.
+- Animation duration should scale loosely with the amount of overflow — very long names need more time. A CSS custom property (`--overflow-distance`) set by JS (measured at render time) and referenced in the animation makes this dynamic.
+- Easing: ease-in-out or linear both work. Avoid ease (too front-loaded).
+- Applies to: project names, roadmap item chat names, terminal session names — any truncated label in the hub.
+- **Does not apply** to action buttons or badges in the same row — only the name/label text.
+
+**Example timing (starting point, tune in implementation):**
+- Delay before animation starts: `300ms` (prevents flicker on mouse-through)
+- Pan duration: `~1.5s` for a moderately long name
+- Hold at end: `500ms`
+- Return: `200ms` (fast snap back, or instant)
+
 ## Chat Behaviors
 
 - **Sorted by last interaction** — most recently active chats appear at the top, not by creation date
