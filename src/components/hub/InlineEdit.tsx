@@ -55,7 +55,7 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
           }
         }}
         onBlur={commit}
-        className={`bg-transparent border border-revival-accent-400/40 rounded px-1 py-0 text-sm outline-none focus:ring-1 focus:ring-revival-accent-400/40 ${inputClassName ?? ''}`}
+        className={`w-full max-w-full bg-transparent border border-revival-accent-400/40 rounded px-1 py-0 text-sm outline-none focus:ring-1 focus:ring-revival-accent-400/40 ${inputClassName ?? ''}`}
       />
     );
   }
@@ -63,6 +63,7 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
   if (useScrollReveal) {
     return (
       <div
+        className="min-w-0"
         onDoubleClick={(e) => {
           e.stopPropagation();
           setEditing(true);

@@ -54,15 +54,15 @@ export function ChatEntryRow({
       </button>
 
       {/* Chat name */}
-      <div className="min-w-0 flex-1 pr-14">
+      <div className="min-w-0 flex-1 flex items-center gap-1.5">
         <InlineEdit
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
-          className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''}`}
+          className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''} ${chat.unread ? 'font-semibold text-neutral-900 dark:text-neutral-100' : ''}`}
           useScrollReveal
         />
         {chat.unread && (
-          <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-[#DFFF00]" />
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#DFFF00]" />
         )}
       </div>
 
@@ -71,7 +71,9 @@ export function ChatEntryRow({
       )}
 
       {/* Right hover actions — ⋯ first, then archive */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md px-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${
+        isActive ? 'bg-neutral-200/80 dark:bg-neutral-700/80' : 'bg-neutral-100 dark:bg-neutral-800'
+      }`}>
         <ChatEntryMenu
           chat={chat}
           onMarkUnread={() => onMarkUnread(chat.id)}

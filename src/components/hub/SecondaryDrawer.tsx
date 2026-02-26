@@ -91,7 +91,7 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r ${
+      className={`relative z-[60] flex shrink-0 flex-col overflow-visible border-r ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover

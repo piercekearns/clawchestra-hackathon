@@ -78,6 +78,8 @@ interface GatewayOptions {
   onStreamDelta?: (content: string) => void;
   onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
   idempotencyKey?: string;
+  /** Skip the global turn registry for scoped/independent chat sessions. */
+  skipTurnTracking?: boolean;
 }
 
 interface ChatCompletionMessagePartText {
@@ -2754,6 +2756,7 @@ async function sendViaTauriWs(
   onStreamDelta?: (content: string) => void,
   onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void,
   recoveryAttempted: boolean = false,
+  skipTurnTracking: boolean | undefined = false,
 ): Promise<SendResult> {
   if (transport.mode !== 'tauri-ws') {
     throw new Error('Tauri WebSocket transport is not configured');
@@ -2809,7 +2812,19 @@ async function sendViaTauriWs(
   let lastObservedRunActivityAt = sendRequestedAt;
   let terminalProcessFailureMessage: string | null = null;
   const baselineMessageIds = new Set<string>();
-  upsertTurn(turnToken, {
+
+  // When skipTurnTracking is true (scoped hub chats), bypass the global turn registry
+  // and agent activity to prevent cross-contamination with the main chat state.
+  const _upsertTurn: typeof upsertTurn = skipTurnTracking
+    ? ((_token: string, updates: Parameters<typeof upsertTurn>[1]) => ({ turnToken: _token, ...updates } as PendingTurn))
+    : upsertTurn;
+  const _markActiveSendRun = skipTurnTracking ? (_id: string) => {} : markActiveSendRun;
+  const _clearActiveSendRun = skipTurnTracking ? (_id?: string) => {} : clearActiveSendRun;
+  const _setAgentActivity: typeof setAgentActivity = skipTurnTracking
+    ? ((_next, onAct) => { if (onAct) onAct(_next); })
+    : setAgentActivity;
+
+  _upsertTurn(turnToken, {
     sessionKey,
     runId,
     status: 'queued',
@@ -2852,15 +2867,15 @@ async function sendViaTauriWs(
   }
 
   try {
-    markActiveSendRun(runId);
+    _markActiveSendRun(runId);
     transitionLifecycle('send_started');
-    upsertTurn(turnToken, {
+    _upsertTurn(turnToken, {
       sessionKey,
       runId,
       status: 'running',
       completionReason: 'chat_send_started',
     });
-    setAgentActivity('working', onActivityChange);
+    _setAgentActivity('working', onActivityChange);
     logSend('SEND START', { sessionKey, runId, connected: connection.connected });
 
     // Try to send the message. If the WS drops before the ack returns,
@@ -2898,9 +2913,9 @@ async function sendViaTauriWs(
       const ackRunId = typeof sendResponse?.runId === 'string' ? sendResponse.runId : undefined;
       if (ackRunId && ackRunId !== runId) {
         runId = ackRunId;
-        markActiveSendRun(runId);
+        _markActiveSendRun(runId);
       }
-      upsertTurn(turnToken, {
+      _upsertTurn(turnToken, {
         sessionKey,
         runId,
         status: 'running',
@@ -2913,7 +2928,7 @@ async function sendViaTauriWs(
         throw mapSendAckError(sendErr);
       }
       warnSend('[reason=failed_unacked_send] chat.send failed — will poll for response:', sendErr);
-      upsertTurn(turnToken, {
+      _upsertTurn(turnToken, {
         sessionKey,
         runId,
         status: 'running',
@@ -2941,7 +2956,7 @@ async function sendViaTauriWs(
         if (idleTimeout) clearTimeout(idleTimeout);
         idleTimeout = setTimeout(() => {
           transitionLifecycle('awaiting_output');
-          upsertTurn(turnToken, {
+          _upsertTurn(turnToken, {
             sessionKey,
             runId,
             status: 'awaiting_output',
@@ -2995,7 +3010,7 @@ async function sendViaTauriWs(
         if (wsState === 'disconnected' || wsState === 'reconnecting') {
           warnSend('WS connection lost during active send, state:', wsState);
           // Keep activity visible so user knows we're aware
-          setAgentActivity('working', onActivityChange);
+          _setAgentActivity('working', onActivityChange);
         } else if (wsState === 'connected' && resubscribeCount < 3) {
           // Connection restored — re-subscribe to pick up remaining events
           logSend('WS reconnected during send, re-subscribing', {
@@ -3093,7 +3108,7 @@ async function sendViaTauriWs(
               streamedText = combined;
               lastContentSignalAt = Date.now();
               sawRunOwnedContent = true;
-              upsertTurn(turnToken, {
+              _upsertTurn(turnToken, {
                 sessionKey,
                 runId,
                 status: 'running',
@@ -3341,7 +3356,7 @@ async function sendViaTauriWs(
               lastEventTime = now;
               if (hasScopedProgress) {
                 lastObservedRunActivityAt = now;
-                upsertTurn(turnToken, {
+                _upsertTurn(turnToken, {
                   sessionKey,
                   runId,
                   status: 'running',
@@ -3354,7 +3369,7 @@ async function sendViaTauriWs(
               const timeSinceLastDelta = Date.now() - lastDeltaTime;
               if (timeSinceLastDelta > 3000) {
                 sawToolSinceLastContent = true;
-                setAgentActivity('working', onActivityChange);
+                _setAgentActivity('working', onActivityChange);
               }
             }
             return;
@@ -3366,7 +3381,7 @@ async function sendViaTauriWs(
           const now = Date.now();
           lastEventTime = now;
           lastObservedRunActivityAt = now;
-          upsertTurn(turnToken, {
+          _upsertTurn(turnToken, {
             sessionKey,
             runId,
             status: 'running',
@@ -3386,7 +3401,7 @@ async function sendViaTauriWs(
           const timeSinceLastDelta = Date.now() - lastDeltaTime;
           if (timeSinceLastDelta > 3000) {
             sawToolSinceLastContent = true;
-            setAgentActivity('working', onActivityChange);
+            _setAgentActivity('working', onActivityChange);
           }
           return;
         }
@@ -3445,17 +3460,17 @@ async function sendViaTauriWs(
         }
 
         if (state && (state as CompactionState) in stateLabels) {
-          setAgentActivity(state === 'compacting' ? 'compacting' : 'working', onActivityChange);
+          _setAgentActivity(state === 'compacting' ? 'compacting' : 'working', onActivityChange);
         }
 
         if (TYPING_ACTIVITY_STATES.has(state)) {
-          setAgentActivity('typing', onActivityChange);
+          _setAgentActivity('typing', onActivityChange);
         } else if (TOOL_ACTIVITY_STATES.has(state)) {
-          setAgentActivity('working', onActivityChange);
+          _setAgentActivity('working', onActivityChange);
           sawToolSinceLastContent = true;
         } else if (TERMINAL_ACTIVITY_STATES.has(state) && ownsTerminalEvent(eventRunId)) {
           touchTurnSignal(turnToken);
-          setAgentActivity('idle', onActivityChange);
+          _setAgentActivity('idle', onActivityChange);
         }
 
         const announce = parseAnnounceMetadata(chat, true);
@@ -3481,7 +3496,7 @@ async function sendViaTauriWs(
             transitionLifecycle('stream_delta');
             sawRunOwnedContent = true;
             lastContentSignalAt = Date.now();
-            upsertTurn(turnToken, {
+            _upsertTurn(turnToken, {
               sessionKey,
               runId,
               status: 'running',
@@ -3525,7 +3540,7 @@ async function sendViaTauriWs(
             completionReason: 'chat_error_event',
           });
           cleanup('errorEvent');
-          clearActiveSendRun(runId);
+          _clearActiveSendRun(runId);
           reject(new Error(typeof chat.errorMessage === 'string' ? chat.errorMessage : 'OpenClaw chat error'));
           return;
         }
@@ -3539,15 +3554,15 @@ async function sendViaTauriWs(
           abortedEventAt = Date.now();
           transitionLifecycle('awaiting_output');
           console.log('[Gateway] Aborted event received — switching to history recovery');
-          upsertTurn(turnToken, {
+          _upsertTurn(turnToken, {
             sessionKey,
             runId,
             status: 'awaiting_output',
             completionReason: 'chat_aborted_event',
           });
-          setAgentActivity('working', onActivityChange);
+          _setAgentActivity('working', onActivityChange);
           cleanup('abortedEvent');
-          clearActiveSendRun(runId);
+          _clearActiveSendRun(runId);
           resolve();
           return;
         }
@@ -3597,14 +3612,14 @@ async function sendViaTauriWs(
           sawFinalEventAt = Date.now();
           sawFinalAt = Date.now();
           transitionLifecycle('awaiting_output');
-          upsertTurn(turnToken, {
+          _upsertTurn(turnToken, {
             sessionKey,
             runId,
             status: 'awaiting_output',
             completionReason: finalText?.trim().length ? 'final_seen' : 'final_seen_without_content',
             hasAssistantOutput: streamedText.trim().length > 0,
           });
-          clearActiveSendRun(runId);
+          _clearActiveSendRun(runId);
         }
       };
 
@@ -3701,7 +3716,7 @@ async function sendViaTauriWs(
       const hardDeadline = sendRequestedAt + (
         sawAnyProgress ? ACTIVE_RUN_NO_FINAL_TIMEOUT_MS : NO_EVENTS_AFTER_SEND_TIMEOUT_MS
       );
-      upsertTurn(turnToken, {
+      _upsertTurn(turnToken, {
         sessionKey,
         runId,
         status: 'awaiting_output',
@@ -3714,7 +3729,7 @@ async function sendViaTauriWs(
       while (Date.now() < recoveryDeadline) {
         const waitMs = getBackfillPollIntervalMs(sendRequestedAt);
         await new Promise((resolve) => setTimeout(resolve, waitMs));
-        setAgentActivity('working', onActivityChange);
+        _setAgentActivity('working', onActivityChange);
         touchTurnSignal(turnToken);
         try {
           const processState = await connection.request<unknown>('process', {
@@ -3752,7 +3767,7 @@ async function sendViaTauriWs(
           });
           if (recovered.length > 0) {
             assistantMessages = recovered;
-            upsertTurn(turnToken, {
+            _upsertTurn(turnToken, {
               sessionKey,
               runId,
               status: 'running',
@@ -3858,8 +3873,8 @@ async function sendViaTauriWs(
       hasAssistantOutput: true,
       completionReason: sawFinalEvent ? 'completed_from_final_or_history' : 'completed_from_history_without_final',
     });
-    setAgentActivity('idle', onActivityChange);
-    clearActiveSendRun(runId);
+    _setAgentActivity('idle', onActivityChange);
+    _clearActiveSendRun(runId);
 
     if (!runtimeModel && !runtimeProvider) {
       try {
@@ -3930,11 +3945,11 @@ async function sendViaTauriWs(
         completionReason: reason,
       });
     }
-    setAgentActivity('idle', onActivityChange);
-    clearActiveSendRun(runId);
+    _setAgentActivity('idle', onActivityChange);
+    _clearActiveSendRun(runId);
     throw error;
   } finally {
-    clearActiveSendRun(runId);
+    _clearActiveSendRun(runId);
   }
 }
 
@@ -4034,6 +4049,8 @@ export async function sendMessageWithContext(
       idempotencyKey,
       onStreamDelta,
       onActivityChange,
+      false,
+      options?.skipTurnTracking,
     );
   }
 

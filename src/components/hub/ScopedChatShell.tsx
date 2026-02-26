@@ -110,6 +110,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
         },
         {
           sessionKey: chat.sessionKey ?? undefined,
+          skipTurnTracking: true,
           onStreamDelta: (content) => {
             setStreamingContent(content);
           },
@@ -155,9 +156,9 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
   }, [input, sending, messages, chat.sessionKey, chat.title, chat.id]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {messages.length === 0 && !streamingContent ? (
           <div className="flex h-full items-center justify-center px-4">
             <p className="text-center text-xs text-neutral-400 dark:text-neutral-500">
@@ -182,6 +183,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
       </div>
 
       {/* Input bar — reuses the main ChatBar in embedded mode */}
+      <div className="shrink-0 px-3 pb-3 pt-2">
       <ChatBar
         connectionState={wsConnectionState}
         activityLabel={sending ? 'Working...' : null}
@@ -204,6 +206,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
         onDropFiles={async () => {}}
         onDragStateChange={setDragActive}
       />
+      </div>
     </div>
   );
 }

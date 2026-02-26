@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, MoreHorizontal, Plus, Terminal } from 'lucide-react';
-import type { HubChat, HubChatType, HubThread } from '../../lib/hub-types';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, Plus, Terminal } from 'lucide-react';
+import type { HubChat, HubThread } from '../../lib/hub-types';
 import { ChatEntryRow } from './ChatEntryRow';
 import { ScrollRevealText } from './ScrollRevealText';
 
@@ -100,25 +100,15 @@ export function ThreadSection({
         </button>
 
         {/* Project name */}
-        <div className="min-w-0 flex-1 pr-14">
+        <div className="min-w-0 flex-1">
           <ScrollRevealText
             text={thread.projectTitle}
             className="text-xs font-semibold leading-tight text-neutral-800 dark:text-neutral-200"
           />
         </div>
 
-        {/* Hover actions: ⋯ and + */}
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-            className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-            aria-label="Thread actions"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
+        {/* Hover actions: + */}
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-neutral-100 px-0.5 opacity-0 group-hover:opacity-100 transition-opacity dark:bg-neutral-800">
           <TypePickerButton projectId={thread.projectId} onAddChat={onAddChat} />
         </div>
       </div>
