@@ -1609,7 +1609,7 @@ export async function recoverRecentSessionMessages(options?: {
     return [];
   }
 
-  const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+  const { getTauriOpenClawConnection, getConnectionInstance } = await import('./tauri-websocket');
   const sessionKey = options?.sessionKey?.trim() || transport.sessionKey?.trim() || DEFAULT_SESSION_KEY;
   let recoveryCursor: RecoveryCursorSnapshot | null = null;
   if (CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring) {
@@ -1626,7 +1626,8 @@ export async function recoverRecentSessionMessages(options?: {
       console.warn('[Gateway] Failed to load recovery cursor:', error);
     }
   }
-  const connection = await getTauriOpenClawConnection(
+  // Reuse existing singleton to avoid disconnecting active sends (same issue as fetchSessionModel).
+  const connection = getConnectionInstance() ?? await getTauriOpenClawConnection(
     transport.wsUrl,
     sessionKey,
     transport.token,
@@ -2066,9 +2067,12 @@ export async function fetchSessionModel(options?: {
   if (!sessionKey) return null;
 
   if (transport.mode === 'tauri-ws') {
-    const { getTauriOpenClawConnection } = await import('./tauri-websocket');
+    const { getTauriOpenClawConnection, getConnectionInstance } = await import('./tauri-websocket');
     try {
-      const connection = await getTauriOpenClawConnection(
+      // Reuse the existing singleton if available — calling getTauriOpenClawConnection
+      // with a different sessionKey (e.g. scoped hub chat) would disconnect the shared
+      // connection, destroying all active send handlers for every chat.
+      const connection = getConnectionInstance() ?? await getTauriOpenClawConnection(
         transport.wsUrl,
         sessionKey,
         transport.token,

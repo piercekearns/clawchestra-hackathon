@@ -238,23 +238,33 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
 
     try {
       const viewContext = store.viewContext;
-      const result = await sendMessageWithContext(
-        historyForSend,
-        {
-          view: viewContext.type,
-          selectedProject: chat.title,
-        },
-        {
-          sessionKey: chat.sessionKey ?? undefined,
-          skipTurnTracking: true,
-          onStreamDelta: (content) => {
-            // Guard: only update local streaming state if still on the originating chat
-            if (chatIdRef.current === originChatId) {
-              setStreamingContent(content);
-            }
+      // Safety timeout — gateway can get stuck in an infinite poll loop if WS drops mid-send
+      const SEND_TIMEOUT_MS = 2 * 60 * 1000;
+      const result = await Promise.race([
+        sendMessageWithContext(
+          historyForSend,
+          {
+            view: viewContext.type,
+            selectedProject: chat.title,
           },
-        },
-      );
+          {
+            sessionKey: chat.sessionKey ?? undefined,
+            skipTurnTracking: true,
+            onStreamDelta: (content) => {
+              // Guard: only update local streaming state if still on the originating chat
+              if (chatIdRef.current === originChatId) {
+                setStreamingContent(content);
+              }
+            },
+          },
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Request timed out — the connection may be unstable. Try again.')),
+            SEND_TIMEOUT_MS,
+          ),
+        ),
+      ]);
 
       // Check if user switched away while awaiting the response
       const switchedAway = chatIdRef.current !== originChatId;
