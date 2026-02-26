@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
 import type { HubChat } from '../../lib/hub-types';
-import { ChatTypeIcon } from './ChatTypeIcon';
 
 interface QuickAccessPopoverProps {
   anchorRef: React.RefObject<HTMLElement | null>;
@@ -29,6 +28,7 @@ export function QuickAccessPopover({ anchorRef, onSelectChat }: QuickAccessPopov
   const popoverRef = useRef<HTMLDivElement>(null);
   const hubChats = useDashboardStore((s) => s.hubChats);
   const projects = useDashboardStore((s) => s.projects);
+  const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
 
   // Build project title lookup
   const titleLookup = useMemo(() => {
@@ -43,7 +43,7 @@ export function QuickAccessPopover({ anchorRef, onSelectChat }: QuickAccessPopov
     return map;
   }, [projects]);
 
-  // Top 5 entries: unread first, then most recent
+  // Top 5 entries: unread first, then most recent (include all chats, even with 0 messages)
   const entries = useMemo(() => {
     const active = hubChats.filter((c) => !c.archived);
     const unread = active.filter((c) => c.unread).sort((a, b) => b.lastActivity - a.lastActivity);
@@ -66,10 +66,12 @@ export function QuickAccessPopover({ anchorRef, onSelectChat }: QuickAccessPopov
       leaveTimerRef.current = null;
     }
     hoverTimerRef.current = window.setTimeout(() => {
+      // Ensure chats are loaded even if sidebar hasn't been opened
+      void refreshHubChats();
       updatePosition();
       setVisible(true);
     }, 300);
-  }, [updatePosition]);
+  }, [updatePosition, refreshHubChats]);
 
   const hide = useCallback(() => {
     if (hoverTimerRef.current) {
@@ -102,6 +104,16 @@ export function QuickAccessPopover({ anchorRef, onSelectChat }: QuickAccessPopov
     };
   }, [anchorRef, show, hide]);
 
+  // Re-attach listeners when anchor element changes (handles late ref assignment)
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    // Check if ref is populated after a short delay (handles mount order)
+    const timer = window.setTimeout(() => {
+      if (anchorRef.current) forceUpdate((n) => n + 1);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [anchorRef]);
+
   if (!visible || !pos) return null;
 
   return createPortal(
@@ -133,11 +145,6 @@ export function QuickAccessPopover({ anchorRef, onSelectChat }: QuickAccessPopov
             }}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
-            <ChatTypeIcon
-              type={chat.type}
-              agentType={chat.agentType}
-              className="h-3.5 w-3.5 shrink-0 text-neutral-400"
-            />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
                 <span className="truncate text-xs font-medium text-neutral-800 dark:text-neutral-200">

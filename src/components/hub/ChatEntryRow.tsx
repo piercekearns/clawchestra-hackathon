@@ -1,9 +1,8 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Archive, Check, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
-import { ChatTypeIcon } from './ChatTypeIcon';
 import { InlineEdit } from './InlineEdit';
-import { ScrollRevealText } from './ScrollRevealText';
 
 interface ChatEntryRowProps {
   chat: HubChat;
@@ -55,15 +54,13 @@ export function ChatEntryRow({
         <Pin className="h-3 w-3" />
       </button>
 
-      {/* Type icon */}
-      <ChatTypeIcon type={chat.type} agentType={chat.agentType} className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-
       {/* Chat name */}
       <div className="min-w-0 flex-1 pr-12">
         <InlineEdit
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
-          className={`block truncate text-xs leading-tight ${isItemComplete ? 'line-through' : ''}`}
+          className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''}`}
+          useScrollReveal
         />
         {/* Unread dot */}
         {chat.unread && (
@@ -84,7 +81,7 @@ export function ChatEntryRow({
             e.stopPropagation();
             onArchive(chat.id);
           }}
-          className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+          className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
           aria-label="Archive"
         >
           <Archive className="h-3 w-3" />
@@ -109,37 +106,49 @@ function ChatEntryMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (open) {
+      setOpen(false);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 }); // 144 = w-36 = 9rem
+      setOpen(true);
+    }
+  };
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((prev) => !prev);
-        }}
+        onClick={handleToggle}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             e.stopPropagation();
-            setOpen((prev) => !prev);
+            handleToggle(e as unknown as React.MouseEvent);
           }
           if (e.key === 'Escape') {
             setOpen(false);
           }
         }}
-        className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+        className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
         aria-label="More actions"
       >
         <MoreHorizontal className="h-3 w-3" />
       </button>
-      {open && (
+      {open && menuPos && createPortal(
         <>
           <div
-            className="fixed inset-0 z-50"
+            className="fixed inset-0 z-[200]"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border border-neutral-200 bg-neutral-0 py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+          <div
+            className="fixed z-[200] w-36 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
             <button
               type="button"
               onClick={(e) => {
@@ -164,9 +173,9 @@ function ChatEntryMenu({
               Delete
             </button>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   );
 }
-

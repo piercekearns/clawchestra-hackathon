@@ -5,7 +5,7 @@ import { DrawerHeader } from './DrawerHeader';
 import { ScopedChatShell } from './ScopedChatShell';
 
 const MIN_WIDTH = 280;
-const MAX_WIDTH = 600;
+const MAX_WIDTH = 800;
 
 interface SecondaryDrawerProps {
   chatId: string;
@@ -91,7 +91,7 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-20 flex shrink-0 flex-col overflow-hidden border-r ${
+      className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
@@ -100,14 +100,16 @@ export function SecondaryDrawer({
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
       style={{ width }}
     >
-      <DrawerHeader
-        chat={chat}
-        projectTitle={projectTitle}
-        onClose={onClose}
-        onToast={onToast}
-        onOpenLinkedItem={onOpenLinkedItem}
-      />
-      <ScopedChatShell chat={chat} />
+      <div className="flex h-full flex-col overflow-hidden">
+        <DrawerHeader
+          chat={chat}
+          projectTitle={projectTitle}
+          onClose={onClose}
+          onToast={onToast}
+          onOpenLinkedItem={onOpenLinkedItem}
+        />
+        <ScopedChatShell chat={chat} />
+      </div>
 
       {/* Drag handle on right edge */}
       <div

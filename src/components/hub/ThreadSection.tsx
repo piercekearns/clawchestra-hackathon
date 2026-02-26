@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, GripVertical, MessageSquare, MoreHorizontal, Plus, Terminal } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, MoreHorizontal, Plus, Terminal } from 'lucide-react';
 import type { HubChat, HubChatType, HubThread } from '../../lib/hub-types';
 import { ChatEntryRow } from './ChatEntryRow';
-import { InlineEdit } from './InlineEdit';
 import { ScrollRevealText } from './ScrollRevealText';
 
 const MAX_VISIBLE_CHATS = 5;
@@ -66,61 +65,73 @@ export function ThreadSection({
   const allVisible = [...pinnedChats, ...visibleUnpinned];
 
   return (
-    <div ref={setNodeRef} style={style} className={`mb-1 ${isDragging ? 'opacity-50' : ''}`}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`mb-1 ${isDragging ? 'opacity-50' : ''}`}
+      {...attributes}
+      {...listeners}
+    >
       {/* Thread header */}
-      <div className="hub-row group flex items-center gap-1 rounded-md px-2 py-1.5 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800">
-        {/* Drag handle */}
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
-          aria-label="Drag to reorder"
-        >
-          <GripVertical className="h-3 w-3" />
-        </button>
-
+      <div
+        className="hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800"
+        onClick={onToggle}
+      >
         {/* Folder icon / chevron */}
         <button
           type="button"
-          onClick={onToggle}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
           className="flex h-4 w-4 shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400"
           aria-label={collapsed ? 'Expand thread' : 'Collapse thread'}
         >
           {/* Default: folder icon. On hover: chevron */}
           <span className="group-hover:hidden">
             {collapsed ? (
-              <Folder className="h-3.5 w-3.5" />
+              <Folder className="h-4 w-4" />
             ) : (
-              <FolderOpen className="h-3.5 w-3.5" />
+              <FolderOpen className="h-4 w-4" />
             )}
           </span>
           <span className="hidden group-hover:inline">
             {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-4 w-4" />
             )}
           </span>
         </button>
 
         {/* Project name */}
-        <div className="min-w-0 flex-1 pr-12" onClick={onToggle}>
+        <div className="min-w-0 flex-1 pr-14">
           <ScrollRevealText
             text={thread.projectTitle}
             className="text-xs font-semibold leading-tight text-neutral-800 dark:text-neutral-200"
           />
         </div>
 
-        {/* Hover actions */}
+        {/* Hover actions: ⋯ and + */}
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Thread-level menu - future: rename, archive all, etc.
+            }}
+            className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label="Thread actions"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
           <TypePickerButton projectId={thread.projectId} onAddChat={onAddChat} />
         </div>
       </div>
 
       {/* Chat entries */}
       {!collapsed && (
-        <div className="ml-3">
+        <div className="ml-5">
           {allVisible.map((chat) => (
             <ChatEntryRow
               key={chat.id}
@@ -186,10 +197,10 @@ function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddCh
           e.stopPropagation();
           setOpen((prev) => !prev);
         }}
-        className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+        className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
         aria-label="New chat"
       >
-        <Plus className="h-3 w-3" />
+        <Plus className="h-3.5 w-3.5" />
       </button>
       {open && (
         <>

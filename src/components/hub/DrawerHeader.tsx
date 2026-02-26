@@ -3,7 +3,6 @@ import { Archive, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-r
 import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate } from '../../lib/tauri';
 import { useDashboardStore } from '../../lib/store';
-import { ChatTypeIcon } from './ChatTypeIcon';
 
 interface DrawerHeaderProps {
   chat: HubChat;
@@ -22,21 +21,29 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
 
   const handleTogglePin = async () => {
     setMenuOpen(false);
-    await hubChatUpdate(chat.id, { pinned: !chat.pinned });
-    await refreshHubChats();
+    try {
+      await hubChatUpdate(chat.id, { pinned: !chat.pinned });
+      await refreshHubChats();
+    } catch (err) {
+      console.error('[DrawerHeader] Pin toggle failed:', err);
+    }
   };
 
   const handleArchive = async () => {
     setMenuOpen(false);
-    await hubChatUpdate(chat.id, { archived: true });
-    await refreshHubChats();
-    if (onToast) {
-      onToast('success', `"${chat.title}" archived`, {
-        label: 'Undo',
-        onClick: () => {
-          void hubChatUpdate(chat.id, { archived: false }).then(() => refreshHubChats());
-        },
-      });
+    try {
+      await hubChatUpdate(chat.id, { archived: true });
+      await refreshHubChats();
+      if (onToast) {
+        onToast('success', `"${chat.title}" archived`, {
+          label: 'Undo',
+          onClick: () => {
+            void hubChatUpdate(chat.id, { archived: false }).then(() => refreshHubChats());
+          },
+        });
+      }
+    } catch (err) {
+      console.error('[DrawerHeader] Archive failed:', err);
     }
   };
 
@@ -63,12 +70,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   };
 
   return (
-    <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-700">
-      <ChatTypeIcon
-        type={chat.type}
-        agentType={chat.agentType}
-        className="h-3.5 w-3.5 shrink-0 text-neutral-400"
-      />
+    <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-700">
       <div className="min-w-0 flex-1">
         {renaming ? (
           <input
@@ -100,7 +102,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
         <button
           type="button"
           onClick={() => setMenuOpen((prev) => !prev)}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
           aria-label="Chat actions"
         >
           <MoreHorizontal className="h-4 w-4" />
@@ -108,7 +110,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-50" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-neutral-0 py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+            <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
               <MenuButton icon={PenLine} label="Rename" onClick={handleRenameStart} />
               <MenuButton
                 icon={Pin}
@@ -129,7 +131,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
       <button
         type="button"
         onClick={onClose}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
         aria-label="Close chat drawer"
       >
         <X className="h-4 w-4" />

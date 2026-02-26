@@ -195,8 +195,8 @@ export function HubNav({ onToast }: HubNavProps) {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-          Threads
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+          Projects
         </span>
       </div>
 
