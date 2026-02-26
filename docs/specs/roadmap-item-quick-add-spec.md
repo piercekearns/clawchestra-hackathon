@@ -132,7 +132,6 @@ Remaining build sequence:
 ### Phase 3: Polish
 - Multi-turn refinement before creation ("actually focus it on mobile first")
 - Inline creation vs modal (card appears in-place on the board)
-- Spec/plan auto-generation offered after item creation as a follow-up
 
 ## Non-Goals
 
@@ -140,9 +139,10 @@ Remaining build sequence:
 - Bulk item creation ("add 5 items at once")
 - Template-based creation (predefined item templates — could be future enhancement)
 - Creating items for projects not currently visible on the board
+- Spec/plan auto-generation at creation time — that's a separate action triggered from the card after it exists
 
-## Open Questions
+## Decisions
 
-1. **Two-path UI** — Tab toggle (AI / Manual) or AI-first with a "fill in manually" link below the chat?
-2. **Spec/plan auto-generation** — Should OpenClaw offer to write an initial spec for the new item after it's created? Or is that a separate action triggered from the card?
-3. **Session lifecycle** — Does the AI creation chat use an ephemeral session (destroyed after creation) or persist for context?
+- **Two-path UI:** AI-first. The chat input is the primary affordance; a "Fill in manually" link sits below it for users who prefer direct input.
+- **Spec/plan auto-generation:** Out of scope for this feature. Offered post-creation from the card, not during quick-add.
+- **Session lifecycle:** Ephemeral. The chat session is destroyed after the item is created — it's a scoped task with a clear end state.
