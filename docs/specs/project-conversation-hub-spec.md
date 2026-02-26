@@ -91,21 +91,47 @@ The default is OpenClaw. In future, certain UI actions could auto-default to a s
 
 ## UI: Card-Level Chat Access
 
-The key UX insight: **the entry point is the card, not a sidebar hierarchy.**
+The key UX insight: **the entry point is the card, not a sidebar hierarchy.** Both project cards and roadmap item cards surface a `MessagesSquare` icon on hover that creates or navigates to the relevant thread/chat.
+
+### The `MessagesSquare` Button — States
+
+The icon uses the same hover-reveal style as the existing card lifecycle buttons — hidden by default, fades in on card hover.
+
+| State | Visual | Tooltip | Click action |
+|-------|--------|---------|--------------|
+| **No thread exists** | Unfilled / default stroke colour | `"Create Thread"` | Creates the project thread + project-level chat, then opens hub nav to it + secondary drawer to the new chat |
+| **Thread exists, no notifications** | Filled, coloured `#DFFF00` (chartreuse) | `"Open Thread"` | Opens hub nav to the project thread + secondary drawer to the project-level chat (or most recent chat if one was previously active) |
+| **Thread exists, has notifications** | Filled `#DFFF00` + small notification dot/badge | `"Open Thread (N unread)"` | Same as above — drawer opens to the chat with the notification |
+
+The `#DFFF00` fill is a proposal — validate visually against the card background at implementation. If chartreuse reads poorly in context, the filled state can use the app's accent colour instead.
+
+---
 
 ### On Project Cards (Level 1 — Kanban Board)
 
-- **Chat indicator** — small icon/badge showing active chats (e.g., `💬 3`)
-- **Click indicator** → sidebar opens to the project's thread, showing the project-level chat
-- If no thread exists yet → creates the thread + project-level chat automatically
-- **Quick action** — "New chat" option to create additional chats within the thread
+The `MessagesSquare` icon appears in the card's hover-reveal button area (same zone as other card actions).
+
+- **Unfilled** → no thread for this project yet
+- **Filled `#DFFF00`** → thread exists
+- **Filled + notification badge** → thread has chats with unread/action-required states
+- **Click** → opens hub nav sidebar to that project's thread. Secondary drawer opens to the project-level chat (the thread's root conversation). If no thread existed, creates it first.
+
+---
 
 ### On Roadmap Item Cards (Level 2 — Priority List)
 
-- **Chat indicator** — shows if this specific item has an active chat
-- **Click indicator** → sidebar opens to that item's chat directly
-- If no chat exists for this item → creates one within the project's thread automatically
-- Item-level chats inherit project context + add item-specific context (spec, plan, detail file)
+The `MessagesSquare` icon sits **to the left of the existing lifecycle buttons** (Update Spec, Create Plan, Plan Review, etc.) in the card's hover-reveal button row.
+
+Same filled/unfilled/notification state logic as project cards, but scoped to item-level:
+
+- **Unfilled** → no chat exists for this roadmap item yet
+- **Filled `#DFFF00`** → a chat for this item exists within its project's thread
+- **Filled + badge** → that chat has unreads or action-required
+- **Click** → opens hub nav to the item's chat within its project thread. Secondary drawer opens directly to that item-level chat. If no item chat existed, creates one within the project's thread.
+
+#### Lifecycle buttons — future rethink (flagged, not actioned)
+
+The 5 lifecycle buttons (Update Spec, Create Plan, Plan Review, etc.) currently auto-copy-paste prompts into the general chat. As the hub and per-item chat sessions mature, this workflow will likely change — it makes more sense for those actions to initiate or continue an item-scoped chat rather than dumping into the general chat. **The buttons stay as-is for now** until the new workflow is defined. This is flagged here so it's not forgotten when planning item-level chats.
 
 ### Spatial Layout (Option B — resolved, see Decision 8)
 
