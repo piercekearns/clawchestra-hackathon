@@ -367,7 +367,7 @@ When a terminal session needs attention (detected via output parsing):
 
 - **Default**: Auto-generated from launch context — "Claude Code — git-sync" (agent + scope)
 - **First prompt enhancement**: If the user's first message to the agent is identifiable, append it — "Claude Code — git-sync — implementing Phase 2"
-- User can rename via right-click or inline edit
+- User can rename via the `⋯` hover menu (inline edit in place — same pattern as conversation hub chat entries)
 - Name persists across app restarts
 
 ### Scrollback Persistence

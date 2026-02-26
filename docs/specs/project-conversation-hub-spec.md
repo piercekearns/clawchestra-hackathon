@@ -115,6 +115,67 @@ The key UX insight: **the entry point is the card, not a sidebar hierarchy.**
 - **Chat switcher** — click any chat in the thread list to switch without closing the sidebar
 - Sidebar can coexist with the kanban view
 
+### Row Actions (Three-Dot Hover Menu)
+
+Every item in the hub — project thread headers and individual chat entries — surfaces a **`⋯` icon on hover** at the right edge of the row. Clicking it opens a small inline dropdown with the actions applicable to that item type.
+
+#### Trigger behaviour
+
+- Icon is **hidden by default**. Fades in (`opacity: 0 → 1`, `~150ms`) when the row is hovered.
+- On hover-out (no menu open): fades back out.
+- If the menu is open: icon stays visible until the menu is dismissed.
+- The icon sits **fixed at the right edge** of the row — it does not scroll with the name reveal animation (see below). The text container reserves right padding equal to the icon width so the scrolling name never slides underneath it.
+
+#### Actions per item type
+
+**Chat entry (project-level or roadmap-item-level OpenClaw chat):**
+
+| Action | Behaviour |
+|--------|-----------|
+| Rename | Inline edit — label becomes an input field in place, confirm with Enter / blur |
+| Pin / Unpin | Toggle pinned state; pinned chats float above the recency-sorted list |
+| Mark as unread / Read | Toggle unread indicator |
+| Open linked item | Navigate to the roadmap card for this chat's linked item (only shown if chat has a linked roadmap item) |
+| Archive | Move to archived section with confirmation snackbar + undo option |
+| Delete | Destructive — confirmation required. Removes chat history locally. Separate from archive. |
+
+**Terminal session entry:**
+
+| Action | Behaviour |
+|--------|-----------|
+| Rename | Same inline edit as chat |
+| Pin / Unpin | Same |
+| End session | Kill the tmux session (with confirmation if session is active) |
+| Detach | Detach xterm.js from the tmux session without killing it — session keeps running in background |
+| View scrollback | Open scrollback in read-only mode (useful for completed sessions) |
+| Delete | Remove session entry + scrollback from history |
+
+**Project thread header (the collapsible project row):**
+
+| Action | Behaviour |
+|--------|-----------|
+| New OpenClaw chat | Create a new OpenClaw chat within this project thread |
+| New terminal session | Launch a new coding agent terminal within this project thread |
+| Collapse / Expand | Toggle visibility of the thread's chat list (also achievable by clicking the row itself) |
+
+#### Visual + layout notes
+
+- Dropdown is a compact popover (not a full modal) — appears below or above the icon depending on available space.
+- Destructive actions (Archive, Delete, End session) are separated by a divider and rendered in a muted danger colour.
+- Action labels use sentence case, no icons required (labels are clear enough at this scale).
+- Keyboard: the `⋯` icon is focusable; Enter/Space opens the menu; Escape closes it.
+
+#### Coexistence with the name reveal animation
+
+Both the name reveal scroll and the three-dot icon are hover-triggered on the same row. They coexist as follows:
+
+- **Text container** has `padding-right` equal to the icon width + gap (e.g., `28px`). The scrolling text therefore never visually reaches the icon zone.
+- The `translateX` animation target is capped to the overflow minus this reserved right padding.
+- The `⋯` icon is `position: absolute; right: 8px` (or equivalent), outside the text clip zone.
+- Both effects start on the same `mouseenter` event — no conflict.
+
+---
+
 ### Truncated Name Reveal (Hover Marquee)
 
 When a project or roadmap item name is too long to fit in the sidebar row, it truncates with `…`. On hover, instead of showing a static tooltip, the label plays a **smooth horizontal scroll animation** that pans the text left to reveal the hidden portion, then either holds or gently pans back.
@@ -144,10 +205,10 @@ When a project or roadmap item name is too long to fit in the sidebar row, it tr
 
 - **Sorted by last interaction** — most recently active chats appear at the top, not by creation date
 - **Max 5 visible per project** — roadmap-item-level chats show 5 max, then "Show N more..." dropdown below the 5th
-- **Pin** — user can pin specific chats to keep them visible regardless of recency
-- **Rename** — user can rename any chat (default name is the project/item title)
-- **Archive** — user can manually archive chats they're done with
-- **Mark as unread** — user can mark a chat as unread (for "come back to this" workflow)
+- **Pin** — user can pin specific chats to keep them visible regardless of recency *(via `⋯` hover menu)*
+- **Rename** — user can rename any chat (default name is the project/item title) *(via `⋯` hover menu — inline edit in place)*
+- **Archive** — user can manually archive chats they're done with *(via `⋯` hover menu)*
+- **Mark as unread** — user can mark a chat as unread (for "come back to this" workflow) *(via `⋯` hover menu)*
 - **Completion indicator** — when a linked roadmap item reaches `complete` status, the chat shows a visual checkmark/greyed title, but does NOT auto-archive (see decision below)
 
 ## Session Key Strategy
