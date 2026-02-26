@@ -40,6 +40,10 @@ interface BoardProps<T extends BoardItem> {
   renderItemActions?: (item: T) => ReactNode;
   renderItemHoverActions?: (item: T) => ReactNode;
   showPriority?: boolean;
+  /** When provided, renders a quick-add CTA card at the bottom of each column */
+  onQuickAdd?: (columnId: string) => void;
+  /** Label for the quick-add card (e.g. "Add Project") */
+  quickAddLabel?: string;
 }
 
 const MIN_COLUMN_WIDTH = 300;
@@ -123,6 +127,8 @@ export function Board<T extends BoardItem>({
   renderItemActions,
   renderItemHoverActions,
   showPriority,
+  onQuickAdd,
+  quickAddLabel,
 }: BoardProps<T>) {
   const collapsedColumns = useDashboardStore(
     (s) => s.collapsedColumns[boardId] ?? EMPTY_ARRAY,
@@ -440,6 +446,8 @@ export function Board<T extends BoardItem>({
                     renderItemHoverActions={renderItemHoverActions}
                     showPriority={resolvedShowPriority}
                     headerDragHandleProps={{ ...listeners, ...attributes }}
+                    onQuickAdd={onQuickAdd ? () => onQuickAdd(column.id) : undefined}
+                    quickAddLabel={quickAddLabel}
                   />
                 )}
               </SortableColumn>

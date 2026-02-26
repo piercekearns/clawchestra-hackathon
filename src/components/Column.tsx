@@ -4,6 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { ChevronDown, ChevronUp, GripVertical, Minimize2 } from 'lucide-react';
 import type { BoardItem, ColumnDefinition } from '../lib/schema';
 import { Card } from './Card';
+import { QuickAddCard } from './QuickAddCard';
 
 interface ColumnProps<T extends BoardItem> {
   column: ColumnDefinition;
@@ -22,6 +23,10 @@ interface ColumnProps<T extends BoardItem> {
   showPriority?: boolean;
   /** Spread onto the header to make it a drag handle for column reordering */
   headerDragHandleProps?: Record<string, unknown>;
+  /** When provided, renders a quick-add CTA card at the bottom of the column */
+  onQuickAdd?: () => void;
+  /** Label for the quick-add card (e.g. "+ Add Project") */
+  quickAddLabel?: string;
 }
 
 export function Column<T extends BoardItem>({
@@ -39,6 +44,8 @@ export function Column<T extends BoardItem>({
   renderItemActions,
   renderItemHoverActions,
   showPriority = true,
+  onQuickAdd,
+  quickAddLabel = 'Add Project',
 }: ColumnProps<T>) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const { onKeyDown: dragHandleOnKeyDown, ...dragHandleProps } = (headerDragHandleProps ?? {}) as {
@@ -158,10 +165,14 @@ export function Column<T extends BoardItem>({
               />
             ))}
 
-            {items.length === 0 ? (
+            {items.length === 0 && !onQuickAdd ? (
               <div className="mt-6 rounded-xl border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
                 Drop project here
               </div>
+            ) : null}
+
+            {onQuickAdd ? (
+              <QuickAddCard label={quickAddLabel} onClick={onQuickAdd} />
             ) : null}
           </div>
         </SortableContext>

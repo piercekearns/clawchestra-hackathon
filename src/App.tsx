@@ -291,6 +291,7 @@ export default function App() {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogInitialStatus, setAddDialogInitialStatus] = useState<string | undefined>(undefined);
   const [settingsPageOpen, setSettingsPageOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaveNudge, setSettingsSaveNudge] = useState(false);
@@ -2514,6 +2515,11 @@ export default function App() {
                   onItemsChange={(nextItems) => {
                     void persistBoardChanges(nextItems);
                   }}
+                  onQuickAdd={(columnId) => {
+                    setAddDialogInitialStatus(columnId);
+                    setAddDialogOpen(true);
+                  }}
+                  quickAddLabel="Add Project"
                 />
               )}
             </div>
@@ -2592,7 +2598,8 @@ export default function App() {
             settings={dashboardSettings}
             existingProjects={allProjects}
             boardScoped={sidebarOpen}
-            onClose={() => setAddDialogOpen(false)}
+            initialStatus={addDialogInitialStatus as ProjectStatus | undefined}
+            onClose={() => { setAddDialogOpen(false); setAddDialogInitialStatus(undefined); }}
             onComplete={async (message) => {
               try {
                 await loadProjects();

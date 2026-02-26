@@ -24,6 +24,8 @@ interface AddProjectDialogProps {
   onClose: () => void;
   onComplete: (message: string) => Promise<void> | void;
   boardScoped?: boolean;
+  /** Pre-select the status dropdown (e.g. from in-column quick-add) */
+  initialStatus?: ProjectStatus;
 }
 
 type WizardMode = 'create-new' | 'add-existing';
@@ -38,6 +40,7 @@ export function AddProjectDialog({
   onClose,
   onComplete,
   boardScoped,
+  initialStatus,
 }: AddProjectDialogProps) {
   const [mode, setMode] = useState<WizardMode>('create-new');
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +111,9 @@ export function AddProjectDialog({
     setSaving(false);
     setCompatibility(null);
     setScanPath(defaultRoot);
-  }, [defaultRoot, open]);
+    setStatus(initialStatus ?? 'up-next');
+    setExistingStatus(initialStatus ?? 'pending');
+  }, [defaultRoot, initialStatus, open]);
 
   useEffect(() => {
     if (folderEdited) return;
