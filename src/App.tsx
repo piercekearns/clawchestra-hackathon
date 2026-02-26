@@ -5,6 +5,7 @@ import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
 import { AddProjectDialog } from './components/AddProjectDialog';
+import { AddRoadmapItemDialog } from './components/AddRoadmapItemDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
 import { LifecycleActionBar } from './components/LifecycleActionBar';
@@ -292,6 +293,8 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDialogInitialStatus, setAddDialogInitialStatus] = useState<string | undefined>(undefined);
+  const [addRoadmapItemOpen, setAddRoadmapItemOpen] = useState(false);
+  const [addRoadmapItemInitialStatus, setAddRoadmapItemInitialStatus] = useState<string | undefined>(undefined);
   const [settingsPageOpen, setSettingsPageOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaveNudge, setSettingsSaveNudge] = useState(false);
@@ -2507,6 +2510,11 @@ export default function App() {
                   onItemsChange={(nextItems) => {
                     void persistRoadmapChanges(nextItems);
                   }}
+                  onQuickAdd={(columnId) => {
+                    setAddRoadmapItemInitialStatus(columnId);
+                    setAddRoadmapItemOpen(true);
+                  }}
+                  quickAddLabel="Add Roadmap Item"
                 />
                 </>
               ) : (
@@ -2647,6 +2655,21 @@ export default function App() {
               }
             }}
           />
+
+          {activeRoadmapProject && (
+            <AddRoadmapItemDialog
+              open={addRoadmapItemOpen}
+              projectId={activeRoadmapProject.id}
+              projectTitle={activeRoadmapProject.title}
+              existingItems={roadmapItems}
+              gatewayConnected={gatewayConnected}
+              initialStatus={addRoadmapItemInitialStatus as import('./lib/constants').RoadmapItemStatus | undefined}
+              onClose={() => { setAddRoadmapItemOpen(false); setAddRoadmapItemInitialStatus(undefined); }}
+              onComplete={async () => {
+                await refreshRoadmapFromFile('all');
+              }}
+            />
+          )}
 
           <SyncDialog
             open={syncDialogOpen}

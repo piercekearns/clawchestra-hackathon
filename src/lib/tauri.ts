@@ -73,6 +73,17 @@ export type SkippedDirectory = {
   reason: string;
 };
 
+/** Payload for creating a new roadmap item. */
+export type CreateRoadmapItemInput = {
+  id: string;
+  title: string;
+  status: string;
+  priority?: number;
+  nextAction?: string;
+  tags?: string[];
+  icon?: string;
+};
+
 /** Partial update payload for a roadmap item — only fields that are present are applied. */
 export type RoadmapItemChanges = {
   title?: string;
@@ -296,6 +307,13 @@ type TauriCommands = {
       title: string;
       status: string;
       description: string;
+    };
+    return: void;
+  };
+  create_roadmap_item: {
+    args: {
+      projectId: string;
+      item: CreateRoadmapItemInput;
     };
     return: void;
   };
@@ -827,6 +845,13 @@ export async function createProjectWithState(
     status,
     description,
   });
+}
+
+export async function createRoadmapItem(
+  projectId: string,
+  item: CreateRoadmapItemInput,
+): Promise<void> {
+  return typedInvoke('create_roadmap_item', { projectId, item });
 }
 
 export async function updateRoadmapItem(

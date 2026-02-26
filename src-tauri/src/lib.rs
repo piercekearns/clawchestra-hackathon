@@ -2534,6 +2534,120 @@ fn write_state_json_for_project(
     Ok(())
 }
 
+/// Input payload for creating a new roadmap item from the UI.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateRoadmapItemInput {
+    id: String,
+    title: String,
+    status: String,
+    priority: Option<i64>,
+    next_action: Option<String>,
+    tags: Option<Vec<String>>,
+    icon: Option<String>,
+}
+
+/// Create a new roadmap item in a project's db.json, write state.json, emit event.
+#[tauri::command]
+async fn create_roadmap_item(
+    project_id: String,
+    item: CreateRoadmapItemInput,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let payload = {
+        let mut guard = app_state.lock().await;
+        let ts = guard.next_hlc();
+
+        let project_path = {
+            let entry = guard
+                .db
+                .projects
+                .get_mut(&project_id)
+                .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+
+            if entry.roadmap_items.contains_key(&item.id) {
+                return Err(format!(
+                    "Roadmap item '{}' already exists in project '{}'",
+                    item.id, project_id
+                ));
+            }
+
+            // Auto-assign priority to bottom of column if not provided
+            let priority = item.priority.unwrap_or_else(|| {
+                let max = entry
+                    .roadmap_items
+                    .values()
+                    .filter(|i| i.status == item.status)
+                    .map(|i| i.priority)
+                    .max()
+                    .unwrap_or(0);
+                max + 1
+            });
+
+            let db_item = state::DbRoadmapItem {
+                id: item.id.clone(),
+                title: item.title,
+                title_updated_at: ts,
+                status: item.status,
+                status_updated_at: ts,
+                priority,
+                priority_updated_at: ts,
+                next_action: item.next_action.clone(),
+                next_action_updated_at: item.next_action.as_ref().map(|_| ts),
+                tags: item.tags.clone(),
+                tags_updated_at: item.tags.as_ref().map(|_| ts),
+                icon: item.icon.clone(),
+                icon_updated_at: item.icon.as_ref().map(|_| ts),
+                blocked_by: None,
+                blocked_by_updated_at: None,
+                spec_doc: None,
+                spec_doc_updated_at: None,
+                plan_doc: None,
+                plan_doc_updated_at: None,
+                spec_doc_branch: None,
+                spec_doc_branch_updated_at: None,
+                plan_doc_branch: None,
+                plan_doc_branch_updated_at: None,
+                spec_doc_content: None,
+                spec_doc_content_updated_at: None,
+                plan_doc_content: None,
+                plan_doc_content_updated_at: None,
+                completed_at: None,
+                completed_at_updated_at: None,
+            };
+
+            entry.roadmap_items.insert(item.id.clone(), db_item);
+            PathBuf::from(&entry.project_path)
+        };
+
+        guard.mark_dirty();
+
+        let pid = state::ProjectId(project_id.clone());
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let history = state::HistoryEntry {
+                timestamp: ts,
+                source: state::HistorySource::Ui,
+                changed_fields: vec!["created".to_string()],
+                state: state_json,
+            };
+            guard.push_history(&pid, history);
+        }
+
+        write_state_json_for_project(&mut guard, &project_id, &project_path)?;
+        build_merged_payload(&guard, &project_id, vec!["created".to_string()])
+    };
+
+    flush_handle.schedule_flush();
+
+    if let Some(payload) = payload {
+        let _ = app_handle.emit(watcher::EVENT_STATE_JSON_MERGED, payload);
+    }
+
+    Ok(())
+}
+
 /// Partial update for a roadmap item — only fields that are `Some` are applied.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -4073,6 +4187,7 @@ pub fn run() {
             // Phase 5.3 project creation
             create_project_with_state,
             // Phase 5.16 mutation commands
+            create_roadmap_item,
             update_roadmap_item,
             batch_reorder_items,
             reorder_item,
