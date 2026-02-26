@@ -42,7 +42,30 @@ Pick one of:
 - Global search.
 - Server‑side ingestion of selection metadata.
 
+## Context-Aware Routing (future direction — not Phase 1)
+
+The current spec routes all "Ask OpenClaw" queries to the **general chat**. This is the correct Phase 1 default — simple, always works.
+
+But as the Project Conversation Hub matures (scoped project and item chats), the routing should become **context-aware**: where the query goes depends on where in the app the user is highlighting text.
+
+| User location | Routing destination | Rationale |
+|--------------|--------------------|-----------| 
+| Inside a **roadmap item modal** | That item's scoped chat (create if none exists) | User is clearly working on that item — the question should live in that context |
+| On a **project dashboard** | That project's thread-level chat | User is in project context — question belongs there |
+| In the **general kanban board** (no specific project open) | General chat | No specific context — general chat is correct |
+| Anywhere else / ambiguous | General chat | Safe default |
+
+### UX implications
+
+- The tooltip label could reflect the destination: `"Ask OpenClaw"` (general) vs `"Ask in project chat"` vs `"Ask in item chat"` — though this adds complexity. Phase 1 can keep a static label; routing adapts silently in the background.
+- If routing creates a new item-level or project-level chat on the fly, it should auto-open the hub secondary drawer to that chat so the user sees where their question went.
+- This is the "pre-scoped AI surfaces" pattern from `distributed-ai-surfaces-spec.md` applied to the selection feature — the context of WHERE determines WHICH AI session receives the query.
+
+**Phase 1:** Route to general chat always. No context awareness.
+**Phase 2 (post-hub):** Add context-aware routing once project and item chats exist and have stable session keys.
+
 ## Decisions
 
 - The tooltip should appear **app‑wide** (including modals) when selecting non‑editable text.
 - The action should make it **obvious** the message references the selection (quoted block or reference chip).
+- **Phase 1 routing:** general chat only. Context-aware routing is a Phase 2 addition (see section above).

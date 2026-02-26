@@ -349,6 +349,51 @@ When a project or roadmap item name is too long to fit in the sidebar row, it tr
 - Hold at end: `500ms`
 - Return: `200ms` (fast snap back, or instant)
 
+## UI: Additional Contextual Access Points
+
+### Project Breadcrumb `MessagesSquare` Icon
+
+When the user is on a **project's dashboard** (the project-level view, showing its roadmap/kanban), a `MessagesSquare` icon sits **to the right of the project breadcrumb** at the top of the view. This provides a quick-access path to the project thread even when the sidebar is in thin mode.
+
+- Same filled/unfilled/notification states as the card-level button (unfilled = no thread, filled `#DFFF00` = thread exists, badge = notifications)
+- **Click:** Opens the hub nav sidebar to that project's thread and opens the secondary drawer to the project-level chat
+- This means a user can be browsing a project's roadmap, want to chat about it, and get there in one click — without toggling the sidebar, finding the thread, and clicking into it
+
+---
+
+### Roadmap Item Modal — Chat Access
+
+The roadmap item modal should surface access to that item's scoped chat. Two approaches, phased:
+
+#### Interim (Phase 2 — navigate to chat)
+A `MessagesSquare` icon in the **modal header** (or top-right corner, near the close button) with the same state logic:
+- Unfilled → no item chat exists yet
+- Filled `#DFFF00` → item chat exists
+- Notification badge → unread/action required in that chat
+
+**Click:** Opens the hub nav to that item's chat within its project thread + opens the secondary drawer. The modal stays open — the user now has the modal visible alongside the chat drawer, which is the natural working state: reference the spec/plan in the modal, ask questions in the chat.
+
+#### Future (Phase 3+ — embedded chat in modal)
+A minimal chat interface embedded directly inside the modal — the user can ask about the spec, the plan, or the roadmap item without leaving the modal or opening a drawer. Architecturally heavier (requires `<AiChat>` component as per `distributed-ai-surfaces-spec.md`). Defer until Phase 1 and 2 of the hub are stable.
+
+---
+
+### Context-Aware "Ask OpenClaw" Routing
+
+As the selection feature (`ask-openclaw-selection-spec.md`) matures, the destination for a highlighted-text query should depend on **where the user is in the app** when they make the selection:
+
+| User's current context | Query routes to |
+|-----------------------|----------------|
+| Inside a roadmap item modal | That item's scoped chat (create if none) |
+| On a project dashboard | That project's thread-level chat |
+| General kanban / no specific context | General chat |
+
+This is the pre-scoped AI surfaces pattern in practice — the UI location IS the instruction. **Phase 1 of the selection feature routes to general chat.** Context-aware routing lands in Phase 2, once project and item chats have stable session keys.
+
+See `ask-openclaw-selection-spec.md` for full routing decision documentation.
+
+---
+
 ## Chat Behaviors
 
 - **Sorted by last interaction** — most recently active chats appear at the top, not by creation date
