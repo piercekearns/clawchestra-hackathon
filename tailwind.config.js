@@ -56,13 +56,13 @@ export default {
         },
         dotBounce: {
           '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-6px)' },
+          '50%': { transform: 'translateY(-3px)' },
         },
       },
       animation: {
         textPulse: 'textPulse 2s ease-in-out infinite',
         textPulseBlue: 'textPulseBlue 2s ease-in-out infinite',
-        dotBounce: 'dotBounce 0.6s ease-in-out infinite',
+        dotBounce: 'dotBounce 0.8s ease-in-out infinite',
       },
     },
   },
