@@ -67,7 +67,7 @@ export function ProjectModal({ project, open, onClose, actions, boardScoped }: P
   const hasRoadmap = project.hasRoadmap;
 
   const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-2 backdrop-blur-sm sm:p-4`;
-  const dialogClass = `${boardScoped ? 'h-[min(90%,56rem)] max-h-[90%]' : 'h-[min(90vh,56rem)]'} w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-0 px-3 pb-3 pt-2 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 sm:px-5 sm:pb-5 sm:pt-3 relative group`;
+  const dialogClass = `${boardScoped ? 'h-[min(90%,56rem)] max-h-[90%]' : 'h-[min(90vh,56rem)]'} w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-0 px-3 pb-3 pt-1 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 sm:px-5 sm:pb-5 sm:pt-2 relative group`;
 
   return (
     <div
