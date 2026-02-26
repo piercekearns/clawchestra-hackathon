@@ -157,10 +157,10 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Messages */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* Messages — relative wrapper so MessageList's absolute inset-0 works */}
+      <div className="relative min-h-0 flex-1">
         {messages.length === 0 && !streamingContent ? (
-          <div className="flex h-full items-center justify-center px-4">
+          <div className="absolute inset-0 flex items-center justify-center px-4">
             <p className="text-center text-xs text-neutral-400 dark:text-neutral-500">
               {contextLoaded ? (
                 <>
@@ -183,7 +183,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
       </div>
 
       {/* Input bar — reuses the main ChatBar in embedded mode */}
-      <div className="shrink-0 px-3 pb-4 pt-2 md:pb-6">
+      <div className="shrink-0 px-3 pt-2">
       <ChatBar
         connectionState={wsConnectionState}
         activityLabel={sending ? 'Working...' : null}

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface ScrollRevealTextProps {
   text: string;
@@ -14,12 +14,25 @@ export function ScrollRevealText({ text, className }: ScrollRevealTextProps) {
   const textRef = useRef<HTMLSpanElement>(null);
   const [overflowPx, setOverflowPx] = useState(0);
 
-  useLayoutEffect(() => {
+  const measure = useCallback(() => {
     if (!containerRef.current || !textRef.current) return;
     const containerWidth = containerRef.current.clientWidth;
     const textWidth = textRef.current.scrollWidth;
     setOverflowPx(Math.max(0, textWidth - containerWidth));
-  }, [text]);
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [text, measure]);
+
+  // Re-measure when container resizes (e.g. hover padding changes)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
 
   const hasOverflow = overflowPx > 0;
   // Scale duration: ~40px/sec, min 1s, max 4s

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, Plus, Terminal } from 'lucide-react';
@@ -170,24 +171,39 @@ export function ThreadSection({
 
 function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddChat: (projectId: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (open) {
+      setOpen(false);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 });
+      setOpen(true);
+    }
+  };
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((prev) => !prev);
-        }}
+        onClick={handleToggle}
         className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
         aria-label="New chat"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
-      {open && (
+      {open && menuPos && createPortal(
         <>
-          <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+          <div
+            className="fixed inset-0 z-[200]"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="fixed z-[200] w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
             <button
               type="button"
               onClick={(e) => {
@@ -210,7 +226,8 @@ function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddCh
               <span className="ml-auto text-[10px] text-neutral-400 dark:text-neutral-600">Coming soon</span>
             </button>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   );

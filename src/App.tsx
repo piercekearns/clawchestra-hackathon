@@ -2543,7 +2543,7 @@ export default function App() {
           </main>
         ) : (
           <>
-        <div className="relative mb-4 -mt-[3px] flex items-center justify-between gap-3 px-3 md:px-4">
+        <div className="relative mb-4 -mt-[5px] flex items-center justify-between gap-3 px-3 md:px-4">
           <div className="flex items-center gap-1.5">
             <Breadcrumb
               viewContext={viewContext}
