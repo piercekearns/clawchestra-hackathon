@@ -4,7 +4,7 @@ id: ui-tweaks
 status: in-progress
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Remaining: item 2 chat bar height shell removal. Model selector (3) deferred."
+nextAction: "Item 2 shipped. Remaining: item 1 ValidationBadge evolution. Model selector (3) deferred."
 lastActivity: "2026-02-25"
 ---
 
@@ -63,11 +63,13 @@ The badge consolidates two signal types:
 
 The bottom chat bar currently has a nested inner field; instead, the **outer container should be the input**, so the default chat bar height matches the input height. This should reduce the overall bar height and tighten the UI.
 
-**Status:** ⏳ Pending (added 2026-02-24)
+**Status:** ✅ Complete (shipped 2026-02-26)
 
 **Notes:**
-- The outer chat bar should align to the input's default height.
-- Keep the same focus/hover styling; just remove the extra shell layer.
+- Removed inner `rounded-lg border` wrapper and `p-2` padding div.
+- Textarea and send button now sit directly inside the outer ChatBar container.
+- Sending border indicator moved to outer container border.
+- CSS custom properties moved to outer container.
 
 ---
 
