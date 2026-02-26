@@ -360,7 +360,14 @@ export default function App() {
   // Restore window size/position from saved state on launch.
   useEffect(() => {
     if (isTauriRuntime()) {
-      void restoreStateCurrent(StateFlags.ALL).catch(() => {});
+      // Restore immediately, then again after a short delay as a safety net
+      // in case the initial restore races with window creation.
+      const restore = () => restoreStateCurrent(StateFlags.ALL).catch((err) => {
+        console.warn('[WindowState] restore failed:', err);
+      });
+      void restore();
+      const timer = window.setTimeout(() => { void restore(); }, 300);
+      return () => clearTimeout(timer);
     }
   }, []);
 
