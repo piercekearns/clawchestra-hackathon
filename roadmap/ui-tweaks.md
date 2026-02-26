@@ -33,6 +33,8 @@ The badge consolidates two signal types:
 - Shows a count badge when there is more than one item.
 - Clicking opens a compact popover (same pattern as today's `ValidationBadge`) listing all active items.
 - Each item in the popover is **selectable text** and has a **"Copy" button** so errors can be pasted into a chat or terminal immediately.
+- **"Ask OpenClaw"** button per item — pre-fills the chat bar with the error context and opens the chat, so the user can go from "I have an error" to "OpenClaw is looking at it" in one click, no copy-paste trip needed.
+- **"Ask OpenClaw (all)"** at the bottom of the popover — injects all active issues as a structured message.
 - Errors can be individually dismissed.
 
 ### Layout
@@ -49,8 +51,10 @@ The badge consolidates two signal types:
 - Extend `ValidationBadge` (or create a sibling `StatusBadge`) to accept both `rejections: ValidationRejection[]` and `buildErrors: BuildError[]`.
 - Move the TitleBar render into `TitleBar.tsx`; keep (or simplify) the per-card badge for per-project context if still useful, but the header badge is the primary copy/paste surface.
 - Use `status-warning` colour tokens for warnings (amber), `status-danger` for errors (red).
-- Popover items: timestamp, type label, message text (selectable), "Copy" button per item.
-- "Copy all" button at the bottom of the popover for bulk copy.
+- Popover items: timestamp, type label, message text (selectable), "Copy" button, "Ask OpenClaw" button per item.
+- "Copy all" + "Ask OpenClaw (all)" buttons at the bottom of the popover.
+- "Ask OpenClaw" injects a pre-structured message into the chat input (e.g. `"I'm seeing this error: [full message]. Can you help?"`) and opens the chat drawer — no clipboard needed.
+- Chat injection needs a shared `useChatInput` setter or store action (e.g. `setChatDraft(message)`) that the TitleBar can call without prop drilling.
 - Build errors need to be surfaced via a new store slice or prop drilled from wherever build output is captured (likely `chat-reliability.ts` or `lib.rs`).
 
 ---
