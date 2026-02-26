@@ -159,7 +159,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     const ro = new ResizeObserver(measure);
     if (headerRef.current) ro.observe(headerRef.current);
     return () => ro.disconnect();
-  }, [activityLabel, images.length]);
+  }, [activityLabel]);
 
   const expanded = composerHeight > 72;
   const isFloating = variant === 'floating';
@@ -243,11 +243,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               />
             </div>
             {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
-            {images.length > 0 ? (
-              <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
-                {images.length} image{images.length === 1 ? '' : 's'} attached
-              </span>
-            ) : null}
           </div>
           {/* Toggle — centred by default, right-pinned only when left content would collide */}
           {showToggle ? (
@@ -277,11 +272,6 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             />
           </div>
           {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
-          {images.length > 0 ? (
-            <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
-              {images.length} image{images.length === 1 ? '' : 's'} attached
-            </span>
-          ) : null}
         </div>
       )}
 
