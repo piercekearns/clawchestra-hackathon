@@ -158,9 +158,11 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
 
   return (
     <div
-      className={`relative flex w-full flex-col ${
+      className={`relative flex w-full flex-col [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
         isFloating
-          ? `max-h-[50vh] rounded-xl border border-neutral-300 bg-neutral-0/95 backdrop-blur transition-all dark:border-neutral-600 dark:bg-neutral-900/95 ${
+          ? `max-h-[50vh] rounded-xl border bg-neutral-0/95 backdrop-blur transition-all ${
+              sending ? 'border-revival-accent/50' : 'border-neutral-300 dark:border-neutral-600'
+            } dark:bg-neutral-900/95 ${
               expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
             }`
           : ''
@@ -290,90 +292,84 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
         </div>
       )}
 
-      <div className="min-h-0 p-2">
-        <div className={`relative rounded-lg border bg-neutral-0/80 focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 transition-all [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
-          sending 
-            ? 'border-revival-accent/50' 
-            : 'border-neutral-300/70 dark:border-neutral-600'
-        }`}>
-          {/* Slash command dropdown */}
-          {showDropdown && (
-            <CommandDropdown
-              input={input}
-              onSelect={(cmd) => onInputChange(cmd)}
-              onClose={() => {
-                setDropdownDismissed(true);
-              }}
-            />
-          )}
-          <textarea
-            ref={(node) => {
-              textareaRef.current = node;
-              if (typeof forwardedRef === 'function') {
-                forwardedRef(node);
-              } else if (forwardedRef) {
-                forwardedRef.current = node;
-              }
+      <div className="relative min-h-0">
+        {/* Slash command dropdown */}
+        {showDropdown && (
+          <CommandDropdown
+            input={input}
+            onSelect={(cmd) => onInputChange(cmd)}
+            onClose={() => {
+              setDropdownDismissed(true);
             }}
-            value={input}
-            onChange={(event) => onInputChange(event.target.value)}
-            onPaste={async (event) => {
-              const files = Array.from(event.clipboardData.files ?? []);
-              if (files.length === 0) return;
-              await onPasteFiles(files);
-            }}
-            onKeyDown={(event) => {
-              // Don't submit if command dropdown is open (let dropdown handle Enter)
-              if (event.key === 'Enter' && !event.shiftKey && !showDropdown) {
-                event.preventDefault();
-                onSubmit();
-              }
-            }}
-            placeholder={
-              sending
-                ? 'Type to queue another message...'
-                : gatewayConnected
-                  ? 'Message OpenClaw'
-                  : 'Gateway offline. You can still draft here.'
-            }
-            className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
           />
+        )}
+        <textarea
+          ref={(node) => {
+            textareaRef.current = node;
+            if (typeof forwardedRef === 'function') {
+              forwardedRef(node);
+            } else if (forwardedRef) {
+              forwardedRef.current = node;
+            }
+          }}
+          value={input}
+          onChange={(event) => onInputChange(event.target.value)}
+          onPaste={async (event) => {
+            const files = Array.from(event.clipboardData.files ?? []);
+            if (files.length === 0) return;
+            await onPasteFiles(files);
+          }}
+          onKeyDown={(event) => {
+            // Don't submit if command dropdown is open (let dropdown handle Enter)
+            if (event.key === 'Enter' && !event.shiftKey && !showDropdown) {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
+          placeholder={
+            sending
+              ? 'Type to queue another message...'
+              : gatewayConnected
+                ? 'Message OpenClaw'
+                : 'Gateway offline. You can still draft here.'
+          }
+          className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+        />
 
-          <button
-            type="button"
-            disabled={!hasContent}
-            onClick={onSubmit}
-            aria-label={sending ? 'Queue message' : 'Send message'}
-            className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
-              sending
-                ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
-                : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
-            }`}
-          >
-            {sending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
-          </button>
-        </div>
-
-        {images.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-1.5 px-1">
-            {images.map((image, index) => (
-              <button
-                type="button"
-                key={image.id}
-                className="inline-flex items-center gap-1 rounded-md border border-neutral-300 bg-neutral-0 px-2 py-1 text-[11px] text-neutral-700 hover:border-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-500"
-                onClick={() => onRemoveImage(index)}
-                title={`Remove ${image.name}`}
-              >
-                <span className="max-w-[14rem] truncate">{image.name}</span>
-                <X className="h-3 w-3" />
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {attachmentNotice ? (
-          <div className="mt-1 px-1 text-[11px] text-status-danger">{attachmentNotice}</div>
-        ) : null}
+        <button
+          type="button"
+          disabled={!hasContent}
+          onClick={onSubmit}
+          aria-label={sending ? 'Queue message' : 'Send message'}
+          className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+            sending
+              ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
+              : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
+          }`}
+        >
+          {sending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
+        </button>
       </div>
+
+      {images.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+          {images.map((image, index) => (
+            <button
+              type="button"
+              key={image.id}
+              className="inline-flex items-center gap-1 rounded-md border border-neutral-300 bg-neutral-0 px-2 py-1 text-[11px] text-neutral-700 hover:border-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-500"
+              onClick={() => onRemoveImage(index)}
+              title={`Remove ${image.name}`}
+            >
+              <span className="max-w-[14rem] truncate">{image.name}</span>
+              <X className="h-3 w-3" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {attachmentNotice ? (
+        <div className="px-3 pb-2 text-[11px] text-status-danger">{attachmentNotice}</div>
+      ) : null}
     </div>
   );
 });
