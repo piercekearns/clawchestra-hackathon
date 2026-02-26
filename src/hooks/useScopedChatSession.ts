@@ -211,21 +211,24 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
       _id: generateMessageId(),
     };
 
-    // 2. Add to store (atomic dedup-then-append)
+    // 2. Snapshot prior messages BEFORE mutation (matches main chat pattern —
+    //    avoids stale-snapshot pitfall of reading back after set())
+    const priorMessages = store.hubChatMessages[originChatId] ?? [];
+
+    // 3. Add to store (atomic dedup-then-append)
     store.addHubChatMessage(originChatId, userMessage);
 
-    // 3. Clear input + mark busy
+    // 4. Clear input + mark busy
     setInputRaw('');
     draftsRef.current.set(originChatId, '');
     store.addHubBusyChatId(originChatId);
     store.addHubStreamingChatId(originChatId);
     setStreamingContent(null);
 
-    // 4. Build history for send — read from store for consistency
-    const currentMessages = store.hubChatMessages[originChatId] ?? [];
-    const historyForSend = [...currentMessages];
+    // 5. Build history for send — prior snapshot + user message (same as main chat)
+    const historyForSend = [...priorMessages, userMessage];
 
-    // 5. Prepend context on first send
+    // 6. Prepend context on first send
     const contextInjected = store.hubChatContextInjected[originChatId];
     if (contextRef.current && !contextInjected) {
       historyForSend.unshift({
@@ -272,6 +275,7 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
       if (!switchedAway) {
         setStreamingContent(null);
       }
+      useDashboardStore.getState().setGatewayConnected(true);
 
       // Add response messages via store (each goes through dedup pipeline)
       for (const msg of result.messages) {
