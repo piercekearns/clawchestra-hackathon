@@ -18,7 +18,7 @@ Instructions for agents interacting with Clawchestra (formerly Pipeline Dashboar
 
 ### Schema Constraints (HARD — app rejects invalid values silently)
 
-**Roadmap item statuses:** `pending` | `up-next` | `in-progress` | `complete`
+**Roadmap item statuses:** `pending` | `up-next` | `in-progress` | `complete` | `archived`
 - No other values. Not `done`, not `finished`, not `shipped`, not `blocked`.
 
 **Project statuses:** `in-progress` | `up-next` | `pending` | `dormant` | `archived`

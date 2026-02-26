@@ -346,7 +346,7 @@ fn deduplicate_ids(ids: &mut Vec<String>) -> Vec<(usize, String, String)> {
 // ---------------------------------------------------------------------------
 
 /// Valid roadmap item statuses.
-const VALID_ROADMAP_STATUSES: &[&str] = &["pending", "up-next", "in-progress", "complete"];
+const VALID_ROADMAP_STATUSES: &[&str] = &["pending", "up-next", "in-progress", "complete", "archived"];
 
 /// Sanitize a single YAML value into a DB roadmap item.
 ///

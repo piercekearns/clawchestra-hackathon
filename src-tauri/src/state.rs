@@ -19,7 +19,7 @@ use std::time::SystemTime;
 // ---------------------------------------------------------------------------
 
 /// Valid statuses for a roadmap item.
-pub const ROADMAP_ITEM_STATUSES: &[&str] = &["pending", "up-next", "in-progress", "complete"];
+pub const ROADMAP_ITEM_STATUSES: &[&str] = &["pending", "up-next", "in-progress", "complete", "archived"];
 
 /// Valid statuses for a project.
 pub const PROJECT_STATUSES: &[&str] = &["in-progress", "up-next", "pending", "dormant", "archived"];

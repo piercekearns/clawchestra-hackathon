@@ -39,6 +39,7 @@ interface BoardProps<T extends BoardItem> {
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
   renderItemHoverActions?: (item: T) => ReactNode;
+  renderItemRightHoverActions?: (item: T) => ReactNode;
   showPriority?: boolean;
   /** When provided, renders a quick-add CTA card at the bottom of each column */
   onQuickAdd?: (columnId: string) => void;
@@ -126,6 +127,7 @@ export function Board<T extends BoardItem>({
   renderItemIndicators,
   renderItemActions,
   renderItemHoverActions,
+  renderItemRightHoverActions,
   showPriority,
   onQuickAdd,
   quickAddLabel,
@@ -446,6 +448,7 @@ export function Board<T extends BoardItem>({
                     renderItemIndicators={renderItemIndicators}
                     renderItemActions={renderItemActions}
                     renderItemHoverActions={renderItemHoverActions}
+                    renderItemRightHoverActions={renderItemRightHoverActions}
                     showPriority={resolvedShowPriority}
                     headerDragHandleProps={{ ...listeners, ...attributes }}
                     onQuickAdd={onQuickAdd ? () => onQuickAdd(column.id) : undefined}

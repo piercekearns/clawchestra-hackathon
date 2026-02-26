@@ -11,6 +11,7 @@ interface CardProps<T extends BoardItem> {
   renderIndicators?: (item: T) => ReactNode;
   renderActions?: (item: T) => ReactNode;
   renderHoverActions?: (item: T) => ReactNode;
+  renderRightHoverActions?: (item: T) => ReactNode;
   showPriority?: boolean;
 }
 
@@ -21,6 +22,7 @@ export function Card<T extends BoardItem>({
   renderIndicators,
   renderActions,
   renderHoverActions,
+  renderRightHoverActions,
   showPriority = true,
 }: CardProps<T>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -42,7 +44,7 @@ export function Card<T extends BoardItem>({
       {...attributes}
       {...listeners}
       onClick={() => onClick(item)}
-      className={`group cursor-grab rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 shadow-sm outline-none transition hover:border-revival-accent-400 hover:bg-neutral-100 focus:outline-none focus-visible:outline-none active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700 ${hasBody ? 'p-3' : 'px-3 py-2'}`}
+      className={`group relative cursor-grab rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 shadow-sm outline-none transition hover:border-revival-accent-400 hover:bg-neutral-100 focus:outline-none focus-visible:outline-none active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700 ${hasBody ? 'p-3' : 'px-3 py-2'}`}
     >
       <div className={`flex items-start justify-between gap-2 ${hasBody ? 'mb-2' : 'mb-0'}`}>
         <h3 className="text-sm font-semibold leading-tight">
@@ -53,9 +55,14 @@ export function Card<T extends BoardItem>({
           {renderIndicators ? renderIndicators(item) : null}
           {warning ? <AlertTriangle className="h-4 w-4 text-status-warning" /> : null}
           {showPriority && item.priority !== undefined ? (
-            <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:border-neutral-600 dark:text-neutral-200">
+            <span className="transition-opacity duration-150 rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:border-neutral-600 dark:text-neutral-200 group-hover:opacity-0">
               P{item.priority}
             </span>
+          ) : null}
+          {renderRightHoverActions ? (
+            <div className="pointer-events-none invisible absolute right-3 top-3 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+              {renderRightHoverActions(item)}
+            </div>
           ) : null}
         </div>
       </div>

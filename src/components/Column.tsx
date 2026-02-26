@@ -20,6 +20,7 @@ interface ColumnProps<T extends BoardItem> {
   renderItemIndicators?: (item: T) => ReactNode;
   renderItemActions?: (item: T) => ReactNode;
   renderItemHoverActions?: (item: T) => ReactNode;
+  renderItemRightHoverActions?: (item: T) => ReactNode;
   showPriority?: boolean;
   /** Spread onto the header to make it a drag handle for column reordering */
   headerDragHandleProps?: Record<string, unknown>;
@@ -43,6 +44,7 @@ export function Column<T extends BoardItem>({
   renderItemIndicators,
   renderItemActions,
   renderItemHoverActions,
+  renderItemRightHoverActions,
   showPriority = true,
   onQuickAdd,
   quickAddLabel = 'Add Project',
@@ -161,6 +163,7 @@ export function Column<T extends BoardItem>({
                 renderIndicators={renderItemIndicators}
                 renderActions={renderItemActions}
                 renderHoverActions={renderItemHoverActions}
+                renderRightHoverActions={renderItemRightHoverActions}
                 showPriority={showPriority}
               />
             ))}

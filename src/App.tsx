@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
-import { Check, Clock4, GitBranch, Github, Plus, RefreshCcw, Search } from 'lucide-react';
+import { Archive, Check, CircleCheckBig, Clock4, EyeOff, GitBranch, Github, Plus, RefreshCcw, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
@@ -79,6 +79,9 @@ import {
   markRejectionResolved,
   resetOpenclawAuthCooldown,
   updateDashboardSettings,
+  createRoadmapItem,
+  deleteRoadmapItems,
+  updateRoadmapItem,
   type ValidationRejection,
 } from './lib/tauri';
 import { mapToRoadmapItemsWithDocs } from './lib/roadmap-item-mapper';
@@ -99,6 +102,7 @@ interface Toast {
   id: number;
   kind: 'success' | 'error';
   message: string;
+  action?: { label: string; onClick: () => void };
 }
 
 function flattenProjects(projects: ProjectViewModel[]): ProjectViewModel[] {
@@ -295,6 +299,8 @@ export default function App() {
   const [addDialogInitialStatus, setAddDialogInitialStatus] = useState<string | undefined>(undefined);
   const [addRoadmapItemOpen, setAddRoadmapItemOpen] = useState(false);
   const [addRoadmapItemInitialStatus, setAddRoadmapItemInitialStatus] = useState<string | undefined>(undefined);
+  const [showArchived, setShowArchived] = useState(false);
+  const [deleteAllArchivedConfirmOpen, setDeleteAllArchivedConfirmOpen] = useState(false);
   const [settingsPageOpen, setSettingsPageOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaveNudge, setSettingsSaveNudge] = useState(false);
@@ -723,12 +729,12 @@ export default function App() {
     percent: number;
   } | null>(null);
 
-  const pushToast = useCallback((kind: Toast['kind'], message: string) => {
+  const pushToast = useCallback((kind: Toast['kind'], message: string, action?: Toast['action']) => {
     const id = Date.now() + Math.round(Math.random() * 1000);
-    setToasts((current) => [...current, { id, kind, message }]);
+    setToasts((current) => [...current, { id, kind, message, action }]);
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
-    }, 3600);
+    }, 5000);
   }, []);
 
   const refreshActiveSessionModel = useCallback(async () => {
@@ -1721,6 +1727,7 @@ export default function App() {
   const resetToProjectBoard = () => {
     setViewContext(defaultView());
     setRoadmapItems([]);
+    setShowArchived(false);
   };
 
   const openRoadmapView = async (project: ProjectViewModel) => {
@@ -2384,13 +2391,25 @@ export default function App() {
   const toastContent = toasts.map((toast) => (
     <div
       key={toast.id}
-      className={`pointer-events-auto w-full max-w-md rounded-lg border px-3 py-2 text-sm shadow-lg backdrop-blur ${
+      className={`pointer-events-auto flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm shadow-lg backdrop-blur ${
         toast.kind === 'error'
           ? 'border-status-danger/45 bg-status-danger/12 text-status-danger dark:bg-status-danger/18'
           : 'border-revival-accent-400/45 bg-neutral-100/92 text-neutral-900 dark:bg-neutral-900/92 dark:text-neutral-100'
       }`}
     >
-      {toast.message}
+      <span>{toast.message}</span>
+      {toast.action ? (
+        <button
+          type="button"
+          onClick={() => {
+            toast.action!.onClick();
+            setToasts((current) => current.filter((t) => t.id !== toast.id));
+          }}
+          className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold text-revival-accent-500 transition-colors hover:bg-revival-accent-400/20 dark:text-revival-accent-400"
+        >
+          {toast.action.label}
+        </button>
+      ) : null}
     </div>
   ));
 
@@ -2461,7 +2480,34 @@ export default function App() {
             {loading
               ? 'Loading...'
               : isRoadmapView
-                ? `${roadmapItems.length} roadmap item(s)`
+                ? (
+                  <span className="group/archive relative inline-flex items-center gap-2">
+                    {/* Item count — hidden on hover when archive is off */}
+                    <span className={showArchived ? 'hidden' : 'group-hover/archive:hidden'}>
+                      {roadmapItems.filter((i) => i.status !== 'archived').length} roadmap item(s)
+                    </span>
+                    {/* Show archive toggle — visible on hover, or always when active */}
+                    <span className={`items-center gap-2 ${showArchived ? 'inline-flex' : 'hidden group-hover/archive:inline-flex'}`}>
+                      <span className="whitespace-nowrap">Show archive</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowArchived((v) => !v)}
+                        className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                          showArchived
+                            ? 'bg-revival-accent-500'
+                            : 'bg-neutral-300 dark:bg-neutral-600'
+                        }`}
+                        aria-label={showArchived ? 'Hide archived items' : 'Show archived items'}
+                      >
+                        <span
+                          className={`inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                            showArchived ? 'translate-x-3.5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </span>
+                  </span>
+                )
                 : `${topLevelProjects.length} projects`}
           </div>
         </div>
@@ -2508,32 +2554,253 @@ export default function App() {
 
         <main className="mb-4 min-h-0 flex-1">
           <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
-            <div className="h-full min-h-0 overflow-hidden">
-              {isRoadmapView ? (
-                <>
-                <Board
-                  columns={viewContext.columns}
-                  items={roadmapItems}
-                  boardId={`roadmap:${viewContext.type === 'roadmap' ? viewContext.projectId : 'unknown'}`}
-                  onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
-                  renderItemHoverActions={(item) => (
-                    <LifecycleActionBar
-                      specExists={Boolean(item.docs?.spec)}
-                      planExists={Boolean(item.docs?.plan)}
-                      onAction={(action) => handleLifecycleAction(item, action)}
-                    />
+            <div className={`h-full min-h-0 ${showArchived && isRoadmapView ? 'flex gap-3 overflow-hidden' : 'overflow-hidden'}`}>
+              {isRoadmapView ? (() => {
+                const projectId = activeRoadmapProject!.id;
+                const nonArchivedItems = roadmapItems.filter((i) => i.status !== 'archived');
+                const archivedItems = roadmapItems.filter((i) => i.status === 'archived');
+
+                const handleComplete = (item: RoadmapItemWithDocs) => {
+                  const previousStatus = item.status;
+                  const previousPriority = item.priority;
+                  const completedAt = new Date().toISOString().split('T')[0];
+                  setRoadmapItems((prev) =>
+                    prev.map((i) => (i.id === item.id ? { ...i, status: 'complete', completedAt } : i)),
+                  );
+                  void updateRoadmapItem(projectId, item.id, { status: 'complete', completedAt }).catch(() => {
+                    setRoadmapItems((prev) =>
+                      prev.map((i) =>
+                        i.id === item.id ? { ...i, status: previousStatus, priority: previousPriority, completedAt: undefined } : i,
+                      ),
+                    );
+                    pushToast('error', 'Failed to complete item');
+                  });
+                  pushToast('success', `"${item.title}" completed`, {
+                    label: 'Undo',
+                    onClick: () => {
+                      setRoadmapItems((prev) =>
+                        prev.map((i) =>
+                          i.id === item.id ? { ...i, status: previousStatus, priority: previousPriority, completedAt: undefined } : i,
+                        ),
+                      );
+                      void updateRoadmapItem(projectId, item.id, { status: previousStatus, completedAt: '' });
+                    },
+                  });
+                };
+
+                const handleArchive = (item: RoadmapItemWithDocs) => {
+                  const previousStatus = item.status;
+                  const previousPriority = item.priority;
+                  setRoadmapItems((prev) =>
+                    prev.map((i) => (i.id === item.id ? { ...i, status: 'archived' } : i)),
+                  );
+                  void updateRoadmapItem(projectId, item.id, { status: 'archived' }).catch(() => {
+                    setRoadmapItems((prev) =>
+                      prev.map((i) =>
+                        i.id === item.id ? { ...i, status: previousStatus, priority: previousPriority } : i,
+                      ),
+                    );
+                    pushToast('error', 'Failed to archive item');
+                  });
+                  pushToast('success', `"${item.title}" archived`, {
+                    label: 'Undo',
+                    onClick: () => {
+                      setRoadmapItems((prev) =>
+                        prev.map((i) =>
+                          i.id === item.id ? { ...i, status: previousStatus, priority: previousPriority } : i,
+                        ),
+                      );
+                      void updateRoadmapItem(projectId, item.id, { status: previousStatus });
+                    },
+                  });
+                };
+
+                const handleRestore = (item: RoadmapItemWithDocs) => {
+                  // Restore to pending by default (original status is lost once archived)
+                  const restoreTo = 'pending';
+                  setRoadmapItems((prev) =>
+                    prev.map((i) => (i.id === item.id ? { ...i, status: restoreTo } : i)),
+                  );
+                  void updateRoadmapItem(projectId, item.id, { status: restoreTo }).catch(() => {
+                    setRoadmapItems((prev) =>
+                      prev.map((i) => (i.id === item.id ? { ...i, status: 'archived' } : i)),
+                    );
+                    pushToast('error', 'Failed to restore item');
+                  });
+                  pushToast('success', `"${item.title}" restored to pending`);
+                };
+
+                const handleDeleteItem = (item: RoadmapItemWithDocs) => {
+                  const snapshot = { ...item };
+                  setRoadmapItems((prev) => prev.filter((i) => i.id !== item.id));
+                  void deleteRoadmapItems(projectId, [item.id]).catch(() => {
+                    setRoadmapItems((prev) => [...prev, snapshot]);
+                    pushToast('error', 'Failed to delete item');
+                  });
+                  pushToast('success', `"${item.title}" deleted`, {
+                    label: 'Undo',
+                    onClick: () => {
+                      setRoadmapItems((prev) => [...prev, snapshot]);
+                      void createRoadmapItem(projectId, {
+                        id: snapshot.id,
+                        title: snapshot.title,
+                        status: snapshot.status,
+                        priority: snapshot.priority,
+                        nextAction: snapshot.nextAction,
+                        tags: snapshot.tags,
+                        icon: snapshot.icon,
+                      });
+                    },
+                  });
+                };
+
+                const handleDeleteAllArchived = () => {
+                  const snapshots = [...archivedItems];
+                  setRoadmapItems((prev) => prev.filter((i) => i.status !== 'archived'));
+                  setShowArchived(false);
+                  setDeleteAllArchivedConfirmOpen(false);
+                  void deleteRoadmapItems(projectId, snapshots.map((i) => i.id)).catch(() => {
+                    setRoadmapItems((prev) => [...prev, ...snapshots]);
+                    pushToast('error', 'Failed to delete archived items');
+                  });
+                  pushToast('success', `${snapshots.length} archived item(s) deleted`);
+                };
+
+                const stopDrag = (e: React.PointerEvent) => e.stopPropagation();
+                const stopClick = (e: React.MouseEvent) => e.stopPropagation();
+                const actionBtnClass = 'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-500 transition-all dark:text-neutral-400';
+
+                return (
+                  <>
+                  <div className={showArchived ? 'min-w-0 flex-1' : 'h-full'}>
+                  <Board
+                    columns={viewContext.columns}
+                    items={nonArchivedItems}
+                    boardId={`roadmap:${viewContext.type === 'roadmap' ? viewContext.projectId : 'unknown'}`}
+                    onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
+                    renderItemHoverActions={(item) => (
+                      <LifecycleActionBar
+                        specExists={Boolean(item.docs?.spec)}
+                        planExists={Boolean(item.docs?.plan)}
+                        onAction={(action) => handleLifecycleAction(item, action)}
+                      />
+                    )}
+                    renderItemRightHoverActions={(item) => (
+                      <>
+                        {item.status !== 'complete' && (
+                          <button
+                            type="button"
+                            className={`${actionBtnClass} hover:bg-green-500/15 hover:text-green-600 hover:shadow-sm dark:hover:bg-green-500/15 dark:hover:text-green-400`}
+                            onPointerDown={stopDrag}
+                            onClick={(e) => { stopClick(e); handleComplete(item); }}
+                            title="Complete"
+                          >
+                            <CircleCheckBig className="h-[15px] w-[15px]" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={`${actionBtnClass} hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100`}
+                          onPointerDown={stopDrag}
+                          onClick={(e) => { stopClick(e); handleArchive(item); }}
+                          title="Archive"
+                        >
+                          <Archive className="h-[15px] w-[15px]" />
+                        </button>
+                      </>
+                    )}
+                    onItemsChange={(nextItems) => {
+                      void persistRoadmapChanges(nextItems);
+                    }}
+                    onQuickAdd={(columnId) => {
+                      setAddRoadmapItemInitialStatus(columnId);
+                      setAddRoadmapItemOpen(true);
+                    }}
+                    quickAddLabel="Add Roadmap Item"
+                  />
+                  </div>
+
+                  {/* Archived column — rendered separately, outside Board's dnd-kit context */}
+                  {showArchived && (
+                    <div className="flex h-full w-[280px] shrink-0 flex-col rounded-2xl border border-neutral-200 bg-neutral-100/60 dark:border-neutral-700 dark:bg-neutral-900/60">
+                      {/* Header */}
+                      <div className="flex items-center gap-1.5 rounded-t-2xl bg-neutral-100 px-3 py-2 dark:bg-neutral-800">
+                        <Archive className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+                          Archived
+                        </h2>
+                        <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                          {archivedItems.length}
+                        </span>
+                        <div className="ml-auto flex items-center gap-1">
+                          {archivedItems.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteAllArchivedConfirmOpen(true)}
+                              className="rounded p-1 text-neutral-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:text-neutral-500 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                              title="Delete all archived items"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowArchived(false)}
+                            className="rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                          >
+                            <EyeOff className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      {/* Cards */}
+                      <div className="flex-1 space-y-2 overflow-y-auto p-2">
+                        {archivedItems.length === 0 ? (
+                          <p className="px-2 py-4 text-center text-xs text-neutral-400 dark:text-neutral-500">
+                            No archived items
+                          </p>
+                        ) : (
+                          archivedItems.map((item) => (
+                            <article
+                              key={item.id}
+                              onClick={() => setSelectedRoadmapItemId(item.id)}
+                              className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-neutral-50 p-3 opacity-60 shadow-sm transition hover:border-neutral-300 hover:opacity-80 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:border-neutral-600"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="text-sm font-semibold leading-tight line-through text-neutral-600 dark:text-neutral-400">
+                                  {item.title}
+                                  {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
+                                </h3>
+                                {/* Restore + Delete buttons on hover */}
+                                <div className="pointer-events-none invisible flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+                                  <button
+                                    type="button"
+                                    className={`${actionBtnClass} hover:bg-revival-accent-400/15 hover:text-revival-accent-600 hover:shadow-sm dark:hover:bg-revival-accent-400/15 dark:hover:text-revival-accent-400`}
+                                    onPointerDown={stopDrag}
+                                    onClick={(e) => { stopClick(e); handleRestore(item); }}
+                                    title="Restore"
+                                  >
+                                    <RotateCcw className="h-[15px] w-[15px]" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`${actionBtnClass} hover:bg-red-100 hover:text-red-600 hover:shadow-sm dark:hover:bg-red-900/30 dark:hover:text-red-400`}
+                                    onPointerDown={stopDrag}
+                                    onClick={(e) => { stopClick(e); handleDeleteItem(item); }}
+                                    title="Delete permanently"
+                                  >
+                                    <Trash2 className="h-[15px] w-[15px]" />
+                                  </button>
+                                </div>
+                              </div>
+                            </article>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   )}
-                  onItemsChange={(nextItems) => {
-                    void persistRoadmapChanges(nextItems);
-                  }}
-                  onQuickAdd={(columnId) => {
-                    setAddRoadmapItemInitialStatus(columnId);
-                    setAddRoadmapItemOpen(true);
-                  }}
-                  quickAddLabel="Add Roadmap Item"
-                />
-                </>
-              ) : (
+                  </>
+                );
+              })() : (
                 <Board
                   columns={viewContext.columns}
                   items={topLevelProjects}
@@ -2685,6 +2952,53 @@ export default function App() {
                 await refreshRoadmapFromFile('all');
               }}
             />
+          )}
+
+          {/* Delete All Archived confirmation modal */}
+          {deleteAllArchivedConfirmOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="w-full max-w-sm rounded-2xl border border-red-300 bg-white p-6 shadow-xl dark:border-red-800 dark:bg-neutral-900">
+                <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                  Delete all archived items?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+                  This will permanently delete{' '}
+                  <span className="font-semibold">{roadmapItems.filter((i) => i.status === 'archived').length}</span>{' '}
+                  archived item(s). This action cannot be undone.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    autoFocus
+                    onClick={() => setDeleteAllArchivedConfirmOpen(false)}
+                    className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // handleDeleteAllArchived is only available in roadmap IIFE scope,
+                      // so we replicate the logic here with access to the state setters
+                      const archived = roadmapItems.filter((i) => i.status === 'archived');
+                      if (archived.length === 0) { setDeleteAllArchivedConfirmOpen(false); return; }
+                      const projectId = activeRoadmapProject!.id;
+                      setRoadmapItems((prev) => prev.filter((i) => i.status !== 'archived'));
+                      setShowArchived(false);
+                      setDeleteAllArchivedConfirmOpen(false);
+                      void deleteRoadmapItems(projectId, archived.map((i) => i.id)).catch(() => {
+                        setRoadmapItems((prev) => [...prev, ...archived]);
+                        pushToast('error', 'Failed to delete archived items');
+                      });
+                      pushToast('success', `${archived.length} archived item(s) deleted`);
+                    }}
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                  >
+                    Delete all
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           <SyncDialog

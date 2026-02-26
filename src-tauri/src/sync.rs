@@ -316,7 +316,7 @@ Known clients:
 
 Schema rules:
 - Project statuses: in-progress | up-next | pending | dormant | archived
-- Roadmap item statuses: pending | up-next | in-progress | complete
+- Roadmap item statuses: pending | up-next | in-progress | complete | archived
 - completedAt required when status is complete
 - Priorities unique per column
 

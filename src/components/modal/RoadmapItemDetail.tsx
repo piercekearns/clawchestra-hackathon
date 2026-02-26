@@ -19,6 +19,7 @@ const ROADMAP_STATUS_LABELS: Partial<Record<RoadmapStatus, string>> = {
   'pending': 'Pending',
   'in-progress': 'In Progress',
   'complete': 'Complete',
+  'archived': 'Archived',
 };
 
 function roadmapStatusVariant(status: RoadmapStatus): BadgeVariant {
@@ -30,6 +31,8 @@ function roadmapStatusVariant(status: RoadmapStatus): BadgeVariant {
       return 'accent';
     case 'complete':
       return 'success';
+    case 'archived':
+      return 'outline';
   }
 }
 

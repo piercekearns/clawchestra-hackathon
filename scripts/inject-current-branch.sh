@@ -24,7 +24,7 @@ Project orchestration state lives in \`.clawchestra/state.json\` (gitignored, al
 
 **Schema rules:**
 - Project statuses: in-progress | up-next | pending | dormant | archived
-- Roadmap item statuses: pending | up-next | in-progress | complete
+- Roadmap item statuses: pending | up-next | in-progress | complete | archived
 - When setting status: complete, always set completedAt: YYYY-MM-DD
 - Priorities are unique per column
 - Do NOT delete items from state.json — removal requires explicit action via Clawchestra UI

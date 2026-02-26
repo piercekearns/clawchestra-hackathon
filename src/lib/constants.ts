@@ -18,6 +18,7 @@ export const ROADMAP_ITEM_STATUSES = [
   'up-next',
   'in-progress',
   'complete',
+  'archived',
 ] as const;
 
 export type RoadmapItemStatus = (typeof ROADMAP_ITEM_STATUSES)[number];

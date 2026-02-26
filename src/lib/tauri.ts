@@ -326,6 +326,13 @@ type TauriCommands = {
     };
     return: void;
   };
+  delete_roadmap_items: {
+    args: {
+      projectId: string;
+      itemIds: string[];
+    };
+    return: void;
+  };
   reorder_item: {
     args: {
       projectId: string;
@@ -861,6 +868,13 @@ export async function updateRoadmapItem(
   changes: RoadmapItemChanges,
 ): Promise<void> {
   return typedInvoke('update_roadmap_item', { projectId, itemId, changes });
+}
+
+export async function deleteRoadmapItems(
+  projectId: string,
+  itemIds: string[],
+): Promise<void> {
+  return typedInvoke('delete_roadmap_items', { projectId, itemIds });
 }
 
 export async function reorderItem(

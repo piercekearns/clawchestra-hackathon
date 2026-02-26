@@ -2792,6 +2792,60 @@ async fn update_roadmap_item(
     Ok(())
 }
 
+/// Delete one or more roadmap items from a project's db.json.
+/// Does NOT remove associated doc files on disk (spec, plan).
+#[tauri::command]
+async fn delete_roadmap_items(
+    project_id: String,
+    item_ids: Vec<String>,
+    app_state: tauri::State<'_, SharedAppState>,
+    flush_handle: tauri::State<'_, SharedFlushHandle>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let payload = {
+        let mut guard = app_state.lock().await;
+        let ts = guard.next_hlc();
+
+        let project_path = {
+            let entry = guard
+                .db
+                .projects
+                .get_mut(&project_id)
+                .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+
+            for id in &item_ids {
+                entry.roadmap_items.remove(id);
+            }
+
+            PathBuf::from(&entry.project_path)
+        };
+
+        guard.mark_dirty();
+
+        let pid = state::ProjectId(project_id.clone());
+        if let Some(state_json) = guard.project_state_json(&project_id) {
+            let history = state::HistoryEntry {
+                timestamp: ts,
+                source: state::HistorySource::Ui,
+                changed_fields: vec!["roadmap_items".to_string()],
+                state: state_json,
+            };
+            guard.push_history(&pid, history);
+        }
+
+        write_state_json_for_project(&mut guard, &project_id, &project_path)?;
+        build_merged_payload(&guard, &project_id, vec!["roadmap_items".to_string()])
+    };
+
+    flush_handle.schedule_flush();
+
+    if let Some(payload) = payload {
+        let _ = app_handle.emit(watcher::EVENT_STATE_JSON_MERGED, payload);
+    }
+
+    Ok(())
+}
+
 /// Atomically update multiple roadmap items (priority + status) for a kanban drag operation.
 /// This reduces N IPC calls/writes/events to one command execution.
 #[tauri::command]
@@ -4190,6 +4244,7 @@ pub fn run() {
             // Phase 5.16 mutation commands
             create_roadmap_item,
             update_roadmap_item,
+            delete_roadmap_items,
             batch_reorder_items,
             reorder_item,
             // Phase 3 migration commands
