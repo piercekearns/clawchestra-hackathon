@@ -126,10 +126,41 @@ The secondary drawer can be open or closed independently. The main sidebar remai
 
 The thin icon strip (existing left-edge navigation) gains a dedicated **conversation hub icon** — something that visually represents chats and/or terminal sessions (e.g. speech bubble, branching threads, or a combined chat+terminal glyph).
 
-**Behaviour:**
+**Click behaviour:**
 - **Click (hub not open):** Opens the main sidebar to the conversation hub view. If all threads are collapsed, expands them so the user can immediately see and navigate to threads and chats.
 - **Click (hub already open):** Collapses the main sidebar back (standard sidebar toggle behaviour).
-- **Visual state:** Icon is highlighted/active when the hub is open, default when closed. If any thread has an unread indicator, a small badge on the icon can surface this without opening the sidebar.
+- **Visual state:** Icon is highlighted/active when the hub is open, default when closed.
+
+**Notification badge:** A small dot or count badge sits on the glyph whenever any chat/terminal has an unread message or an action required (e.g. terminal waiting for approval). Visible at all times — gives the user a signal without opening anything.
+
+---
+
+#### Quick Access Popover (hover)
+
+On **hover** over the hub glyph (after ~300ms delay to prevent accidental triggers), a compact popover card surfaces to the right of the thin strip — without opening the full sidebar.
+
+**Contents:** Up to **5 entries**, sorted by priority:
+
+1. Chats/terminals with **unread messages or actions required** — floated to the top, in recency order within that group
+2. Remaining slots filled by **most recently active** chats/terminals
+
+Each entry shows:
+
+| Element | Detail |
+|---------|--------|
+| Type icon | Chat bubble (OpenClaw) or terminal/agent icon — same icons as hub nav |
+| Chat name | Truncated if needed |
+| Project name | Shown smaller beneath the chat name — gives context at a glance |
+| Notification indicator | Dot or label (`unread`, `approval needed`, `error`) if applicable |
+| Last activity | Relative timestamp (e.g. "2m ago") |
+
+**Clicking an entry** in the popover opens the secondary drawer directly to that chat — skipping the "find thread → find chat → click" path entirely. Hub nav also opens so the user has full context, but the drawer is the destination.
+
+**Clicking the glyph itself** (while popover is visible) opens the full hub nav as normal.
+
+**Popover dismissal:** Disappears when the cursor leaves the glyph + popover area (with a ~200ms grace period so the user can move the cursor from glyph to popover without it closing). Also dismisses if the user clicks anywhere outside it.
+
+**When the popover would be empty** (no chats exist yet): show a brief prompt — *"No chats yet. Open a project card to start one."* — rather than showing nothing.
 
 ---
 
