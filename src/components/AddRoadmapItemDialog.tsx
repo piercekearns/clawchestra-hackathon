@@ -106,8 +106,12 @@ export function AddRoadmapItemDialog({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose, aiSending]);
 
+  // Track previous open state so we only reset when the dialog opens, not on prop changes
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!justOpened) return;
     setError(null);
     setMode('ai');
     // Reset AI state
@@ -122,7 +126,7 @@ export function AddRoadmapItemDialog({
     setNextAction('');
     setPriority(getNextPriority(existingItems, targetStatus));
     setIcon('');
-  }, [existingItems, initialStatus, open, targetStatus]);
+  }, [existingItems, open, targetStatus]);
 
   // Auto-scroll chat messages
   useEffect(() => {
