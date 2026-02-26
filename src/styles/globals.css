@@ -115,9 +115,11 @@
     display: none;
   }
 
-  /* Hover-reveal scrollbar — hidden by default, thin on hover */
+  /* Hover-reveal scrollbar — always reserves gutter space, thumb only visible on hover */
   .hover-scrollbar {
-    scrollbar-width: none;
+    overflow-y: scroll !important;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
   }
 
   .hover-scrollbar::-webkit-scrollbar {
@@ -134,7 +136,6 @@
   }
 
   .hover-scrollbar:hover {
-    scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
   }
 
