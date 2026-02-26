@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Bot, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ModalDragZone } from './ui/ModalDragZone';
 import { ROADMAP_ITEM_STATUSES, type RoadmapItemStatus } from '../lib/constants';
 import { canonicalSlugify } from '../lib/project-flows';
@@ -254,79 +256,119 @@ export function AddRoadmapItemDialog({
         <div className="p-5">
           {mode === 'ai' ? (
             <div className="flex flex-col gap-3">
-              {/* Chat input — primary affordance, immediately visible */}
-              <div
-                className={`relative rounded-lg border bg-neutral-0/80 transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 ${
-                  aiSending
-                    ? 'border-revival-accent/50'
-                    : 'border-neutral-300/70 dark:border-neutral-600'
-                }`}
-              >
-                <textarea
-                  ref={textareaRef}
-                  value={aiInput}
-                  onChange={(event) => setAiInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleAiSend();
-                    }
-                  }}
-                  placeholder={
-                    gatewayConnected
-                      ? 'Describe the item and OpenClaw will create the card for you \u2014 add as much context as you need.'
-                      : 'Gateway disconnected'
-                  }
-                  className="min-h-[60px] w-full resize-none border-0 bg-transparent px-3 py-2.5 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
-                  disabled={!gatewayConnected || aiSending}
-                  autoFocus
-                  rows={3}
-                />
-
-                <button
-                  type="button"
-                  disabled={!hasAiContent || !gatewayConnected}
-                  onClick={() => void handleAiSend()}
-                  aria-label={aiSending ? 'Working...' : 'Send message'}
-                  className={`absolute bottom-2.5 right-2.5 inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+              {/* Chat input — hidden once a message has been sent */}
+              {aiMessages.length === 0 && (
+                <div
+                  className={`relative rounded-lg border bg-neutral-0/80 transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 dark:bg-neutral-950/70 ${
                     aiSending
-                      ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
-                      : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
+                      ? 'border-revival-accent/50'
+                      : 'border-neutral-300/70 dark:border-neutral-600'
                   }`}
                 >
-                  {aiSending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
-                </button>
-              </div>
+                  <textarea
+                    ref={textareaRef}
+                    value={aiInput}
+                    onChange={(event) => setAiInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        void handleAiSend();
+                      }
+                    }}
+                    placeholder={
+                      gatewayConnected
+                        ? 'Describe the item and OpenClaw will create the card for you \u2014 add as much context as you need.'
+                        : 'Gateway disconnected'
+                    }
+                    className="min-h-[60px] w-full resize-none border-0 bg-transparent px-3 py-2.5 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+                    disabled={!gatewayConnected || aiSending}
+                    autoFocus
+                    rows={3}
+                  />
 
-              {/* Chat messages — only shown after interaction */}
+                  <button
+                    type="button"
+                    disabled={!hasAiContent || !gatewayConnected}
+                    onClick={() => void handleAiSend()}
+                    aria-label="Send message"
+                    className="absolute bottom-2.5 right-2.5 inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#DFFF00] p-0 leading-none text-neutral-900 transition-colors hover:bg-[#c8e600] disabled:opacity-50"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Chat messages — styled to match main chat drawer */}
               {(aiMessages.length > 0 || aiStreamingContent) && (
                 <div
                   ref={scrollRef}
-                  className="max-h-[280px] space-y-2 overflow-y-auto"
+                  className="max-h-[320px] space-y-3 overflow-y-auto"
                 >
                   {aiMessages.map((msg, i) => (
                     <div
                       key={`${msg.role}-${i}`}
-                      className={`rounded-lg px-3 py-2 text-sm ${
-                        msg.role === 'user'
-                          ? 'ml-6 bg-revival-accent-400 text-neutral-900'
-                          : 'mr-6 bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100'
-                      }`}
+                      className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
-                      {msg.content}
+                      <div
+                        className={`max-w-[85%] rounded-lg border px-3 py-2 shadow-sm ${
+                          msg.role === 'user'
+                            ? 'border-revival-accent-400/40 bg-revival-accent-100 text-neutral-900 dark:bg-revival-accent-900/30 dark:text-neutral-100'
+                            : 'border-neutral-300/80 bg-neutral-50 text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100'
+                        }`}
+                      >
+                        {msg.role === 'user' ? (
+                          <p className="text-sm leading-relaxed">{msg.content}</p>
+                        ) : (
+                          <div className="prose max-w-none break-words text-sm leading-relaxed dark:prose-invert prose-p:my-1.5 prose-pre:my-2 prose-pre:rounded-md prose-pre:bg-neutral-800 prose-pre:px-3 prose-pre:py-2 prose-pre:text-[13px] prose-pre:text-neutral-100 prose-code:rounded prose-code:bg-neutral-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.9em] prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 dark:prose-code:bg-neutral-700 prose-hr:my-2">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                      <span className={`mt-1 text-[10px] text-neutral-400 dark:text-neutral-500 ${msg.role === 'user' ? 'pr-1' : 'pl-1'}`}>
+                        <span className="font-medium">{msg.role === 'user' ? 'You' : 'OpenClaw'}</span>
+                        {msg.timestamp ? (
+                          <>
+                            {' · '}
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                          </>
+                        ) : null}
+                      </span>
                     </div>
                   ))}
 
+                  {/* Streaming content — rendered as markdown in assistant bubble */}
                   {aiStreamingContent ? (
-                    <div className="mr-6 rounded-lg bg-neutral-200 px-3 py-2 text-sm text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100">
-                      {aiStreamingContent}
+                    <div className="flex flex-col items-start">
+                      <div className="max-w-[85%] rounded-lg border border-neutral-300/80 bg-neutral-50 px-3 py-2 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
+                        <div className="prose max-w-none break-words text-sm leading-relaxed dark:prose-invert prose-p:my-1.5 prose-pre:my-2 prose-pre:rounded-md prose-pre:bg-neutral-800 prose-pre:px-3 prose-pre:py-2 prose-pre:text-[13px] prose-pre:text-neutral-100 prose-code:rounded prose-code:bg-neutral-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.9em] prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 dark:prose-code:bg-neutral-700 prose-hr:my-2">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+                            {aiStreamingContent}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
                     </div>
                   ) : null}
 
+                  {/* Bouncing dots indicator — matches main chat drawer */}
                   {aiSending && !aiStreamingContent ? (
-                    <div className="mr-6 flex items-center gap-2 rounded-lg bg-neutral-200 px-3 py-2 text-sm text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
-                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
-                      Working...
+                    <div className="flex items-start">
+                      <div
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300/80 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900"
+                        aria-label="OpenClaw is working"
+                      >
+                        {[0, 1, 2].map((i) => (
+                          <span
+                            key={i}
+                            className="h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
+                            style={{
+                              animation: 'reading-dot 1.2s ease-in-out infinite',
+                              animationDelay: `${i * 0.15}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                 </div>
