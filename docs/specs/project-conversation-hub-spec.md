@@ -124,7 +124,7 @@ The secondary drawer can be open or closed independently. The main sidebar remai
 
 ### Thin Sidebar Entry Point
 
-The thin icon strip (existing left-edge navigation) gains a dedicated **conversation hub icon** — something that visually represents chats and/or terminal sessions (e.g. speech bubble, branching threads, or a combined chat+terminal glyph).
+The thin icon strip (existing left-edge navigation) gains a dedicated **conversation hub icon** — **`MessagesSquare`** from Lucide (two overlapping speech bubbles).
 
 **Click behaviour:**
 - **Click (hub not open):** Opens the main sidebar to the conversation hub view. If all threads are collapsed, expands them so the user can immediately see and navigate to threads and chats.
