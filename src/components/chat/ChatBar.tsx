@@ -182,7 +182,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     <div
       className={`relative flex w-full flex-col [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
         isFloating
-          ? `max-h-[50vh] rounded-xl border bg-neutral-0/95 backdrop-blur transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 ${
+          ? `max-h-[50vh] ${drawerOpen ? 'rounded-b-xl' : 'rounded-xl'} border bg-neutral-0/95 backdrop-blur transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 ${
               sending ? 'border-revival-accent/50' : 'border-neutral-300 dark:border-neutral-600'
             } dark:bg-neutral-900/95 ${
               expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
@@ -210,7 +210,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
       {dragActive ? (
         <div
           className={`pointer-events-none absolute inset-0 z-10 border-2 border-dashed border-revival-accent-400 bg-revival-accent-200/10 dark:bg-revival-accent-900/20 ${
-            isFloating ? 'rounded-xl' : 'rounded-none'
+            isFloating ? (drawerOpen ? 'rounded-b-xl' : 'rounded-xl') : 'rounded-none'
           }`}
         />
       ) : null}
