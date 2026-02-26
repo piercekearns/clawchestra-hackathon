@@ -3208,6 +3208,7 @@ export default function App() {
           <SecondaryDrawer
             chatId={hubActiveChatId}
             width={hubDrawerWidth}
+            side="right"
             onWidthChange={setHubDrawerWidth}
             onClose={() => setHubDrawerOpen(false)}
             onToast={pushToast}

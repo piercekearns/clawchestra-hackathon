@@ -10,6 +10,7 @@ const MAX_WIDTH = 800;
 interface SecondaryDrawerProps {
   chatId: string;
   width: number;
+  side?: 'left' | 'right';
   onWidthChange: (width: number) => void;
   onClose: () => void;
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
@@ -19,6 +20,7 @@ interface SecondaryDrawerProps {
 export function SecondaryDrawer({
   chatId,
   width,
+  side = 'left',
   onWidthChange,
   onClose,
   onToast,
@@ -58,14 +60,18 @@ export function SecondaryDrawer({
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'col-resize';
 
-      const drawerLeft = drawerRef.current?.getBoundingClientRect().left ?? 0;
+      const rect = drawerRef.current?.getBoundingClientRect();
+      const drawerLeft = rect?.left ?? 0;
+      const drawerRight = rect?.right ?? 0;
 
       const onMouseMove = (event: MouseEvent) => {
         if (!isDragging.current) return;
         cancelAnimationFrame(rafHandle.current);
         rafHandle.current = requestAnimationFrame(() => {
           if (!isDragging.current) return;
-          const newWidth = event.clientX - drawerLeft;
+          const newWidth = side === 'right'
+            ? drawerRight - event.clientX
+            : event.clientX - drawerLeft;
           onWidthChange(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth)));
         });
       };
@@ -91,7 +97,7 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-[60] flex shrink-0 flex-col overflow-visible border-r ${
+      className={`relative z-[60] flex shrink-0 flex-col overflow-visible ${side === 'right' ? 'border-l' : 'border-r'} ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
@@ -111,7 +117,7 @@ export function SecondaryDrawer({
         <ScopedChatShell chat={chat} />
       </div>
 
-      {/* Drag handle on right edge — z-[70] to stay above modal overlays (z-50) */}
+      {/* Drag handle — on right edge when side=left, left edge when side=right */}
       <div
         role="separator"
         aria-orientation="vertical"
@@ -122,7 +128,9 @@ export function SecondaryDrawer({
         onMouseEnter={() => setIsHandleHover(true)}
         onMouseLeave={() => setIsHandleHover(false)}
         onDoubleClick={() => onWidthChange(400)}
-        className="group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize [will-change:transform]"
+        className={`group absolute top-0 z-[70] h-full w-[6px] cursor-col-resize [will-change:transform] ${
+          side === 'right' ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'
+        }`}
       >
         <div
           className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${
