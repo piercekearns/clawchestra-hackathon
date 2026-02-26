@@ -359,7 +359,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           }}
           placeholder={
             sending
-              ? 'Type to queue another message...'
+              ? 'Type to queue message...'
               : gatewayConnected
                 ? 'Message OpenClaw'
                 : 'Gateway offline. You can still draft here.'
