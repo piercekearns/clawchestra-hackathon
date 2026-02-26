@@ -181,7 +181,7 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
       const { hubChats, setHubChats } = useDashboardStore.getState();
       setHubChats(hubChats.map((c) => (c.id === chat.id ? { ...c, unread: false } : c)));
     }
-  }, [chat.id, chat.unread]);
+  }, [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Build display messages (real messages + streaming preview) ---
   const displayMessages: ChatMessage[] = streamingContent

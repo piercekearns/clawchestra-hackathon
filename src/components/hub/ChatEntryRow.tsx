@@ -34,6 +34,15 @@ export function ChatEntryRow({
   onDelete,
 }: ChatEntryRowProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuPos({ top: e.clientY, left: e.clientX });
+    setMenuOpen(true);
+  };
 
   return (
     <div
@@ -43,6 +52,7 @@ export function ChatEntryRow({
           : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
       } ${isItemComplete ? 'opacity-60' : ''}`}
       onClick={() => onSelect(chat.id)}
+      onContextMenu={handleContextMenu}
     >
       {/* Icon slot: busy dots → type icon with unread overlay */}
       {isBusy ? (
@@ -58,21 +68,21 @@ export function ChatEntryRow({
         >
           <Home className="h-4 w-4" />
           {chat.unread && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+            <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
           )}
         </span>
       ) : chat.pinned ? (
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-[#DFFF00]">
           <Pin className="h-4 w-4" />
           {chat.unread && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+            <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
           )}
         </span>
       ) : (
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
           <MessageSquare className="h-3.5 w-3.5" />
           {chat.unread && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+            <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
           )}
         </span>
       )}
@@ -101,6 +111,10 @@ export function ChatEntryRow({
         <ChatEntryMenu
           chat={chat}
           isProjectChat={isProjectChat}
+          open={menuOpen}
+          menuPos={menuPos}
+          onOpen={(pos) => { setMenuPos(pos); setMenuOpen(true); }}
+          onClose={() => setMenuOpen(false)}
           onTogglePin={() => onTogglePin(chat.id, !chat.pinned)}
           onArchive={() => onArchive(chat.id)}
           onMarkUnread={() => onMarkUnread(chat.id)}
@@ -114,6 +128,10 @@ export function ChatEntryRow({
 function ChatEntryMenu({
   chat,
   isProjectChat,
+  open,
+  menuPos,
+  onOpen,
+  onClose,
   onTogglePin,
   onArchive,
   onMarkUnread,
@@ -121,22 +139,22 @@ function ChatEntryMenu({
 }: {
   chat: HubChat;
   isProjectChat?: boolean;
+  open: boolean;
+  menuPos: { top: number; left: number } | null;
+  onOpen: (pos: { top: number; left: number }) => void;
+  onClose: () => void;
   onTogglePin: () => void;
   onArchive: () => void;
   onMarkUnread: () => void;
   onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (open) {
-      setOpen(false);
+      onClose();
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
-      setOpen(true);
+      onOpen({ top: rect.bottom + 4, left: rect.right - 144 });
     }
   };
 
@@ -146,7 +164,7 @@ function ChatEntryMenu({
       onClick={(e) => {
         e.stopPropagation();
         action();
-        setOpen(false);
+        onClose();
       }}
       className={`w-full px-3 py-1.5 text-left text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
         danger
@@ -170,7 +188,7 @@ function ChatEntryMenu({
             handleToggle(e as unknown as React.MouseEvent);
           }
           if (e.key === 'Escape') {
-            setOpen(false);
+            onClose();
           }
         }}
         className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
@@ -182,7 +200,7 @@ function ChatEntryMenu({
         <>
           <div
             className="fixed inset-0 z-[200]"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
           />
           <div
             className="fixed z-[200] w-36 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
