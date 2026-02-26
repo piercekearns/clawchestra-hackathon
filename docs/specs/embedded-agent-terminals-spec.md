@@ -4,7 +4,7 @@
 
 **Status:** Draft (comprehensive spec, Model D chosen, key decisions captured)
 **Created:** 2026-02-21
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-26
 **Roadmap Item:** `embedded-agent-terminals`
 **Depends On:** `project-conversation-hub` (thread/container model)
 **Direction:** Model D (Parallel Tracks) — phased progression
@@ -632,11 +632,15 @@ Notifications fire for approval requests and errors by default. The user can con
 6. **tmux session naming convention** — What naming pattern ensures Clawchestra can reliably find its own sessions without conflicting with user's existing tmux sessions?
 7. **tmux-to-xterm.js bridge** — Does `tauri-plugin-pty` support attaching to an existing tmux session, or do we need a custom Rust bridge?
 
+### Layout (shared with `project-conversation-hub` — must resolve before planning)
+8. **Chat drawer vs sidebar for terminal panel** — See `project-conversation-hub-spec.md` OQ-1. Terminal sessions live in the same container as OpenClaw chats, so the spatial layout decision there governs terminal rendering too. Key terminal-specific angle: terminal panels likely need more horizontal real estate than chat bubbles — a resizable drawer that can be made wide is more important for terminals than for text chats. The drawer width floor for a usable terminal (80 columns minimum, ideally 120+) should inform the minimum drawer width in the hub spec.
+
 ### Longer-term (design context, not Phase 1 blockers)
-8. **Claude Code remote control handoff** — If Claude Code is launched via embedded terminal and later controlled remotely (cloud handoff), does Clawchestra's project planning/kanban stay up to date with the remote changes? Needs workflow + sync implications testing.
-9. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent. Monitor but don't block on.
-10. **ACP stability** — Is ACP stable enough to build against for Phase 3, or will it change significantly? Same — monitor, don't block.
-11. **Conversation context portability** — How to bridge the context gap between terminal sessions and OpenClaw. Phase 1 accepts manual bridging. Phase 2 adds filesystem-based awareness. Future: automated session summaries. This is the most important longer-term question for the feature's utility.
+9. **Claude Code remote control handoff** — If Claude Code is launched via embedded terminal and later controlled remotely (cloud handoff), does Clawchestra's project planning/kanban stay up to date with the remote changes? Needs workflow + sync implications testing.
+10. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent. Monitor but don't block on.
+11. **ACP stability** — Is ACP stable enough to build against for Phase 3, or will it change significantly? Same — monitor, don't block.
+12. **Conversation context portability** — How to bridge the context gap between terminal sessions and OpenClaw. Phase 1 accepts manual bridging. Phase 2 adds filesystem-based awareness. Future: automated session summaries. This is the most important longer-term question for the feature's utility.
+13. **Minimum usable terminal width** — Terminal panels need ≥80 columns to be usable (120+ preferred). The chat drawer minimum width in the hub spatial layout should be driven by this constraint, not arbitrary UI preference. Feed into OQ-1 resolution.
 
 ## Relationship to Other Specs
 

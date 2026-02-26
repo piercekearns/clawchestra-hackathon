@@ -4,7 +4,7 @@
 
 **Status:** Draft (decisions captured, ready for plan)
 **Created:** 2026-02-21
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-26
 **Roadmap Item:** `project-conversation-hub`
 **Depends On:** `distributed-ai-surfaces` (multi-surface foundation), `scoped-chat-sessions` (session isolation)
 
@@ -254,6 +254,36 @@ Terminal sessions within the conversation hub use tmux as the backend (not direc
 
 ## Open Questions
 
-*All previously open questions have been resolved (see Decisions section). New questions may arise during planning.*
+### OQ-1: Spatial layout — nav hub vs active chat surface (⚠️ must resolve before planning)
 
-1. **Context injection mechanism** — How exactly does the scoped session get its project/item context? Is this via OpenClaw's existing session preamble, a Clawchestra-specific skill, or a new injection mechanism? (Depends on `app-aware-ai-context` spec resolution.)
+The spec currently describes the conversation hub as living in the sidebar and also renders chat content there. This conflates two distinct UI concerns:
+
+- **Navigation layer** — the thread list, chat list, project/item tree, search, switcher. This is the *hub* — you need to stay oriented within it.
+- **Chat content layer** — the actual message history, input box, context header. This is where the *conversation happens*.
+
+**The problem:** If opening a chat replaces the sidebar with the chat, the user loses access to the navigation. They can't switch to another chat, scan across projects, or navigate back without some back-button gesture. The hub needs to be persistent or very easily recovered while the user is inside a conversation.
+
+**Proposed options to decide between:**
+
+| Option | Description | Trade-offs |
+|--------|-------------|------------|
+| **A — Split panel (hub left, chat right)** | Navigation hub occupies a narrow left column (always visible). Active chat opens to its right in a wider panel. Both coexist. | Most spatial — two panes. Requires enough screen width. |
+| **B — Chat opens in a separate resizable drawer** | Hub lives in the sidebar as currently. Clicking a chat opens an additional right-side (or left-side) drawer that renders the conversation. Hub stays visible underneath / alongside. Drawer can be resized/dismissed independently. | Similar to a VS Code secondary panel. Hub persists. Drawer adds width. |
+| **C — Hub is a persistently visible strip** | Hub collapses to a narrow icon strip (like the thin sidebar), active chat fills the rest. Expanding the strip reveals thread/chat names. | Compact but discovery may be worse — harder to orient when minimised. |
+| **D — Hub slides over, but chat remembers scroll + stays warm** | Chat opens in the full sidebar area (replaces nav), but a pinned "back to hub" button is always visible. Chat stays mounted in background so switching is instant. | Lower spatial cost, higher cognitive cost — user has to mentally track "am I in a chat or the hub?". |
+
+**Key questions for the decision:**
+- Should the hub always be visible while in a conversation, or is a persistent "back" affordance sufficient?
+- Does the chat drawer need to be resizable independently of the sidebar?
+- Can the chat drawer be open *at the same time* as the project kanban board (so the user sees board + hub strip + chat panel simultaneously)?
+- Where does the terminal session panel live — same drawer as chat? Its own drawer? Full-screen overlay?
+- On narrower screens, which panel wins?
+
+**Recommendation (unvalidated — needs decision):** Option B (separate resizable drawer). Rationale: the hub should feel like persistent navigation infrastructure (like a file tree), not a modal you step into and out of. The chat drawer adds width but preserves orientation. The drawer pattern is familiar (VS Code secondary sidebar, Notion page preview). Resizability lets power users make it narrow during active coding and wide during deep chat.
+
+**Impact on both specs:** This decision determines the layout architecture for `embedded-agent-terminals` too — terminal sessions and OpenClaw chats live in the same container, so the same spatial model applies to both.
+
+---
+
+### OQ-2: Context injection mechanism
+How exactly does the scoped session get its project/item context? Is this via OpenClaw's existing session preamble, a Clawchestra-specific skill, or a new injection mechanism? (Depends on `app-aware-ai-context` spec resolution.)
