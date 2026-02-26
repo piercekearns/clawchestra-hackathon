@@ -190,6 +190,21 @@ Each entry shows:
 
 ---
 
+### Default Chat Experience in the Secondary Drawer
+
+**The default OpenClaw chat experience in the secondary drawer is the same as the current general chat drawer — just scoped and relocated.**
+
+Same streaming responses. Same message bubbles. Same input bar. Same typing animation. Same tool call visibility. The only differences are:
+- The session key is scoped to a project or roadmap item (so conversation history stays focused)
+- Context is pre-injected (OpenClaw knows which project/item it's in)
+- The container is a resizable side drawer instead of the bottom chat bar
+
+There is no "new" chat UI to build for the OpenClaw chat mode. The existing chat components are reused with a different session key and a scoped context payload. The hub spec is about building the navigation infrastructure (threads, entries, drawer container, entry points) — not a new chat renderer.
+
+This is also what makes the build order rational: **Project Conversation Hub ships first** and delivers the full navigation model + the scoped OpenClaw chat experience. **Embedded Agent Terminals** then adds a second chat *modality* (terminal sessions) into the same drawer container that the hub already built. Terminals don't change the structure — they're an additive option that slots into existing thread entries alongside OpenClaw chats.
+
+---
+
 ### Secondary Chat Drawer
 
 When the user clicks a chat or terminal entry in the hub nav, a **secondary drawer** opens to the right of the main sidebar containing the active conversation or terminal session.
