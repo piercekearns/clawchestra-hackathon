@@ -115,64 +115,106 @@ The key UX insight: **the entry point is the card, not a sidebar hierarchy.**
 - **Chat switcher** — click any chat in the thread list to switch without closing the sidebar
 - Sidebar can coexist with the kanban view
 
-### Row Actions (Three-Dot Hover Menu)
+### Row Layout + Hover Affordances
 
-Every item in the hub — project thread headers and individual chat entries — surfaces a **`⋯` icon on hover** at the right edge of the row. Clicking it opens a small inline dropdown with the actions applicable to that item type.
+The hub has two distinct row types with different visual structures and different hover behaviours.
 
-#### Trigger behaviour
+---
 
-- Icon is **hidden by default**. Fades in (`opacity: 0 → 1`, `~150ms`) when the row is hovered.
-- On hover-out (no menu open): fades back out.
-- If the menu is open: icon stays visible until the menu is dismissed.
-- The icon sits **fixed at the right edge** of the row — it does not scroll with the name reveal animation (see below). The text container reserves right padding equal to the icon width so the scrolling name never slides underneath it.
+#### Project thread header row
 
-#### Actions per item type
+```
+[▾]  Project Name ···················  [+]  [⋯]
+```
 
-**Chat entry (project-level or roadmap-item-level OpenClaw chat):**
+| Zone | Element | Behaviour |
+|------|---------|-----------|
+| Far left | **Chevron `▾` / `▸`** | Toggle expand/collapse for the thread. Always visible. |
+| Middle | **Project name** | Always visible. Double-click to rename (inline edit). Truncates with `…` + hover scroll animation if too long. |
+| Right (hover) | **`+` add button** | Fades in on row hover. Opens a small type-picker: *OpenClaw chat* (default) or *Terminal session* (with agent selector). Creates the new chat/session within this thread. |
+| Far right (hover) | **`⋯` menu** | Fades in on row hover. See actions below. |
 
-| Action | Behaviour |
-|--------|-----------|
-| Rename | **Primary trigger: double-click the name directly.** Secondary: via this menu. In both cases, label becomes an input field in place — confirm with Enter, cancel with Escape, save on blur. Single-click still opens/switches to the chat as normal; double-click is a distinct gesture. |
-| Pin / Unpin | Toggle pinned state; pinned chats float above the recency-sorted list |
-| Mark as unread / Read | Toggle unread indicator |
-| Open linked item | Navigate to the roadmap card for this chat's linked item (only shown if chat has a linked roadmap item) |
-| Archive | Move to archived section with confirmation snackbar + undo option |
-| Delete | Destructive — confirmation required. Removes chat history locally. Separate from archive. |
+**Project header `⋯` menu:**
+- *Expand all / Collapse all* (toggle all threads at once)
+- *(Reserved — keep menu present for future project-level actions)*
+- Note: `+` handles all chat creation, so the menu is intentionally sparse on project headers. May be omitted entirely if no additional project-level actions materialise during planning.
 
-**Terminal session entry:**
+---
 
-| Action | Behaviour |
-|--------|-----------|
-| Rename | Same as chat — double-click the name (primary) or via this menu (secondary) |
-| Pin / Unpin | Same |
-| End session | Kill the tmux session (with confirmation if session is active) |
-| Detach | Detach xterm.js from the tmux session without killing it — session keeps running in background |
-| View scrollback | Open scrollback in read-only mode (useful for completed sessions) |
-| Delete | Remove session entry + scrollback from history |
+#### Chat entry row (indented under project)
 
-**Project thread header (the collapsible project row):**
+```
+  [📌 hover]  Chat Name ············  [🗄 hover]  [⋯ hover]
+```
 
-| Action | Behaviour |
-|--------|-----------|
-| New OpenClaw chat | Create a new OpenClaw chat within this project thread |
-| New terminal session | Launch a new coding agent terminal within this project thread |
-| Collapse / Expand | Toggle visibility of the thread's chat list (also achievable by clicking the row itself) |
+| Zone | Element | Behaviour |
+|------|---------|-----------|
+| Left indent space | **Pin icon `📌`** | Hidden by default. Fades in on row hover, in the indented whitespace to the left of the name. Click to pin/unpin. Pinned chats show the icon persistently (filled/coloured). |
+| Middle | **Chat name** | Double-click to rename (inline edit — Enter to confirm, Escape to cancel, blur to save). Single-click opens/switches to the chat. Truncates with hover scroll if too long. |
+| Right (hover) | **Archive icon** | Fades in on row hover. Click to archive (moves to archived section, confirmation snackbar with undo). |
+| Far right (hover) | **`⋯` menu** | Fades in on row hover. Contains the actions that don't warrant a dedicated button (see below). |
 
-#### Visual + layout notes
+**Chat entry `⋯` menu — what's left after pin, archive, rename:**
 
-- Dropdown is a compact popover (not a full modal) — appears below or above the icon depending on available space.
-- Destructive actions (Archive, Delete, End session) are separated by a divider and rendered in a muted danger colour.
-- Action labels use sentence case, no icons required (labels are clear enough at this scale).
-- Keyboard: the `⋯` icon is focusable; Enter/Space opens the menu; Escape closes it.
+| Action | Why it's in the menu (not a direct button) |
+|--------|---------------------------------------------|
+| Mark as unread / Read | Infrequent enough to not need a button; classic three-dot action |
+| Open linked item | Contextual — only shown when chat has a linked roadmap item. Navigates to that card. |
+| Delete | Deliberately tucked away — destructive, irreversible, should require intent |
+
+That's it. Three items (one conditional). The menu is lean because the common actions are already on direct affordances.
+
+---
+
+#### Terminal session entry row (indented, same indent as chat entries)
+
+Terminal rows follow the same layout as chat entries but with role-appropriate right-edge and menu actions:
+
+```
+  [📌 hover]  Terminal Name ·········  [⏹ hover]  [⋯ hover]
+```
+
+| Zone | Element | Notes |
+|------|---------|-------|
+| Left indent | **Pin icon** | Same as chat entries |
+| Middle | **Session name** | Double-click to rename. Default: `"{Agent} — {scope}"` (e.g. `Claude Code — git-sync`), optionally suffixed with first prompt content once the session has started. |
+| Right (hover) | **End / Archive icon** | Context-sensitive: shows **End session** `⏹` if session is active (with confirmation); shows **Archive** `🗄` if session is completed/idle. |
+| Far right (hover) | **`⋯` menu** | See below. |
+
+**Terminal entry `⋯` menu:**
+
+| Action | Notes |
+|--------|-------|
+| Detach | Disconnect xterm.js from the tmux session without killing it — session keeps running in background |
+| View scrollback | Open session output in read-only mode (useful for completed sessions) |
+| Mark as unread | Same as chat entries |
+| Delete | Remove session + scrollback from history. Destructive, requires confirmation. |
+
+---
+
+#### Trigger behaviour (shared across all row types)
+
+- All hover-only elements (pin icon, archive/end button, `⋯` icon, `+` button) are **hidden by default**. They fade in (`opacity: 0 → 1`, `~150ms`) when the row is hovered.
+- On hover-out (no menu open): fade back out.
+- If a menu is open: all hover elements stay visible until the menu is dismissed.
+- The `⋯` icon is focusable; Enter/Space opens the menu; Escape closes it.
+- Dropdown is a compact popover (not a full modal). Appears below or above based on available space.
+- Destructive actions (Delete, End session) are separated by a divider and rendered in a muted danger colour.
 
 #### Coexistence with the name reveal animation
 
-Both the name reveal scroll and the three-dot icon are hover-triggered on the same row. They coexist as follows:
+The name's `translateX` animation and the right-edge hover buttons share the same `mouseenter` trigger. They coexist without conflict:
 
-- **Text container** has `padding-right` equal to the icon width + gap (e.g., `28px`). The scrolling text therefore never visually reaches the icon zone.
-- The `translateX` animation target is capped to the overflow minus this reserved right padding.
-- The `⋯` icon is `position: absolute; right: 8px` (or equivalent), outside the text clip zone.
-- Both effects start on the same `mouseenter` event — no conflict.
+- The text container has `padding-right` equal to the combined width of the right-edge button(s) + gap. The scrolling text therefore never reaches the button zone.
+- The `⋯` icon sits `position: absolute; right: 8px` (or similar), outside the text clip zone.
+- Animation `translateX` target is capped to the overflow distance minus this reserved padding.
+
+#### Chat name inference
+
+When a chat is **created manually** (via the `+` button on a project header), the initial name defaults to:
+- `"New chat"` with a timestamp suffix, immediately editable
+- Once the first message is sent: name auto-updates to a short inferred label derived from the opening prompt (e.g. `"Fixing auth flow"` from a prompt like *"Help me fix the authentication flow in the login component"*). This inference is a lightweight AI call (single-turn, cheap model, optional — falls back to keeping the manual name if the user already renamed it).
+- If created from a card: default name is the project or roadmap item title (same as today's auto-naming).
 
 ---
 
@@ -205,10 +247,10 @@ When a project or roadmap item name is too long to fit in the sidebar row, it tr
 
 - **Sorted by last interaction** — most recently active chats appear at the top, not by creation date
 - **Max 5 visible per project** — roadmap-item-level chats show 5 max, then "Show N more..." dropdown below the 5th
-- **Pin** — user can pin specific chats to keep them visible regardless of recency *(via `⋯` hover menu)*
-- **Rename** — user can rename any chat (default name is the project/item title) *(double-click the name, or via `⋯` hover menu)*
-- **Archive** — user can manually archive chats they're done with *(via `⋯` hover menu)*
-- **Mark as unread** — user can mark a chat as unread (for "come back to this" workflow) *(via `⋯` hover menu)*
+- **Pin** — user can pin specific chats *(pin icon in left indent zone, on hover)*
+- **Rename** — user can rename any chat *(double-click the name — primary; also in `⋯` menu)*
+- **Archive** — user can manually archive chats *(archive icon at right edge, on hover)*
+- **Mark as unread** — user can mark a chat as unread *(via `⋯` menu)*
 - **Completion indicator** — when a linked roadmap item reaches `complete` status, the chat shows a visual checkmark/greyed title, but does NOT auto-archive (see decision below)
 
 ## Session Key Strategy
