@@ -110,7 +110,7 @@ function ThinSidebarButton({
         type="button"
         onClick={onClick}
         aria-label={ariaLabel}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+        className="relative flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
       >
         <Icon className={iconClassName ?? 'h-4 w-4'} />
         {badgeCount && badgeCount > 0 ? (
