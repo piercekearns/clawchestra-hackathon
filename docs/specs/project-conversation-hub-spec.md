@@ -142,6 +142,8 @@ The hub has two distinct row types with different visual structures and differen
 
 The folder icon and chevron occupy the same space — the folder icon is the resting state, the chevron is the hover state. The swap signals affordance without cluttering the default view.
 
+**Thread reordering:** Project threads can be drag-to-reordered by clicking and dragging any thread header row. Cursor changes to `grab` on hover over the draggable zone (folder icon + name area) and `grabbing` during drag. The `+` and `⋯` buttons are not drag handles — hovering them shows the default pointer cursor. A visual drop indicator (line between threads) shows the insertion point during drag. Order is persisted to app state.
+
 **Project header `⋯` menu:**
 - *Expand all / Collapse all* (toggle all threads at once)
 - *(Reserved — keep menu present for future project-level actions)*
