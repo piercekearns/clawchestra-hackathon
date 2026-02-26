@@ -12,32 +12,46 @@ interface ScopedChatShellProps {
   chat: HubChat;
 }
 
+/** In-memory cache so chat history survives switching between drawer chats. */
+const chatCache = new Map<string, { messages: ChatMessage[]; input: string; sentCount: number }>();
+
 export function ScopedChatShell({ chat }: ScopedChatShellProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
+  const cached = chatCache.get(chat.id);
+  const [messages, setMessages] = useState<ChatMessage[]>(cached?.messages ?? []);
+  const [input, setInput] = useState(cached?.input ?? '');
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [contextLoaded, setContextLoaded] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const chatIdRef = useRef(chat.id);
   const contextRef = useRef<string | null>(null);
-  const sentCountRef = useRef(0);
+  const sentCountRef = useRef(cached?.sentCount ?? 0);
   const gatewayConnected = useDashboardStore((s) => s.gatewayConnected);
   const wsConnectionState = useDashboardStore((s) => s.wsConnectionState);
 
-  // Reset state when chat changes
+  // Save to cache whenever messages or input change
+  useEffect(() => {
+    chatCache.set(chatIdRef.current, { messages, input, sentCount: sentCountRef.current });
+  }, [messages, input]);
+
+  // Restore or reset state when chat changes
   useEffect(() => {
     if (chatIdRef.current !== chat.id) {
+      // Save outgoing chat state
+      chatCache.set(chatIdRef.current, { messages, input, sentCount: sentCountRef.current });
       chatIdRef.current = chat.id;
-      setMessages([]);
-      setInput('');
+
+      // Restore incoming chat state from cache
+      const incoming = chatCache.get(chat.id);
+      setMessages(incoming?.messages ?? []);
+      setInput(incoming?.input ?? '');
+      sentCountRef.current = incoming?.sentCount ?? 0;
       setSending(false);
       setStreamingContent(null);
       setContextLoaded(false);
       contextRef.current = null;
-      sentCountRef.current = 0;
     }
-  }, [chat.id]);
+  }, [chat.id, messages, input]);
 
   // Load scoped context on mount / chat identity change
   useEffect(() => {
