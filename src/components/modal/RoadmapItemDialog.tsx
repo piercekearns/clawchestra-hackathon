@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { MessageSquare, X } from 'lucide-react';
 import { ModalDragZone } from '../ui/ModalDragZone';
 import type { ProjectFrontmatter, RoadmapItem, RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/doc-resolution';
@@ -15,6 +15,7 @@ interface RoadmapItemDialogProps {
   isMigrated?: boolean;
   onClose: () => void;
   onStatusChange: (itemId: string, status: RoadmapStatus) => void;
+  onOpenChat?: (itemId: string, itemTitle: string) => void;
   boardScoped?: boolean;
 }
 
@@ -31,6 +32,7 @@ export function RoadmapItemDialog({
   isMigrated,
   onClose,
   onStatusChange,
+  onOpenChat,
   boardScoped,
 }: RoadmapItemDialogProps) {
   const [enrichedItem, setEnrichedItem] = useState<RoadmapItemWithDocs | null>(null);
@@ -251,7 +253,17 @@ export function RoadmapItemDialog({
         aria-modal
         aria-label={`Roadmap item: ${item.title}`}
       >
-        <div className="sticky top-0 z-10 flex justify-end">
+        <div className="sticky top-0 z-10 flex justify-end gap-1">
+          {onOpenChat && (
+            <button
+              type="button"
+              className="rounded-md p-1 text-neutral-500 opacity-0 transition-opacity hover:bg-neutral-100 hover:text-neutral-800 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-events-none dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              onClick={() => onOpenChat(item.id, item.title)}
+              aria-label="Open chat"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             className="rounded-md p-1 text-neutral-500 opacity-0 transition-opacity hover:bg-neutral-100 hover:text-neutral-800 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-events-none dark:hover:bg-neutral-800 dark:hover:text-neutral-200"

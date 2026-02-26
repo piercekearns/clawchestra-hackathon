@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { restoreStateCurrent, saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state';
-import { Archive, Check, CircleCheckBig, Clock4, EyeOff, GitBranch, Github, Plus, RefreshCcw, RotateCcw, Search, Trash2 } from 'lucide-react';
+import { Archive, Check, CircleCheckBig, Clock4, EyeOff, GitBranch, Github, MessageSquare, Plus, RefreshCcw, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
@@ -15,6 +15,9 @@ import type { ProjectModalActions } from './components/modal';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ThinSidebar } from './components/sidebar/ThinSidebar';
+import { SecondaryDrawer } from './components/hub/SecondaryDrawer';
+import { QuickAccessPopover } from './components/hub/QuickAccessPopover';
+import { openOrCreateProjectChat, openOrCreateItemChat } from './lib/hub-actions';
 import { SettingsPage } from './components/SettingsPage';
 import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
@@ -272,6 +275,11 @@ export default function App() {
   const sidebarOpen = useDashboardStore((state) => state.sidebarOpen);
   const sidebarSide = useDashboardStore((state) => state.sidebarSide);
   const thinSidebarSide = useDashboardStore((state) => state.thinSidebarSide);
+  const sidebarMode = useDashboardStore((state) => state.sidebarMode);
+  const hubChats = useDashboardStore((state) => state.hubChats);
+  const hubActiveChatId = useDashboardStore((state) => state.hubActiveChatId);
+  const hubDrawerOpen = useDashboardStore((state) => state.hubDrawerOpen);
+  const hubDrawerWidth = useDashboardStore((state) => state.hubDrawerWidth);
   const activeSessionModel = useDashboardStore((state) => state.activeSessionModel);
   const activeSessionProvider = useDashboardStore((state) => state.activeSessionProvider);
   const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
@@ -294,6 +302,9 @@ export default function App() {
   const setSelectedProjectId = useDashboardStore((state) => state.setSelectedProjectId);
   const updateProjectAndReload = useDashboardStore((state) => state.updateProjectAndReload);
   const setThinSidebarSide = useDashboardStore((state) => state.setThinSidebarSide);
+  const setSidebarMode = useDashboardStore((state) => state.setSidebarMode);
+  const setHubDrawerOpen = useDashboardStore((state) => state.setHubDrawerOpen);
+  const setHubDrawerWidth = useDashboardStore((state) => state.setHubDrawerWidth);
   const deleteProjectAndReload = useDashboardStore((state) => state.deleteProjectAndReload);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -342,6 +353,7 @@ export default function App() {
   const lastGatewayActiveTurnsRef = useRef(gatewayActiveTurns);
   const chatSendingRef = useRef(chatSending);
   const sessionModelRefreshInFlightRef = useRef<Promise<void> | null>(null);
+  const hubButtonRef = useRef<HTMLDivElement>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
     if (!sessionKey || sessionKey === getResolvedDefaultSessionKey()) return;
@@ -1571,6 +1583,36 @@ export default function App() {
     setThinSidebarSide(thinSidebarSide === 'left' ? 'right' : 'left');
   }, [setThinSidebarSide, thinSidebarSide]);
 
+  const handleToggleHub = useCallback(() => {
+    if (sidebarMode === 'hub') {
+      setSidebarMode('default');
+    } else {
+      setSettingsPageOpen(false);
+      setSidebarMode('hub');
+      useDashboardStore.getState().setSidebarOpen(true);
+    }
+  }, [sidebarMode, setSidebarMode]);
+
+  const handleQuickAccessSelectChat = useCallback((chatId: string) => {
+    setSettingsPageOpen(false);
+    setSidebarMode('hub');
+    useDashboardStore.getState().setSidebarOpen(true);
+    useDashboardStore.getState().setHubActiveChatId(chatId);
+    useDashboardStore.getState().setHubDrawerOpen(true);
+  }, [setSidebarMode]);
+
+  const handleOpenLinkedItem = useCallback((projectId: string, projectTitle: string, itemId: string) => {
+    setViewContext(projectRoadmapView(projectId, projectTitle));
+    setSelectedRoadmapItemId(itemId);
+  }, [setViewContext]);
+
+  const hubUnreadCount = useMemo(
+    () => hubChats.filter((c) => c.unread && !c.archived).length,
+    [hubChats],
+  );
+
+  const resolvedSidebarMode = settingsPageOpen ? 'settings' as const : sidebarMode;
+
   const sidebarActions = useMemo(
     () => [
       {
@@ -2445,19 +2487,33 @@ export default function App() {
             onOpenSync={handleOpenSync}
             onSwitchSide={handleSwitchThinSidebarSide}
             onOpenSettings={handleSettingsOpen}
+            onToggleHub={handleToggleHub}
+            hubButtonRef={hubButtonRef}
             syncBadgeCount={syncBadgeCount}
+            hubUnreadCount={hubUnreadCount}
           />
         ) : null}
         {sidebarSide === 'left' ? (
           <Sidebar
             side="left"
-            mode={settingsPageOpen ? 'settings' : 'default'}
+            mode={resolvedSidebarMode}
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
             actions={sidebarActions}
+            onToast={pushToast}
           />
         ) : null}
+        {hubDrawerOpen && hubActiveChatId && sidebarSide === 'left' && (
+          <SecondaryDrawer
+            chatId={hubActiveChatId}
+            width={hubDrawerWidth}
+            onWidthChange={setHubDrawerWidth}
+            onClose={() => setHubDrawerOpen(false)}
+            onToast={pushToast}
+            onOpenLinkedItem={handleOpenLinkedItem}
+          />
+        )}
         <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
         {settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
@@ -2487,14 +2543,33 @@ export default function App() {
         ) : (
           <>
         <div className="relative mb-4 flex items-center justify-between gap-3 px-3 md:px-4">
-          <Breadcrumb
-            viewContext={viewContext}
-            onNavigate={(crumbId) => {
-              if (crumbId === 'root') {
-                resetToProjectBoard();
-              }
-            }}
-          />
+          <div className="flex items-center gap-1.5">
+            <Breadcrumb
+              viewContext={viewContext}
+              onNavigate={(crumbId) => {
+                if (crumbId === 'root') {
+                  resetToProjectBoard();
+                }
+              }}
+            />
+            {isRoadmapView && activeRoadmapProject && (
+              <Tooltip text="Project chat">
+                <button
+                  type="button"
+                  className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 transition-colors hover:text-neutral-600 dark:hover:text-neutral-200"
+                  onClick={() => {
+                    void openOrCreateProjectChat(
+                      activeRoadmapProject.id,
+                      activeRoadmapProject.title,
+                    );
+                  }}
+                  aria-label="Open project chat"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
+            )}
+          </div>
           <div className="text-xs text-neutral-500">
             {loading
               ? 'Loading...'
@@ -2722,6 +2797,27 @@ export default function App() {
                     )}
                     renderItemRightHoverActions={(item) => (
                       <>
+                        <Tooltip text="Chat">
+                          <button
+                            type="button"
+                            className={actionBtnClass}
+                            onPointerDown={stopDrag}
+                            onClick={(e) => {
+                              stopClick(e);
+                              if (activeRoadmapProject) {
+                                void openOrCreateItemChat(
+                                  activeRoadmapProject.id,
+                                  activeRoadmapProject.title,
+                                  item.id,
+                                  item.title,
+                                );
+                              }
+                            }}
+                            aria-label="Open item chat"
+                          >
+                            <MessageSquare className="h-[15px] w-[15px]" />
+                          </button>
+                        </Tooltip>
                         {item.status !== 'complete' && (
                           <Tooltip text="Complete">
                             <button
@@ -2879,6 +2975,25 @@ export default function App() {
                     );
                   }}
                   renderItemActions={() => null}
+                  renderItemRightHoverActions={(project) => (
+                    <Tooltip text="Chat">
+                      <button
+                        type="button"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded transition-all text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void openOrCreateProjectChat(
+                            project.id,
+                            project.frontmatter?.title ?? project.id,
+                          );
+                        }}
+                        aria-label="Open project chat"
+                      >
+                        <MessageSquare className="h-[15px] w-[15px]" />
+                      </button>
+                    </Tooltip>
+                  )}
                   onItemsChange={(nextItems) => {
                     void persistBoardChanges(nextItems);
                   }}
@@ -2908,6 +3023,16 @@ export default function App() {
                 i.id === itemId ? { ...i, status } : i,
               );
               void persistRoadmapChanges(updated);
+            }}
+            onOpenChat={(itemId, itemTitle) => {
+              if (activeRoadmapProject) {
+                void openOrCreateItemChat(
+                  activeRoadmapProject.id,
+                  activeRoadmapProject.title,
+                  itemId,
+                  itemTitle,
+                );
+              }
             }}
           />
         ) : null}
@@ -3065,14 +3190,25 @@ export default function App() {
         </>
       )}
         </div>
+        {hubDrawerOpen && hubActiveChatId && sidebarSide === 'right' && (
+          <SecondaryDrawer
+            chatId={hubActiveChatId}
+            width={hubDrawerWidth}
+            onWidthChange={setHubDrawerWidth}
+            onClose={() => setHubDrawerOpen(false)}
+            onToast={pushToast}
+            onOpenLinkedItem={handleOpenLinkedItem}
+          />
+        )}
         {sidebarSide === 'right' ? (
           <Sidebar
             side="right"
-            mode={settingsPageOpen ? 'settings' : 'default'}
+            mode={resolvedSidebarMode}
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
             actions={sidebarActions}
+            onToast={pushToast}
           />
         ) : null}
         {showThinSidebar && thinSidebarSide === 'right' ? (
@@ -3084,10 +3220,19 @@ export default function App() {
             onOpenSync={handleOpenSync}
             onSwitchSide={handleSwitchThinSidebarSide}
             onOpenSettings={handleSettingsOpen}
+            onToggleHub={handleToggleHub}
+            hubButtonRef={hubButtonRef}
             syncBadgeCount={syncBadgeCount}
+            hubUnreadCount={hubUnreadCount}
           />
         ) : null}
       </div>
+
+      {/* Quick access popover for hub conversations */}
+      <QuickAccessPopover
+        anchorRef={hubButtonRef}
+        onSelectChat={handleQuickAccessSelectChat}
+      />
 
       <SearchModal
         isOpen={searchOpen}

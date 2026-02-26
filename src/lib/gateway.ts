@@ -73,6 +73,8 @@ export type GatewayTransport =
 interface GatewayOptions {
   attachments?: GatewayImageAttachment[];
   transport?: GatewayTransport;
+  /** Override the default session key for scoped chat sessions (hub chats). */
+  sessionKey?: string;
   onStreamDelta?: (content: string) => void;
   onActivityChange?: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
   idempotencyKey?: string;
@@ -3992,7 +3994,15 @@ export async function sendMessageWithContext(
   },
   options?: GatewayOptions,
 ): Promise<SendResult> {
-  const transport = await resolveTransport(options?.transport);
+  // If a session key override is specified (scoped hub chats), inject it into the transport.
+  let transportOverride = options?.transport;
+  if (options?.sessionKey) {
+    const base = transportOverride ?? await resolveTransport();
+    if (base.mode === 'tauri-ws' || base.mode === 'tauri-openclaw' || base.mode === 'openclaw-ws') {
+      transportOverride = { ...base, sessionKey: options.sessionKey };
+    }
+  }
+  const transport = await resolveTransport(transportOverride);
   const attachments = options?.attachments ?? [];
   const onStreamDelta = options?.onStreamDelta;
   const onActivityChange = options?.onActivityChange;

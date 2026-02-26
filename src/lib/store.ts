@@ -16,11 +16,13 @@ import {
   chatMessagesCount,
   getAllProjects,
   getDashboardSettings,
+  hubChatList,
   injectAgentGuidance,
   isTauriRuntime,
   pathExists,
   type PersistedChatMessage,
 } from './tauri';
+import type { HubChat } from './hub-types';
 import {
   trackChatPersistenceWrite,
 } from './chat-persistence';
@@ -68,6 +70,24 @@ interface DashboardState {
   sidebarSide: 'left' | 'right';
   sidebarWidth: number;
   thinSidebarSide: 'left' | 'right';
+  // Hub state
+  sidebarMode: 'default' | 'settings' | 'hub';
+  hubActiveChatId: string | null;
+  hubDrawerOpen: boolean;
+  hubDrawerWidth: number;
+  hubCollapsedThreads: string[];
+  hubThreadOrder: string[];
+  hubChats: HubChat[];
+  // Hub actions
+  setSidebarMode: (mode: 'default' | 'settings' | 'hub') => void;
+  setHubActiveChatId: (id: string | null) => void;
+  setHubDrawerOpen: (open: boolean) => void;
+  setHubDrawerWidth: (width: number) => void;
+  toggleHubThread: (projectId: string) => void;
+  setHubThreadOrder: (order: string[]) => void;
+  setHubChats: (chats: HubChat[]) => void;
+  refreshHubChats: () => Promise<void>;
+
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
   dismissValidationRejection: (projectId: string, timestamp: number) => void;
@@ -393,6 +413,14 @@ export const useDashboardStore = create<DashboardState>()(
       sidebarSide: 'left',
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       thinSidebarSide: 'left',
+      // Hub defaults
+      sidebarMode: 'default',
+      hubActiveChatId: null,
+      hubDrawerOpen: false,
+      hubDrawerWidth: 400,
+      hubCollapsedThreads: [],
+      hubThreadOrder: [],
+      hubChats: [],
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -710,6 +738,32 @@ export const useDashboardStore = create<DashboardState>()(
         set({ sidebarWidth: Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width)) }),
       setThinSidebarSide: (thinSidebarSide) => set({ thinSidebarSide }),
 
+      // Hub actions
+      setSidebarMode: (sidebarMode) => set({ sidebarMode }),
+      setHubActiveChatId: (hubActiveChatId) => set({ hubActiveChatId }),
+      setHubDrawerOpen: (hubDrawerOpen) => set({ hubDrawerOpen }),
+      setHubDrawerWidth: (width) =>
+        set({ hubDrawerWidth: Math.min(600, Math.max(280, width)) }),
+      toggleHubThread: (projectId) =>
+        set((state) => {
+          const collapsed = state.hubCollapsedThreads;
+          if (collapsed.includes(projectId)) {
+            return { hubCollapsedThreads: collapsed.filter((id) => id !== projectId) };
+          }
+          return { hubCollapsedThreads: [...collapsed, projectId] };
+        }),
+      setHubThreadOrder: (hubThreadOrder) => set({ hubThreadOrder }),
+      setHubChats: (hubChats) => set({ hubChats }),
+      refreshHubChats: async () => {
+        if (!isTauriRuntime()) return;
+        try {
+          const chats = await hubChatList(undefined, true);
+          set({ hubChats: chats });
+        } catch (err) {
+          console.warn('[Store] Failed to refresh hub chats:', err);
+        }
+      },
+
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);
         // Auto-commit for local-only repos (no remote)
@@ -792,6 +846,13 @@ export const useDashboardStore = create<DashboardState>()(
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,
         thinSidebarSide: state.thinSidebarSide,
+        // Hub state (persisted)
+        sidebarMode: state.sidebarMode,
+        hubActiveChatId: state.hubActiveChatId,
+        hubDrawerOpen: state.hubDrawerOpen,
+        hubDrawerWidth: state.hubDrawerWidth,
+        hubCollapsedThreads: state.hubCollapsedThreads,
+        hubThreadOrder: state.hubThreadOrder,
       }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<DashboardState>;

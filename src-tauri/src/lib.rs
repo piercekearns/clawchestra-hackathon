@@ -4234,6 +4234,13 @@ pub fn run() {
             commands::chat::chat_recovery_cursor_get,
             commands::chat::chat_recovery_cursor_advance,
             commands::chat::chat_recovery_cursor_clear,
+            // Hub chat commands (commands/hub_chats.rs)
+            commands::hub_chats::hub_chat_create,
+            commands::hub_chats::hub_chat_list,
+            commands::hub_chats::hub_chat_get,
+            commands::hub_chats::hub_chat_update,
+            commands::hub_chats::hub_chat_delete,
+            commands::hub_chats::hub_chat_update_activity,
             // Phase 2 commands
             ensure_clawchestra_dir,
             write_state_json,

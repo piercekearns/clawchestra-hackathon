@@ -265,6 +265,102 @@ type TauriCommands = {
     args: { sessionKey?: string };
     return: void;
   };
+  // Hub chat commands
+  hub_chat_create: {
+    args: {
+      projectId: string;
+      itemId: string | null;
+      chatType: string;
+      agentType: string | null;
+      title: string;
+    };
+    return: {
+      id: string;
+      projectId: string;
+      itemId: string | null;
+      type: string;
+      agentType: string | null;
+      title: string;
+      sessionKey: string | null;
+      pinned: boolean;
+      unread: boolean;
+      sortOrder: number;
+      createdAt: number;
+      lastActivity: number;
+      messageCount: number;
+      archived: boolean;
+    };
+  };
+  hub_chat_list: {
+    args: { projectId?: string; includeArchived?: boolean };
+    return: Array<{
+      id: string;
+      projectId: string;
+      itemId: string | null;
+      type: string;
+      agentType: string | null;
+      title: string;
+      sessionKey: string | null;
+      pinned: boolean;
+      unread: boolean;
+      sortOrder: number;
+      createdAt: number;
+      lastActivity: number;
+      messageCount: number;
+      archived: boolean;
+    }>;
+  };
+  hub_chat_get: {
+    args: { chatId: string };
+    return: {
+      id: string;
+      projectId: string;
+      itemId: string | null;
+      type: string;
+      agentType: string | null;
+      title: string;
+      sessionKey: string | null;
+      pinned: boolean;
+      unread: boolean;
+      sortOrder: number;
+      createdAt: number;
+      lastActivity: number;
+      messageCount: number;
+      archived: boolean;
+    };
+  };
+  hub_chat_update: {
+    args: {
+      chatId: string;
+      changes: {
+        title?: string;
+        pinned?: boolean;
+        unread?: boolean;
+        archived?: boolean;
+        sortOrder?: number;
+        lastActivity?: number;
+        messageCount?: number;
+      };
+    };
+    return: {
+      id: string;
+      projectId: string;
+      itemId: string | null;
+      type: string;
+      agentType: string | null;
+      title: string;
+      sessionKey: string | null;
+      pinned: boolean;
+      unread: boolean;
+      sortOrder: number;
+      createdAt: number;
+      lastActivity: number;
+      messageCount: number;
+      archived: boolean;
+    };
+  };
+  hub_chat_delete: { args: { chatId: string }; return: void };
+  hub_chat_update_activity: { args: { chatId: string }; return: void };
   // Phase 3 migration commands
   get_migration_status: { args: Record<string, never>; return: MigrationStatusResponse };
   run_migration: {
@@ -930,4 +1026,55 @@ export async function markRejectionResolved(
   timestamp: number,
 ): Promise<boolean> {
   return typedInvoke('mark_rejection_resolved', { projectId, timestamp });
+}
+
+// =============================================================================
+// Hub Chat Commands
+// =============================================================================
+
+import type { HubChat, HubChatUpdate } from './hub-types';
+
+export async function hubChatCreate(
+  projectId: string,
+  itemId: string | null,
+  chatType: string,
+  agentType: string | null,
+  title: string,
+): Promise<HubChat> {
+  return typedInvoke('hub_chat_create', {
+    projectId,
+    itemId,
+    chatType,
+    agentType,
+    title,
+  }) as Promise<HubChat>;
+}
+
+export async function hubChatList(
+  projectId?: string,
+  includeArchived?: boolean,
+): Promise<HubChat[]> {
+  return typedInvoke('hub_chat_list', {
+    projectId,
+    includeArchived,
+  }) as Promise<HubChat[]>;
+}
+
+export async function hubChatGet(chatId: string): Promise<HubChat> {
+  return typedInvoke('hub_chat_get', { chatId }) as Promise<HubChat>;
+}
+
+export async function hubChatUpdate(
+  chatId: string,
+  changes: HubChatUpdate,
+): Promise<HubChat> {
+  return typedInvoke('hub_chat_update', { chatId, changes }) as Promise<HubChat>;
+}
+
+export async function hubChatDelete(chatId: string): Promise<void> {
+  return typedInvoke('hub_chat_delete', { chatId });
+}
+
+export async function hubChatUpdateActivity(chatId: string): Promise<void> {
+  return typedInvoke('hub_chat_update_activity', { chatId });
 }

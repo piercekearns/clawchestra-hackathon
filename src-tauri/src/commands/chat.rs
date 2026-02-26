@@ -92,10 +92,13 @@ fn init_chat_db() -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    // Hub chats table (conversation hub metadata)
+    super::hub_chats::create_hub_chats_table(&conn)?;
+
     Ok(conn)
 }
 
-fn get_or_init_chat_db() -> Result<std::sync::MutexGuard<'static, Option<Connection>>, String> {
+pub(crate) fn get_or_init_chat_db() -> Result<std::sync::MutexGuard<'static, Option<Connection>>, String> {
     let mut guard = CHAT_DB.lock().map_err(|e| e.to_string())?;
     if guard.is_none() {
         *guard = Some(init_chat_db()?);

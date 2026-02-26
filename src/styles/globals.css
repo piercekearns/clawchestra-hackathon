@@ -156,6 +156,24 @@
   }
 }
 
+/* Scroll-reveal text animation for hub thread names */
+@keyframes scroll-reveal {
+  0%, 10% {
+    transform: translateX(0);
+  }
+  80%, 100% {
+    transform: translateX(var(--overflow-distance, 0));
+  }
+}
+
+.scroll-reveal-text {
+  transform: translateX(0);
+}
+
+*:hover > .scroll-reveal-text[style] {
+  animation: scroll-reveal var(--scroll-duration, 2s) ease-in-out 300ms forwards;
+}
+
 /* Brand checkbox — chartreuse fill with dark tick */
 @layer utilities {
   .checkbox-brand {

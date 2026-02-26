@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
-import { ArrowLeftRight, Github, Plus, RefreshCcw, Search, Settings } from 'lucide-react';
+import React from 'react';
+import { ArrowLeftRight, Github, MessageSquare, Plus, RefreshCcw, Search, Settings } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 
 interface ThinSidebarProps {
@@ -10,7 +11,10 @@ interface ThinSidebarProps {
   onOpenSync: () => void;
   onSwitchSide: () => void;
   onOpenSettings: () => void;
+  onToggleHub: () => void;
+  hubButtonRef?: React.Ref<HTMLDivElement>;
   syncBadgeCount?: number;
+  hubUnreadCount?: number;
 }
 
 const THIN_SIDEBAR_WIDTH = 44;
@@ -23,11 +27,15 @@ export function ThinSidebar({
   onOpenSync,
   onSwitchSide,
   onOpenSettings,
+  onToggleHub,
+  hubButtonRef,
   syncBadgeCount = 0,
+  hubUnreadCount = 0,
 }: ThinSidebarProps) {
   const isRight = side === 'right';
   const switchLabel = 'Switch panel side';
   const hasSyncBadge = syncBadgeCount > 0;
+  const hasHubBadge = hubUnreadCount > 0;
 
   return (
     <aside
@@ -69,6 +77,15 @@ export function ThinSidebar({
           ariaLabel="Manage Git Syncs"
           badgeCount={hasSyncBadge ? syncBadgeCount : undefined}
         />
+        <div ref={hubButtonRef}>
+          <ThinSidebarButton
+            icon={MessageSquare}
+            label="Conversations"
+            onClick={onToggleHub}
+            ariaLabel="Toggle conversations hub"
+            badgeCount={hasHubBadge ? hubUnreadCount : undefined}
+          />
+        </div>
         <ThinSidebarButton
           icon={ArrowLeftRight}
           label={switchLabel}
