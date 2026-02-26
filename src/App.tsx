@@ -2395,10 +2395,10 @@ export default function App() {
   const toastContent = toasts.map((toast) => (
     <div
       key={toast.id}
-      className={`pointer-events-auto flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm shadow-md ${
+      className={`pointer-events-auto flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-1.5 text-sm shadow-md ${
         toast.kind === 'error'
-          ? 'border-status-danger bg-red-50 text-status-danger dark:bg-red-950 dark:text-red-300'
-          : 'border-revival-accent-400 bg-revival-accent-100 text-neutral-900 dark:bg-revival-accent-900 dark:text-neutral-100'
+          ? 'border-status-danger/60 bg-red-50 text-status-danger dark:border-red-500/40 dark:bg-[#1f1012] dark:text-red-300'
+          : 'border-revival-accent-400/40 bg-revival-accent-100 text-neutral-900 dark:bg-[#202210] dark:text-neutral-100'
       }`}
     >
       <span>{toast.message}</span>
@@ -2515,7 +2515,7 @@ export default function App() {
                 : `${topLevelProjects.length} projects`}
           </div>
           {!settingsPageOpen && toasts.length > 0 && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-[70] flex h-full items-center justify-center px-4">
+            <div className="pointer-events-none absolute inset-x-0 -top-0.5 z-[70] flex h-full items-center justify-center px-4">
               <div className="pointer-events-auto flex flex-col items-center gap-2">
                 {toastContent}
               </div>
