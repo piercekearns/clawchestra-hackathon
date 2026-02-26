@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import type { ChatMessage } from '../../lib/gateway';
 import { sendMessageWithContext } from '../../lib/gateway';
@@ -7,6 +6,7 @@ import { useDashboardStore } from '../../lib/store';
 import { hubChatUpdate, hubChatUpdateActivity } from '../../lib/tauri';
 import { buildScopedContext } from '../../lib/hub-context';
 import { MessageList } from '../chat/MessageList';
+import { ChatBar } from '../chat/ChatBar';
 
 interface ScopedChatShellProps {
   chat: HubChat;
@@ -18,10 +18,12 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [contextLoaded, setContextLoaded] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [dragActive, setDragActive] = useState(false);
   const chatIdRef = useRef(chat.id);
   const contextRef = useRef<string | null>(null);
   const sentCountRef = useRef(0);
+  const gatewayConnected = useDashboardStore((s) => s.gatewayConnected);
+  const wsConnectionState = useDashboardStore((s) => s.wsConnectionState);
 
   // Reset state when chat changes
   useEffect(() => {
@@ -152,21 +154,6 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
     }
   }, [input, sending, messages, chat.sessionKey, chat.title, chat.id]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
-    }
-  };
-
-  // Auto-resize textarea
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = '40px';
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-  }, [input]);
-
   return (
     <div className="flex h-full flex-col">
       {/* Messages */}
@@ -194,31 +181,29 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
         )}
       </div>
 
-      {/* Input bar */}
-      <div className="border-t border-neutral-200 px-3 py-2 dark:border-neutral-700">
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={sending ? 'Working...' : 'Type a message...'}
-            disabled={sending}
-            rows={1}
-            className="flex-1 resize-none rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-800 placeholder-neutral-400 outline-none focus:border-revival-accent-400/60 focus:ring-1 focus:ring-revival-accent-400/40 dark:border-neutral-700 dark:text-neutral-200 dark:placeholder-neutral-500"
-            style={{ minHeight: 40, maxHeight: 120 }}
-          />
-          <button
-            type="button"
-            onClick={() => void handleSend()}
-            disabled={!input.trim() || sending}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#DFFF00] text-neutral-900 transition-colors hover:bg-[#d4f500] disabled:opacity-40 disabled:cursor-not-allowed"
-            aria-label="Send message"
-          >
-            <Send className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      {/* Input bar — reuses the main ChatBar in embedded mode */}
+      <ChatBar
+        connectionState={wsConnectionState}
+        activityLabel={sending ? 'Working...' : null}
+        drawerOpen={false}
+        variant="embedded"
+        showToggle={false}
+        input={input}
+        sending={sending}
+        dragActive={dragActive}
+        images={[]}
+        gatewayConnected={gatewayConnected}
+        queue={[]}
+        onInputChange={setInput}
+        onToggleDrawer={() => {}}
+        onSubmit={() => void handleSend()}
+        onRemoveImage={() => {}}
+        onRemoveFromQueue={() => {}}
+        onRetryQueuedMessage={() => {}}
+        onPasteFiles={async () => {}}
+        onDropFiles={async () => {}}
+        onDragStateChange={setDragActive}
+      />
     </div>
   );
 }

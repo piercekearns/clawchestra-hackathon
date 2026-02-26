@@ -7,7 +7,6 @@ import { InlineEdit } from './InlineEdit';
 interface ChatEntryRowProps {
   chat: HubChat;
   isActive: boolean;
-  /** Whether the linked roadmap item is complete */
   isItemComplete?: boolean;
   onSelect: (chatId: string) => void;
   onRename: (chatId: string, newTitle: string) => void;
@@ -30,21 +29,21 @@ export function ChatEntryRow({
 }: ChatEntryRowProps) {
   return (
     <div
-      className={`hub-row group relative flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors ${
+      className={`hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer transition-colors ${
         isActive
           ? 'bg-revival-accent-400/10 text-neutral-900 dark:text-neutral-100'
           : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
       } ${isItemComplete ? 'opacity-60' : ''}`}
       onClick={() => onSelect(chat.id)}
     >
-      {/* Pin icon — left indent zone */}
+      {/* Pin icon — aligned under the folder icon above */}
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onTogglePin(chat.id, !chat.pinned);
         }}
-        className={`flex h-4 w-4 shrink-0 items-center justify-center transition-opacity ${
+        className={`flex h-5 w-5 shrink-0 items-center justify-center transition-opacity ${
           chat.pinned
             ? 'text-[#DFFF00] opacity-100'
             : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
@@ -55,26 +54,29 @@ export function ChatEntryRow({
       </button>
 
       {/* Chat name */}
-      <div className="min-w-0 flex-1 pr-12">
+      <div className="min-w-0 flex-1 pr-14">
         <InlineEdit
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
           className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''}`}
           useScrollReveal
         />
-        {/* Unread dot */}
         {chat.unread && (
           <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-[#DFFF00]" />
         )}
       </div>
 
-      {/* Completion indicator */}
       {isItemComplete && (
         <Check className="h-3 w-3 shrink-0 text-green-500" />
       )}
 
-      {/* Right hover actions */}
-      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Right hover actions — ⋯ first, then archive */}
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ChatEntryMenu
+          chat={chat}
+          onMarkUnread={() => onMarkUnread(chat.id)}
+          onDelete={() => onDelete(chat.id)}
+        />
         <button
           type="button"
           onClick={(e) => {
@@ -86,11 +88,6 @@ export function ChatEntryRow({
         >
           <Archive className="h-3 w-3" />
         </button>
-        <ChatEntryMenu
-          chat={chat}
-          onMarkUnread={() => onMarkUnread(chat.id)}
-          onDelete={() => onDelete(chat.id)}
-        />
       </div>
     </div>
   );
@@ -114,7 +111,7 @@ function ChatEntryMenu({
       setOpen(false);
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 }); // 144 = w-36 = 9rem
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
       setOpen(true);
     }
   };

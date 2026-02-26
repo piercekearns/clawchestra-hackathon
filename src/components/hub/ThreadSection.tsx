@@ -12,7 +12,6 @@ interface ThreadSectionProps {
   thread: HubThread;
   collapsed: boolean;
   activeChatId: string | null;
-  /** Map of roadmap item IDs that are complete */
   completedItemIds?: Set<string>;
   onToggle: () => void;
   onSelectChat: (chatId: string) => void;
@@ -53,15 +52,12 @@ export function ThreadSection({
     transition,
   };
 
-  // Split pinned vs non-pinned
   const pinnedChats = thread.chats.filter((c) => c.pinned && !c.archived);
   const unpinnedChats = thread.chats.filter((c) => !c.pinned && !c.archived);
   const archivedChats = thread.chats.filter((c) => c.archived);
 
-  // Apply 5-chat limit to non-pinned
   const visibleUnpinned = showAll ? unpinnedChats : unpinnedChats.slice(0, MAX_VISIBLE_CHATS);
   const hiddenCount = unpinnedChats.length - visibleUnpinned.length;
-
   const allVisible = [...pinnedChats, ...visibleUnpinned];
 
   return (
@@ -69,13 +65,13 @@ export function ThreadSection({
       ref={setNodeRef}
       style={style}
       className={`mb-1 ${isDragging ? 'opacity-50' : ''}`}
-      {...attributes}
-      {...listeners}
     >
-      {/* Thread header */}
+      {/* Thread header — drag handle lives here, not on the entire section */}
       <div
         className="hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800"
         onClick={onToggle}
+        {...attributes}
+        {...listeners}
       >
         {/* Folder icon / chevron */}
         <button
@@ -84,10 +80,9 @@ export function ThreadSection({
             e.stopPropagation();
             onToggle();
           }}
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400"
+          className="flex h-5 w-5 shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400"
           aria-label={collapsed ? 'Expand thread' : 'Collapse thread'}
         >
-          {/* Default: folder icon. On hover: chevron */}
           <span className="group-hover:hidden">
             {collapsed ? (
               <Folder className="h-4 w-4" />
@@ -118,7 +113,6 @@ export function ThreadSection({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              // Thread-level menu - future: rename, archive all, etc.
             }}
             className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
             aria-label="Thread actions"
@@ -129,9 +123,9 @@ export function ThreadSection({
         </div>
       </div>
 
-      {/* Chat entries */}
+      {/* Chat entries — NO indentation, same alignment as project header */}
       {!collapsed && (
-        <div className="ml-5">
+        <div>
           {allVisible.map((chat) => (
             <ChatEntryRow
               key={chat.id}
@@ -147,12 +141,11 @@ export function ThreadSection({
             />
           ))}
 
-          {/* Show more */}
           {hiddenCount > 0 && !showAll && (
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              className="w-full px-2 py-1 text-left text-[11px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+              className="w-full px-3 py-1 text-left text-[11px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               Show {hiddenCount} more...
             </button>
@@ -161,13 +154,12 @@ export function ThreadSection({
             <button
               type="button"
               onClick={() => setShowAll(false)}
-              className="w-full px-2 py-1 text-left text-[11px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+              className="w-full px-3 py-1 text-left text-[11px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               Show less
             </button>
           )}
 
-          {/* Archived section (collapsed by default) */}
           {archivedChats.length > 0 && (
             <ArchivedSection
               chats={archivedChats}
@@ -205,7 +197,7 @@ function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddCh
       {open && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-neutral-0 py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
             <button
               type="button"
               onClick={(e) => {
@@ -260,7 +252,7 @@ function ArchivedSection({
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex items-center gap-1 px-2 py-1 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+        className="flex items-center gap-1 px-3 py-1 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
       >
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         Archived ({chats.length})

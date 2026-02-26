@@ -285,65 +285,69 @@ pub(crate) fn hub_chat_update(
     chat_id: String,
     changes: HubChatUpdate,
 ) -> Result<HubChat, String> {
-    let guard = get_or_init_chat_db()?;
-    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    // Scope the MutexGuard so it is dropped before hub_chat_get,
+    // which also acquires the same mutex. Without this scope,
+    // the non-reentrant std::sync::Mutex deadlocks.
+    {
+        let guard = get_or_init_chat_db()?;
+        let conn = guard.as_ref().ok_or("Database not initialized")?;
 
-    // Build SET clauses dynamically
-    let mut sets: Vec<String> = Vec::new();
-    let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    let mut param_idx = 1;
+        // Build SET clauses dynamically
+        let mut sets: Vec<String> = Vec::new();
+        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        let mut param_idx = 1;
 
-    if let Some(ref title) = changes.title {
-        sets.push(format!("title = ?{}", param_idx));
-        params_vec.push(Box::new(title.clone()));
-        param_idx += 1;
-    }
-    if let Some(pinned) = changes.pinned {
-        sets.push(format!("pinned = ?{}", param_idx));
-        params_vec.push(Box::new(if pinned { 1i64 } else { 0i64 }));
-        param_idx += 1;
-    }
-    if let Some(unread) = changes.unread {
-        sets.push(format!("unread = ?{}", param_idx));
-        params_vec.push(Box::new(if unread { 1i64 } else { 0i64 }));
-        param_idx += 1;
-    }
-    if let Some(archived) = changes.archived {
-        sets.push(format!("archived = ?{}", param_idx));
-        params_vec.push(Box::new(if archived { 1i64 } else { 0i64 }));
-        param_idx += 1;
-    }
-    if let Some(sort_order) = changes.sort_order {
-        sets.push(format!("sort_order = ?{}", param_idx));
-        params_vec.push(Box::new(sort_order));
-        param_idx += 1;
-    }
-    if let Some(last_activity) = changes.last_activity {
-        sets.push(format!("last_activity = ?{}", param_idx));
-        params_vec.push(Box::new(last_activity));
-        param_idx += 1;
-    }
-    if let Some(message_count) = changes.message_count {
-        sets.push(format!("message_count = ?{}", param_idx));
-        params_vec.push(Box::new(message_count));
-        param_idx += 1;
-    }
+        if let Some(ref title) = changes.title {
+            sets.push(format!("title = ?{}", param_idx));
+            params_vec.push(Box::new(title.clone()));
+            param_idx += 1;
+        }
+        if let Some(pinned) = changes.pinned {
+            sets.push(format!("pinned = ?{}", param_idx));
+            params_vec.push(Box::new(if pinned { 1i64 } else { 0i64 }));
+            param_idx += 1;
+        }
+        if let Some(unread) = changes.unread {
+            sets.push(format!("unread = ?{}", param_idx));
+            params_vec.push(Box::new(if unread { 1i64 } else { 0i64 }));
+            param_idx += 1;
+        }
+        if let Some(archived) = changes.archived {
+            sets.push(format!("archived = ?{}", param_idx));
+            params_vec.push(Box::new(if archived { 1i64 } else { 0i64 }));
+            param_idx += 1;
+        }
+        if let Some(sort_order) = changes.sort_order {
+            sets.push(format!("sort_order = ?{}", param_idx));
+            params_vec.push(Box::new(sort_order));
+            param_idx += 1;
+        }
+        if let Some(last_activity) = changes.last_activity {
+            sets.push(format!("last_activity = ?{}", param_idx));
+            params_vec.push(Box::new(last_activity));
+            param_idx += 1;
+        }
+        if let Some(message_count) = changes.message_count {
+            sets.push(format!("message_count = ?{}", param_idx));
+            params_vec.push(Box::new(message_count));
+            param_idx += 1;
+        }
 
-    if sets.is_empty() {
-        // No changes — just return the current record
-        return hub_chat_get(chat_id);
-    }
+        if sets.is_empty() {
+            // No changes — drop guard and return current record
+        } else {
+            let sql = format!(
+                "UPDATE chats SET {} WHERE id = ?{}",
+                sets.join(", "),
+                param_idx
+            );
+            params_vec.push(Box::new(chat_id.clone()));
 
-    let sql = format!(
-        "UPDATE chats SET {} WHERE id = ?{}",
-        sets.join(", "),
-        param_idx
-    );
-    params_vec.push(Box::new(chat_id.clone()));
-
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-    conn.execute(&sql, params_refs.as_slice())
-        .map_err(|e| e.to_string())?;
+            let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+            conn.execute(&sql, params_refs.as_slice())
+                .map_err(|e| e.to_string())?;
+        }
+    } // MutexGuard dropped here — safe to call hub_chat_get now
 
     hub_chat_get(chat_id)
 }
