@@ -5,6 +5,7 @@ import type { DashboardError } from './errors';
 import type { ChatMessage, SystemBubbleAction, SystemBubbleKind, SystemBubbleMeta } from './gateway';
 import type { ProjectFrontmatter, ProjectViewModel, ThemePreference } from './schema';
 import type { StateJsonMergedPayload, ClawchestraReadyPayload, RoadmapItemState } from './state-json';
+import type { ValidationRejection } from './tauri';
 import { createProject, getProjects, removeProject, updateProject, type ProjectUpdate } from './projects';
 import { autoCommitIfLocalOnly } from './auto-commit';
 import { defaultView, type ViewContext } from './views';
@@ -61,10 +62,15 @@ interface DashboardState {
   minimizedColumns: Record<string, string[]>;
   /** Custom column order per board. Key: board id, Value: ordered status ids */
   columnOrder: Record<string, string[]>;
+  chatDraft: string | null;
+  validationRejections: Record<string, ValidationRejection[]>;
   sidebarOpen: boolean;
   sidebarSide: 'left' | 'right';
   sidebarWidth: number;
   thinSidebarSide: 'left' | 'right';
+  setChatDraft: (message: string | null) => void;
+  setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
+  dismissValidationRejection: (projectId: string, timestamp: number) => void;
   setSidebarOpen: (open: boolean) => void;
   setSidebarSide: (side: 'left' | 'right') => void;
   setSidebarWidth: (width: number) => void;
@@ -381,6 +387,8 @@ export const useDashboardStore = create<DashboardState>()(
       collapsedColumns: {},
       minimizedColumns: {},
       columnOrder: {},
+      chatDraft: null,
+      validationRejections: {},
       sidebarOpen: false,
       sidebarSide: 'left',
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
@@ -681,6 +689,21 @@ export const useDashboardStore = create<DashboardState>()(
           },
         })),
 
+      setChatDraft: (chatDraft) => set({ chatDraft }),
+      setValidationRejections: (validationRejections) => set({ validationRejections }),
+      dismissValidationRejection: (projectId, timestamp) =>
+        set((state) => {
+          const projectRejections = state.validationRejections[projectId];
+          if (!projectRejections) return state;
+          return {
+            validationRejections: {
+              ...state.validationRejections,
+              [projectId]: projectRejections.map((r) =>
+                r.timestamp === timestamp ? { ...r, resolved: true } : r,
+              ),
+            },
+          };
+        }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSidebarSide: (sidebarSide) => set({ sidebarSide }),
       setSidebarWidth: (width) =>

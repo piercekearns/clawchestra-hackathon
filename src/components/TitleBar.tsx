@@ -2,6 +2,7 @@ import { Loader2, PanelLeft, PanelLeftClose } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
+import { StatusBadge } from './StatusBadge';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
 
@@ -110,6 +111,9 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
             {updateFailureReason}
           </span>
         )}
+        <div className="pointer-events-auto">
+          <StatusBadge />
+        </div>
       </div>
 
       {/* Right sidebar toggle — shifts inward when thin sidebar is on the right */}

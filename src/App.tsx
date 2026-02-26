@@ -425,10 +425,10 @@ export default function App() {
     [dirtyProjects.length, unresolvedSyncCount],
   );
 
-  // Validation rejection history (Phase 7.3)
-  const [validationRejections, setValidationRejections] = useState<
-    Record<string, ValidationRejection[]>
-  >({});
+  // Validation rejection history (Phase 7.3) — stored in zustand
+  const validationRejections = useDashboardStore((s) => s.validationRejections);
+  const setValidationRejections = useDashboardStore((s) => s.setValidationRejections);
+  const dismissValidationRejection = useDashboardStore((s) => s.dismissValidationRejection);
 
   const scanUnresolvedSyncState = useCallback(() => {
     let count = 0;
@@ -762,6 +762,14 @@ export default function App() {
   useEffect(() => {
     chatDrawerOpenRef.current = chatDrawerOpen;
   }, [chatDrawerOpen]);
+
+  // Open chat drawer when a chatDraft is set from StatusBadge (or elsewhere)
+  const chatDraft = useDashboardStore((s) => s.chatDraft);
+  useEffect(() => {
+    if (chatDraft) {
+      setChatDrawerOpen(true);
+    }
+  }, [chatDraft]);
 
   useEffect(() => {
     chatQueueRef.current = chatQueue;
@@ -2537,9 +2545,8 @@ export default function App() {
                           <ValidationBadge
                             rejections={projectRejections}
                             onDismiss={(timestamp) => {
-                              void markRejectionResolved(project.id, timestamp).then(() =>
-                                getValidationHistory().then(setValidationRejections).catch(() => {}),
-                              );
+                              dismissValidationRejection(project.id, timestamp);
+                              void markRejectionResolved(project.id, timestamp).catch(() => {});
                             }}
                           />
                         )}

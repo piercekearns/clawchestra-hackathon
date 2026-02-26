@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { ChatMessage } from '../../lib/gateway';
+import { useDashboardStore } from '../../lib/store';
 import { ChatBar } from './ChatBar';
 import { MessageList } from './MessageList';
 import { ResponseToast } from './ResponseToast';
@@ -207,6 +208,16 @@ export function ChatShell({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Consume chatDraft from global store (e.g. from StatusBadge "Ask OpenClaw")
+  const chatDraft = useDashboardStore((s) => s.chatDraft);
+  const setChatDraft = useDashboardStore((s) => s.setChatDraft);
+  useEffect(() => {
+    if (!chatDraft) return;
+    setInput(chatDraft);
+    setChatDraft(null);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, [chatDraft, setChatDraft]);
 
   useEffect(() => {
     drawerHeightRef.current = drawerHeightPx;
