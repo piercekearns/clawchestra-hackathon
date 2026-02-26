@@ -578,7 +578,7 @@ export function ChatShell({
         <>
           <button
             type="button"
-            className="fixed inset-0 z-30 bg-black/35"
+            className="absolute inset-0 z-30 bg-black/35"
             onClick={() => onDrawerOpenChange(false)}
             aria-label="Close chat drawer backdrop"
           />
