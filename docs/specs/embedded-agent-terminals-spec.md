@@ -2,7 +2,7 @@
 
 > Give Clawchestra users direct, visible access to coding agent sessions tied to projects and roadmap items — from embedded terminals (Phase 1) through managed sessions (Phase 2) to native protocol integration (Phase 3) — without removing OpenClaw from the loop.
 
-**Status:** Draft (comprehensive spec, Model D chosen)
+**Status:** Draft (comprehensive spec, Model D chosen, key decisions captured)
 **Created:** 2026-02-21
 **Last Updated:** 2026-02-25
 **Roadmap Item:** `embedded-agent-terminals`
@@ -23,7 +23,8 @@
 8. [OpenClaw's Role Across Phases](#openclaws-role-across-phases)
 9. [Session Lifecycle Management](#session-lifecycle-management)
 10. [Alternative Architectural Models](#alternative-models)
-11. [Open Questions](#open-questions)
+11. [Decisions](#decisions)
+12. [Open Questions](#open-questions)
 
 ---
 
@@ -84,7 +85,7 @@ OpenClaw retains all its current capabilities — planning, thinking, roadmap ma
 
 | Phase | What | Value | Dependency |
 |-------|------|-------|-----------|
-| **Phase 1** | Embedded terminals | Direct agent access, project multiplexing, no more separate terminal windows | Terminal emulator in Tauri |
+| **Phase 1** | Embedded terminals (tmux-backed) | Direct agent access, project multiplexing, session persistence, no more separate terminal windows | Terminal emulator in Tauri + tmux |
 | **Phase 2** | Enhanced session management | Session dashboard, status indicators, notifications, output parsing, named sessions | Phase 1 + UI work |
 | **Phase 3** | Protocol integration (optional) | Native UI (diffs, approvals, progress cards) for agents that support ACP/JSON-RPC, terminal remains for others | Phase 2 + ecosystem maturity |
 
@@ -221,52 +222,59 @@ This is useful regardless of Model D and makes OpenClaw's existing orchestration
 
 ### What It Is
 
-A terminal emulator inside Clawchestra. User clicks a button on a project card or roadmap item → terminal opens → pre-loaded with the coding agent CLI already running in the project's working directory. Multiple terminals, one per project/item, managed in the conversation hub sidebar.
+A terminal emulator inside Clawchestra, backed by tmux for session persistence. User clicks a button on a project card or roadmap item → terminal session opens in the conversation hub sidebar → pre-loaded with the coding agent CLI already running in the project's working directory. Multiple terminals per project, managed alongside OpenClaw chats in the thread.
 
 ### What the User Gets
 
-Exactly what they'd get opening iTerm and typing `claude` or `codex` — but inside Clawchestra, tied to a project, without needing separate terminal windows. This is the Conductor model but integrated with project management.
+Exactly what they'd get opening iTerm and typing `claude` or `codex` — but inside Clawchestra, tied to a project, without needing separate terminal windows. Sessions persist across app restarts (thanks to tmux), matching the persistence behavior users expect from OpenClaw chat history. No surprise data loss.
 
-The user who prefers the Claude Code CLI experience keeps that experience. The user who prefers Codex's GUI-like project view gets something similar via the conversation hub sidebar (project → sessions → click to open). Both without leaving Clawchestra.
+### Why tmux for Phase 1 (Not Phase 2)
 
-### Terminal Emulator Options
+The user's experience must be consistent across all chat types in the conversation hub. OpenClaw chats persist their history — the user closes and reopens the app, and the conversation is still there. If terminal sessions died on app close, the experience would be jarring and inconsistent. Users might not even realize they're in a "terminal" vs an "OpenClaw chat" depending on how much the UI abstracts the difference.
 
-xterm.js is the most common web-based terminal emulator but not the only option:
+tmux provides session persistence transparently:
+- Sessions survive app closure (tmux runs independently)
+- On app reopen, Clawchestra detects existing tmux sessions and reconnects
+- The user's work continues from where they left off
+- No "your session was lost" surprises
 
-| Option | Description | Tauri Compatibility | Trade-offs |
-|--------|-------------|-------------------|------------|
-| **xterm.js** | Industry standard web terminal emulator. Used by VS Code, Theia, many others. | ✅ Works in webview. `tauri-plugin-pty` provides native PTY bridge. | Most mature, largest ecosystem. WebGL renderer for performance. Canvas fallback. |
-| **tauri-plugin-pty** | Tauri-specific plugin that bridges PTY allocation with the frontend. Provides Rust-side PTY management + JS API for xterm.js integration. | ✅ Purpose-built for Tauri. | Simplifies the PTY ↔ xterm.js wiring. Handles spawn, resize, data transport. |
-| **portable-pty (Rust)** | Rust crate for cross-platform PTY operations. Used by WezTerm and others. | ✅ Can be used directly in Tauri's Rust backend. | More control, but need to build the frontend bridge yourself. |
-| **Tauri shell plugin** | Tauri's built-in `shell` plugin for spawning child processes. | ✅ Native. | Not a real terminal — no PTY, no TUI support. Captures stdout/stderr as text. Only useful for non-interactive commands. |
-| **Native terminal view** | Embed an actual native terminal view (e.g., SwiftUI Terminal view on macOS). | ⚠️ Platform-specific, not in webview. Would require Tauri plugin with native rendering. | Best performance, but platform-locked and complex. |
+The UI must make session state obvious — visual indicators for active/idle/completed sessions, clear "End session" actions, and warnings if many sessions are running (resource/cost awareness).
 
-**Recommended approach:** `tauri-plugin-pty` + xterm.js. This is the most proven path:
-- `tauri-plugin-pty` handles PTY allocation and lifecycle in Rust
-- xterm.js renders the terminal in the webview
-- The plugin already provides the bridge (spawn, data transport, resize)
-- Production-proven (VS Code uses xterm.js, WezTerm uses portable-pty)
+### Terminal Emulator: Recommended Approach
 
-**Validation needed before committing:**
+**`tauri-plugin-pty` + xterm.js + tmux backend.** This is the most proven path:
+
+| Component | Role |
+|-----------|------|
+| **tmux** | Holds the actual terminal session. Survives app restarts. |
+| **tauri-plugin-pty** (or equivalent Rust PTY bridge) | Connects Clawchestra to the tmux session. Handles data transport between the webview and the tmux pane. |
+| **xterm.js** | Renders the terminal in the webview. Handles keyboard input, ANSI rendering, scrollback. |
+
+The flow: `xterm.js (webview) ↔ tauri-plugin-pty (Rust) ↔ tmux session ↔ agent CLI (claude/codex/etc.)`
+
+**Validation spike needed before committing to this stack:**
 - xterm.js performance in Tauri v2 webview (especially with WebGL renderer)
-- Key handling (modifier keys, special sequences) pass through correctly
+- Key handling (modifier keys, special sequences) pass through correctly from webview → tmux
 - Resize behavior when sidebar changes width
 - Memory footprint with multiple terminals open
-- ANSI escape / color rendering with Claude Code's TUI output
+- Claude Code TUI rendering (syntax highlighting, diffs, progress bars) in xterm.js within a webview
+
+This spike validates the *rendering method*. The UX design (sidebar layout, chat-type selection, card entry points) can be planned and built independently — it doesn't depend on the spike outcome. If the spike reveals xterm.js issues, the UX stays the same but the rendering backend changes.
 
 ### Agent Launch Flow
 
-1. User clicks "Open terminal" (or agent-specific button like "Claude Code" / "Codex") on a project card or roadmap item
-2. Clawchestra creates a terminal session:
-   - PTY allocated via `tauri-plugin-pty`
+1. User clicks "New chat" on a project card or roadmap item card → selects a terminal type (Claude Code, Codex, Cursor, generic terminal)
+2. Clawchestra creates a tmux session:
+   - Named: `clawchestra:{project-id}:{uuid}` (or similar unique pattern)
    - Working directory set to project's `localPath`
    - Shell spawned (user's default shell)
-3. If agent-specific button was clicked:
-   - Auto-send the launch command: `claude` or `codex` or `opencode`
+3. If agent-specific type was selected:
+   - Auto-send the launch command: `claude` or `codex` or `cursor` or `opencode`
    - Wait for TUI initialization
-4. Terminal renders in the sidebar panel (same area as chat threads)
-5. User interacts directly — full keyboard input, full terminal output
-6. Session tracked in the conversation hub's thread list
+4. xterm.js connects to the tmux session via the PTY bridge
+5. Terminal renders in the sidebar panel (same area as OpenClaw chats)
+6. User interacts directly — full keyboard input, full terminal output
+7. Session tracked in the conversation hub's chat list (with agent-specific icon)
 
 ### Pre-Configuration Options
 
@@ -281,11 +289,11 @@ When launching from a specific context, Clawchestra can pre-configure the sessio
 
 ### UI Layout
 
-- Terminal occupies the same sidebar/panel area as chat threads
-- Thread list shows terminal sessions alongside OpenClaw chats
-- Terminal header bar: agent icon, session name, project/item scope, status indicator, controls (kill, detach, fullscreen)
-- Multiple terminals can exist per project — switch between them via the thread list
-- Terminal persists when switching to other views (runs in background)
+- Terminal occupies the same sidebar/panel area as OpenClaw chats (conversation hub)
+- Chat list shows terminal sessions alongside OpenClaw chats with distinguishing icons
+- Terminal header bar: agent icon, session name, project/item scope, status indicator, controls (end session, detach, fullscreen)
+- Multiple terminals can exist per project — switch between them via the chat list
+- Terminal persists when switching to other views (runs in background via tmux)
 
 ### What This Doesn't Solve
 
@@ -307,28 +315,28 @@ Phase 1's terminals plus a management and intelligence layer on top. A session d
 
 ### What the User Gets
 
-Not just "terminals in the app" but "managed coding sessions." The experience Pierce described: a session list in a sidebar where each project has its sessions (both OpenClaw chats and terminal sessions), with the ability to name sessions, see status at a glance, get notifications when something needs attention, and persistent scrollback across app restarts.
+Not just "terminals in the app" but "managed coding sessions." A session list in the sidebar where each project has its sessions (both OpenClaw chats and terminal sessions), with the ability to name sessions, see status at a glance, get notifications when something needs attention, and persistent scrollback across app restarts.
 
 ### Session Dashboard
 
-The conversation hub sidebar (from `project-conversation-hub` spec) expands to include terminal sessions:
+The conversation hub sidebar (from `project-conversation-hub` spec) with enriched terminal entries:
 
 ```
-Project A
-├── 💬 OpenClaw Chat (general)
-├── 💬 OpenClaw Chat (roadmap item: git-sync)
+Clawchestra (project thread)
+├── 💬 Project chat
+├── 💬 git-sync (roadmap item chat)
 ├── 🖥️ Claude Code — "implementing git-sync Phase 2" [active]
 ├── 🖥️ Codex — "fixing auth module" [waiting for approval]
 └── 🖥️ Claude Code — "yesterday's refactor" [completed]
 
-Project B
-├── 💬 OpenClaw Chat (general)
+ClawOS (project thread)
+├── 💬 Project chat
 └── 🖥️ Claude Code — "initial setup" [active]
 ```
 
 Each terminal session shows:
-- **Agent icon** — Claude Code, Codex, OpenCode, generic terminal
-- **Session name** — user-named or auto-generated from first prompt
+- **Agent icon** — Claude Code, Codex, OpenCode, Cursor, generic terminal
+- **Session name** — user-named or auto-generated from first prompt/launch context
 - **Status** — active (green), waiting for input/approval (amber), completed (checkmark), errored (red)
 - **Duration** — how long it's been running
 - **Last activity** — timestamp of last output
@@ -342,7 +350,7 @@ Layer basic intelligence on top of terminal output to detect key moments:
 | **Waiting for approval** | Pattern match on Claude Code's approval prompt ("Allow?" / "Yes/No") | Amber status indicator, optional notification |
 | **Error / failure** | Pattern match on common error patterns (build failures, test failures, stack traces) | Red status indicator |
 | **Completion** | Detect when agent returns to prompt (idle for N seconds after output burst) | Mark as idle, suggest summary |
-| **Agent exit** | PTY process exit event | Mark as completed |
+| **Agent exit** | tmux pane exit / PTY process exit event | Mark as completed |
 
 **Important caveat:** Output parsing is heuristic. It will work for ~80% of cases and miss edge cases. This is explicitly acceptable — the user can always look at the terminal directly. The parsing adds convenience, not reliability. When Phase 3 protocols are available, structured events replace heuristic parsing for supported agents.
 
@@ -351,29 +359,43 @@ Layer basic intelligence on top of terminal output to detect key moments:
 When a terminal session needs attention (detected via output parsing):
 
 - **Card badge** — the project card or roadmap item card shows a notification indicator
-- **Sidebar indicator** — the session in the thread list shows the relevant status
-- **Optional system notification** — macOS notification if the app is backgrounded (configurable)
-- **OpenClaw awareness** — optionally surface a system event to OpenClaw's session so it knows "Claude Code session for project X is waiting for approval"
+- **Sidebar indicator** — the session in the chat list shows the relevant status
+- **Optional system notification** — macOS notification if the app is backgrounded (configurable per user preference — every approval request vs only errors vs off)
+- **OpenClaw awareness** — surface a system event to OpenClaw's session so it knows "Claude Code session for project X is waiting for approval" (this enables OpenClaw to proactively mention it if the user asks what's happening)
 
 ### Session Naming
 
-- Auto-generated from first prompt or launch context: "Claude Code — git-sync Phase 2"
+- **Default**: Auto-generated from launch context — "Claude Code — git-sync" (agent + scope)
+- **First prompt enhancement**: If the user's first message to the agent is identifiable, append it — "Claude Code — git-sync — implementing Phase 2"
 - User can rename via right-click or inline edit
 - Name persists across app restarts
 
 ### Scrollback Persistence
 
 - Terminal scrollback saved to disk periodically (and on session end)
-- When user reopens Clawchestra, completed sessions show their scrollback (read-only)
-- Active sessions reconnect to the running PTY (if the process is still alive)
-- Storage: local file per session, keyed by session ID
+- Storage: Clawchestra's app data directory (`~/Library/Application Support/clawchestra/sessions/`), not alongside project files (avoids accidental git commits, protects secrets that may appear in terminal output)
+- When user reopens Clawchestra, active sessions reconnect to the running tmux session
+- Completed sessions show their scrollback (read-only)
 
 ### Session History
 
-- Completed sessions remain in the thread list (greyed out / archived section)
+- Completed sessions remain in the chat list (greyed out / archived section)
 - User can review what happened, see the scrollback, see the final status
 - Sessions can be deleted/archived by the user
 - History is filterable: by project, by agent type, by date, by status
+
+### OpenClaw Conversation Context from Terminal Sessions
+
+A key gap: when the user does deep-dive work in a terminal session, the conversation context (what was discussed, what decisions were made, what was tried and failed) doesn't port back to OpenClaw. OpenClaw can see the *outcomes* (git diff, commits, file changes) but not the *conversation*.
+
+**Phase 2 approach:** OpenClaw discovers outcomes via filesystem (git log, uncommitted changes, roadmap state changes from Clawchestra's sync). The user manually bridges conversation context: "I just finished implementing X in Claude Code, here's what I changed and why."
+
+**Future consideration (Phase 2+):** Automated session summaries. When a terminal session completes or is archived, Clawchestra could:
+- Generate a summary of the session (using the scrollback + a cheap AI call)
+- Store it as a note attached to the chat entry
+- Make it available to OpenClaw as context (e.g., inject into the project's context profile)
+
+This would close the context gap without requiring the user to manually bridge. But it adds complexity and cost (AI call per session summary) — defer until the basic terminal experience is validated.
 
 ### When Phase 2 Is "Good Enough"
 
@@ -466,12 +488,12 @@ OpenClaw never loses anything. Its role evolves alongside the phases:
 
 | Capability | Phase 0 | Phase 1 | Phase 2 | Phase 3 |
 |------------|---------|---------|---------|---------|
-| **Planning, thinking, chat** | ✅ Unchanged | ✅ Unchanged | ✅ Unchanged | ✅ Unchanged |
-| **Small tasks via exec/tmux** | ✅ Unchanged | ✅ Unchanged | ✅ Unchanged | ✅ Unchanged |
-| **Roadmap management** | ✅ Unchanged | ✅ Unchanged | ✅ Unchanged | ✅ Unchanged |
-| **Awareness of direct sessions** | N/A | Via filesystem (git diff, changed files) | + Session status (knows what's running) | + Structured summaries |
+| **Planning, thinking, chat** | Unchanged | Unchanged | Unchanged | Unchanged |
+| **Small tasks via exec/tmux** | Unchanged | Unchanged | Unchanged | Unchanged |
+| **Roadmap management** | Unchanged | Unchanged | Unchanged | Unchanged |
+| **Awareness of direct sessions** | N/A | Via filesystem (git diff, changed files) | + Session status (knows what's running) + notifications | + Structured summaries |
 | **Visibility of own exec/tmux work** | Surface in UI | Same | Same | Same |
-| **User asks "what happened?"** | OpenClaw checks git log | Same + session scrollback | Same + session history + parsed events | Same + structured event log |
+| **User asks "what happened?"** | OpenClaw checks git log | Same + session scrollback | Same + session history + parsed events + optional summaries | Same + structured event log |
 
 ### When OpenClaw Orchestrates (Still Valuable)
 
@@ -504,14 +526,14 @@ Power users understand terminal session lifecycle (open, running, idle, killed).
 
 | State | Meaning | Visual | Auto-Action |
 |-------|---------|--------|------------|
-| **Created** | PTY allocated, shell starting | Spinner | — |
+| **Created** | tmux session created, shell starting | Spinner | — |
 | **Launching** | Agent CLI initializing (5-10s for TUI startup) | Spinner + "Starting Claude Code..." | — |
 | **Active** | Agent is processing (output flowing) | Green pulse | — |
-| **Idle** | Agent at prompt, no output for N seconds | Grey / dimmed | Auto-sleep after configurable timeout? |
+| **Idle** | Agent at prompt, no output for N seconds | Grey / dimmed | Subtle "Still running" indicator after configurable timeout |
 | **Waiting for Input** | Agent needs approval/decision (detected via output parsing) | Amber indicator | Notification to user |
 | **Errored** | Error detected in output or process crashed | Red indicator | Notification to user |
-| **Completed** | Agent or shell process exited | Checkmark (greyed) | Move to history section |
-| **Killed by User** | User explicitly killed the session | X mark | Remove from active list |
+| **Completed** | Agent or shell process exited | Checkmark (greyed) | Move to archived/history section |
+| **Killed by User** | User explicitly ended the session | X mark | Remove from active list |
 
 ### Resource Awareness
 
@@ -520,24 +542,19 @@ The UI must surface resource usage so users don't accidentally overload their ma
 - **Active session count** — visible in sidebar header: "3 active sessions"
 - **Resource warning** — if system memory is low (detectable via Tauri system info), warn before launching new sessions
 - **Session age** — long-running idle sessions highlighted with "Running for 2h, still needed?"
-- **Quick kill** — one-click kill for any session, with confirmation for active ones
-- **Kill all** — "Kill all sessions" action for when things go wrong
+- **Quick end** — one-click end for any session, with confirmation for active ones
+- **End all** — "End all sessions" action for when things go wrong
+- **Cost reminder** — "3 active agent sessions — API costs are accruing independently for each"
 
-### Persistence Across App Restarts
+### Persistence Across App Restarts (tmux)
 
-Two approaches depending on implementation:
+Since Phase 1 uses tmux as the session backend:
 
-**If using tmux backend:**
-- tmux sessions survive app closure
-- On app reopen, detect existing tmux sessions and reconnect
-- Sessions continue running even if Clawchestra is closed
-- Pros: true persistence. Cons: tmux dependency.
-
-**If using direct PTY (tauri-plugin-pty):**
-- PTY processes are children of the Tauri app
-- When app closes, child processes get SIGHUP (may die)
-- Options: (a) detach to background on close, (b) warn user about active sessions before close, (c) use tmux as a persistence layer behind the PTY
-- Recommended: warn user on close if active sessions exist, offer to kill or detach
+- tmux sessions survive app closure — the agent keeps running
+- On app reopen, Clawchestra detects existing tmux sessions (by naming convention) and reconnects xterm.js to them
+- The user sees their sessions exactly as they left them
+- Completed sessions (where the tmux pane process has exited) show scrollback as read-only
+- **App close behavior**: if active sessions exist, show a notification: "N sessions are still running in the background. They'll be here when you return." — no need to kill them
 
 ### Cost Awareness
 
@@ -573,34 +590,57 @@ Monitor ACP adoption, Claude Code protocol status, OpenClaw roadmap. Build termi
 
 ---
 
+<a name="decisions"></a>
+## Decisions (Resolved)
+
+### 1. tmux for Phase 1 (not Phase 2)
+Terminal sessions use tmux as the backend from Phase 1. This ensures session persistence across app restarts, matching the persistence behavior users expect from OpenClaw chat history. Direct PTY (tauri-plugin-pty) would be simpler but sessions would die on app close — creating an inconsistent experience where OpenClaw chats persist but terminal sessions don't.
+
+### 2. Session storage in app data directory
+Scrollback and session history stored in `~/Library/Application Support/clawchestra/sessions/`, not alongside project files. Rationale: terminal output doesn't belong in git, may contain secrets, and is an app concern not a project concern.
+
+### 3. OpenClaw integration: filesystem discovery for Phase 1, active notification for Phase 2
+Phase 1: OpenClaw discovers outcomes of terminal sessions via git diff, uncommitted files, commit messages. No active notification.
+Phase 2: Clawchestra notifies OpenClaw when sessions start/end/need attention, enabling OpenClaw to proactively reference what happened.
+Future: Automated session summaries that close the conversation context gap.
+
+### 4. Plan the UX independently of the xterm.js spike
+The xterm.js + Tauri v2 validation spike determines the *rendering method*, not the *UX design*. The sidebar layout, chat-type selection, card entry points, and session management UI can all be planned and built independently. The spike runs in parallel.
+
+### 5. Default experience: detect available agents
+First-time experience should detect which agent CLIs are available on the user's machine (claude, codex, cursor, opencode) and present them as launch options. If none are found, offer a generic terminal. Don't force the user to configure anything.
+
+### 6. Session naming: auto-generate from context
+Default name format: "{agent} — {scope}" (e.g., "Claude Code — git-sync"). Enhanced with first prompt if identifiable. User can rename anytime. No prompt to name on creation — that adds friction.
+
+### 7. Notification threshold: configurable, default to approvals + errors
+Notifications fire for approval requests and errors by default. The user can configure: all events, approvals + errors only, errors only, or off. System notifications (macOS) are opt-in.
+
+---
+
 <a name="open-questions"></a>
 ## Open Questions
 
-### Technical Validation (Phase 1 blockers)
-1. **xterm.js + Tauri v2 performance** — Does `tauri-plugin-pty` work reliably with Tauri v2? WebGL renderer performance? Needs a spike.
-2. **Key handling** — Do modifier keys (Ctrl-C, Ctrl-D, Ctrl-Z, Meta/Cmd) pass through correctly from webview → PTY?
+### Technical Validation (Phase 1 — spike needed)
+1. **xterm.js + Tauri v2 performance** — Does xterm.js render reliably in Tauri v2's webview? WebGL renderer performance? This is the primary technical risk.
+2. **Key handling** — Do modifier keys (Ctrl-C, Ctrl-D, Ctrl-Z, Meta/Cmd) pass through correctly from webview → tmux?
 3. **Resize** — When the sidebar changes width, does the terminal resize gracefully? Column count recalculation?
-4. **Memory** — What's the memory footprint of N concurrent xterm.js + PTY instances?
+4. **Memory** — What's the memory footprint of N concurrent xterm.js + tmux instances?
 5. **Claude Code TUI rendering** — Does Claude Code's rich TUI (syntax highlighting, diffs, progress bars) render correctly in xterm.js within a webview?
 
-### Architecture Decisions
-6. **tmux vs direct PTY** — Should sessions use tmux for persistence (survive app close) or direct PTY (simpler, but tied to app lifecycle)?
-7. **Session storage** — Where do scrollback/session history files live? Alongside project files? In Clawchestra's app data?
-8. **OpenClaw integration depth** — Should OpenClaw be notified when a direct session starts/ends? Or just discover changes via filesystem?
-9. **Claude Code remote control handoff** — If Claude Code is launched via embedded terminal and later controlled remotely (cloud handoff), does Clawchestra’s project planning/kanban stay up to date with the remote changes? Needs workflow + sync implications testing.
+### Architecture (decide during planning)
+6. **tmux session naming convention** — What naming pattern ensures Clawchestra can reliably find its own sessions without conflicting with user's existing tmux sessions?
+7. **tmux-to-xterm.js bridge** — Does `tauri-plugin-pty` support attaching to an existing tmux session, or do we need a custom Rust bridge?
 
-### Ecosystem
-10. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent.
-11. **ACP stability** — Is ACP stable enough to build against, or will it change significantly?
-
-### UX
-12. **Default experience** — Should the first-time experience be a terminal, or should we detect available agents and suggest a launch?
-13. **Session naming** — Auto-generate from context, or always ask the user to name?
-14. **Notification threshold** — How aggressively should we notify? Every approval request? Only errors? Configurable?
+### Longer-term (design context, not Phase 1 blockers)
+8. **Claude Code remote control handoff** — If Claude Code is launched via embedded terminal and later controlled remotely (cloud handoff), does Clawchestra's project planning/kanban stay up to date with the remote changes? Needs workflow + sync implications testing.
+9. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent. Monitor but don't block on.
+10. **ACP stability** — Is ACP stable enough to build against for Phase 3, or will it change significantly? Same — monitor, don't block.
+11. **Conversation context portability** — How to bridge the context gap between terminal sessions and OpenClaw. Phase 1 accepts manual bridging. Phase 2 adds filesystem-based awareness. Future: automated session summaries. This is the most important longer-term question for the feature's utility.
 
 ## Relationship to Other Specs
 
-- **`project-conversation-hub-spec.md`** — provides the thread/container model. Terminal sessions are threads alongside OpenClaw chats.
+- **`project-conversation-hub-spec.md`** — provides the thread/container model. Terminal sessions are a chat type within the conversation hub, alongside OpenClaw chats.
 - **`distributed-ai-surfaces-spec.md`** — agent sessions are the most advanced form of distributed AI surface.
 - **`scoped-chat-sessions-spec.md`** — session isolation principles. Terminal sessions are separate from OpenClaw chat sessions.
 - **`roadmap-item-quick-add-spec.md`** — example of a distributed AI surface; different pattern (chat-based creation vs terminal-based coding) but same conversation hub home.
