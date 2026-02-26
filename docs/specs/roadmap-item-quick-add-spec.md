@@ -21,8 +21,8 @@ There's no UI affordance for "I'm looking at this project's kanban board and I w
 
 ## What Success Looks Like
 
-- **A "+" button on kanban columns** (or a similar affordance) that says "Add a roadmap item here."
-- **Clicking it opens a new card** with an AI chat box as the primary input method.
+- **A lightweight "+ Add roadmap item" card** at the bottom of each kanban column (or top if the column is empty) — hollow, dashed stroke, secondary CTA. Same visual pattern as the `board-project-quick-add` card in the project board.
+- **Clicking the card opens a modal** (not an in-place card) with an AI chat box as the primary input method.
 - **The user just describes the item** — what it covers, what the goals are, any context. No need to specify project, column, priority, or schema fields.
 - **OpenClaw structures the output** — turns the natural language description into a schema-compliant roadmap item with proper frontmatter (title, status, priority, tags, nextAction, etc.).
 - **Optional manual fields** are exposed below the chat for users who prefer to fill fields directly or want to override what the AI generated.
@@ -115,11 +115,21 @@ This is the first distributed AI surface — the first time an AI chat component
 
 Every subsequent distributed AI surface (git sync inline chat, project card chat, etc.) follows the same pattern established here.
 
+## Build Order & Dependencies
+
+This spec and `board-project-quick-add` share the same in-column card affordance. The recommended build sequence:
+
+1. **Build the shared "add card" component** — a reusable inline column card (hollow, dashed, secondary CTA) that can be dropped into any kanban column. Both `board-project-quick-add` and this spec consume it.
+2. **Ship `board-project-quick-add` first** — wire the project board columns to show the add card, clicking it opens the existing `AddProjectDialog` with status pre-selected. This is the simpler path (no new modal, no AI) and gets the shared pattern battle-tested.
+3. **Phase 1 of this spec** — wire roadmap columns to show the same add card, but clicking it opens a new `AddRoadmapItemDialog` (manual fields only). Column status pre-selected.
+4. **Phase 2 of this spec** — layer in the AI chat input.
+
 ## Phased Delivery
 
 ### Phase 1: UI Affordance + Manual Fields
-- "+" button on kanban columns
-- New card / modal with manual input fields only (no AI chat yet)
+- "+ Add roadmap item" card at bottom/top of roadmap kanban columns (shared card component from `board-project-quick-add`)
+- Clicking opens a modal (`AddRoadmapItemDialog`) with manual input fields only — no AI chat yet
+- Status pre-selected from the column clicked
 - Creates a schema-compliant roadmap item from field values
 - Validates against schema before writing
 
