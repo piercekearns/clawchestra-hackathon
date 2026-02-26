@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, Plus, Terminal } from 'lucide-react';
 import type { HubChat, HubThread } from '../../lib/hub-types';
+import { useDashboardStore } from '../../lib/store';
 import { ChatEntryRow } from './ChatEntryRow';
 import { ScrollRevealText } from './ScrollRevealText';
 
@@ -39,6 +40,7 @@ export function ThreadSection({
   onAddChat,
 }: ThreadSectionProps) {
   const [showAll, setShowAll] = useState(false);
+  const hubBusyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
   const {
     attributes,
     listeners,
@@ -128,6 +130,7 @@ export function ThreadSection({
               chat={projectChat}
               isActive={activeChatId === projectChat.id}
               isProjectChat
+              isBusy={hubBusyChatIds.has(projectChat.id)}
               onSelect={onSelectChat}
               onRename={onRenameChat}
               onTogglePin={onTogglePinChat}
@@ -142,6 +145,7 @@ export function ThreadSection({
               chat={chat}
               isActive={activeChatId === chat.id}
               isItemComplete={chat.itemId ? completedItemIds?.has(chat.itemId) : false}
+              isBusy={hubBusyChatIds.has(chat.id)}
               onSelect={onSelectChat}
               onRename={onRenameChat}
               onTogglePin={onTogglePinChat}
@@ -272,6 +276,7 @@ function ArchivedSection({
   onDeleteChat: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hubBusyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
 
   return (
     <div className="mt-1">
@@ -290,6 +295,7 @@ function ArchivedSection({
               key={chat.id}
               chat={chat}
               isActive={activeChatId === chat.id}
+              isBusy={hubBusyChatIds.has(chat.id)}
               onSelect={onSelectChat}
               onRename={onRenameChat}
               onTogglePin={onTogglePinChat}

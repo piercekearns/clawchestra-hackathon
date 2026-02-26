@@ -10,6 +10,8 @@ interface ChatEntryRowProps {
   isItemComplete?: boolean;
   /** When true, renders this row as the project-level root chat (special icon, no pin/archive) */
   isProjectChat?: boolean;
+  /** When true, replaces the icon with animated activity dots */
+  isBusy?: boolean;
   onSelect: (chatId: string) => void;
   onRename: (chatId: string, newTitle: string) => void;
   onTogglePin: (chatId: string, pinned: boolean) => void;
@@ -23,6 +25,7 @@ export function ChatEntryRow({
   isActive,
   isItemComplete = false,
   isProjectChat = false,
+  isBusy = false,
   onSelect,
   onRename,
   onTogglePin,
@@ -41,8 +44,14 @@ export function ChatEntryRow({
       } ${isItemComplete ? 'opacity-60' : ''}`}
       onClick={() => onSelect(chat.id)}
     >
-      {/* Project-level chat: static home icon; others: pin button */}
-      {isProjectChat ? (
+      {/* Icon slot: animated dots when busy, home icon for project chats, pin for others */}
+      {isBusy ? (
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center gap-[2px]">
+          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-bounce [animation-delay:0ms]" />
+          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-bounce [animation-delay:150ms]" />
+          <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-bounce [animation-delay:300ms]" />
+        </span>
+      ) : isProjectChat ? (
         <span
           className="flex h-5 w-5 shrink-0 items-center justify-center text-revival-accent-400/80 dark:text-revival-accent-400/70"
           aria-label="Project chat"

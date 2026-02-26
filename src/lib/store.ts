@@ -79,6 +79,8 @@ interface DashboardState {
   hubCollapsedThreads: string[];
   hubThreadOrder: string[];
   hubChats: HubChat[];
+  /** Transient set of chat IDs currently waiting for a response (not persisted). */
+  hubBusyChatIds: Set<string>;
   // Hub actions
   setSidebarMode: (mode: 'default' | 'settings') => void;
   setHubActiveChatId: (id: string | null) => void;
@@ -88,6 +90,8 @@ interface DashboardState {
   setHubThreadOrder: (order: string[]) => void;
   setHubChats: (chats: HubChat[]) => void;
   refreshHubChats: () => Promise<void>;
+  addHubBusyChatId: (id: string) => void;
+  removeHubBusyChatId: (id: string) => void;
 
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
@@ -426,6 +430,7 @@ export const useDashboardStore = create<DashboardState>()(
       hubCollapsedThreads: [],
       hubThreadOrder: [],
       hubChats: [],
+      hubBusyChatIds: new Set<string>(),
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -777,6 +782,18 @@ export const useDashboardStore = create<DashboardState>()(
           console.warn('[Store] Failed to refresh hub chats:', err);
         }
       },
+      addHubBusyChatId: (id) =>
+        set((state) => {
+          const next = new Set(state.hubBusyChatIds);
+          next.add(id);
+          return { hubBusyChatIds: next };
+        }),
+      removeHubBusyChatId: (id) =>
+        set((state) => {
+          const next = new Set(state.hubBusyChatIds);
+          next.delete(id);
+          return { hubBusyChatIds: next };
+        }),
 
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);

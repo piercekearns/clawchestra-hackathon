@@ -170,6 +170,10 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
     const text = input.trim();
     if (!text || sending) return;
 
+    // Capture the chat ID at send time — if the user switches away mid-response,
+    // we route results to the originating chat's cache instead of the current view.
+    const originChatId = chat.id;
+
     const userMessage: ChatMessage = {
       role: 'user',
       content: text,
@@ -182,12 +186,13 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
 
     // Fire-and-forget persist user message to SQLite
     if (isTauriRuntime()) {
-      void hubChatMessageSave(chat.id, toPersisted(userMessage)).catch((err) => {
+      void hubChatMessageSave(originChatId, toPersisted(userMessage)).catch((err) => {
         console.warn('[ScopedChat] Failed to persist user message:', err);
       });
     }
     setSending(true);
     setStreamingContent(null);
+    useDashboardStore.getState().addHubBusyChatId(originChatId);
 
     // Prepend context as system message on first send
     const historyForSend = [...messages, userMessage];
@@ -212,66 +217,115 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
           sessionKey: chat.sessionKey ?? undefined,
           skipTurnTracking: true,
           onStreamDelta: (content) => {
-            setStreamingContent(content);
+            // Guard: only update streaming UI if we're still on the originating chat
+            if (chatIdRef.current === originChatId) {
+              setStreamingContent(content);
+            }
           },
         },
       );
 
-      setStreamingContent(null);
+      // Check if user switched away while awaiting the response
+      const switchedAway = chatIdRef.current !== originChatId;
+
+      if (!switchedAway) {
+        setStreamingContent(null);
+      }
+
+      // Build the response messages with IDs
+      const responseMessages: ChatMessage[] = [];
       for (const msg of result.messages) {
         const withId: ChatMessage = { ...msg, _id: msg._id ?? generateMessageId() };
-        setMessages((prev) => [...prev, withId]);
+        responseMessages.push(withId);
 
-        // Fire-and-forget persist assistant message to SQLite
+        // Always persist to SQLite (using the original chat ID, not the current one)
         if (isTauriRuntime()) {
-          void hubChatMessageSave(chat.id, toPersisted(withId)).catch((err) => {
+          void hubChatMessageSave(originChatId, toPersisted(withId)).catch((err) => {
             console.warn('[ScopedChat] Failed to persist assistant message:', err);
           });
         }
       }
 
-      // Extract model badge + usage ring from send result
-      if (result.runtimeModel || result.runtimeProvider) {
-        const ml = formatModelDisplayName(result.runtimeModel);
-        const pl = formatProviderDisplayName(result.runtimeProvider);
-        setModelLabel(pl && ml ? `${pl} · ${ml}` : ml ?? pl);
-        const rawModel = result.runtimeModel ?? 'unknown model';
-        setModelTooltip(result.runtimeProvider ? `${result.runtimeProvider} · ${rawModel}` : rawModel);
-      }
-      if (result.usage) {
-        setModelUsage(result.usage);
+      if (switchedAway) {
+        // User navigated to a different chat — stash results in the originating chat's cache
+        const cached = chatCache.get(originChatId);
+        if (cached) {
+          cached.messages = [...cached.messages, ...responseMessages];
+          // Also stash model/usage into the cache
+          if (result.runtimeModel || result.runtimeProvider) {
+            const ml = formatModelDisplayName(result.runtimeModel);
+            const pl = formatProviderDisplayName(result.runtimeProvider);
+            cached.modelLabel = pl && ml ? `${pl} · ${ml}` : ml ?? pl;
+            const rawModel = result.runtimeModel ?? 'unknown model';
+            cached.modelTooltip = result.runtimeProvider ? `${result.runtimeProvider} · ${rawModel}` : rawModel;
+          }
+          if (result.usage) {
+            cached.usage = result.usage;
+          }
+        }
+        // Mark as unread since user isn't viewing this chat
+        void hubChatUpdate(originChatId, { unread: true });
+        const store = useDashboardStore.getState();
+        store.setHubChats(store.hubChats.map((c) => (c.id === originChatId ? { ...c, unread: true } : c)));
+      } else if (!useDashboardStore.getState().hubDrawerOpen) {
+        // Drawer closed entirely — also mark unread
+        void hubChatUpdate(originChatId, { unread: true });
+        const store = useDashboardStore.getState();
+        store.setHubChats(store.hubChats.map((c) => (c.id === originChatId ? { ...c, unread: true } : c)));
+      } else {
+        // Still on the originating chat — apply to state normally
+        for (const msg of responseMessages) {
+          setMessages((prev) => [...prev, msg]);
+        }
+
+        // Extract model badge + usage ring from send result
+        if (result.runtimeModel || result.runtimeProvider) {
+          const ml = formatModelDisplayName(result.runtimeModel);
+          const pl = formatProviderDisplayName(result.runtimeProvider);
+          setModelLabel(pl && ml ? `${pl} · ${ml}` : ml ?? pl);
+          const rawModel = result.runtimeModel ?? 'unknown model';
+          setModelTooltip(result.runtimeProvider ? `${result.runtimeProvider} · ${rawModel}` : rawModel);
+        }
+        if (result.usage) {
+          setModelUsage(result.usage);
+        }
       }
 
-      // Update activity + message count metadata
-      void hubChatUpdateActivity(chat.id);
-      const currentChat = useDashboardStore.getState().hubChats.find((c) => c.id === chat.id);
+      // Update activity + message count metadata (always uses originChatId)
+      void hubChatUpdateActivity(originChatId);
+      const currentChat = useDashboardStore.getState().hubChats.find((c) => c.id === originChatId);
       if (currentChat) {
         // +1 for user message, + N for assistant responses
-        void hubChatUpdate(chat.id, { messageCount: (currentChat.messageCount ?? 0) + 1 + result.messages.length });
+        void hubChatUpdate(originChatId, { messageCount: (currentChat.messageCount ?? 0) + 1 + result.messages.length });
       }
 
       // Auto-name chat from first user message if title is generic
       if (sentCountRef.current === 1 && isGenericTitle(chat.title)) {
         const autoTitle = text.slice(0, 60) + (text.length > 60 ? '...' : '');
-        void hubChatUpdate(chat.id, { title: autoTitle }).then(() => {
+        void hubChatUpdate(originChatId, { title: autoTitle }).then(() => {
           const store = useDashboardStore.getState();
-          store.setHubChats(store.hubChats.map((c) => (c.id === chat.id ? { ...c, title: autoTitle } : c)));
+          store.setHubChats(store.hubChats.map((c) => (c.id === originChatId ? { ...c, title: autoTitle } : c)));
         }).catch((err) => {
           console.warn('[ScopedChat] Auto-name failed:', err);
         });
       }
     } catch (error) {
       console.error('[ScopedChat] Send failed:', error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'system' as const,
-          content: `Failed to send: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          timestamp: Date.now(),
-        },
-      ]);
+      if (chatIdRef.current === originChatId) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'system' as const,
+            content: `Failed to send: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            timestamp: Date.now(),
+          },
+        ]);
+      }
     } finally {
-      setSending(false);
+      useDashboardStore.getState().removeHubBusyChatId(originChatId);
+      if (chatIdRef.current === originChatId) {
+        setSending(false);
+      }
     }
   }, [input, sending, messages, chat.sessionKey, chat.title, chat.id]);
 
