@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/sortable';
 import { MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
-import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
+import { hubChatCreate, hubChatUpdate, hubChatDelete, hubChatMessagesClear } from '../../lib/tauri';
 import type { HubChat, HubThread } from '../../lib/hub-types';
 import { ThreadSection } from './ThreadSection';
 
@@ -177,6 +177,13 @@ export function HubNav({ onToast }: HubNavProps) {
     await refreshHubChats();
   };
 
+  const handleClearHistory = async (chatId: string) => {
+    useDashboardStore.getState().setHubChatMessages(chatId, []);
+    await hubChatMessagesClear(chatId);
+    await hubChatUpdate(chatId, { messageCount: 0 });
+    await refreshHubChats();
+  };
+
   const handleAddChat = async (projectId: string) => {
     const title = `New Chat ${new Date().toLocaleDateString()}`;
     const newChat = await hubChatCreate(
@@ -235,6 +242,7 @@ export function HubNav({ onToast }: HubNavProps) {
                   onArchiveChat={handleArchiveChat}
                   onMarkUnreadChat={handleMarkUnreadChat}
                   onDeleteChat={handleDeleteChat}
+                  onClearHistory={handleClearHistory}
                   onAddChat={handleAddChat}
                 />
               ))}

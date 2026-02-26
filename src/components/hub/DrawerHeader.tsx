@@ -111,13 +111,13 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
           <>
             <div className="fixed inset-0 z-50" onClick={() => setMenuOpen(false)} />
             <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
-              <MenuButton icon={PenLine} label="Rename" onClick={handleRenameStart} />
-              <MenuButton
+              {!chat.isProjectRoot && <MenuButton icon={PenLine} label="Rename" onClick={handleRenameStart} />}
+              {!chat.isProjectRoot && <MenuButton
                 icon={Pin}
                 label={chat.pinned ? 'Unpin' : 'Pin'}
                 onClick={() => void handleTogglePin()}
-              />
-              <MenuButton icon={Archive} label="Archive" onClick={() => void handleArchive()} />
+              />}
+              {!chat.isProjectRoot && <MenuButton icon={Archive} label="Archive" onClick={() => void handleArchive()} />}
               {chat.itemId && onOpenLinkedItem && (
                 <>
                   <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />

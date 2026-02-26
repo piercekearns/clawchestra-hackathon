@@ -30,6 +30,7 @@ pub(crate) struct HubChat {
     pub last_activity: i64,
     pub message_count: i64,
     pub archived: bool,
+    pub is_project_root: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -83,6 +84,7 @@ fn row_to_hub_chat(row: &rusqlite::Row<'_>) -> rusqlite::Result<HubChat> {
         last_activity: row.get(11)?,
         message_count: row.get(12)?,
         archived: row.get::<_, i64>(13)? != 0,
+        is_project_root: row.get::<_, i64>(14)? != 0,
     })
 }
 
@@ -106,7 +108,8 @@ pub(crate) fn create_hub_chats_table(conn: &rusqlite::Connection) -> Result<(), 
             created_at INTEGER NOT NULL,
             last_activity INTEGER NOT NULL,
             message_count INTEGER DEFAULT 0,
-            archived INTEGER NOT NULL DEFAULT 0
+            archived INTEGER NOT NULL DEFAULT 0,
+            is_project_root INTEGER NOT NULL DEFAULT 0
         )",
         [],
     )
@@ -136,6 +139,35 @@ pub(crate) fn create_hub_chats_table(conn: &rusqlite::Connection) -> Result<(), 
     )
     .map_err(|e| e.to_string())?;
 
+    // Migration: add is_project_root column to existing tables
+    {
+        let has_is_project_root: bool = conn
+            .prepare("PRAGMA table_info(chats)")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .any(|col| col.as_deref() == Ok("is_project_root"));
+
+        if !has_is_project_root {
+            conn.execute_batch("ALTER TABLE chats ADD COLUMN is_project_root INTEGER NOT NULL DEFAULT 0;")
+                .map_err(|e| e.to_string())?;
+
+            // Mark the oldest item_id-less chat per project as the project root
+            conn.execute_batch(
+                "UPDATE chats SET is_project_root = 1
+                 WHERE id IN (
+                     SELECT id FROM chats c1
+                     WHERE item_id IS NULL AND is_project_root = 0
+                     AND created_at = (
+                         SELECT MIN(created_at) FROM chats c2
+                         WHERE c2.project_id = c1.project_id AND c2.item_id IS NULL
+                     )
+                 );"
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
     Ok(())
 }
 
@@ -150,6 +182,7 @@ pub(crate) fn hub_chat_create(
     chat_type: String,
     agent_type: Option<String>,
     title: String,
+    is_project_root: Option<bool>,
 ) -> Result<HubChat, String> {
     let guard = get_or_init_chat_db()?;
     let conn = guard.as_ref().ok_or("Database not initialized")?;
@@ -173,6 +206,8 @@ pub(crate) fn hub_chat_create(
         )
         .unwrap_or(-1);
 
+    let is_root = is_project_root.unwrap_or(false);
+
     let chat = HubChat {
         id: id.clone(),
         project_id: project_id.clone(),
@@ -188,11 +223,12 @@ pub(crate) fn hub_chat_create(
         last_activity: now,
         message_count: 0,
         archived: false,
+        is_project_root: is_root,
     };
 
     conn.execute(
-        "INSERT INTO chats (id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8, ?9, ?10, 0, 0)",
+        "INSERT INTO chats (id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived, is_project_root)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8, ?9, ?10, 0, 0, ?11)",
         params![
             id,
             project_id,
@@ -204,6 +240,7 @@ pub(crate) fn hub_chat_create(
             max_sort + 1,
             now,
             now,
+            if is_root { 1i64 } else { 0i64 },
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -224,11 +261,11 @@ pub(crate) fn hub_chat_list(
 
     if let Some(pid) = project_id {
         let sql = if include_archived {
-            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived
+            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived, is_project_root
              FROM chats WHERE project_id = ?1
              ORDER BY pinned DESC, last_activity DESC"
         } else {
-            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived
+            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived, is_project_root
              FROM chats WHERE project_id = ?1 AND archived = 0
              ORDER BY pinned DESC, last_activity DESC"
         };
@@ -242,11 +279,11 @@ pub(crate) fn hub_chat_list(
         }
     } else {
         let sql = if include_archived {
-            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived
+            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived, is_project_root
              FROM chats
              ORDER BY pinned DESC, last_activity DESC"
         } else {
-            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived
+            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived, is_project_root
              FROM chats WHERE archived = 0
              ORDER BY pinned DESC, last_activity DESC"
         };
@@ -270,7 +307,7 @@ pub(crate) fn hub_chat_get(chat_id: String) -> Result<HubChat, String> {
 
     let chat = conn
         .query_row(
-            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived
+            "SELECT id, project_id, item_id, type, agent_type, title, session_key, pinned, unread, sort_order, created_at, last_activity, message_count, archived, is_project_root
              FROM chats WHERE id = ?1",
             params![chat_id],
             |row| row_to_hub_chat(row),
@@ -358,6 +395,18 @@ pub(crate) fn hub_chat_delete(chat_id: String) -> Result<(), String> {
     let conn = guard.as_ref().ok_or("Database not initialized")?;
     conn.execute("DELETE FROM chats WHERE id = ?1", params![chat_id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn hub_chat_messages_clear(chat_id: String) -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+    conn.execute(
+        "DELETE FROM messages WHERE hub_chat_id = ?1",
+        params![chat_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 

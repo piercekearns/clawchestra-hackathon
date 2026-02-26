@@ -4,6 +4,8 @@ import { ScrollRevealText } from './ScrollRevealText';
 interface InlineEditProps {
   value: string;
   onSave: (newValue: string) => void;
+  /** When false, double-click editing is disabled (read-only display) */
+  editable?: boolean;
   className?: string;
   inputClassName?: string;
   /** Use ScrollRevealText instead of plain truncation for overflow */
@@ -12,7 +14,7 @@ interface InlineEditProps {
   onEditingChange?: (editing: boolean) => void;
 }
 
-export function InlineEdit({ value, onSave, className, inputClassName, useScrollReveal, onEditingChange }: InlineEditProps) {
+export function InlineEdit({ value, onSave, editable = true, className, inputClassName, useScrollReveal, onEditingChange }: InlineEditProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,10 +73,10 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
     return (
       <div
         className="min-w-0"
-        onDoubleClick={(e) => {
+        onDoubleClick={editable ? (e) => {
           e.stopPropagation();
           setEditingState(true);
-        }}
+        } : undefined}
       >
         <ScrollRevealText text={value} className={className} />
       </div>
@@ -84,10 +86,10 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
   return (
     <span
       className={className}
-      onDoubleClick={(e) => {
+      onDoubleClick={editable ? (e) => {
         e.stopPropagation();
         setEditingState(true);
-      }}
+      } : undefined}
     >
       {value}
     </span>

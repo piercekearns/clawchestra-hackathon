@@ -4242,6 +4242,7 @@ pub fn run() {
             commands::hub_chats::hub_chat_get,
             commands::hub_chats::hub_chat_update,
             commands::hub_chats::hub_chat_delete,
+            commands::hub_chats::hub_chat_messages_clear,
             commands::hub_chats::hub_chat_update_activity,
             // Phase 2 commands
             ensure_clawchestra_dir,

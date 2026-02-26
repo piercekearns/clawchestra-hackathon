@@ -15,13 +15,13 @@ export async function openOrCreateProjectChat(
   );
 
   if (chats.length === 0) {
-    const newChat = await hubChatCreate(projectId, null, 'openclaw', null, projectTitle);
+    const newChat = await hubChatCreate(projectId, null, 'openclaw', null, projectTitle, true);
     await store.refreshHubChats();
     chats = [newChat];
   }
 
-  // Prefer the project-level chat (no itemId), fallback to first
-  const target = chats.find((c) => !c.itemId) ?? chats[0];
+  // Prefer the project root chat, fallback to first
+  const target = chats.find((c) => c.isProjectRoot) ?? chats[0];
   store.setSidebarMode('default');
   store.setSidebarOpen(true);
   store.setHubActiveChatId(target.id);
@@ -49,7 +49,7 @@ export async function openOrCreateItemChat(
     (c) => c.projectId === projectId && !c.archived,
   );
   if (projectChats.length === 0) {
-    await hubChatCreate(projectId, null, 'openclaw', null, projectTitle);
+    await hubChatCreate(projectId, null, 'openclaw', null, projectTitle, true);
   }
 
   // Find or create item-level chat

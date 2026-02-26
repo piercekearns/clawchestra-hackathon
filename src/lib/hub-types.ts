@@ -25,6 +25,7 @@ export interface HubChat {
   lastActivity: number;
   messageCount: number;
   archived: boolean;
+  isProjectRoot: boolean;
 }
 
 export interface HubThread {

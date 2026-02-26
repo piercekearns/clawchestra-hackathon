@@ -18,6 +18,7 @@ interface ChatEntryRowProps {
   onArchive: (chatId: string) => void;
   onMarkUnread: (chatId: string) => void;
   onDelete: (chatId: string) => void;
+  onClearHistory?: (chatId: string) => void;
 }
 
 export function ChatEntryRow({
@@ -32,6 +33,7 @@ export function ChatEntryRow({
   onArchive,
   onMarkUnread,
   onDelete,
+  onClearHistory,
 }: ChatEntryRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -92,6 +94,7 @@ export function ChatEntryRow({
         <InlineEdit
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
+          editable={!isProjectChat}
           className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''} ${chat.unread ? 'font-semibold text-neutral-900 dark:text-neutral-100' : ''}`}
           useScrollReveal
           onEditingChange={setIsEditing}
@@ -119,6 +122,7 @@ export function ChatEntryRow({
           onArchive={() => onArchive(chat.id)}
           onMarkUnread={() => onMarkUnread(chat.id)}
           onDelete={() => onDelete(chat.id)}
+          onClearHistory={onClearHistory ? () => onClearHistory(chat.id) : undefined}
         />
       </div>
     </div>
@@ -136,6 +140,7 @@ function ChatEntryMenu({
   onArchive,
   onMarkUnread,
   onDelete,
+  onClearHistory,
 }: {
   chat: HubChat;
   isProjectChat?: boolean;
@@ -147,6 +152,7 @@ function ChatEntryMenu({
   onArchive: () => void;
   onMarkUnread: () => void;
   onDelete: () => void;
+  onClearHistory?: () => void;
 }) {
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -209,8 +215,9 @@ function ChatEntryMenu({
             {!isProjectChat && menuItem(chat.pinned ? 'Unpin' : 'Pin', onTogglePin)}
             {menuItem(chat.unread ? 'Mark as read' : 'Mark as unread', onMarkUnread)}
             {!isProjectChat && menuItem('Archive', onArchive)}
+            {isProjectChat && onClearHistory && menuItem('Clear history', onClearHistory)}
             <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
-            {menuItem('Delete', onDelete, true)}
+            {!isProjectChat && menuItem('Delete', onDelete, true)}
           </div>
         </>,
         document.body,

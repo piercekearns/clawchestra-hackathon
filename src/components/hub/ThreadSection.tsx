@@ -22,6 +22,7 @@ interface ThreadSectionProps {
   onArchiveChat: (chatId: string) => void;
   onMarkUnreadChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
+  onClearHistory: (chatId: string) => void;
   onAddChat: (projectId: string) => void;
 }
 
@@ -37,6 +38,7 @@ export function ThreadSection({
   onArchiveChat,
   onMarkUnreadChat,
   onDeleteChat,
+  onClearHistory,
   onAddChat,
 }: ThreadSectionProps) {
   const [showAll, setShowAll] = useState(false);
@@ -55,8 +57,8 @@ export function ThreadSection({
     transition,
   };
 
-  // Project-level chat (itemId === null) always floats to the top, separate from pin sort
-  const projectChat = thread.chats.find((c) => !c.itemId && !c.archived) ?? null;
+  // Project root chat always floats to the top, separate from pin sort
+  const projectChat = thread.chats.find((c) => c.isProjectRoot && !c.archived) ?? null;
   const restChats = thread.chats.filter((c) => c !== projectChat);
 
   const pinnedChats = restChats.filter((c) => c.pinned && !c.archived);
@@ -137,6 +139,7 @@ export function ThreadSection({
               onArchive={onArchiveChat}
               onMarkUnread={onMarkUnreadChat}
               onDelete={onDeleteChat}
+              onClearHistory={onClearHistory}
             />
           )}
           {allVisible.map((chat) => (

@@ -282,6 +282,7 @@ type TauriCommands = {
       chatType: string;
       agentType: string | null;
       title: string;
+      isProjectRoot?: boolean;
     };
     return: {
       id: string;
@@ -298,6 +299,7 @@ type TauriCommands = {
       lastActivity: number;
       messageCount: number;
       archived: boolean;
+      isProjectRoot: boolean;
     };
   };
   hub_chat_list: {
@@ -317,6 +319,7 @@ type TauriCommands = {
       lastActivity: number;
       messageCount: number;
       archived: boolean;
+      isProjectRoot: boolean;
     }>;
   };
   hub_chat_get: {
@@ -336,6 +339,7 @@ type TauriCommands = {
       lastActivity: number;
       messageCount: number;
       archived: boolean;
+      isProjectRoot: boolean;
     };
   };
   hub_chat_update: {
@@ -366,9 +370,11 @@ type TauriCommands = {
       lastActivity: number;
       messageCount: number;
       archived: boolean;
+      isProjectRoot: boolean;
     };
   };
   hub_chat_delete: { args: { chatId: string }; return: void };
+  hub_chat_messages_clear: { args: { chatId: string }; return: void };
   hub_chat_update_activity: { args: { chatId: string }; return: void };
   // Phase 3 migration commands
   get_migration_status: { args: Record<string, never>; return: MigrationStatusResponse };
@@ -1069,6 +1075,7 @@ export async function hubChatCreate(
   chatType: string,
   agentType: string | null,
   title: string,
+  isProjectRoot?: boolean,
 ): Promise<HubChat> {
   return typedInvoke('hub_chat_create', {
     projectId,
@@ -1076,6 +1083,7 @@ export async function hubChatCreate(
     chatType,
     agentType,
     title,
+    isProjectRoot: isProjectRoot ?? false,
   }) as Promise<HubChat>;
 }
 
@@ -1102,6 +1110,10 @@ export async function hubChatUpdate(
 
 export async function hubChatDelete(chatId: string): Promise<void> {
   return typedInvoke('hub_chat_delete', { chatId });
+}
+
+export async function hubChatMessagesClear(chatId: string): Promise<void> {
+  return typedInvoke('hub_chat_messages_clear', { chatId });
 }
 
 export async function hubChatUpdateActivity(chatId: string): Promise<void> {

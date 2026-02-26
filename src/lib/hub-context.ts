@@ -56,6 +56,9 @@ interface ContextFile {
  * 6. AGENTS.md
  */
 export async function buildScopedContext(chat: HubChat): Promise<string | null> {
+  // Ad-hoc chats (no isProjectRoot, no itemId) get no automatic context
+  if (!chat.isProjectRoot && !chat.itemId) return null;
+
   const { projects, roadmapItems } = useDashboardStore.getState();
   const project = findProject(projects, chat.projectId);
 
