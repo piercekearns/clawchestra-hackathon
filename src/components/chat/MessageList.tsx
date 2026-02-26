@@ -145,11 +145,12 @@ const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function M
 
   return (
     <div className={cn('relative min-h-0 flex-1', className)}>
-      <div 
-        ref={containerRef} 
-        className="absolute inset-0 space-y-2 overflow-y-auto p-3"
+      <div
+        ref={containerRef}
+        className="absolute inset-0 overflow-y-auto p-3"
         onScroll={handleScroll}
       >
+      <div className="flex min-h-full flex-col justify-end space-y-2">
       {/* Loading indicator at top */}
       {loadingMore && (
         <div className="flex items-center justify-center py-2">
@@ -226,6 +227,7 @@ const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function M
       )}
       {/* Scroll anchor - browser will try to keep this in view */}
       <div id="scroll-anchor" style={{ overflowAnchor: 'auto', height: 1 }} />
+      </div>
       </div>
 
       {/* New messages indicator */}
