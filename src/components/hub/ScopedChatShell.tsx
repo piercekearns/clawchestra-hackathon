@@ -184,6 +184,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
 
       {/* Input bar — reuses the main ChatBar in embedded mode */}
       <div className="shrink-0 px-3 pt-2">
+      <div className="rounded-xl border border-neutral-300 dark:border-neutral-600">
       <ChatBar
         connectionState={wsConnectionState}
         activityLabel={sending ? 'Working...' : null}
@@ -206,6 +207,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
         onDropFiles={async () => {}}
         onDragStateChange={setDragActive}
       />
+      </div>
       </div>
     </div>
   );
