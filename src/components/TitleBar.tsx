@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Loader2, PanelLeft, PanelLeftClose } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
@@ -17,6 +18,17 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
   const setSidebarSide = useDashboardStore((s) => s.setSidebarSide);
   const { updateAvailable, updating, updateBlockedReason, updateFailureReason, handleUpdate } = useAppUpdate();
+  const addBuildError = useDashboardStore((s) => s.addBuildError);
+  const clearBuildErrors = useDashboardStore((s) => s.clearBuildErrors);
+
+  // Sync update failure reason → StatusBadge build errors
+  useEffect(() => {
+    if (updateFailureReason) {
+      addBuildError(updateFailureReason);
+    } else {
+      clearBuildErrors();
+    }
+  }, [updateFailureReason, addBuildError, clearBuildErrors]);
 
   const leftOpen = sidebarOpen && sidebarSide === 'left';
   const rightOpen = sidebarOpen && sidebarSide === 'right';
@@ -92,7 +104,7 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
             onMouseDown={(e) => e.stopPropagation()}
             disabled={updating}
             className="pointer-events-auto inline-flex items-center rounded-full bg-[#DFFF00] px-2 py-0.5 text-[11px] font-medium text-neutral-800 transition-colors hover:bg-[#e9ff4d] disabled:cursor-wait"
-            title={updateBlockedReason ?? updateFailureReason ?? undefined}
+            title={updateBlockedReason ?? undefined}
           >
             {updating ? (
               <span className="inline-flex items-center gap-1">
@@ -106,11 +118,6 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         )}
         {updateBlockedReason && (
           <span className="text-[11px] text-status-danger">{updateBlockedReason}</span>
-        )}
-        {updateFailureReason && (
-          <span className="max-w-[28rem] truncate text-[11px] text-status-danger" title={updateFailureReason}>
-            {updateFailureReason}
-          </span>
         )}
         <div className="pointer-events-auto">
           <StatusBadge />

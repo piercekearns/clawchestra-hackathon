@@ -20,6 +20,8 @@ export function StatusBadge() {
   const validationRejections = useDashboardStore((s) => s.validationRejections);
   const setChatDraft = useDashboardStore((s) => s.setChatDraft);
   const dismissValidationRejection = useDashboardStore((s) => s.dismissValidationRejection);
+  const storeBuildErrors = useDashboardStore((s) => s.buildErrors);
+  const dismissBuildError = useDashboardStore((s) => s.dismissBuildError);
 
   // Flatten all projects' unresolved rejections
   const warnings: FlattenedWarning[] = [];
@@ -31,8 +33,7 @@ export function StatusBadge() {
     }
   }
 
-  // Build errors stub (empty for now — no feed exists yet)
-  const buildErrors: BuildError[] = [];
+  const buildErrors = storeBuildErrors;
 
   // Close popover on outside click
   useEffect(() => {
@@ -220,6 +221,13 @@ export function StatusBadge() {
                     }}
                   >
                     <MessageSquare className="h-3 w-3" /> Ask OpenClaw
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                    onClick={() => dismissBuildError(e.timestamp)}
+                  >
+                    Dismiss
                   </button>
                 </div>
               </div>

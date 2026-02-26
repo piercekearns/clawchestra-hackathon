@@ -92,6 +92,27 @@ fn init_chat_db() -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    // Add hub_chat_id column for scoped chat message persistence (idempotent)
+    {
+        let has_column: bool = conn
+            .prepare("PRAGMA table_info(messages)")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .any(|col| col.as_deref() == Ok("hub_chat_id"));
+
+        if !has_column {
+            conn.execute_batch("ALTER TABLE messages ADD COLUMN hub_chat_id TEXT;")
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_hub_chat_id
+         ON messages(hub_chat_id, timestamp DESC)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     // Hub chats table (conversation hub metadata)
     super::hub_chats::create_hub_chats_table(&conn)?;
 
@@ -502,5 +523,133 @@ pub(crate) fn chat_recovery_cursor_clear(session_key: Option<String>) -> Result<
         conn.execute("DELETE FROM chat_recovery_cursor", [])
             .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
+// Hub chat message persistence (scoped chat SQLite)
+// -------------------------------------------------------------------------
+
+#[tauri::command]
+pub(crate) fn hub_chat_messages_load(
+    hub_chat_id: String,
+    before_timestamp: Option<i64>,
+    before_id: Option<String>,
+    limit: Option<i64>,
+) -> Result<Vec<ChatMessage>, String> {
+    let limit = limit.unwrap_or(50);
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+
+    let mut messages: Vec<ChatMessage> = Vec::new();
+
+    match before_timestamp {
+        Some(ts) => {
+            if let Some(cursor_id) = before_id {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, role, content, timestamp, metadata FROM messages
+                         WHERE hub_chat_id = ?1
+                           AND ((timestamp < ?2) OR (timestamp = ?2 AND id < ?3))
+                         ORDER BY timestamp DESC, id DESC LIMIT ?4",
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                let rows = stmt
+                    .query_map(params![hub_chat_id, ts, cursor_id, limit], |row| {
+                        Ok(ChatMessage {
+                            id: row.get(0)?,
+                            role: row.get(1)?,
+                            content: row.get(2)?,
+                            timestamp: row.get(3)?,
+                            metadata: row.get(4)?,
+                        })
+                    })
+                    .map_err(|e| e.to_string())?;
+
+                for row in rows {
+                    messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+                }
+            } else {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, role, content, timestamp, metadata FROM messages
+                         WHERE hub_chat_id = ?1 AND timestamp < ?2
+                         ORDER BY timestamp DESC, id DESC LIMIT ?3",
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                let rows = stmt
+                    .query_map(params![hub_chat_id, ts, limit], |row| {
+                        Ok(ChatMessage {
+                            id: row.get(0)?,
+                            role: row.get(1)?,
+                            content: row.get(2)?,
+                            timestamp: row.get(3)?,
+                            metadata: row.get(4)?,
+                        })
+                    })
+                    .map_err(|e| e.to_string())?;
+
+                for row in rows {
+                    messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+                }
+            }
+        }
+        None => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, role, content, timestamp, metadata FROM messages
+                     WHERE hub_chat_id = ?1
+                     ORDER BY timestamp DESC, id DESC LIMIT ?2",
+                )
+                .map_err(|e| e.to_string())?;
+
+            let rows = stmt
+                .query_map(params![hub_chat_id, limit], |row| {
+                    Ok(ChatMessage {
+                        id: row.get(0)?,
+                        role: row.get(1)?,
+                        content: row.get(2)?,
+                        timestamp: row.get(3)?,
+                        metadata: row.get(4)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?;
+
+            for row in rows {
+                messages.push(row.map_err(|e: rusqlite::Error| e.to_string())?);
+            }
+        }
+    }
+
+    // Reverse to get chronological order (oldest first)
+    messages.reverse();
+
+    Ok(messages)
+}
+
+#[tauri::command]
+pub(crate) fn hub_chat_message_save(
+    hub_chat_id: String,
+    message: ChatMessage,
+) -> Result<(), String> {
+    let guard = get_or_init_chat_db()?;
+    let conn = guard.as_ref().ok_or("Database not initialized")?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO messages (id, role, content, timestamp, metadata, hub_chat_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            message.id,
+            message.role,
+            message.content,
+            message.timestamp,
+            message.metadata,
+            hub_chat_id,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }

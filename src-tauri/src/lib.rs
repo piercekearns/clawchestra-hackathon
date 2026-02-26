@@ -4234,6 +4234,8 @@ pub fn run() {
             commands::chat::chat_recovery_cursor_get,
             commands::chat::chat_recovery_cursor_advance,
             commands::chat::chat_recovery_cursor_clear,
+            commands::chat::hub_chat_messages_load,
+            commands::chat::hub_chat_message_save,
             // Hub chat commands (commands/hub_chats.rs)
             commands::hub_chats::hub_chat_create,
             commands::hub_chats::hub_chat_list,

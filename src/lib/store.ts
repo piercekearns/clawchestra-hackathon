@@ -66,6 +66,7 @@ interface DashboardState {
   columnOrder: Record<string, string[]>;
   chatDraft: string | null;
   validationRejections: Record<string, ValidationRejection[]>;
+  buildErrors: { message: string; timestamp: number }[];
   sidebarOpen: boolean;
   sidebarSide: 'left' | 'right';
   sidebarWidth: number;
@@ -91,6 +92,9 @@ interface DashboardState {
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
   dismissValidationRejection: (projectId: string, timestamp: number) => void;
+  addBuildError: (message: string) => void;
+  dismissBuildError: (timestamp: number) => void;
+  clearBuildErrors: () => void;
   setSidebarOpen: (open: boolean) => void;
   setSidebarSide: (side: 'left' | 'right') => void;
   setSidebarWidth: (width: number) => void;
@@ -409,6 +413,7 @@ export const useDashboardStore = create<DashboardState>()(
       columnOrder: {},
       chatDraft: null,
       validationRejections: {},
+      buildErrors: [],
       sidebarOpen: false,
       sidebarSide: 'left',
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
@@ -732,6 +737,15 @@ export const useDashboardStore = create<DashboardState>()(
             },
           };
         }),
+      addBuildError: (message) =>
+        set((state) => ({
+          buildErrors: [...state.buildErrors, { message, timestamp: Date.now() }],
+        })),
+      dismissBuildError: (timestamp) =>
+        set((state) => ({
+          buildErrors: state.buildErrors.filter((e) => e.timestamp !== timestamp),
+        })),
+      clearBuildErrors: () => set({ buildErrors: [] }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSidebarSide: (sidebarSide) => set({ sidebarSide }),
       setSidebarWidth: (width) =>

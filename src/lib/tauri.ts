@@ -265,6 +265,15 @@ type TauriCommands = {
     args: { sessionKey?: string };
     return: void;
   };
+  // Hub chat message persistence commands
+  hub_chat_messages_load: {
+    args: { hubChatId: string; beforeTimestamp?: number; beforeId?: string; limit?: number };
+    return: Array<{ id: string; role: string; content: string; timestamp: number; metadata?: string }>;
+  };
+  hub_chat_message_save: {
+    args: { hubChatId: string; message: { id: string; role: string; content: string; timestamp: number; metadata?: string } };
+    return: void;
+  };
   // Hub chat commands
   hub_chat_create: {
     args: {
@@ -786,6 +795,26 @@ export async function chatRecoveryCursorAdvance(
 
 export async function chatRecoveryCursorClear(sessionKey?: string): Promise<void> {
   return typedInvoke('chat_recovery_cursor_clear', { sessionKey });
+}
+
+// =============================================================================
+// Hub Chat Message Persistence (scoped chats)
+// =============================================================================
+
+export async function hubChatMessagesLoad(
+  hubChatId: string,
+  limit?: number,
+  beforeTimestamp?: number,
+  beforeId?: string,
+): Promise<PersistedChatMessage[]> {
+  return typedInvoke('hub_chat_messages_load', { hubChatId, beforeTimestamp, beforeId, limit });
+}
+
+export async function hubChatMessageSave(
+  hubChatId: string,
+  message: PersistedChatMessage,
+): Promise<void> {
+  return typedInvoke('hub_chat_message_save', { hubChatId, message });
 }
 
 // =============================================================================

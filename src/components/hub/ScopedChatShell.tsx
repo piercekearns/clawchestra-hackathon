@@ -3,8 +3,16 @@ import type { HubChat } from '../../lib/hub-types';
 import type { ChatMessage } from '../../lib/gateway';
 import { sendMessageWithContext } from '../../lib/gateway';
 import { useDashboardStore } from '../../lib/store';
-import { hubChatUpdate, hubChatUpdateActivity } from '../../lib/tauri';
+import {
+  hubChatUpdate,
+  hubChatUpdateActivity,
+  hubChatMessagesLoad,
+  hubChatMessageSave,
+  isTauriRuntime,
+} from '../../lib/tauri';
+import type { PersistedChatMessage } from '../../lib/tauri';
 import { buildScopedContext } from '../../lib/hub-context';
+import { formatModelDisplayName, formatProviderDisplayName } from '../../lib/model-label';
 import { MessageList } from '../chat/MessageList';
 import { ChatBar } from '../chat/ChatBar';
 
@@ -12,8 +20,40 @@ interface ScopedChatShellProps {
   chat: HubChat;
 }
 
+interface ScopedChatCacheEntry {
+  messages: ChatMessage[];
+  input: string;
+  sentCount: number;
+  modelLabel: string | null;
+  modelTooltip: string | null;
+  usage: { used: number; max: number; percent: number } | null;
+}
+
 /** In-memory cache so chat history survives switching between drawer chats. */
-const chatCache = new Map<string, { messages: ChatMessage[]; input: string; sentCount: number }>();
+const chatCache = new Map<string, ScopedChatCacheEntry>();
+
+let _msgCounter = 0;
+function generateMessageId(): string {
+  return `hub-msg-${Date.now()}-${++_msgCounter}`;
+}
+
+function toPersisted(msg: ChatMessage): PersistedChatMessage {
+  return {
+    id: msg._id ?? generateMessageId(),
+    role: msg.role,
+    content: msg.content,
+    timestamp: msg.timestamp ?? Date.now(),
+  };
+}
+
+function fromPersisted(p: PersistedChatMessage): ChatMessage {
+  return {
+    role: p.role as ChatMessage['role'],
+    content: p.content,
+    timestamp: p.timestamp,
+    _id: p.id,
+  };
+}
 
 export function ScopedChatShell({ chat }: ScopedChatShellProps) {
   const cached = chatCache.get(chat.id);
@@ -23,22 +63,39 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [contextLoaded, setContextLoaded] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [modelLabel, setModelLabel] = useState<string | null>(cached?.modelLabel ?? null);
+  const [modelTooltip, setModelTooltip] = useState<string | null>(cached?.modelTooltip ?? null);
+  const [modelUsage, setModelUsage] = useState<{ used: number; max: number; percent: number } | null>(cached?.usage ?? null);
   const chatIdRef = useRef(chat.id);
   const contextRef = useRef<string | null>(null);
   const sentCountRef = useRef(cached?.sentCount ?? 0);
   const gatewayConnected = useDashboardStore((s) => s.gatewayConnected);
   const wsConnectionState = useDashboardStore((s) => s.wsConnectionState);
 
-  // Save to cache whenever messages or input change
+  // Save to cache whenever messages, input, or model/usage change
   useEffect(() => {
-    chatCache.set(chatIdRef.current, { messages, input, sentCount: sentCountRef.current });
-  }, [messages, input]);
+    chatCache.set(chatIdRef.current, {
+      messages,
+      input,
+      sentCount: sentCountRef.current,
+      modelLabel,
+      modelTooltip,
+      usage: modelUsage,
+    });
+  }, [messages, input, modelLabel, modelTooltip, modelUsage]);
 
   // Restore or reset state when chat changes
   useEffect(() => {
     if (chatIdRef.current !== chat.id) {
       // Save outgoing chat state
-      chatCache.set(chatIdRef.current, { messages, input, sentCount: sentCountRef.current });
+      chatCache.set(chatIdRef.current, {
+        messages,
+        input,
+        sentCount: sentCountRef.current,
+        modelLabel,
+        modelTooltip,
+        usage: modelUsage,
+      });
       chatIdRef.current = chat.id;
 
       // Restore incoming chat state from cache
@@ -46,12 +103,15 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
       setMessages(incoming?.messages ?? []);
       setInput(incoming?.input ?? '');
       sentCountRef.current = incoming?.sentCount ?? 0;
+      setModelLabel(incoming?.modelLabel ?? null);
+      setModelTooltip(incoming?.modelTooltip ?? null);
+      setModelUsage(incoming?.usage ?? null);
       setSending(false);
       setStreamingContent(null);
       setContextLoaded(false);
       contextRef.current = null;
     }
-  }, [chat.id, messages, input]);
+  }, [chat.id, messages, input, modelLabel, modelTooltip, modelUsage]);
 
   // Load scoped context on mount / chat identity change
   useEffect(() => {
@@ -66,6 +126,24 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
     });
     return () => { cancelled = true; };
   }, [chat.id, chat.projectId, chat.itemId]);
+
+  // Cold-start: load messages from SQLite when cache is empty
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    // Only load if cache was empty for this chat (cold start / app restart)
+    if (chatCache.has(chat.id) && (chatCache.get(chat.id)?.messages.length ?? 0) > 0) return;
+
+    let cancelled = false;
+    void hubChatMessagesLoad(chat.id, 200).then((rows) => {
+      if (cancelled || rows.length === 0) return;
+      const restored = rows.map(fromPersisted);
+      setMessages(restored);
+      sentCountRef.current = restored.filter((m) => m.role === 'user').length;
+    }).catch((err) => {
+      console.warn('[ScopedChat] SQLite load failed:', err);
+    });
+    return () => { cancelled = true; };
+  }, [chat.id]);
 
   // Clear unread on open
   useEffect(() => {
@@ -96,10 +174,18 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
       role: 'user',
       content: text,
       timestamp: Date.now(),
+      _id: generateMessageId(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+
+    // Fire-and-forget persist user message to SQLite
+    if (isTauriRuntime()) {
+      void hubChatMessageSave(chat.id, toPersisted(userMessage)).catch((err) => {
+        console.warn('[ScopedChat] Failed to persist user message:', err);
+      });
+    }
     setSending(true);
     setStreamingContent(null);
 
@@ -133,7 +219,27 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
 
       setStreamingContent(null);
       for (const msg of result.messages) {
-        setMessages((prev) => [...prev, msg]);
+        const withId: ChatMessage = { ...msg, _id: msg._id ?? generateMessageId() };
+        setMessages((prev) => [...prev, withId]);
+
+        // Fire-and-forget persist assistant message to SQLite
+        if (isTauriRuntime()) {
+          void hubChatMessageSave(chat.id, toPersisted(withId)).catch((err) => {
+            console.warn('[ScopedChat] Failed to persist assistant message:', err);
+          });
+        }
+      }
+
+      // Extract model badge + usage ring from send result
+      if (result.runtimeModel || result.runtimeProvider) {
+        const ml = formatModelDisplayName(result.runtimeModel);
+        const pl = formatProviderDisplayName(result.runtimeProvider);
+        setModelLabel(pl && ml ? `${pl} · ${ml}` : ml ?? pl);
+        const rawModel = result.runtimeModel ?? 'unknown model';
+        setModelTooltip(result.runtimeProvider ? `${result.runtimeProvider} · ${rawModel}` : rawModel);
+      }
+      if (result.usage) {
+        setModelUsage(result.usage);
       }
 
       // Update activity + message count metadata
@@ -211,6 +317,9 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
         images={[]}
         gatewayConnected={gatewayConnected}
         queue={[]}
+        activeModelLabel={modelLabel}
+        activeModelTooltip={modelTooltip}
+        activeModelUsage={modelUsage}
         onInputChange={setInput}
         onToggleDrawer={() => {}}
         onSubmit={() => void handleSend()}
