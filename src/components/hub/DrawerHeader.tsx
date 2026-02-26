@@ -88,12 +88,13 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
         ) : (
           <>
             <div className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-200">
-              {chat.title}
+              {chat.isProjectRoot ? projectTitle : chat.title}
             </div>
-            <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-              {projectTitle}
-              {chat.itemId && ' / item'}
-            </div>
+            {!chat.isProjectRoot && (
+              <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
+                {projectTitle}
+              </div>
+            )}
           </>
         )}
       </div>

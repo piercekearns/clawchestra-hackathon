@@ -3118,6 +3118,7 @@ export default function App() {
               existingItems={roadmapItems}
               gatewayConnected={gatewayConnected}
               initialStatus={addRoadmapItemInitialStatus as import('./lib/constants').RoadmapItemStatus | undefined}
+              boardScoped
               onClose={() => { setAddRoadmapItemOpen(false); setAddRoadmapItemInitialStatus(undefined); }}
               onComplete={async () => {
                 await refreshRoadmapFromFile('all');

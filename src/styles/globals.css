@@ -115,6 +115,34 @@
     display: none;
   }
 
+  /* Hover-reveal scrollbar — hidden by default, thin on hover */
+  .hover-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .hover-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .hover-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .hover-scrollbar::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 9999px;
+  }
+
+  .hover-scrollbar:hover {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  }
+
+  .hover-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.4);
+  }
+
+
   /* Animated dots for loading states */
   .loading-dots span {
     animation: dot-blink 1.4s infinite both;

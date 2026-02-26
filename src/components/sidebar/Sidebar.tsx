@@ -224,7 +224,13 @@ export function Sidebar({
           className={`group absolute top-0 h-full w-[6px] cursor-col-resize ${isRight ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`}
         >
           <div
-            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${isResizing ? 'bg-[#DFFF00]' : 'bg-[#a7c400]'}`}
+            className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-sm transition-colors duration-150 ${
+              isResizing
+                ? 'border-[#DFFF00] bg-[#DFFF00]'
+                : isHandleHover
+                  ? 'border-[#a7c400] bg-[#a7c400]'
+                  : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900'
+            }`}
           />
         </div>
       )}

@@ -24,6 +24,8 @@ interface AddRoadmapItemDialogProps {
   onComplete: () => Promise<void> | void;
   /** Pre-select the status dropdown from the column clicked */
   initialStatus?: RoadmapItemStatus;
+  /** When true, positions absolute within parent instead of fixed over entire viewport */
+  boardScoped?: boolean;
 }
 
 function buildContextMessage(
@@ -72,6 +74,7 @@ export function AddRoadmapItemDialog({
   onClose,
   onComplete,
   initialStatus,
+  boardScoped,
 }: AddRoadmapItemDialogProps) {
   const [mode, setMode] = useState<CreationMode>('ai');
   const [error, setError] = useState<string | null>(null);
@@ -219,9 +222,9 @@ export function AddRoadmapItemDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    <div className={`${boardScoped ? 'absolute' : 'fixed'} inset-0 z-[60] flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm`}>
       <ModalDragZone />
-      <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+      <div className={`flex ${boardScoped ? 'max-h-[calc(100%-3rem)]' : 'max-h-[80vh]'} w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900`}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3">
           <div>

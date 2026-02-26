@@ -147,7 +147,7 @@ const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function M
     <div className={cn('relative min-h-0 flex-1', className)}>
       <div
         ref={containerRef}
-        className="absolute inset-0 overflow-y-auto p-3"
+        className="absolute inset-0 overflow-y-auto p-3 hover-scrollbar"
         onScroll={handleScroll}
       >
       <div className="flex min-h-full flex-col justify-end space-y-2">
