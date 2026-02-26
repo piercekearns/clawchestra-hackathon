@@ -118,9 +118,44 @@ The hybrid approach is likely correct. The `project-conversation-hub` spec shoul
 - Restricting tool access per surface (agent has full workspace access everywhere)
 - Building this before architecture-direction is complete
 
+## Lessons from First Implementation: Roadmap Item Quick-Add
+
+The `roadmap-item-quick-add` feature shipped (commits `439c5dc`–`42fc527`) as the first real distributed AI surface. It proves the core pattern works — and exposes what's missing.
+
+### What Works
+
+- **Context injection works.** The modal auto-injects project ID, target column, existing items, and schema into every message. The user just describes what they want. OpenClaw receives structured context without the user typing it.
+- **Scoped interaction works.** The chat is about one thing (creating a roadmap item), not everything. The user doesn't need to say "in project X in column Y" — the surface already knows.
+- **AI-structured output works.** Natural language in, schema-compliant item out. OpenClaw creates the roadmap item directly from the user's description.
+- **State sync works.** The kanban board updates immediately when the item is created — no refresh needed.
+
+### What's Missing: Surface-Aware Response Behaviour
+
+The quick-add feature revealed that **context injection alone is not enough**. OpenClaw receives the structured context and acts on it correctly (creates the item), but its *response* doesn't match what the surface expects.
+
+**The problem:** OpenClaw responds the same way regardless of which surface the message came from. When a user sends a message via the quick-add modal, OpenClaw's reply is verbose and unstructured — the same style it would use in the general chat drawer. But the quick-add surface is a scoped, one-shot action. The expected response is:
+
+> "Created **Dark Mode Theme System** in the pending column — priority 4. Added tags: `ui`, `theming`. Click the card to review details."
+
+Instead, what the user gets is a long, unformatted dump that doesn't clearly confirm what was done or how to proceed.
+
+**What this means for the architecture:**
+
+1. **Surfaces need response contracts.** Each surface should define not just what context to inject, but how OpenClaw should format its reply. Quick-add expects a brief confirmation + summary. Git sync inline chat might expect structured resolution options. Project card chat might expect conversational depth.
+
+2. **This is an app-aware AI context problem.** The fix isn't in the UI (the UI now renders markdown, shows proper bubbles, etc.) — it's in how OpenClaw is trained/prompted to understand different surfaces. The `app-aware-ai-context` deliverable needs to include surface-specific behavioural guidelines.
+
+3. **The context injection instruction needs to include response format guidance.** The current instruction says "create the item immediately — do not ask for confirmation." It should also say: "Reply with a brief confirmation including the item title, column, and priority. Keep your response under 3 sentences. Use markdown formatting."
+
+4. **This pattern will repeat for every future surface.** Git sync, project card chat, item detail chat — each will need its own response contract. The distributed AI surfaces architecture should formalize this as part of the `SurfaceContext` interface.
+
+### Implication for Build Order
+
+The original phased delivery assumed the reusable `<AiChat>` component extraction (Phase 1) would come first. In practice, we built the quick-add surface directly without extracting a shared component — and the result works. The more urgent need is **response behaviour training** (an `app-aware-ai-context` concern) rather than component abstraction. The component extraction can happen when the second surface ships (git sync inline chat) and we have two consumers to generalize from.
+
 ## Open Questions
 
-1. **Response format contracts** — Should surfaces define expected response formats (e.g., quick-add expects YAML frontmatter)? Or should the agent decide?
+1. **Response format contracts** — Should surfaces define expected response formats (e.g., quick-add expects YAML frontmatter)? Or should the agent decide? *Update: first implementation confirms surfaces need response format guidance. The agent doesn't naturally adapt its reply style to the surface context.*
 2. **Surface discovery** — Should surfaces be registered declaratively (a manifest) or composed ad-hoc in components?
 3. **Concurrent surface limits** — How many active AI surfaces can the user have open simultaneously? Performance/UX implications.
 4. **Token cost** — Multiple concurrent sessions each maintain their own context window. Acceptable? Need per-session model routing?

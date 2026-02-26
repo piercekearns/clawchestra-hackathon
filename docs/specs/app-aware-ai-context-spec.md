@@ -359,10 +359,60 @@ Observe what users ask OpenClaw to do within Clawchestra. Patterns reveal what t
 
 ---
 
+## Lessons from First Distributed AI Surface: Roadmap Item Quick-Add
+
+The `roadmap-item-quick-add` feature (commits `439c5dc`–`42fc527`) is the first distributed AI surface — an AI chat component embedded outside the general chat drawer. Building it revealed a concrete gap that this spec needs to address.
+
+### The Gap: OpenClaw Doesn't Know How to Respond Per-Surface
+
+The quick-add modal injects structured context into every message: project ID, target column, existing items, schema, and an instruction to create the item immediately. OpenClaw *acts* correctly — it creates the item. But its *response* is wrong for the surface:
+
+- **What the user expects:** A brief, tidy confirmation — "Created **Dark Mode Theme System** in pending (priority 4)."
+- **What OpenClaw returns:** A verbose, unstructured dump — the same style it would use in the general chat drawer, as if it's having a full conversation rather than confirming a scoped action.
+
+This is exactly the kind of problem this spec's Layer 2 (Behavioural Guidelines) and Layer 3 (Dynamic State Awareness) are designed to solve. The quick-add experience proves that:
+
+1. **Context injection tells OpenClaw WHAT to do** — this works today.
+2. **Nothing tells OpenClaw HOW to respond based on the surface** — this is missing.
+
+### What Needs to Happen
+
+**Surface-specific response contracts** — part of the capability map or behavioural guidelines — that teach OpenClaw how to behave differently depending on where the message came from:
+
+| Surface | Expected Response Style |
+|---------|------------------------|
+| General chat drawer | Conversational, detailed, markdown-rich |
+| Roadmap item quick-add | Brief confirmation + summary (1–3 sentences), structured |
+| Git sync inline chat | Actionable options, resolution-focused |
+| Project card chat | Context-aware, project-scoped, medium depth |
+| Roadmap item detail chat | Item-scoped, spec/plan-aware, workflow-suggestive |
+
+This could be implemented as:
+- **Per-surface instruction blocks** in the context injection — "When responding from this surface, keep replies under 3 sentences and confirm what was created."
+- **A surface-awareness skill** — a skill that teaches OpenClaw the different surfaces, their purposes, and the expected interaction style for each.
+- **Enhanced behavioural guidelines** — Layer 2 guidelines that include surface-specific response patterns, not just general "be helpful" principles.
+
+### Priority Implication
+
+This finding elevates the urgency of this deliverable. The distributed AI surfaces architecture is working mechanically (context injection, state sync, scoped chat), but the user experience is undermined by OpenClaw not adapting its response style. Every new surface that ships will have the same problem until OpenClaw has surface-aware behavioural guidelines.
+
+The minimum viable version of this spec's deliverable could be: **per-surface response format guidance injected alongside the context payload.** This is a pragmatic first step that doesn't require the full capability map or skill system — just extending the existing context injection with a `responseFormat` field.
+
+### Updated Dual-Surface Parity Matrix
+
+```
+| Capability                    | UI Surface          | AI Surface              | Primary | Parity |
+|-------------------------------|---------------------|-------------------------|---------|--------|
+| Add new roadmap item          | Quick-add modal     | "Add an item for..."    | Both    | ✅     |
+```
+
+The `Add new roadmap item` row can be updated from `[not built] / ⚠️ UI` to `Both / ✅` — the quick-add modal provides the UI surface, and the AI chat within it provides the AI surface. Both exist and work.
+
 ## Open Questions
 
-1. **How prescriptive should the guidelines be?** Too vague and OpenClaw doesn't change behaviour. Too specific and it feels scripted. Where's the sweet spot?
+1. **How prescriptive should the guidelines be?** Too vague and OpenClaw doesn't change behaviour. Too specific and it feels scripted. Where's the sweet spot? *Update: the quick-add experience suggests more prescriptive is better for scoped surfaces. A quick-add chat shouldn't feel conversational — it should feel like a confirmation.*
 2. **Skill vs. preamble?** Which injection mechanism is more maintainable and reliable?
 3. **How do we measure success?** How do we know if OpenClaw is actually being a better guide within Clawchestra vs. generic chat? User feedback? Usage patterns? Task completion rates?
 4. **Compaction resilience.** How do we ensure the context survives compaction reliably? Skills are re-injected, but are they re-injected in full? Does the capability map fit within context limits?
 5. **User-modified instances.** If users start modifying their Clawchestra instance via OpenClaw, how does the capability map stay accurate? Does it need to be auto-generated from the codebase?
+6. **Per-surface response contracts.** Should response format guidance live in the context injection payload, in a skill, or in the behavioural guidelines? The quick-add experience suggests it should be close to the surface (injected with context), not global.
