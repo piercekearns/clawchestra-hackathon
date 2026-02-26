@@ -98,7 +98,7 @@ export function SecondaryDrawer({
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
-      style={{ width }}
+      style={{ width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden pb-4 md:pb-6">
         <DrawerHeader
@@ -122,7 +122,7 @@ export function SecondaryDrawer({
         onMouseEnter={() => setIsHandleHover(true)}
         onMouseLeave={() => setIsHandleHover(false)}
         onDoubleClick={() => onWidthChange(400)}
-        className="group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize"
+        className="group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize [will-change:transform]"
       >
         <div
           className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${
