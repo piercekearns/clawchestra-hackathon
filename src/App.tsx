@@ -379,11 +379,39 @@ export default function App() {
     [projects],
   );
 
-  // Dirty project count for Sync button
-  const dirtyProjects = useMemo(
-    () => allProjects.filter((p) => p.gitStatus?.hasDirtyFiles),
-    [allProjects],
-  );
+  // Dirty project count for Sync button — debounced so agent mid-flight commits
+  // don't flash the badge. A project must be dirty for DIRTY_DEBOUNCE_MS before
+  // it counts toward the badge. A 15s tick ensures the threshold is caught promptly.
+  const DIRTY_DEBOUNCE_MS = 60_000;
+  const dirtyFirstSeenRef = useRef<Map<string, number>>(new Map());
+  const [dirtyTick, setDirtyTick] = useState(0);
+
+  useEffect(() => {
+    const now = Date.now();
+    for (const project of allProjects) {
+      const isDirty = project.gitStatus?.hasDirtyFiles ?? false;
+      if (isDirty && !dirtyFirstSeenRef.current.has(project.id)) {
+        dirtyFirstSeenRef.current.set(project.id, now);
+      } else if (!isDirty) {
+        dirtyFirstSeenRef.current.delete(project.id);
+      }
+    }
+  }, [allProjects]);
+
+  useEffect(() => {
+    const id = setInterval(() => setDirtyTick((t) => t + 1), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const dirtyProjects = useMemo(() => {
+    const now = Date.now();
+    return allProjects.filter((p) => {
+      if (!p.gitStatus?.hasDirtyFiles) return false;
+      const firstSeen = dirtyFirstSeenRef.current.get(p.id);
+      return firstSeen !== undefined && now - firstSeen >= DIRTY_DEBOUNCE_MS;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allProjects, dirtyTick]);
 
   // Unresolved sync state (conflict/failed persisted in localStorage)
   const [unresolvedSyncCount, setUnresolvedSyncCount] = useState(0);
