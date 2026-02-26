@@ -743,7 +743,7 @@ export const useDashboardStore = create<DashboardState>()(
       setHubActiveChatId: (hubActiveChatId) => set({ hubActiveChatId }),
       setHubDrawerOpen: (hubDrawerOpen) => set({ hubDrawerOpen }),
       setHubDrawerWidth: (width) =>
-        set({ hubDrawerWidth: Math.min(600, Math.max(280, width)) }),
+        set({ hubDrawerWidth: Math.min(1200, Math.max(280, width)) }),
       toggleHubThread: (projectId) =>
         set((state) => {
           const collapsed = state.hubCollapsedThreads;

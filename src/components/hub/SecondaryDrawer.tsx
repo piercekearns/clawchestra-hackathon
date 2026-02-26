@@ -5,7 +5,7 @@ import { DrawerHeader } from './DrawerHeader';
 import { ScopedChatShell } from './ScopedChatShell';
 
 const MIN_WIDTH = 280;
-const MAX_WIDTH = 800;
+const MAX_WIDTH = 1200;
 
 interface SecondaryDrawerProps {
   chatId: string;

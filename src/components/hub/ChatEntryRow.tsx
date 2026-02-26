@@ -47,7 +47,7 @@ export function ChatEntryRow({
           className="flex h-5 w-5 shrink-0 items-center justify-center text-revival-accent-400/80 dark:text-revival-accent-400/70"
           aria-label="Project chat"
         >
-          <Home className="h-3 w-3" />
+          <Home className="h-4 w-4" />
         </span>
       ) : (
         <button
@@ -63,7 +63,7 @@ export function ChatEntryRow({
           }`}
           aria-label={chat.pinned ? 'Unpin' : 'Pin'}
         >
-          <Pin className="h-3 w-3" />
+          <Pin className="h-4 w-4" />
         </button>
       )}
 
