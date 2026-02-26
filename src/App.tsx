@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
+import { restoreStateCurrent, saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state';
 import { Archive, Check, CircleCheckBig, Clock4, EyeOff, GitBranch, Github, Plus, RefreshCcw, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
@@ -355,6 +356,13 @@ export default function App() {
   }, []);
 
   const allProjects = useMemo(() => flattenProjects(projects), [projects]);
+
+  // Restore window size/position from saved state on launch.
+  useEffect(() => {
+    if (isTauriRuntime()) {
+      void restoreStateCurrent(StateFlags.ALL).catch(() => {});
+    }
+  }, []);
 
   // Gather roadmap items from all projects for search
   const [allSearchableRoadmapItems, setAllSearchableRoadmapItems] = useState<SearchableRoadmapItem[]>([]);

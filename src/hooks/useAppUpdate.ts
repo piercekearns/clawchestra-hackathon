@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state';
 import { getActiveTurnCount, subscribeTurnRegistry } from '../lib/gateway';
 import { CHAT_RELIABILITY_FLAGS } from '../lib/chat-reliability-flags';
 import { flushChatPersistenceWrites } from '../lib/chat-persistence';
@@ -227,6 +228,8 @@ export function useAppUpdate() {
         flushEndAt,
         activeTurnCount,
       });
+      // Save window geometry so the restart opens at the same size/position.
+      await saveWindowState(StateFlags.ALL).catch(() => {});
       const updateStartMessage = await runAppUpdate({
         activeTurnCount,
         enforceFlushGuard,
