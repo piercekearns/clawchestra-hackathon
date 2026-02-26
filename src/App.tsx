@@ -2478,7 +2478,7 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
       <TitleBar settingsMode={settingsPageOpen} />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1">
         {showThinSidebar && thinSidebarSide === 'left' ? (
           <ThinSidebar
             side="left"
@@ -2515,7 +2515,7 @@ export default function App() {
             onOpenLinkedItem={handleOpenLinkedItem}
           />
         )}
-        <div className={`relative flex min-w-[480px] flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
+        <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
         {settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
             <div className={`h-full min-h-0 overflow-y-auto ${sidebarSide === 'right' ? '[direction:rtl]' : ''}`}>
