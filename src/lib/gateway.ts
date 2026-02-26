@@ -2,6 +2,7 @@ import {
   chatPendingTurnRemove,
   chatPendingTurnSave,
   chatPendingTurnsLoad,
+  chatRecoveryCursorAdvance,
   chatRecoveryCursorGet,
   checkOpenClawGatewayConnection,
   getOpenClawSessionsList,
@@ -1008,6 +1009,21 @@ export async function hydratePendingTurns(sessionKey?: string): Promise<PendingT
     }
 
     emitTurnRegistry();
+
+    if (
+      (terminalizedCount > 0 || expiredCount > 0) &&
+      sessionKey &&
+      CHAT_RELIABILITY_FLAGS.chat.recovery_cursoring
+    ) {
+      const survivingActive = [...turnRegistry.values()].some((t) => isTurnActive(t.status));
+      if (!survivingActive) {
+        try {
+          await chatRecoveryCursorAdvance(sessionKey, now);
+        } catch (cursorError) {
+          console.warn('[Gateway] Failed to advance recovery cursor after hydration:', cursorError);
+        }
+      }
+    }
   } catch (error) {
     console.warn('[Gateway] Failed to hydrate pending turns:', error);
   }

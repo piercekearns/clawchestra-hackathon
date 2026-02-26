@@ -327,6 +327,7 @@ export default function App() {
   const closeSyncInFlightRef = useRef(false);
   const hardClearTimerRef = useRef<number | null>(null);
   const lastGatewayActiveTurnsRef = useRef(gatewayActiveTurns);
+  const chatSendingRef = useRef(chatSending);
   const sessionModelRefreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const registerBackgroundSession = useCallback((sessionKey: string) => {
@@ -763,6 +764,8 @@ export default function App() {
     chatQueueRef.current = chatQueue;
   }, [chatQueue]);
 
+  useEffect(() => { chatSendingRef.current = chatSending; }, [chatSending]);
+
   useEffect(() => {
     const unsubscribe = subscribeTurnRegistry((turns) => {
       const active = turns.filter(
@@ -813,14 +816,21 @@ export default function App() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     const sessionKey = getResolvedDefaultSessionKey();
-    void hydratePendingTurns(sessionKey).then(() => {
+    void hydratePendingTurns(sessionKey).then((turns) => {
       const migrationNotice = consumePendingTurnMigrationNotice();
-      if (!migrationNotice) return;
-      void addSystemBubble('info', 'Recovered pending chat state', {
-        Note: migrationNotice,
-      });
+      if (migrationNotice) {
+        void addSystemBubble('info', 'Recovered pending chat state', {
+          Note: migrationNotice,
+        });
+      }
+      const hasActiveTurns = turns.some(
+        (t) => t.status === 'queued' || t.status === 'running' || t.status === 'awaiting_output',
+      );
+      if (hasActiveTurns) {
+        setAgentActivity('working');
+      }
     });
-  }, [addSystemBubble]);
+  }, [addSystemBubble, setAgentActivity]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -1305,7 +1315,7 @@ export default function App() {
 
         let recoveredCount = 0;
         const recoveredSignatures: string[] = [];
-        const shouldSuppressDuringActiveRun = gatewayActiveTurns > 0;
+        const shouldSuppressDuringActiveRun = chatSendingRef.current;
         let lastMergedMessage: ChatMessage | null = null;
         for (const message of recovered) {
           if (shouldSuppressDuringActiveRun && message.role === 'assistant') {
@@ -1383,7 +1393,7 @@ export default function App() {
     } finally {
       recoveryInFlightRef.current = null;
     }
-  }, [addChatMessage, addSystemBubble, gatewayActiveTurns]);
+  }, [addChatMessage, addSystemBubble]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
