@@ -440,22 +440,42 @@ Building on the hybrid approach suggested in `distributed-ai-surfaces-spec.md`:
 
 **Key behavior:** When a project-scoped or item-scoped chat is opened, OpenClaw should understand that the conversation is constrained to that project/item unless the user explicitly steers it elsewhere. The context injection makes this the default, and the session key isolation means the conversation history stays focused.
 
-## Cross-Session Knowledge: The Context Gap Problem
+## Cross-Session Awareness: Design Principle
 
-A significant architectural challenge: when the user has multiple chats across a project (project-level + several item-level), how does OpenClaw in one chat know about decisions made in another?
+### The Right Framing
 
-**Current state:** OpenClaw has a consolidated memory system across sessions/devices. This provides some baseline awareness — things explicitly committed to memory in one chat will be available in others.
+Scoped chats don't increase total conversation volume — they distribute the same amount of interaction across more focused locations. The challenge isn't capacity; it's **aggregation**: ensuring OpenClaw remains holistically aware of project state even when conversations are spread across sessions.
 
-**Gap:** Conversational context that isn't explicitly memorized is lost across chats. If the user discusses an architectural decision in the project chat, the item-level chat won't know about it unless the user restates it or OpenClaw committed it to memory.
+Each scoped chat is its own OpenClaw session with its own context window. Sessions don't share message history. But OpenClaw's cross-session awareness already works through two shared mechanisms — and the richer of the two is not memory, it's the **file system**:
 
-**Phase 1 approach:** Accept this limitation. The user manually bridges context between chats (or OpenClaw's memory catches the important bits). This matches how people work with multiple chat windows today.
+| Mechanism | What it provides | Managed by |
+|-----------|-----------------|------------|
+| **MEMORY.md** | Global curated memory — significant decisions, lessons, personal context | OpenClaw (any session can read/write) |
+| **File system** | Project state: ROADMAP.md, specs, plans, git log, AGENTS.md, CLAWCHESTRA.md | Both OpenClaw and Clawchestra (structured, versioned, always current) |
 
-**Future consideration:** A pooled context layer — perhaps a per-project knowledge store (structured summaries, key decisions, active constraints) that all chats within a thread can read. This could be:
-- A project-level context file (like AGENTS.md but auto-maintained from chat interactions)
-- A lightweight database of "decisions" and "constraints" extracted from chat history
-- OpenClaw's existing memory system, augmented with project-scoped memory
+The file system is the richest shared context. If a spec is updated in an item-level chat, the project-level chat automatically benefits next time it runs — it reads the updated file. This is already true today. The hub doesn't break this; it extends it.
 
-This is explicitly a Phase 2+ concern. The architecture should not prevent it (session key isolation + project scoping makes it possible), but Phase 1 doesn't build it.
+### Design Principle: Enrich the File System, Not the Session Architecture
+
+**Don't** build cross-session message syncing or try to bridge context windows. That fights how OpenClaw works and adds architectural complexity for modest gain.
+
+**Do** make context injection comprehensive and make the file system richer. When any scoped session opens, inject current project state from files — not from other sessions. The files *are* the shared memory.
+
+### The Missing Piece: Per-Project Working Notes
+
+The one gap is lightweight, volatile, project-scoped context that doesn't belong in MEMORY.md (too global, too curated) and doesn't belong in specs/plans (too structured). For example: "In this morning's git-sync chat we decided to defer Phase 3 until the terminal spike is done" — useful for other sessions today, probably noise in MEMORY.md long-term.
+
+**Solution: a per-project working notes file** — something like `PROJECT_NOTES.md` (or a section in `CLAWCHESTRA.md`) that any scoped session within the project can read and append to. Format: lightweight bullet notes with timestamps. OpenClaw writes to it when notable decisions or constraints come up in any project/item chat. Context injection reads it at session start for all chats in that project.
+
+This is purely file I/O — no cross-session wiring, no database, fully within OpenClaw's existing terms. The file system is already the source of truth; this just adds a volatile layer to it.
+
+### Session Awareness Across Scoped Chats (Phased)
+
+**Phase 1:** File system + MEMORY.md are the bridges. No automatic note-writing. OpenClaw commits important things to memory manually where it matters. Acceptable limitation for initial build.
+
+**Phase 2:** Add the per-project working notes file. Any scoped session writes notable decisions to it. Context injection reads it at session start. All sessions within a project get ambient awareness of what happened in sibling sessions — without any cross-session message syncing.
+
+**Phase 3 (future consideration):** More structured extraction — periodically distilling the working notes into structured form (key decisions, active constraints, open questions). This closes the long-term awareness loop without requiring the user to bridge context manually.
 
 ## Chat Persistence
 
