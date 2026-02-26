@@ -2662,15 +2662,19 @@ export default function App() {
 
                 const handleDeleteItem = (item: RoadmapItemWithDocs) => {
                   const snapshot = { ...item };
+                  const storeSnapshot = storeRoadmapItems[projectId] ?? [];
                   setRoadmapItems((prev) => prev.filter((i) => i.id !== item.id));
+                  setRoadmapItemsForProject(projectId, storeSnapshot.filter((i) => i.id !== item.id));
                   void deleteRoadmapItems(projectId, [item.id]).catch(() => {
                     setRoadmapItems((prev) => [...prev, snapshot]);
+                    setRoadmapItemsForProject(projectId, storeSnapshot);
                     pushToast('error', 'Failed to delete item');
                   });
                   pushToast('success', `"${item.title}" deleted`, {
                     label: 'Undo',
                     onClick: () => {
                       setRoadmapItems((prev) => [...prev, snapshot]);
+                      setRoadmapItemsForProject(projectId, storeSnapshot);
                       void createRoadmapItem(projectId, {
                         id: snapshot.id,
                         title: snapshot.title,
@@ -2686,11 +2690,14 @@ export default function App() {
 
                 const handleDeleteAllArchived = () => {
                   const snapshots = [...archivedItems];
+                  const storeSnapshot = storeRoadmapItems[projectId] ?? [];
                   setRoadmapItems((prev) => prev.filter((i) => i.status !== 'archived'));
+                  setRoadmapItemsForProject(projectId, storeSnapshot.filter((i) => i.status !== 'archived'));
                   setShowArchived(false);
                   setDeleteAllArchivedConfirmOpen(false);
                   void deleteRoadmapItems(projectId, snapshots.map((i) => i.id)).catch(() => {
                     setRoadmapItems((prev) => [...prev, ...snapshots]);
+                    setRoadmapItemsForProject(projectId, storeSnapshot);
                     pushToast('error', 'Failed to delete archived items');
                   });
                   pushToast('success', `${snapshots.length} archived item(s) deleted`);
@@ -3016,11 +3023,14 @@ export default function App() {
                       const archived = roadmapItems.filter((i) => i.status === 'archived');
                       if (archived.length === 0) { setDeleteAllArchivedConfirmOpen(false); return; }
                       const projectId = activeRoadmapProject!.id;
+                      const storeSnapshot = storeRoadmapItems[projectId] ?? [];
                       setRoadmapItems((prev) => prev.filter((i) => i.status !== 'archived'));
+                      setRoadmapItemsForProject(projectId, storeSnapshot.filter((i) => i.status !== 'archived'));
                       setShowArchived(false);
                       setDeleteAllArchivedConfirmOpen(false);
                       void deleteRoadmapItems(projectId, archived.map((i) => i.id)).catch(() => {
                         setRoadmapItems((prev) => [...prev, ...archived]);
+                        setRoadmapItemsForProject(projectId, storeSnapshot);
                         pushToast('error', 'Failed to delete archived items');
                       });
                       pushToast('success', `${archived.length} archived item(s) deleted`);
