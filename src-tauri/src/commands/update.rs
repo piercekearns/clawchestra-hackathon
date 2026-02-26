@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 use crate::commands::git::{categorize_dirty_file, run_git, FileCategory};
 use crate::util::is_pid_alive;
@@ -137,6 +138,7 @@ pub(crate) fn check_for_update() -> Result<UpdateStatus, String> {
 
 #[tauri::command]
 pub(crate) async fn run_app_update(
+    app_handle: tauri::AppHandle,
     update_guard: Option<UpdateGuardInput>,
 ) -> Result<String, String> {
     #[cfg(not(target_os = "macos"))]
@@ -199,6 +201,9 @@ pub(crate) async fn run_app_update(
             }
         })
         .unwrap_or_else(|| "/Applications/Clawchestra.app".to_string());
+
+    // Persist window size/position so the restart opens at the same geometry.
+    let _ = app_handle.save_window_state(StateFlags::all());
 
     let log_path = format!(
         "/tmp/clawchestra-update-{}.log",
