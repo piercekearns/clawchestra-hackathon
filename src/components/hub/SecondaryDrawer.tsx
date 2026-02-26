@@ -97,14 +97,14 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-[60] flex shrink-0 flex-col overflow-visible ${side === 'right' ? 'border-l' : 'border-r'} ${
+      className={`relative z-[60] flex flex-col overflow-visible ${side === 'right' ? 'border-l' : 'border-r'} ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
-      style={{ width, willChange: 'transform' }}
+      style={{ width, minWidth: MIN_WIDTH, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden pb-4 md:pb-6">
         <DrawerHeader

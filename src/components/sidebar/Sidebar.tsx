@@ -91,8 +91,8 @@ export function Sidebar({
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : sidebarOpen ? 'border-neutral-200 dark:border-neutral-700' : 'border-transparent'} ${isResizing ? '' : 'transition-[width,border-color] duration-200 ease-out'}`}
-      style={{ width: sidebarOpen ? sidebarWidth : 0 }}
+      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : sidebarOpen ? 'border-neutral-200 dark:border-neutral-700' : 'border-transparent'} ${isResizing ? '' : 'transition-[width,border-color] duration-200 ease-out'}`}
+      style={{ width: sidebarOpen ? sidebarWidth : 0, minWidth: sidebarOpen ? SIDEBAR_MIN_WIDTH : 0 }}
     >
       <div className={`flex h-full flex-col overflow-hidden ${sidebarOpen ? '' : 'pointer-events-none'}`} style={{ width: sidebarWidth }}>
         {/* Settings back button */}
