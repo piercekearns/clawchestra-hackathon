@@ -2762,8 +2762,11 @@ async function sendViaTauriWs(
     throw new Error('Tauri WebSocket transport is not configured');
   }
 
-  const { getTauriOpenClawConnection } = await import('./tauri-websocket');
-  const connection = await getTauriOpenClawConnection(
+  const { getTauriOpenClawConnection, getConnectionInstance } = await import('./tauri-websocket');
+  // For scoped hub chats, reuse the existing connection directly to avoid
+  // config-key mismatches that would recycle the shared singleton.
+  const existingConnection = skipTurnTracking ? getConnectionInstance() : null;
+  const connection = existingConnection ?? await getTauriOpenClawConnection(
     transport.wsUrl,
     transport.sessionKey || DEFAULT_SESSION_KEY,
     transport.token,
@@ -2848,22 +2851,26 @@ async function sendViaTauriWs(
     runtimeUsage = usage;
   };
 
-  try {
-    const historyBefore = (await connection.request('chat.history', {
-      sessionKey,
-      limit: 200,
-    })) as { messages?: unknown[] };
+  // Skip baseline history for scoped hub chats — they don't use recovery and
+  // the extra request on the shared connection can race with the main chat.
+  if (!skipTurnTracking) {
+    try {
+      const historyBefore = (await connection.request('chat.history', {
+        sessionKey,
+        limit: 200,
+      })) as { messages?: unknown[] };
 
-    const baselineMessages = Array.isArray(historyBefore.messages)
-      ? historyBefore.messages.filter(isHistoryMessage)
-      : [];
+      const baselineMessages = Array.isArray(historyBefore.messages)
+        ? historyBefore.messages.filter(isHistoryMessage)
+        : [];
 
-    for (const message of baselineMessages) {
-      const id = getHistoryMessageId(message);
-      if (id) baselineMessageIds.add(id);
+      for (const message of baselineMessages) {
+        const id = getHistoryMessageId(message);
+        if (id) baselineMessageIds.add(id);
+      }
+    } catch (error) {
+      warnSend('Failed to load baseline history before send:', error);
     }
-  } catch (error) {
-    warnSend('Failed to load baseline history before send:', error);
   }
 
   try {

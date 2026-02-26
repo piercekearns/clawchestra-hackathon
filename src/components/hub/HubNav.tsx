@@ -185,6 +185,10 @@ export function HubNav({ onToast }: HubNavProps) {
       title,
     );
     await refreshHubChats();
+    // Expand the thread if it's collapsed
+    if (hubCollapsedThreads.includes(projectId)) {
+      toggleHubThread(projectId);
+    }
     setHubActiveChatId(newChat.id);
     setHubDrawerOpen(true);
   };

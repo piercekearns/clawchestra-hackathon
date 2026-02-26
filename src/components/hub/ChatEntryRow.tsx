@@ -27,6 +27,8 @@ export function ChatEntryRow({
   onMarkUnread,
   onDelete,
 }: ChatEntryRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+
   return (
     <div
       className={`hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer transition-colors ${
@@ -53,13 +55,14 @@ export function ChatEntryRow({
         <Pin className="h-3 w-3" />
       </button>
 
-      {/* Chat name */}
-      <div className="min-w-0 flex-1 flex items-center gap-1.5">
+      {/* Chat name — on hover, reserve space for action icons so text clips */}
+      <div className={`min-w-0 flex-1 flex items-center gap-1.5 ${isEditing ? '' : 'group-hover:pr-14'}`}>
         <InlineEdit
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
           className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''} ${chat.unread ? 'font-semibold text-neutral-900 dark:text-neutral-100' : ''}`}
           useScrollReveal
+          onEditingChange={setIsEditing}
         />
         {chat.unread && (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#DFFF00]" />
@@ -70,8 +73,10 @@ export function ChatEntryRow({
         <Check className="h-3 w-3 shrink-0 text-green-500" />
       )}
 
-      {/* Right hover actions — ⋯ first, then archive */}
-      <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md px-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${
+      {/* Right hover actions — ⋯ first, then archive; hidden during inline edit */}
+      <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md px-0.5 transition-opacity ${
+        isEditing ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
+      } ${
         isActive ? 'bg-neutral-200/80 dark:bg-neutral-700/80' : 'bg-neutral-100 dark:bg-neutral-800'
       }`}>
         <ChatEntryMenu

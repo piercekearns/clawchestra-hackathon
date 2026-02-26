@@ -225,7 +225,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
           ) : null}
           {showToggle ? (
             <span
-              className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-neutral-500 dark:text-neutral-300"
+              className="pointer-events-none ml-auto text-neutral-500 dark:text-neutral-300"
               aria-hidden
             >
               {drawerOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}

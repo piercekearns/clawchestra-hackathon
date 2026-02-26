@@ -111,7 +111,7 @@ export function SecondaryDrawer({
         <ScopedChatShell chat={chat} />
       </div>
 
-      {/* Drag handle on right edge */}
+      {/* Drag handle on right edge — z-[70] to stay above modal overlays (z-50) */}
       <div
         role="separator"
         aria-orientation="vertical"
@@ -122,7 +122,7 @@ export function SecondaryDrawer({
         onMouseEnter={() => setIsHandleHover(true)}
         onMouseLeave={() => setIsHandleHover(false)}
         onDoubleClick={() => onWidthChange(400)}
-        className="group absolute right-0 top-0 h-full w-[6px] translate-x-1/2 cursor-col-resize"
+        className="group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize"
       >
         <div
           className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${

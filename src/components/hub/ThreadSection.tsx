@@ -99,8 +99,8 @@ export function ThreadSection({
           </span>
         </button>
 
-        {/* Project name */}
-        <div className="min-w-0 flex-1">
+        {/* Project name — on hover, reserve space for + button so text clips */}
+        <div className="min-w-0 flex-1 group-hover:pr-8">
           <ScrollRevealText
             text={thread.projectTitle}
             className="text-xs font-semibold leading-tight text-neutral-800 dark:text-neutral-200"

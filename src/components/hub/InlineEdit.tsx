@@ -8,9 +8,11 @@ interface InlineEditProps {
   inputClassName?: string;
   /** Use ScrollRevealText instead of plain truncation for overflow */
   useScrollReveal?: boolean;
+  /** Notify parent when editing state changes */
+  onEditingChange?: (editing: boolean) => void;
 }
 
-export function InlineEdit({ value, onSave, className, inputClassName, useScrollReveal }: InlineEditProps) {
+export function InlineEdit({ value, onSave, className, inputClassName, useScrollReveal, onEditingChange }: InlineEditProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,9 +29,14 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
     if (!editing) setDraft(value);
   }, [value, editing]);
 
+  const setEditingState = (next: boolean) => {
+    setEditing(next);
+    onEditingChange?.(next);
+  };
+
   const commit = () => {
     const trimmed = draft.trim();
-    setEditing(false);
+    setEditingState(false);
     if (trimmed && trimmed !== value) {
       onSave(trimmed);
     } else {
@@ -51,7 +58,7 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
           if (e.key === 'Escape') {
             e.preventDefault();
             setDraft(value);
-            setEditing(false);
+            setEditingState(false);
           }
         }}
         onBlur={commit}
@@ -66,7 +73,7 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
         className="min-w-0"
         onDoubleClick={(e) => {
           e.stopPropagation();
-          setEditing(true);
+          setEditingState(true);
         }}
       >
         <ScrollRevealText text={value} className={className} />
@@ -79,7 +86,7 @@ export function InlineEdit({ value, onSave, className, inputClassName, useScroll
       className={className}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        setEditing(true);
+        setEditingState(true);
       }}
     >
       {value}

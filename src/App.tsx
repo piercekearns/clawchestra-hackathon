@@ -2543,7 +2543,7 @@ export default function App() {
           </main>
         ) : (
           <>
-        <div className="relative mb-4 flex items-center justify-between gap-3 px-3 md:px-4">
+        <div className="relative mb-4 -mt-[3px] flex items-center justify-between gap-3 px-3 md:px-4">
           <div className="flex items-center gap-1.5">
             <Breadcrumb
               viewContext={viewContext}
@@ -2586,7 +2586,20 @@ export default function App() {
                       <span className="whitespace-nowrap">Show archive</span>
                       <button
                         type="button"
-                        onClick={() => setShowArchived((v) => !v)}
+                        onClick={() => setShowArchived((v) => {
+                          const next = !v;
+                          if (next) {
+                            requestAnimationFrame(() => {
+                              setTimeout(() => {
+                                const scroller = document.querySelector('.kanban-scroll');
+                                if (scroller) {
+                                  scroller.scrollTo({ left: scroller.scrollWidth, behavior: 'smooth' });
+                                }
+                              }, 50);
+                            });
+                          }
+                          return next;
+                        })}
                         className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
                           showArchived
                             ? 'bg-revival-accent-500'

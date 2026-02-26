@@ -43,6 +43,7 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
     <div
       className="relative z-[90] flex h-[46px] shrink-0 items-center border-b border-neutral-200/50 bg-page px-4 dark:border-neutral-700/50 md:px-6"
       onMouseDown={startWindowDrag}
+      onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
     >
       <div className="flex items-center gap-2">
         {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}

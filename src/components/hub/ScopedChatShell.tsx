@@ -183,7 +183,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
       </div>
 
       {/* Input bar — reuses the main ChatBar in embedded mode */}
-      <div className="shrink-0 px-3 pb-3 pt-2">
+      <div className="shrink-0 px-3 pb-4 pt-2 md:pb-6">
       <ChatBar
         connectionState={wsConnectionState}
         activityLabel={sending ? 'Working...' : null}
