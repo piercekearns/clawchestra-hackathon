@@ -4,6 +4,7 @@
 
 **Status:** Draft
 **Created:** 2026-02-21
+**Updated:** 2026-02-26
 **Roadmap Item:** `roadmap-item-quick-add`
 **Depends On:** `architecture-direction` (app-layer foundation)
 **Proves:** `distributed-ai-surfaces` (first consumer of the pattern)
@@ -15,52 +16,53 @@
 Today, roadmap items can only be created by:
 
 1. **Telling OpenClaw in the general chat drawer** — "Add a roadmap item to project X in column Y to do Z." The user has to state the project, the column, and the content all in one message, in a chat that's shared with every other conversation.
-2. **Manually editing YAML files** — writing frontmatter in `ROADMAP.md` or creating a file in `roadmap/`. Requires knowing the schema.
+2. **Manually editing YAML files** — writing frontmatter in `ROADMAP.md` or editing the project's data directly. Requires knowing the schema.
 
 There's no UI affordance for "I'm looking at this project's kanban board and I want to add an item to this column." The spatial context (which project, which column) is lost because the only input is a general-purpose text box.
 
 ## What Success Looks Like
 
-- **A lightweight "+ Add roadmap item" card** at the bottom of each kanban column (or top if the column is empty) — hollow, dashed stroke, secondary CTA. Same visual pattern as the `board-project-quick-add` card in the project board.
-- **Clicking the card opens a modal** (not an in-place card) with an AI chat box as the primary input method.
-- **The user just describes the item** — what it covers, what the goals are, any context. No need to specify project, column, priority, or schema fields.
-- **OpenClaw structures the output** — turns the natural language description into a schema-compliant roadmap item with proper frontmatter (title, status, priority, tags, nextAction, etc.).
-- **Optional manual fields** are exposed below the chat for users who prefer to fill fields directly or want to override what the AI generated.
-- **The item appears on the board** immediately after creation — no page refresh needed.
+- **A lightweight "+ Add roadmap item" card** at the bottom of each roadmap kanban column — hollow, dashed stroke, secondary CTA. Uses the same `QuickAddCard` component already built for `board-project-quick-add` (shipped `86b15b6`).
+- **Clicking opens a modal** with two creation paths:
+  - **AI path (primary):** An AI chat box — user describes the item in natural language, OpenClaw creates it directly, the card appears on the board.
+  - **Manual path (secondary):** Plain input fields with placeholders. User fills in what they want and submits.
+- **AI path creates without preview or confirmation** — the user describes what they want, OpenClaw creates the item, it appears on the board. If they want to review or edit the details, they click the card.
+- **The item appears on the board** immediately after creation — no refresh needed.
 
 ## How It Works
 
-### User Flow
+### Two Creation Paths
 
-1. User is viewing Project X's kanban board
-2. Clicks "+" on the "pending" column
-3. A new card appears in-place (or a sidebar/modal opens) with:
-   - **AI chat box** (primary) — "Describe what this roadmap item should cover..."
-   - **Manual fields** (secondary, collapsed by default) — title, tags, priority, nextAction
+#### Path A: AI Chat (Primary)
+
+1. User is viewing Project X's roadmap kanban
+2. Clicks "+ Add roadmap item" in the "pending" column
+3. Modal opens showing an AI chat input as the primary affordance
 4. User types: "I want to track the work needed to add a dark mode theme system with user-selectable palettes and automatic OS detection"
-5. OpenClaw receives this with auto-injected context:
+5. OpenClaw receives this with auto-injected context (invisible to user):
    - `project: project-x`
-   - `targetColumn: pending`
-   - `existingItems: [list of current items in pending with priorities]`
-   - `schema: [roadmap item schema reference]`
-6. OpenClaw responds with a structured preview:
-   ```
-   Here's what I'd create:
+   - `targetStatus: pending`
+   - `existingItemsInColumn: [...]`
+   - `schema: [roadmap item schema]`
+6. OpenClaw creates the item directly — no preview, no confirmation step
+7. Modal closes, the new card appears in the "pending" column
+8. User can click the card to view and edit all generated fields
 
-   **Title:** Dark Mode & Theme System
-   **Status:** pending
-   **Priority:** 4 (after App Customisation, before Clawchestra Apps)
-   **Tags:** ui, theming, ux
-   **Next Action:** Spec needed — define theme palette structure, OS detection integration, and user preference persistence
-   **Icon:** 🎨
+#### Path B: Manual Fields
 
-   Want me to go ahead, or any changes?
-   ```
-7. User confirms (or adjusts via chat: "make it priority 3 actually")
-8. OpenClaw creates the item — writes to ROADMAP.md, creates roadmap detail file if needed
-9. Board updates in real-time
+1. User clicks "+ Add roadmap item" in any column
+2. Modal opens — user selects the "Fill in manually" path (or it may be a tab/toggle)
+3. Blank input fields with placeholders — no defaults, no AI-suggested values:
+   - Title (text input)
+   - Status (dropdown — pre-set to the column clicked, not editable here)
+   - Priority (number input)
+   - Tags (tag chips / text input)
+   - Icon (emoji picker)
+   - Next Action (text area)
+4. User fills in what they want and submits
+5. Item is created, card appears in the column
 
-### Context Injection
+### Context Injection (AI Path)
 
 The chat component auto-injects (invisible to user):
 
@@ -77,11 +79,11 @@ The chat component auto-injects (invisible to user):
     "requiredFields": ["title", "status", "type", "priority", "parent", "lastActivity"],
     "optionalFields": ["specDoc", "planDoc", "tags", "icon", "nextAction"]
   },
-  "instruction": "The user wants to create a new roadmap item. They will describe it in natural language. Structure it into a schema-compliant deliverable. Ask for confirmation before creating."
+  "instruction": "The user wants to create a new roadmap item. They will describe it in natural language. Structure it into a schema-compliant deliverable and create it immediately — do not ask for confirmation or show a preview."
 }
 ```
 
-This means OpenClaw knows:
+OpenClaw knows:
 - It's creating a roadmap item (not having a general conversation)
 - Which project and column
 - What priority numbers are already taken
@@ -89,20 +91,9 @@ This means OpenClaw knows:
 
 The user never has to state any of this.
 
-### Manual Fields (Secondary Input)
+### Storage
 
-Below the chat box, expandable fields for direct editing:
-
-| Field | Input Type | Default |
-|-------|-----------|---------|
-| Title | Text input | AI-generated from chat |
-| Status | Dropdown (read-only — pre-set from column clicked) | From column |
-| Priority | Number input | AI-suggested based on existing items |
-| Tags | Tag chips / text input | AI-suggested |
-| Icon | Emoji picker | AI-suggested |
-| Next Action | Text area | AI-generated |
-
-These fields update live as the AI generates the item. The user can override any field directly.
+Roadmap items are written to the project's state/database (not to `ROADMAP.md` directly — that file-based approach is superseded by the JSON/state store). The board reflects the new item immediately via the existing state sync mechanism.
 
 ## Proof-of-Concept Value
 
@@ -110,50 +101,48 @@ This is the first distributed AI surface — the first time an AI chat component
 
 1. **Context injection works** — the surface provides structured context without the user typing it
 2. **Scoped interaction works** — the chat is about one thing (creating an item), not everything
-3. **AI-structured output works** — natural language in, schema-compliant YAML out
+3. **AI-structured output works** — natural language in, schema-compliant item out
 4. **State sync works** — the kanban board updates when the item is created
 
 Every subsequent distributed AI surface (git sync inline chat, project card chat, etc.) follows the same pattern established here.
 
 ## Build Order & Dependencies
 
-This spec and `board-project-quick-add` share the same in-column card affordance. The recommended build sequence:
+`QuickAddCard` — the shared in-column CTA card component — **is already built** (commit `86b15b6`, shipped as part of `board-project-quick-add`). It accepts `label` and `onClick` props and renders a dashed hollow card.
 
-1. **Build the shared "add card" component** — a reusable inline column card (hollow, dashed, secondary CTA) that can be dropped into any kanban column. Both `board-project-quick-add` and this spec consume it.
-2. **Ship `board-project-quick-add` first** — wire the project board columns to show the add card, clicking it opens the existing `AddProjectDialog` with status pre-selected. This is the simpler path (no new modal, no AI) and gets the shared pattern battle-tested.
-3. **Phase 1 of this spec** — wire roadmap columns to show the same add card, but clicking it opens a new `AddRoadmapItemDialog` (manual fields only). Column status pre-selected.
-4. **Phase 2 of this spec** — layer in the AI chat input.
+Remaining build sequence:
+
+1. **Phase 1 (this spec)** — Wire `QuickAddCard` into roadmap board columns with label "+ Add roadmap item". Clicking opens `AddRoadmapItemDialog` with manual fields only.
+2. **Phase 2** — Add the AI chat tab/path to `AddRoadmapItemDialog`.
 
 ## Phased Delivery
 
-### Phase 1: UI Affordance + Manual Fields
-- "+ Add roadmap item" card at bottom/top of roadmap kanban columns (shared card component from `board-project-quick-add`)
-- Clicking opens a modal (`AddRoadmapItemDialog`) with manual input fields only — no AI chat yet
-- Status pre-selected from the column clicked
-- Creates a schema-compliant roadmap item from field values
-- Validates against schema before writing
+### Phase 1: UI Affordance + Manual Fields ✅ Component exists, wiring needed
+- Add `onQuickAdd` + `quickAddLabel` props to the roadmap `Board` → `Column` render path (same pattern as project board)
+- Clicking opens `AddRoadmapItemDialog` — a new modal with blank manual input fields and status pre-selected from the column
+- Creates a schema-compliant roadmap item on submit
+- Board updates immediately
 
 ### Phase 2: AI Chat Integration
-- Add the `<AiChat>` component (from distributed-ai-surfaces) to the creation UI
+- Add an AI chat tab/mode to `AddRoadmapItemDialog` as the primary creation path
 - Context injection: project, column, existing items, schema
-- AI generates field values from natural language description
-- Preview → confirm → create flow
+- AI creates the item immediately on receiving the user's description — no preview step
+- Modal closes on creation; user sees the card on the board and can click to review details
 
 ### Phase 3: Polish
-- Live field updates as AI generates
-- Override any AI-generated field manually
-- Multi-turn refinement ("actually make it priority 2", "add a spec doc")
-- Inline creation (card appears in-place on the board) vs modal creation
+- Multi-turn refinement before creation ("actually focus it on mobile first")
+- Inline creation vs modal (card appears in-place on the board)
+- Spec/plan auto-generation offered after item creation as a follow-up
 
 ## Non-Goals
 
+- Preview/confirmation step in the AI path — OpenClaw creates directly; edits happen post-creation by clicking the card
 - Bulk item creation ("add 5 items at once")
 - Template-based creation (predefined item templates — could be future enhancement)
 - Creating items for projects not currently visible on the board
 
 ## Open Questions
 
-1. **Confirmation flow** — Should OpenClaw always ask for confirmation before creating? Or can the user opt into "just create it" mode?
-2. **Spec/plan auto-generation** — Should OpenClaw offer to write an initial spec for the new item as part of creation? Or is that a separate action?
-3. **Priority negotiation** — When the AI suggests a priority, should it explain why ("I put it at P4 because it's less urgent than Rate Limit Resilience but more concrete than Clawchestra Apps")?
-4. **Session lifecycle** — Does the creation chat use an ephemeral session (destroyed after creation) or persist in case the user wants to revisit what was discussed during creation?
+1. **Two-path UI** — Tab toggle (AI / Manual) or AI-first with a "fill in manually" link below the chat?
+2. **Spec/plan auto-generation** — Should OpenClaw offer to write an initial spec for the new item after it's created? Or is that a separate action triggered from the card?
+3. **Session lifecycle** — Does the AI creation chat use an ephemeral session (destroyed after creation) or persist for context?
