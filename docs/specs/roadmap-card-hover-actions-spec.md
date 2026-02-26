@@ -1,103 +1,148 @@
 # Roadmap Card Hover Actions: Archive & Complete
 
-> Quick-action buttons surfaced on hover that let users archive or complete a roadmap item in one click — with undo support.
+> Roadmap item cards grow two lifecycle action buttons on hover — Complete (CircleCheckBig) on the right side, Archive (Archive icon) beside it — so items can be finished or archived directly from the board without opening their detail modal.
 
 **Status:** Draft
 **Created:** 2026-02-26
 **Roadmap Item:** `roadmap-card-hover-actions`
+**Status:** `up-next` · Priority 3
 
 ---
 
 ## Problem
 
-Moving a roadmap item to "complete" or "archive" requires opening the card modal and changing the status via the status dropdown. For frequent, low-ceremony state transitions — "I finished this" or "I'm parking this" — that's too many steps. Users should be able to do it directly from the board without opening anything.
+Moving a roadmap item to "complete" or removing it from view currently requires:
+1. Opening the item's detail modal
+2. Changing the status dropdown
+3. Closing the modal
+
+That's three interactions for what should be a one-click board operation. Archive has no UI path at all.
 
 ## What Success Looks Like
 
-- Hovering over a roadmap item card reveals two action buttons on the **right side** of the lifecycle button row
-- **Archive button** (trash/bin icon) and **Complete button** (check-circle icon) appear on hover, same visual style as the existing lifecycle buttons
-- Clicking either fires the state change immediately and shows a **toast notification** with an **Undo** button
-- Undo reverses the action and restores the card to its original column
-- The complete action works even if the "complete" column is collapsed — the item goes there and the column count increments
-
-## Layout
-
-```
-[lifecycle icon] [lifecycle icon]   ·   [✓ complete] [🗑 archive]
-└─── left side ──────────────────┘   └── right side (hover only) ─┘
-```
-
-Same row, same icon size/style as lifecycle buttons. Left group = existing lifecycle icons. Right group = the two new action buttons, separated by a small gap or divider. Hidden until hover.
-
-## Behaviour
-
-### Complete
-- Sets item status → `complete`
-- Item moves to the `complete` column on the board
-- If the `complete` column is collapsed/minimized, it still receives the item (count badge updates)
-- Toast: **"Item completed"** with **Undo** button
-- Undo: restores original status, item reappears in its original column
-
-### Archive
-- Sets item status → `archived`
-- Toast: **"Item archived"** with **Undo** button
-- Undo: restores original status
-
-### Toast spec
-
-**Stacking:** Multiple toasts stack vertically — new toasts appear above (or below) existing ones rather than replacing them. Each toast has its own independent 5s countdown. If the user archives three cards in quick succession, all three toasts are visible simultaneously and each is independently interactable until it times out.
-
-**Dismissal animation:** When a toast's timer expires (or the user manually dismisses it), it fades out and slides away. The remaining toasts reflow into the vacated space with a smooth height animation — no jarring jumps.
-
-**Undo window:** The Undo button on each toast is accessible until that specific toast dismisses. Rapid-firing archive/complete actions does not collapse or replace earlier toasts, so all undos are accessible in the window after the actions were taken.
-
-**Specifics:**
-- Each toast auto-dismisses after **5s** from the moment it appeared (independent timers, not shared)
-- Toasts stack in reverse chronological order — newest on top (or configurable)
-- Max visible stack: **5 toasts** — oldest silently dismissed if a 6th arrives before any have timed out (edge case)
-- Undo button triggers immediate reversal and dismisses that toast instantly
-- If the session ends or the user navigates away, undo is gone
-- Toasts are scoped to the board view — they don't persist across page reloads
-
-**Exit animation options (to be decided during implementation):**
-- Fade out + collapse height (recommended — content shrinks away cleanly)
-- Slide out to the right + collapse
-- Scale down + fade
-
-## Icons
-- **Complete:** `CheckCircle2` (lucide) — same style as lifecycle buttons
-- **Archive:** `Trash2` (lucide) — bin icon, universally understood as "remove"
-
-## Build Order
-1. Add hover button group to roadmap card component (right side of lifecycle row)
-2. Wire click handlers to status update action (existing `updateRoadmapItemStatus`)
-3. Build stacking toast system — an array of active toasts (id, message, undo callback, timestamp), each with its own independent timer; renders as a fixed stack in the corner; individual fade-out + height-collapse on dismiss
-4. Wire Archive and Complete into the toast stack with Undo callbacks
-5. Handle collapsed-column edge case for complete action
+- Hovering a roadmap item card reveals two action buttons on the **right** side of the card
+- **Complete** (`CircleCheckBig` from Lucide) — moves the item to `complete` status
+- **Archive** (`Archive` from Lucide) — moves the item to `archived` status (see open design question below)
+- Both buttons appear/disappear with the same hover behaviour as existing lifecycle buttons (which sit on the **left** side of the card)
+- Both actions show a **toast notification** with an **Undo** button
+- Undo fully restores the item to its previous status/column
+- Complete always moves the card to the "completed" column, even if that column is currently collapsed
 
 ---
 
-## ⚠️ Open Decision: What Does "Archived" Mean?
+## UI Behaviour
 
-**This is an unresolved design question that must be decided before building the archive path.**
+### Card Layout on Hover
 
-Currently `archived` is a valid project status but its treatment in the roadmap item context is undefined. Options:
+```
+[ left lifecycle buttons ]  ←  title / metadata  →  [ Archive ] [ Complete ]
+```
 
-| Option | Description | Pros | Cons |
-|--------|-------------|------|------|
-| **Hidden by default** | Archived items filtered out of all columns; accessible via "Show archived" toggle | Clean board, easy to un-hide | Need toggle UI; items feel "lost" |
-| **Separate archive column** | A non-draggable "Archived" column at the far right of the roadmap board | Visible; obvious | Clutters the board; grows unbounded |
-| **Board-level archive view** | A separate board view (toggle) that shows only archived items | Clean separation | More UI surface area to build |
-| **Soft-delete (hidden forever)** | Items removed from board entirely; only recoverable via undo or raw JSON | Simplest | Lossy; no recovery after toast dismissed |
+- Left side: existing lifecycle buttons (unchanged)
+- Right side: two new buttons, `Archive` then `CircleCheckBig`, left-to-right
+- Same icon size, padding, and hover style as existing lifecycle buttons
+- Buttons are invisible when not hovered — no layout shift
 
-**Recommendation (not yet accepted):** Hidden by default with a per-board "Show archived" toggle — consistent with how most kanban tools handle it, and keeps the board clean without discarding data.
+### Hover Style
 
-**This decision needs to be made and recorded here before the archive path ships.**
+Reuse the existing Proton Mail-inspired pattern: bare icon at rest, subtle container + shadow appears on hover. Match the colour/size of existing lifecycle icon buttons exactly.
+
+### Complete Action
+
+1. User clicks `CircleCheckBig`
+2. Item status set to `complete`
+3. Card animates out of its current column
+4. Card appears in the "complete" column (scroll/expand that column if collapsed — see note below)
+5. Toast fires: **"Item completed"** + **Undo** button
+6. Undo: restores item to previous status, moves card back
+
+**Collapsed complete column**: If the complete column is collapsed, expand it (or scroll it into view) so the card landing is visible. If auto-expand is complex to implement, simply set status and let the card disappear — the Undo toast is the recovery path.
+
+### Archive Action
+
+1. User clicks `Archive`
+2. Item status set to `archived`
+3. Card disappears from the board (archived items are hidden by default)
+4. Toast fires: **"Item archived"** + **Undo** button
+5. Undo: restores item to previous status, card reappears
 
 ---
 
-## Non-Goals
-- Bulk archive/complete (multiple items at once) — deferred
-- Keyboard shortcuts for these actions — deferred
-- Animation on card removal — nice to have, not required for v1
-- Archive search or filtering beyond the basic "show archived" toggle
+## Show Archived Toggle
+
+Archived items are hidden from the roadmap board by default. A toggle in the project roadmap header lets the user reveal them.
+
+### Placement
+
+A small **"Show archived"** toggle button sits in the roadmap board's header area — right-aligned, in the same horizontal band as the column controls. Uses the `Archive` icon from Lucide.
+
+**When inactive (default):** Icon-only button, muted/secondary style  
+**When active:** Icon button with filled/highlighted treatment (e.g. `text-neutral-800 dark:text-neutral-100`, subtle bg)
+
+### Archived Item Appearance (when toggle is on)
+
+- Archived cards appear at the **bottom of their original column**, below active items
+- Separated from active items by a thin rule (`border-t border-neutral-200 dark:border-neutral-700`)
+- Muted visual treatment: `opacity-50`, title with `line-through`
+- No hover actions (or: only Restore action — see below)
+
+### Restore from Archive
+
+When "Show archived" is on, archived cards could show a **Restore** button on hover (opposite of Archive). This is a nice-to-have; the Undo toast covers the immediate case.
+
+---
+
+## Open Design Question: Archive Behaviour
+
+> **⚠️ Unresolved — decision needed before implementation.**
+
+What does "archived" mean in the context of the roadmap board? Options:
+
+| Option | Description | Trade-offs |
+|--------|-------------|------------|
+| **A: Hidden with filter toggle** | Archived items hidden by default; toggle in header reveals them in-column with muted style | Simple, consistent with Linear/GitHub pattern |
+| **B: Separate "Archived" column** | A collapsed-by-default column at the far right of the board | More visible, but pollutes the column layout |
+| **C: Soft-delete with global archive view** | Archived items visible only in a dedicated "Archive" view (e.g. sidebar nav item) | Most powerful, most work |
+| **D: Hard delete with undo only** | Item is deleted; Undo (30s window) is the only recovery | Simplest, but permanent |
+
+**Recommended starting point: Option A** (hidden with filter toggle). Matches the spec above. Easiest to retrofit into Option C later if a global archive view is added.
+
+---
+
+## Technical Notes
+
+### Icon Imports
+
+```tsx
+import { Archive, CircleCheckBig } from 'lucide-react';
+```
+
+### Status Value
+
+The `archived` status must be added to the `RoadmapStatus` union in `src/lib/schema.ts` if not already present. The board's `ROADMAP_COLUMNS` definition would need a corresponding column definition — or archived items are excluded from all columns (filter-only approach, Option A).
+
+### Undo Implementation
+
+Use the existing toast system. Store previous status in a ref or closure when the action fires. On Undo click, call `updateRoadmapItemStatus(itemId, previousStatus)`.
+
+### "Show Archived" State
+
+Ephemeral (not persisted) — resets when the user navigates away from the project's roadmap view. Stored in local component state or a non-persisted store field.
+
+---
+
+## Phases
+
+### Phase 1: Complete Action Only
+- Add `CircleCheckBig` button to right side of hover area
+- Toast + Undo
+- Ship this first — minimal surface area, most immediately useful
+
+### Phase 2: Archive Action + Show Archived Toggle
+- Add `Archive` button alongside Complete
+- Hidden-by-default + toggle in roadmap header
+- Resolve the open design question before starting this phase
+
+### Phase 3: Restore on Archived Cards
+- Hover Restore button when "Show archived" is active
+- Nice-to-have, can ship separately

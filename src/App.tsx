@@ -1651,6 +1651,12 @@ export default function App() {
           return;
         }
 
+        if (selectedRoadmapItemId) {
+          event.preventDefault();
+          setSelectedRoadmapItemId(null);
+          return;
+        }
+
         if (isRoadmapView) {
           event.preventDefault();
           setViewContext(defaultView());
@@ -1700,6 +1706,8 @@ export default function App() {
     syncDialogOpen,
     selectedProjectId,
     setSelectedProjectId,
+    selectedRoadmapItemId,
+    setSelectedRoadmapItemId,
     setViewContext,
     handleSettingsBack,
   ]);
