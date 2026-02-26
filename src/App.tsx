@@ -2771,7 +2771,7 @@ export default function App() {
                         {/* Cards */}
                         <div className="scrollbar-hidden flex min-h-0 grow flex-col gap-2 overflow-y-auto pr-[1px]">
                           {archivedItems.length === 0 ? (
-                            <div className="mt-6 rounded-xl border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                            <div className="flex w-full items-center justify-center rounded-xl border border-dashed border-neutral-300 px-3 py-2.5 text-xs font-medium text-neutral-500 dark:border-neutral-600 dark:text-neutral-400">
                               No archived items
                             </div>
                           ) : (
