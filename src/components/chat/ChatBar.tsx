@@ -187,7 +187,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             } dark:bg-neutral-900/95 ${
               expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
             }`
-          : `bg-neutral-0 dark:bg-neutral-900 focus-within:ring-1 focus-within:ring-revival-accent-400/40`
+          : `bg-neutral-0 dark:bg-neutral-900`
       } ${dragActive ? 'ring-2 ring-revival-accent-400/40' : ''}`}
       onDragOver={(event) => {
         if (!hasFilePayload(event.dataTransfer)) return;
