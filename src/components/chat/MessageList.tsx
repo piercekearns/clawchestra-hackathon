@@ -11,12 +11,13 @@ interface MessageListProps {
   hasMore?: boolean;
   loadingMore?: boolean;
   showReadingIndicator?: boolean;
+  isCompacting?: boolean;
   onLoadMore?: () => void;
   onSystemBubbleAction?: (actionId: string, payload?: Record<string, unknown>) => void;
 }
 
 const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function MessageList(
-  { messages, className, hasMore, loadingMore, showReadingIndicator, onLoadMore, onSystemBubbleAction },
+  { messages, className, hasMore, loadingMore, showReadingIndicator, isCompacting, onLoadMore, onSystemBubbleAction },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -194,19 +195,32 @@ const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function M
       {showReadingIndicator && (
         <div className="flex items-start">
           <div
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300/80 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900"
-            aria-label="Agent is working"
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-4 py-3 ${
+              isCompacting
+                ? 'border-blue-500/20 bg-blue-50/50 dark:border-blue-400/20 dark:bg-blue-950/30'
+                : 'border-neutral-300/80 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900'
+            }`}
+            aria-label={isCompacting ? 'Compacting conversation' : 'Agent is working'}
           >
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
-                className="h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isCompacting
+                    ? 'bg-blue-400 dark:bg-blue-500'
+                    : 'bg-neutral-400 dark:bg-neutral-500'
+                }`}
                 style={{
                   animation: 'reading-dot 1.2s ease-in-out infinite',
                   animationDelay: `${i * 0.15}s`,
                 }}
               />
             ))}
+            {isCompacting && (
+              <span className="ml-1 text-xs font-medium text-blue-500 dark:text-blue-400">
+                Compacting...
+              </span>
+            )}
           </div>
         </div>
       )}

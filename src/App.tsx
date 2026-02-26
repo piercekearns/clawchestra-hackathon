@@ -2619,6 +2619,7 @@ export default function App() {
           drawerOpen={chatDrawerOpen}
           responseToastMessage={chatResponseToastMessage}
           isAgentWorking={isChatBusy}
+          isCompacting={agentActivity === 'compacting'}
           showPendingBubble={chatPendingBubbleVisible}
           queue={chatQueue}
           hasMoreMessages={chatHasMore}

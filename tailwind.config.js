@@ -50,9 +50,14 @@ export default {
           '0%, 100%': { color: 'rgb(115, 115, 115)' },  // neutral-500
           '50%': { color: 'rgb(223, 255, 0)' },  // revival-accent-400
         },
+        textPulseBlue: {
+          '0%, 100%': { color: 'rgb(59, 130, 246)' },  // blue-500
+          '50%': { color: 'rgb(147, 197, 253)' },  // blue-300
+        },
       },
       animation: {
         textPulse: 'textPulse 2s ease-in-out infinite',
+        textPulseBlue: 'textPulseBlue 2s ease-in-out infinite',
       },
     },
   },

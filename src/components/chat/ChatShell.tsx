@@ -151,6 +151,7 @@ interface ChatShellProps {
   drawerOpen: boolean;
   responseToastMessage: string | null;
   isAgentWorking: boolean; // True when agent is processing
+  isCompacting?: boolean;
   showPendingBubble?: boolean;
   queue: QueuedMessage[];
   hasMoreMessages?: boolean;
@@ -179,6 +180,7 @@ export function ChatShell({
   drawerOpen,
   responseToastMessage,
   isAgentWorking,
+  isCompacting = false,
   showPendingBubble = false,
   queue,
   hasMoreMessages,
@@ -636,6 +638,7 @@ export function ChatShell({
                 messages={displayMessages}
                 // Show the synthetic pending bubble until visible streamed text arrives.
                 showReadingIndicator={showPendingBubble && !streamingContent}
+                isCompacting={isCompacting}
                 className="flex-1"
                 hasMore={hasMoreMessages}
                 loadingMore={loadingMoreMessages}
@@ -653,6 +656,7 @@ export function ChatShell({
                   showToggle={false}
                   connectionState={connectionState}
                   activityLabel={activityLabel}
+                  isCompacting={isCompacting}
                   activeModelLabel={activeModelLabel}
                   activeModelTooltip={activeModelTooltip}
                   activeModelUsage={activeModelUsage}
@@ -693,6 +697,7 @@ export function ChatShell({
             showToggle
             connectionState={connectionState}
             activityLabel={activityLabel}
+            isCompacting={isCompacting}
             activeModelLabel={activeModelLabel}
             activeModelTooltip={activeModelTooltip}
             activeModelUsage={activeModelUsage}

@@ -27,6 +27,7 @@ function formatUsageNumber(value: number): string {
 interface ChatBarProps {
   connectionState: ChatConnectionState;
   activityLabel: string | null;
+  isCompacting?: boolean;
   activeModelLabel?: string | null;
   activeModelTooltip?: string | null;
   activeModelUsage?: { used: number; max: number; percent: number } | null;
@@ -56,6 +57,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   {
     connectionState,
     activityLabel,
+    isCompacting,
     activeModelLabel,
     activeModelUsage,
     drawerOpen,
@@ -213,7 +215,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               usageTooltip={usageTooltip}
             />
           </div>
-          {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
+          {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
           {images.length > 0 ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
               {images.length} image{images.length === 1 ? '' : 's'} attached
@@ -241,7 +243,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
               usageTooltip={usageTooltip}
             />
           </div>
-          {activityLabel ? <ActivityIndicator label={activityLabel} /> : null}
+          {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
           {images.length > 0 ? (
             <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300">
               {images.length} image{images.length === 1 ? '' : 's'} attached
