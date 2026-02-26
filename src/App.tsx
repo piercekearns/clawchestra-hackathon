@@ -2515,7 +2515,7 @@ export default function App() {
                 : `${topLevelProjects.length} projects`}
           </div>
           {!settingsPageOpen && toasts.length > 0 && (
-            <div className="pointer-events-none absolute inset-x-0 -top-[3px] z-[70] flex justify-center px-4">
+            <div className="pointer-events-none absolute inset-x-0 -top-[6px] z-[70] flex justify-center px-4">
               <div className="pointer-events-auto flex flex-col items-center gap-2">
                 {toastContent}
               </div>
