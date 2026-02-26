@@ -59,11 +59,6 @@ export function Card<T extends BoardItem>({
               P{item.priority}
             </span>
           ) : null}
-          {renderRightHoverActions ? (
-            <div className="pointer-events-none invisible absolute right-3 top-3 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
-              {renderRightHoverActions(item)}
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -83,8 +78,13 @@ export function Card<T extends BoardItem>({
                   </p>
                 )}
               </div>
-              <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-start opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+              <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-between opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
                 {renderHoverActions(item)}
+                {renderRightHoverActions ? (
+                  <div className="flex items-center gap-0.5">
+                    {renderRightHoverActions(item)}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : item.nextAction ? (

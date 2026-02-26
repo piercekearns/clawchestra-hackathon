@@ -45,6 +45,8 @@ interface BoardProps<T extends BoardItem> {
   onQuickAdd?: (columnId: string) => void;
   /** Label for the quick-add card (e.g. "Add Project") */
   quickAddLabel?: string;
+  /** Content rendered after all sortable columns (e.g. an archived column) */
+  trailingContent?: ReactNode;
 }
 
 const MIN_COLUMN_WIDTH = 300;
@@ -131,6 +133,7 @@ export function Board<T extends BoardItem>({
   showPriority,
   onQuickAdd,
   quickAddLabel,
+  trailingContent,
 }: BoardProps<T>) {
   const collapsedColumns = useDashboardStore(
     (s) => s.collapsedColumns[boardId] ?? EMPTY_ARRAY,
@@ -195,20 +198,23 @@ export function Board<T extends BoardItem>({
       orderedColumns.reduce(
         (total, column) => total + (minimizedSet.has(column.id) ? MINIMIZED_COLUMN_WIDTH : MIN_COLUMN_WIDTH),
         0,
-      ) + Math.max(0, orderedColumns.length - 1) * COLUMN_GAP,
-    [minimizedSet, orderedColumns],
+      ) + Math.max(0, orderedColumns.length - 1) * COLUMN_GAP
+      + (trailingContent ? MIN_COLUMN_WIDTH + COLUMN_GAP : 0),
+    [minimizedSet, orderedColumns, trailingContent],
   );
 
   const gridTemplateColumns = useMemo(
-    () =>
-      orderedColumns
+    () => {
+      const cols = orderedColumns
         .map((column) =>
           minimizedSet.has(column.id)
             ? `${MINIMIZED_COLUMN_WIDTH}px`
             : `minmax(${MIN_COLUMN_WIDTH}px, 1fr)`,
         )
-        .join(' '),
-    [minimizedSet, orderedColumns],
+        .join(' ');
+      return trailingContent ? `${cols} minmax(${MIN_COLUMN_WIDTH}px, 1fr)` : cols;
+    },
+    [minimizedSet, orderedColumns, trailingContent],
   );
 
   const sortableColumnIds = useMemo(
@@ -457,6 +463,7 @@ export function Board<T extends BoardItem>({
                 )}
               </SortableColumn>
             ))}
+            {trailingContent}
           </div>
         </SortableContext>
       </div>

@@ -2554,7 +2554,7 @@ export default function App() {
 
         <main className="mb-4 min-h-0 flex-1">
           <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
-            <div className={`h-full min-h-0 ${showArchived && isRoadmapView ? 'flex gap-3 overflow-hidden' : 'overflow-hidden'}`}>
+            <div className="h-full min-h-0 overflow-hidden">
               {isRoadmapView ? (() => {
                 const projectId = activeRoadmapProject!.id;
                 const nonArchivedItems = roadmapItems.filter((i) => i.status !== 'archived');
@@ -2668,11 +2668,9 @@ export default function App() {
 
                 const stopDrag = (e: React.PointerEvent) => e.stopPropagation();
                 const stopClick = (e: React.MouseEvent) => e.stopPropagation();
-                const actionBtnClass = 'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-500 transition-all dark:text-neutral-400';
+                const actionBtnClass = 'inline-flex h-6 w-6 items-center justify-center rounded transition-all text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100';
 
                 return (
-                  <>
-                  <div className={showArchived ? 'min-w-0 flex-1' : 'h-full'}>
                   <Board
                     columns={viewContext.columns}
                     items={nonArchivedItems}
@@ -2688,25 +2686,29 @@ export default function App() {
                     renderItemRightHoverActions={(item) => (
                       <>
                         {item.status !== 'complete' && (
+                          <Tooltip text="Complete">
+                            <button
+                              type="button"
+                              className={actionBtnClass}
+                              onPointerDown={stopDrag}
+                              onClick={(e) => { stopClick(e); handleComplete(item); }}
+                              aria-label="Complete"
+                            >
+                              <CircleCheckBig className="h-[15px] w-[15px]" />
+                            </button>
+                          </Tooltip>
+                        )}
+                        <Tooltip text="Archive">
                           <button
                             type="button"
-                            className={`${actionBtnClass} hover:bg-green-500/15 hover:text-green-600 hover:shadow-sm dark:hover:bg-green-500/15 dark:hover:text-green-400`}
+                            className={actionBtnClass}
                             onPointerDown={stopDrag}
-                            onClick={(e) => { stopClick(e); handleComplete(item); }}
-                            title="Complete"
+                            onClick={(e) => { stopClick(e); handleArchive(item); }}
+                            aria-label="Archive"
                           >
-                            <CircleCheckBig className="h-[15px] w-[15px]" />
+                            <Archive className="h-[15px] w-[15px]" />
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          className={`${actionBtnClass} hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100`}
-                          onPointerDown={stopDrag}
-                          onClick={(e) => { stopClick(e); handleArchive(item); }}
-                          title="Archive"
-                        >
-                          <Archive className="h-[15px] w-[15px]" />
-                        </button>
+                        </Tooltip>
                       </>
                     )}
                     onItemsChange={(nextItems) => {
@@ -2717,88 +2719,89 @@ export default function App() {
                       setAddRoadmapItemOpen(true);
                     }}
                     quickAddLabel="Add Roadmap Item"
-                  />
-                  </div>
-
-                  {/* Archived column — rendered separately, outside Board's dnd-kit context */}
-                  {showArchived && (
-                    <div className="flex h-full w-[280px] shrink-0 flex-col rounded-2xl border border-neutral-200 bg-neutral-100/60 dark:border-neutral-700 dark:bg-neutral-900/60">
-                      {/* Header */}
-                      <div className="flex items-center gap-1.5 rounded-t-2xl bg-neutral-100 px-3 py-2 dark:bg-neutral-800">
-                        <Archive className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
-                        <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
-                          Archived
-                        </h2>
-                        <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                          {archivedItems.length}
-                        </span>
-                        <div className="ml-auto flex items-center gap-1">
-                          {archivedItems.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteAllArchivedConfirmOpen(true)}
-                              className="rounded p-1 text-neutral-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:text-neutral-500 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-                              title="Delete all archived items"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setShowArchived(false)}
-                            className="rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-                          >
-                            <EyeOff className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      {/* Cards */}
-                      <div className="flex-1 space-y-2 overflow-y-auto p-2">
-                        {archivedItems.length === 0 ? (
-                          <p className="px-2 py-4 text-center text-xs text-neutral-400 dark:text-neutral-500">
-                            No archived items
-                          </p>
-                        ) : (
-                          archivedItems.map((item) => (
-                            <article
-                              key={item.id}
-                              onClick={() => setSelectedRoadmapItemId(item.id)}
-                              className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-neutral-50 p-3 opacity-60 shadow-sm transition hover:border-neutral-300 hover:opacity-80 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:border-neutral-600"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <h3 className="text-sm font-semibold leading-tight line-through text-neutral-600 dark:text-neutral-400">
-                                  {item.title}
-                                  {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
-                                </h3>
-                                {/* Restore + Delete buttons on hover */}
-                                <div className="pointer-events-none invisible flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
-                                  <button
-                                    type="button"
-                                    className={`${actionBtnClass} hover:bg-revival-accent-400/15 hover:text-revival-accent-600 hover:shadow-sm dark:hover:bg-revival-accent-400/15 dark:hover:text-revival-accent-400`}
-                                    onPointerDown={stopDrag}
-                                    onClick={(e) => { stopClick(e); handleRestore(item); }}
-                                    title="Restore"
-                                  >
-                                    <RotateCcw className="h-[15px] w-[15px]" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`${actionBtnClass} hover:bg-red-100 hover:text-red-600 hover:shadow-sm dark:hover:bg-red-900/30 dark:hover:text-red-400`}
-                                    onPointerDown={stopDrag}
-                                    onClick={(e) => { stopClick(e); handleDeleteItem(item); }}
-                                    title="Delete permanently"
-                                  >
-                                    <Trash2 className="h-[15px] w-[15px]" />
-                                  </button>
+                    trailingContent={showArchived ? (
+                      <section className="flex h-full min-h-0 min-w-0 flex-col rounded-2xl border border-neutral-200 bg-neutral-100/60 p-3 dark:border-neutral-700 dark:bg-neutral-900/40">
+                        {/* Header */}
+                        <header className="mb-3 mr-[1px] flex items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 dark:bg-neutral-800">
+                          <Archive className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
+                          <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 dark:text-neutral-200">
+                            Archived
+                          </h2>
+                          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                            {archivedItems.length}
+                          </span>
+                          <div className="ml-auto flex items-center gap-1">
+                            {archivedItems.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteAllArchivedConfirmOpen(true)}
+                                className="rounded p-1 text-neutral-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:text-neutral-500 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                                title="Delete all archived items"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            <Tooltip text="Hide archive">
+                              <button
+                                type="button"
+                                onClick={() => setShowArchived(false)}
+                                className="rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                                aria-label="Hide archived column"
+                              >
+                                <EyeOff className="h-3.5 w-3.5" />
+                              </button>
+                            </Tooltip>
+                          </div>
+                        </header>
+                        {/* Cards */}
+                        <div className="scrollbar-hidden flex min-h-0 grow flex-col gap-2 overflow-y-auto pr-[1px]">
+                          {archivedItems.length === 0 ? (
+                            <div className="mt-6 rounded-xl border border-dashed border-neutral-300 p-4 text-center text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                              No archived items
+                            </div>
+                          ) : (
+                            archivedItems.map((item) => (
+                              <article
+                                key={item.id}
+                                onClick={() => setSelectedRoadmapItemId(item.id)}
+                                className="group relative cursor-pointer rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 opacity-60 shadow-sm transition hover:border-neutral-300 hover:opacity-80 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:border-neutral-600"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <h3 className="text-sm font-semibold leading-tight text-neutral-600 line-through dark:text-neutral-400">
+                                    {item.title}
+                                    {item.icon ? <span className="ml-1 inline-block align-text-bottom">{item.icon}</span> : null}
+                                  </h3>
+                                  {/* Restore + Delete buttons on hover */}
+                                  <div className="pointer-events-none invisible flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+                                    <Tooltip text="Restore">
+                                      <button
+                                        type="button"
+                                        className={actionBtnClass}
+                                        onClick={(e) => { stopClick(e); handleRestore(item); }}
+                                        aria-label="Restore"
+                                      >
+                                        <RotateCcw className="h-[15px] w-[15px]" />
+                                      </button>
+                                    </Tooltip>
+                                    <Tooltip text="Delete">
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-6 w-6 items-center justify-center rounded transition-all text-neutral-500 dark:text-neutral-400 hover:bg-red-100 hover:text-red-600 hover:shadow-sm dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                                        onClick={(e) => { stopClick(e); handleDeleteItem(item); }}
+                                        aria-label="Delete permanently"
+                                      >
+                                        <Trash2 className="h-[15px] w-[15px]" />
+                                      </button>
+                                    </Tooltip>
+                                  </div>
                                 </div>
-                              </div>
-                            </article>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  </>
+                              </article>
+                            ))
+                          )}
+                        </div>
+                      </section>
+                    ) : undefined}
+                  />
                 );
               })() : (
                 <Board
