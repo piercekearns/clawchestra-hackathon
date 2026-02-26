@@ -9,12 +9,22 @@ import {
 } from '../../lib/store';
 import { HubNav } from '../hub/HubNav';
 
+interface SidebarAction {
+  id: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  onClick: () => void;
+  badgeCount?: number;
+  iconClassName?: string;
+}
+
 interface SidebarProps {
   side: 'left' | 'right';
   mode?: 'default' | 'settings';
   onOpenSettings: () => void;
   onBack?: () => void;
   elevated?: boolean;
+  actions?: SidebarAction[];
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
 }
 
@@ -24,6 +34,7 @@ export function Sidebar({
   onOpenSettings,
   onBack,
   elevated = false,
+  actions = [],
   onToast,
 }: SidebarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
@@ -99,7 +110,48 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Thread list — main content when not in settings */}
+        {/* Action buttons */}
+        {sidebarOpen && !isSettingsMode && actions.length > 0 && (
+          <div className={`flex flex-col gap-0.5 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
+            {actions.map((action) => {
+              const Icon = action.icon;
+              const iconEl = (
+                <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                  <Icon className={action.iconClassName ?? 'h-4 w-4'} />
+                  {action.badgeCount && action.badgeCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#DFFF00] px-0.5 text-[9px] font-semibold text-neutral-900">
+                      {action.badgeCount}
+                    </span>
+                  ) : null}
+                </span>
+              );
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={action.onClick}
+                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
+                    isRight ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {isRight ? (
+                    <>
+                      <span className="min-w-0 truncate text-right">{action.label}</span>
+                      {iconEl}
+                    </>
+                  ) : (
+                    <>
+                      {iconEl}
+                      <span className="min-w-0 truncate">{action.label}</span>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Thread list — fills remaining space below actions */}
         {sidebarOpen && !isSettingsMode && (
           <HubNav onToast={onToast} />
         )}

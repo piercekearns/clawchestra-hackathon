@@ -2501,6 +2501,7 @@ export default function App() {
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
+            actions={sidebarActions}
             onToast={pushToast}
           />
         ) : null}
@@ -3207,6 +3208,7 @@ export default function App() {
             onOpenSettings={handleSettingsOpen}
             onBack={handleSettingsBack}
             elevated={boardModalOpen}
+            actions={sidebarActions}
             onToast={pushToast}
           />
         ) : null}
