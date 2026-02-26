@@ -2397,8 +2397,8 @@ export default function App() {
       key={toast.id}
       className={`pointer-events-auto flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm shadow-md ${
         toast.kind === 'error'
-          ? 'border-status-danger/60 bg-red-50 text-status-danger dark:bg-red-950/60 dark:text-red-300'
-          : 'border-revival-accent-400/40 bg-revival-accent-100 text-neutral-900 dark:bg-revival-accent-900/30 dark:text-neutral-100'
+          ? 'border-status-danger bg-red-50 text-status-danger dark:bg-red-950 dark:text-red-300'
+          : 'border-revival-accent-400 bg-revival-accent-100 text-neutral-900 dark:bg-revival-accent-900 dark:text-neutral-100'
       }`}
     >
       <span>{toast.message}</span>
@@ -2471,7 +2471,7 @@ export default function App() {
           </main>
         ) : (
           <>
-        <div className="mb-4 flex items-center justify-between gap-3 px-3 md:px-4">
+        <div className="relative mb-4 flex items-center justify-between gap-3 px-4 md:px-5">
           <Breadcrumb
             viewContext={viewContext}
             onNavigate={(crumbId) => {
@@ -2514,6 +2514,13 @@ export default function App() {
                 )
                 : `${topLevelProjects.length} projects`}
           </div>
+          {!settingsPageOpen && toasts.length > 0 && (
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-[70] flex h-full items-center justify-center px-4">
+              <div className="pointer-events-auto flex flex-col items-center gap-2">
+                {toastContent}
+              </div>
+            </div>
+          )}
         </div>
 
         {!isRoadmapView && searchQuery.trim() && (
@@ -2556,12 +2563,7 @@ export default function App() {
           </section>
         )}
 
-        <main className="relative mb-4 min-h-0 flex-1">
-          {!settingsPageOpen && toasts.length > 0 && (
-            <div className="pointer-events-none absolute left-1/2 top-2 z-[70] flex w-full max-w-xl -translate-x-1/2 flex-col items-center gap-2 px-4">
-              {toastContent}
-            </div>
-          )}
+        <main className="mb-4 min-h-0 flex-1">
           <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
             <div className="h-full min-h-0 overflow-hidden">
               {isRoadmapView ? (() => {
