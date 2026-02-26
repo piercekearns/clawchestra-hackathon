@@ -44,9 +44,25 @@ Same row, same icon size/style as lifecycle buttons. Left group = existing lifec
 - Undo: restores original status
 
 ### Toast spec
-- Auto-dismisses after ~5s (same pattern as other toasts)
-- Undo button in toast triggers immediate reversal
-- If the user has already navigated away or the session ends, undo is gone
+
+**Stacking:** Multiple toasts stack vertically — new toasts appear above (or below) existing ones rather than replacing them. Each toast has its own independent 5s countdown. If the user archives three cards in quick succession, all three toasts are visible simultaneously and each is independently interactable until it times out.
+
+**Dismissal animation:** When a toast's timer expires (or the user manually dismisses it), it fades out and slides away. The remaining toasts reflow into the vacated space with a smooth height animation — no jarring jumps.
+
+**Undo window:** The Undo button on each toast is accessible until that specific toast dismisses. Rapid-firing archive/complete actions does not collapse or replace earlier toasts, so all undos are accessible in the window after the actions were taken.
+
+**Specifics:**
+- Each toast auto-dismisses after **5s** from the moment it appeared (independent timers, not shared)
+- Toasts stack in reverse chronological order — newest on top (or configurable)
+- Max visible stack: **5 toasts** — oldest silently dismissed if a 6th arrives before any have timed out (edge case)
+- Undo button triggers immediate reversal and dismisses that toast instantly
+- If the session ends or the user navigates away, undo is gone
+- Toasts are scoped to the board view — they don't persist across page reloads
+
+**Exit animation options (to be decided during implementation):**
+- Fade out + collapse height (recommended — content shrinks away cleanly)
+- Slide out to the right + collapse
+- Scale down + fade
 
 ## Icons
 - **Complete:** `CheckCircle2` (lucide) — same style as lifecycle buttons
@@ -55,8 +71,9 @@ Same row, same icon size/style as lifecycle buttons. Left group = existing lifec
 ## Build Order
 1. Add hover button group to roadmap card component (right side of lifecycle row)
 2. Wire click handlers to status update action (existing `updateRoadmapItemStatus`)
-3. Add toast with Undo — needs a short-lived undo stack (store slice or local ref)
-4. Handle collapsed-column edge case for complete action
+3. Build stacking toast system — an array of active toasts (id, message, undo callback, timestamp), each with its own independent timer; renders as a fixed stack in the corner; individual fade-out + height-collapse on dismiss
+4. Wire Archive and Complete into the toast stack with Undo callbacks
+5. Handle collapsed-column edge case for complete action
 
 ---
 
