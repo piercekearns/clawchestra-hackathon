@@ -4,7 +4,7 @@ id: ui-tweaks
 status: in-progress
 tags: [ui, polish, sidebar, ux]
 icon: "✨"
-nextAction: "Remaining: item 1 evolve ValidationBadge → header placement + build errors + copy support; item 2 chat bar height shell removal. Model selector (3) deferred."
+nextAction: "Remaining: item 2 chat bar height shell removal. Model selector (3) deferred."
 lastActivity: "2026-02-25"
 ---
 
@@ -18,7 +18,7 @@ A holding item for UI/UX improvements that are too small for their own roadmap i
 
 Evolve the existing `ValidationBadge` (currently positioned near the search bar) into a unified status badge that lives permanently in the **TitleBar**, to the right of the Clawchestra logo + text — and to the right of the Update button if one is present.
 
-**Status:** ⏳ Pending (updated 2026‑02‑26)
+**Status:** ✅ Complete (shipped 2026-02-26, commit `9996d0c`)
 
 ### What it Does
 
@@ -85,6 +85,6 @@ Potential evolution of the model badge from read-only to selectable. Clicking co
 
 ## Priority Order (suggested)
 
-1. Title bar error details modal - ⏳ pending
+1. ~~Title bar error details modal~~ - ✅ complete
 2. Chat bar height: remove inner field shell - ⏳ pending
 3. Model selector (if/when) - ⏳ deferred
