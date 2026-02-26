@@ -367,7 +367,7 @@ When a terminal session needs attention (detected via output parsing):
 
 - **Default**: Auto-generated from launch context — "Claude Code — git-sync" (agent + scope)
 - **First prompt enhancement**: If the user's first message to the agent is identifiable, append it — "Claude Code — git-sync — implementing Phase 2"
-- User can rename via the `⋯` hover menu (inline edit in place — same pattern as conversation hub chat entries)
+- User can rename via **double-click on the name** (primary) or the `⋯` hover menu (secondary) — inline edit in place, Enter to confirm, Escape to cancel
 - Name persists across app restarts
 
 ### Scrollback Persistence
@@ -611,7 +611,7 @@ The xterm.js + Tauri v2 validation spike determines the *rendering method*, not 
 First-time experience should detect which agent CLIs are available on the user's machine (claude, codex, cursor, opencode) and present them as launch options. If none are found, offer a generic terminal. Don't force the user to configure anything.
 
 ### 6. Session naming: auto-generate from context
-Default name format: "{agent} — {scope}" (e.g., "Claude Code — git-sync"). Enhanced with first prompt if identifiable. User can rename anytime. No prompt to name on creation — that adds friction.
+Default name format: "{agent} — {scope}" (e.g., "Claude Code — git-sync"). Enhanced with first prompt if identifiable. User can rename anytime via double-click or `⋯` menu. No prompt to name on creation — that adds friction.
 
 ### 7. Notification threshold: configurable, default to approvals + errors
 Notifications fire for approval requests and errors by default. The user can configure: all events, approvals + errors only, errors only, or off. System notifications (macOS) are opt-in.

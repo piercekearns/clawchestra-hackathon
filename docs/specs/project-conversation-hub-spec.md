@@ -132,7 +132,7 @@ Every item in the hub — project thread headers and individual chat entries —
 
 | Action | Behaviour |
 |--------|-----------|
-| Rename | Inline edit — label becomes an input field in place, confirm with Enter / blur |
+| Rename | **Primary trigger: double-click the name directly.** Secondary: via this menu. In both cases, label becomes an input field in place — confirm with Enter, cancel with Escape, save on blur. Single-click still opens/switches to the chat as normal; double-click is a distinct gesture. |
 | Pin / Unpin | Toggle pinned state; pinned chats float above the recency-sorted list |
 | Mark as unread / Read | Toggle unread indicator |
 | Open linked item | Navigate to the roadmap card for this chat's linked item (only shown if chat has a linked roadmap item) |
@@ -143,7 +143,7 @@ Every item in the hub — project thread headers and individual chat entries —
 
 | Action | Behaviour |
 |--------|-----------|
-| Rename | Same inline edit as chat |
+| Rename | Same as chat — double-click the name (primary) or via this menu (secondary) |
 | Pin / Unpin | Same |
 | End session | Kill the tmux session (with confirmation if session is active) |
 | Detach | Detach xterm.js from the tmux session without killing it — session keeps running in background |
@@ -206,7 +206,7 @@ When a project or roadmap item name is too long to fit in the sidebar row, it tr
 - **Sorted by last interaction** — most recently active chats appear at the top, not by creation date
 - **Max 5 visible per project** — roadmap-item-level chats show 5 max, then "Show N more..." dropdown below the 5th
 - **Pin** — user can pin specific chats to keep them visible regardless of recency *(via `⋯` hover menu)*
-- **Rename** — user can rename any chat (default name is the project/item title) *(via `⋯` hover menu — inline edit in place)*
+- **Rename** — user can rename any chat (default name is the project/item title) *(double-click the name, or via `⋯` hover menu)*
 - **Archive** — user can manually archive chats they're done with *(via `⋯` hover menu)*
 - **Mark as unread** — user can mark a chat as unread (for "come back to this" workflow) *(via `⋯` hover menu)*
 - **Completion indicator** — when a linked roadmap item reaches `complete` status, the chat shows a visual checkmark/greyed title, but does NOT auto-archive (see decision below)
