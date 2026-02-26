@@ -2471,7 +2471,7 @@ export default function App() {
           </main>
         ) : (
           <>
-        <div className="relative mb-4 flex items-center justify-between gap-3 px-4 md:px-5">
+        <div className="relative mb-4 flex items-center justify-between gap-3">
           <Breadcrumb
             viewContext={viewContext}
             onNavigate={(crumbId) => {
