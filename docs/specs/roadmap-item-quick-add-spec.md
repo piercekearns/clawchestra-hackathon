@@ -46,7 +46,7 @@ There's no UI affordance for "I'm looking at this project's kanban board and I w
    - `schema: [roadmap item schema]`
 6. OpenClaw creates the item directly — no preview, no confirmation step
 7. Modal closes, the new card appears in the "pending" column
-8. User can click the card to view and edit all generated fields
+8. User can click the card to view the details
 
 #### Path B: Manual Fields
 
@@ -128,10 +128,6 @@ Remaining build sequence:
 - Context injection: project, column, existing items, schema
 - AI creates the item immediately on receiving the user's description — no preview step
 - Modal closes on creation; user sees the card on the board and can click to review details
-
-### Phase 3: Polish
-- Multi-turn refinement before creation ("actually focus it on mobile first")
-- Inline creation vs modal (card appears in-place on the board)
 
 ## Non-Goals
 
