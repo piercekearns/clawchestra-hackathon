@@ -2990,19 +2990,26 @@ export default function App() {
                   }}
                   renderItemActions={() => null}
                   renderItemRightHoverActions={(project) => (
-                    <Tooltip text="Chat">
+                    <Tooltip text="Open project">
                       <button
                         type="button"
                         className="inline-flex h-6 w-6 items-center justify-center rounded transition-all text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
+                          // Open project board
+                          if (project.hasRoadmap) {
+                            void openRoadmapView(project);
+                          } else {
+                            setSelectedProjectId(project.id);
+                          }
+                          // Open (or create) the project-level chat and surface the drawer
                           void openOrCreateProjectChat(
                             project.id,
                             project.frontmatter?.title ?? project.id,
                           );
                         }}
-                        aria-label="Open project chat"
+                        aria-label="Open project"
                       >
                         <MessageSquare className="h-[15px] w-[15px]" />
                       </button>

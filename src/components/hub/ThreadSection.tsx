@@ -53,8 +53,12 @@ export function ThreadSection({
     transition,
   };
 
-  const pinnedChats = thread.chats.filter((c) => c.pinned && !c.archived);
-  const unpinnedChats = thread.chats.filter((c) => !c.pinned && !c.archived);
+  // Project-level chat (itemId === null) always floats to the top, separate from pin sort
+  const projectChat = thread.chats.find((c) => !c.itemId && !c.archived) ?? null;
+  const restChats = thread.chats.filter((c) => c !== projectChat);
+
+  const pinnedChats = restChats.filter((c) => c.pinned && !c.archived);
+  const unpinnedChats = restChats.filter((c) => !c.pinned && !c.archived);
   const archivedChats = thread.chats.filter((c) => c.archived);
 
   const visibleUnpinned = showAll ? unpinnedChats : unpinnedChats.slice(0, MAX_VISIBLE_CHATS);
@@ -117,6 +121,21 @@ export function ThreadSection({
       {/* Chat entries — NO indentation, same alignment as project header */}
       {!collapsed && (
         <div>
+          {/* Project-level chat always first, with a persistent home icon */}
+          {projectChat && (
+            <ChatEntryRow
+              key={projectChat.id}
+              chat={projectChat}
+              isActive={activeChatId === projectChat.id}
+              isProjectChat
+              onSelect={onSelectChat}
+              onRename={onRenameChat}
+              onTogglePin={onTogglePinChat}
+              onArchive={onArchiveChat}
+              onMarkUnread={onMarkUnreadChat}
+              onDelete={onDeleteChat}
+            />
+          )}
           {allVisible.map((chat) => (
             <ChatEntryRow
               key={chat.id}

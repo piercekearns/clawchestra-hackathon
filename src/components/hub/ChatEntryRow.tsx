@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, Check, MoreHorizontal, Pin } from 'lucide-react';
+import { Archive, Check, Home, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import { InlineEdit } from './InlineEdit';
 
@@ -8,6 +8,8 @@ interface ChatEntryRowProps {
   chat: HubChat;
   isActive: boolean;
   isItemComplete?: boolean;
+  /** When true, renders this row as the project-level root chat (special icon, no pin/archive) */
+  isProjectChat?: boolean;
   onSelect: (chatId: string) => void;
   onRename: (chatId: string, newTitle: string) => void;
   onTogglePin: (chatId: string, pinned: boolean) => void;
@@ -20,6 +22,7 @@ export function ChatEntryRow({
   chat,
   isActive,
   isItemComplete = false,
+  isProjectChat = false,
   onSelect,
   onRename,
   onTogglePin,
@@ -38,22 +41,31 @@ export function ChatEntryRow({
       } ${isItemComplete ? 'opacity-60' : ''}`}
       onClick={() => onSelect(chat.id)}
     >
-      {/* Pin icon — aligned under the folder icon above */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onTogglePin(chat.id, !chat.pinned);
-        }}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center transition-opacity ${
-          chat.pinned
-            ? 'text-[#DFFF00] opacity-100'
-            : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
-        }`}
-        aria-label={chat.pinned ? 'Unpin' : 'Pin'}
-      >
-        <Pin className="h-3 w-3" />
-      </button>
+      {/* Project-level chat: static home icon; others: pin button */}
+      {isProjectChat ? (
+        <span
+          className="flex h-5 w-5 shrink-0 items-center justify-center text-revival-accent-400/80 dark:text-revival-accent-400/70"
+          aria-label="Project chat"
+        >
+          <Home className="h-3 w-3" />
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin(chat.id, !chat.pinned);
+          }}
+          className={`flex h-5 w-5 shrink-0 items-center justify-center transition-opacity ${
+            chat.pinned
+              ? 'text-[#DFFF00] opacity-100'
+              : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
+          }`}
+          aria-label={chat.pinned ? 'Unpin' : 'Pin'}
+        >
+          <Pin className="h-3 w-3" />
+        </button>
+      )}
 
       {/* Chat name — on hover, reserve space for action icons so text clips */}
       <div className={`min-w-0 flex-1 flex items-center gap-1.5 ${isEditing ? '' : 'group-hover:pr-14'}`}>
@@ -73,7 +85,7 @@ export function ChatEntryRow({
         <Check className="h-3 w-3 shrink-0 text-green-500" />
       )}
 
-      {/* Right hover actions — ⋯ first, then archive; hidden during inline edit */}
+      {/* Right hover actions — ⋯ first, then archive (archive hidden for project-level chats) */}
       <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md px-0.5 transition-opacity ${
         isEditing ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
       } ${
@@ -84,17 +96,19 @@ export function ChatEntryRow({
           onMarkUnread={() => onMarkUnread(chat.id)}
           onDelete={() => onDelete(chat.id)}
         />
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchive(chat.id);
-          }}
-          className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-          aria-label="Archive"
-        >
-          <Archive className="h-3 w-3" />
-        </button>
+        {!isProjectChat && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchive(chat.id);
+            }}
+            className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label="Archive"
+          >
+            <Archive className="h-3 w-3" />
+          </button>
+        )}
       </div>
     </div>
   );
