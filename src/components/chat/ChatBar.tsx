@@ -254,7 +254,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
             <span
               className={`absolute flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-200/80 dark:text-neutral-300 dark:hover:bg-neutral-700/80 ${
                 toggleRight
-                  ? 'right-[14px] top-1/2 -translate-y-1/2'
+                  ? 'right-[13px] top-1/2 -translate-y-1/2'
                   : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
               }`}
               aria-hidden
