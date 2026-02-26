@@ -93,7 +93,7 @@ import { mapToRoadmapItemsWithDocs } from './lib/roadmap-item-mapper';
 import { defaultView, projectRoadmapView } from './lib/views';
 import { setupTauriEventListeners } from './lib/tauri-events';
 import { messageIdentitySignature } from './lib/chat-message-identity';
-import { formatModelDisplayName } from './lib/model-label';
+import { formatModelDisplayName, formatProviderDisplayName } from './lib/model-label';
 import { CHAT_RELIABILITY_FLAGS } from './lib/chat-reliability-flags';
 import {
   buildFailureBubbleDedupeKey,
@@ -119,21 +119,6 @@ function applyTheme(preference: ThemePreference) {
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const isDark = preference === 'dark' || (preference === 'system' && systemDark);
   root.classList.toggle('dark', isDark);
-}
-
-function formatProviderDisplayName(providerId?: string | null): string | null {
-  if (!providerId) return null;
-  const normalized = providerId.trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized === 'github-copilot') return 'Copilot';
-  if (normalized === 'openai') return 'OpenAI';
-  if (normalized === 'anthropic') return 'Anthropic';
-  if (normalized === 'google') return 'Google';
-  return normalized
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(' ');
 }
 
 /** Optimistically mark a project's git status as dirty with an additional file entry. */

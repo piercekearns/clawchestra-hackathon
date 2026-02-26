@@ -37,6 +37,21 @@ function normalizeToken(token: string): string {
   return titleCase(token);
 }
 
+export function formatProviderDisplayName(providerId?: string | null): string | null {
+  if (!providerId) return null;
+  const normalized = providerId.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'github-copilot') return 'Copilot';
+  if (normalized === 'openai') return 'OpenAI';
+  if (normalized === 'anthropic') return 'Anthropic';
+  if (normalized === 'google') return 'Google';
+  return normalized
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
+}
+
 export function formatModelDisplayName(modelId?: string | null): string | null {
   if (!modelId) return null;
   const base = normalizeBaseModelId(modelId);
