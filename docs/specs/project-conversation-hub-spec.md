@@ -107,13 +107,50 @@ The key UX insight: **the entry point is the card, not a sidebar hierarchy.**
 - If no chat exists for this item → creates one within the project's thread automatically
 - Item-level chats inherit project context + add item-specific context (spec, plan, detail file)
 
-### Sidebar Behavior
+### Spatial Layout (Option B — resolved, see Decision 8)
 
-- Lives in the existing sidebar panel area (left side, same region as thin sidebar navigation)
-- Shows chat content: message history, input box, context summary at top
-- **Back navigation** — from an item chat, can go up to project thread list
-- **Chat switcher** — click any chat in the thread list to switch without closing the sidebar
-- Sidebar can coexist with the kanban view
+The conversation hub uses a **two-layer spatial model**:
+
+1. **Main sidebar** — contains the hub navigation: the list of project threads and their chat/terminal entries. This is persistent navigation infrastructure — it stays visible while the user browses and selects.
+2. **Secondary chat drawer** — opens to the right of the main sidebar when the user clicks a specific chat or terminal entry. This is where the conversation actually happens. It can be resized and dismissed independently of the main sidebar.
+
+```
+[Thin strip] | [Main sidebar — hub nav] | [Secondary drawer — active chat] | [Kanban board]
+```
+
+The secondary drawer can be open or closed independently. The main sidebar remains visible regardless of drawer state. The kanban board shifts right to accommodate the drawer width (or overlaps at narrower screen sizes — exact behaviour TBD in planning).
+
+---
+
+### Thin Sidebar Entry Point
+
+The thin icon strip (existing left-edge navigation) gains a dedicated **conversation hub icon** — something that visually represents chats and/or terminal sessions (e.g. speech bubble, branching threads, or a combined chat+terminal glyph).
+
+**Behaviour:**
+- **Click (hub not open):** Opens the main sidebar to the conversation hub view. If all threads are collapsed, expands them so the user can immediately see and navigate to threads and chats.
+- **Click (hub already open):** Collapses the main sidebar back (standard sidebar toggle behaviour).
+- **Visual state:** Icon is highlighted/active when the hub is open, default when closed. If any thread has an unread indicator, a small badge on the icon can surface this without opening the sidebar.
+
+---
+
+### Secondary Chat Drawer
+
+When the user clicks a chat or terminal entry in the hub nav, a **secondary drawer** opens to the right of the main sidebar containing the active conversation or terminal session.
+
+**Drawer behaviour:**
+- Resizable — user can drag the drawer wider or narrower.
+- Persists while navigating — switching between chats in the hub nav updates the drawer content without closing it.
+- **Close control:** A **dismiss icon** (e.g. `→` collapse arrow or `×`) sits in the **top-right corner of the drawer**. Clicking it closes the drawer, leaving the main sidebar (hub nav) visible and the kanban board returning to full width. It does not close the main sidebar.
+- The drawer is the only way to interact with a chat — no chat content renders inside the main sidebar nav itself.
+
+---
+
+### Main Sidebar Hub Nav Behaviour
+
+- Shows the thread list with chat/terminal entries (as specified in Row Layout section)
+- **Back navigation** — from within the drawer, a breadcrumb or header indicates the active chat scope. The hub nav sidebar always shows where you are.
+- **Chat switcher** — clicking a different chat in the nav updates the drawer. No need to close and re-open.
+- Hub nav coexists with the kanban board view (sits to the left of it).
 
 ### Row Layout + Hover Affordances
 
@@ -351,6 +388,9 @@ The general chat bar is a separate UI element from the conversation hub. It's th
 ### 7. tmux for terminal session persistence
 Terminal sessions within the conversation hub use tmux as the backend (not direct PTY). This ensures session persistence across app restarts, matching the persistence behavior users expect from OpenClaw chat history. See `embedded-agent-terminals-spec.md` for details.
 
+### 8. Spatial layout: Option B (separate resizable secondary drawer)
+The hub navigation (thread list) lives in the main sidebar. Active chat/terminal content opens in a **secondary drawer** to the right of the main sidebar — independently resizable and dismissible. The main sidebar remains visible regardless of drawer state. Entry point is a dedicated conversation hub icon in the thin strip. Thin strip icon click opens the hub nav and expands all threads if collapsed. Secondary drawer has a close control in its top-right corner that dismisses only the drawer, leaving the hub nav intact.
+
 ## Phased Delivery
 
 ### Phase 1: Chat Data Model + Storage + Basic Sidebar
@@ -394,7 +434,9 @@ Terminal sessions within the conversation hub use tmux as the backend (not direc
 
 ## Open Questions
 
-### OQ-1: Spatial layout — nav hub vs active chat surface (⚠️ must resolve before planning)
+### ~~OQ-1: Spatial layout~~ → **Resolved** — see Decision 8
+
+### OQ-1 (archived): Spatial layout — nav hub vs active chat surface
 
 The spec currently describes the conversation hub as living in the sidebar and also renders chat content there. This conflates two distinct UI concerns:
 
