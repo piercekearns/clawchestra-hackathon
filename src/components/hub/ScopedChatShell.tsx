@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HubChat } from '../../lib/hub-types';
 import type { ChatMessage } from '../../lib/gateway';
-import { sendMessageWithContext } from '../../lib/gateway';
+import { sendMessageWithContext, fetchSessionModel } from '../../lib/gateway';
 import { useDashboardStore } from '../../lib/store';
 import {
   hubChatUpdate,
@@ -126,6 +126,26 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
     });
     return () => { cancelled = true; };
   }, [chat.id, chat.projectId, chat.itemId]);
+
+  // Probe session model on mount so the badge shows the model even before a send
+  useEffect(() => {
+    if (!chat.sessionKey) return;
+    let cancelled = false;
+    void fetchSessionModel({ sessionKey: chat.sessionKey, allowDefaultsFallback: false }).then((snapshot) => {
+      if (cancelled || !snapshot) return;
+      if (snapshot.model || snapshot.provider) {
+        const ml = formatModelDisplayName(snapshot.model);
+        const pl = formatProviderDisplayName(snapshot.provider);
+        const label = pl && ml ? `${pl} · ${ml}` : ml ?? pl;
+        if (label) {
+          setModelLabel((prev) => prev ?? label);
+          const rawModel = snapshot.model ?? 'unknown model';
+          setModelTooltip((prev) => prev ?? (snapshot.provider ? `${snapshot.provider} · ${rawModel}` : rawModel));
+        }
+      }
+    }).catch(() => {/* silently ignore */});
+    return () => { cancelled = true; };
+  }, [chat.id, chat.sessionKey]);
 
   // Cold-start: load messages from SQLite when cache is empty
   useEffect(() => {
