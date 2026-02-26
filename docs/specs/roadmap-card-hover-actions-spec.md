@@ -22,7 +22,7 @@ That's three interactions for what should be a one-click board operation. Archiv
 
 - Hovering a roadmap item card reveals two action buttons on the **right** side of the card
 - **Complete** (`CircleCheckBig` from Lucide) — moves the item to `complete` status
-- **Archive** (`Archive` from Lucide) — moves the item to `archived` status (see open design question below)
+- **Archive** (`Archive` from Lucide) — moves the item to `archived` status; card disappears from the board
 - Both buttons appear/disappear with the same hover behaviour as existing lifecycle buttons (which sit on the **left** side of the card)
 - Both actions show a **toast notification** with an **Undo** button
 - Undo fully restores the item to its previous status/column
@@ -68,44 +68,63 @@ Reuse the existing Proton Mail-inspired pattern: bare icon at rest, subtle conta
 
 ---
 
-## Show Archived Toggle
+## Show Archived Toggle — Interaction Model
 
-Archived items are hidden from the roadmap board by default. A toggle in the project roadmap header lets the user reveal them.
+Archived items are hidden by default. The toggle to reveal them is surfaced via hover on the item count in the top-right of the board header — it replaces (not augments) that text, keeping zero ambient clutter.
 
-### Placement
+### States
 
-A small **"Show archived"** toggle button sits in the roadmap board's header area — right-aligned, in the same horizontal band as the column controls. Uses the `Archive` icon from Lucide.
+#### Default state
+```
+                                              37 roadmap item(s)
+```
+Item count shown top-right, no toggle visible.
 
-**When inactive (default):** Icon-only button, muted/secondary style  
-**When active:** Icon button with filled/highlighted treatment (e.g. `text-neutral-800 dark:text-neutral-100`, subtle bg)
+#### Hover state (mouse over item count)
+```
+                                         Show archive  [○ toggle off]
+```
+Item count text is **replaced** by "Show archive" with an off-state toggle. If the mouse leaves without clicking, the item count returns.
 
-### Archived Item Appearance (when toggle is on)
+#### Archive-on state (toggle clicked)
+```
+                                         Show archive  [● toggle on]
+```
+The "Show archive" label with toggle **stays rendered** (no longer hover-dependent) — gives the user a persistent mode indicator and a visible way to turn it off. The Archived column appears on the board.
 
-- Archived cards appear at the **bottom of their original column**, below active items
-- Separated from active items by a thin rule (`border-t border-neutral-200 dark:border-neutral-700`)
-- Muted visual treatment: `opacity-50`, title with `line-through`
-- No hover actions (or: only Restore action — see below)
-
-### Restore from Archive
-
-When "Show archived" is on, archived cards could show a **Restore** button on hover (opposite of Archive). This is a nice-to-have; the Undo toast covers the immediate case.
+#### Returning to default
+Either:
+- Click the toggle again from top-right (toggle turns off → item count returns, column disappears), or
+- Press **Hide** in the Archived column's header (same result — both exit paths are equivalent)
 
 ---
 
-## Open Design Question: Archive Behaviour
+## Archived Column
 
-> **⚠️ Unresolved — decision needed before implementation.**
+When archive is on, a dedicated **Archived** column appears at the far right of the board.
 
-What does "archived" mean in the context of the roadmap board? Options:
+### Column Header
 
-| Option | Description | Trade-offs |
-|--------|-------------|------------|
-| **A: Hidden with filter toggle** | Archived items hidden by default; toggle in header reveals them in-column with muted style | Simple, consistent with Linear/GitHub pattern |
-| **B: Separate "Archived" column** | A collapsed-by-default column at the far right of the board | More visible, but pollutes the column layout |
-| **C: Soft-delete with global archive view** | Archived items visible only in a dedicated "Archive" view (e.g. sidebar nav item) | Most powerful, most work |
-| **D: Hard delete with undo only** | Item is deleted; Undo (30s window) is the only recovery | Simplest, but permanent |
+The Archived column header is stripped of controls that don't apply:
+- ❌ No collapse/expand chevron (it's a temporary view, not a persistent column)
+- ❌ No drag handle (it can't be reordered — always sits at the far right)
+- ✅ Column title: `Archive` (with `Archive` icon from Lucide)
+- ✅ Item count badge
+- ✅ **Hide button** — clicking it collapses the column and resets the toggle (equivalent to toggling off from the top-right)
 
-**Recommended starting point: Option A** (hidden with filter toggle). Matches the spec above. Easiest to retrofit into Option C later if a global archive view is added.
+```
+[ Archive icon ]  Archived  (N)  ————————————————  [ Hide ]
+```
+
+### Archived Card Appearance
+
+- Muted visual treatment: slightly reduced opacity, title with `line-through`
+- Cards are **not draggable** out of this column (restoring via hover action only)
+- On hover: single **Restore** action button (`ArchiveRestore` or `RotateCcw` from Lucide) on the right side of the card — moves item back to its previous status/column
+
+### Toggle State
+
+Ephemeral — resets when the user navigates away from the project's roadmap view. Not persisted.
 
 ---
 
@@ -119,30 +138,36 @@ import { Archive, CircleCheckBig } from 'lucide-react';
 
 ### Status Value
 
-The `archived` status must be added to the `RoadmapStatus` union in `src/lib/schema.ts` if not already present. The board's `ROADMAP_COLUMNS` definition would need a corresponding column definition — or archived items are excluded from all columns (filter-only approach, Option A).
+`archived` must be added to the `RoadmapStatus` union in `src/lib/schema.ts`. Archived items are excluded from all `ROADMAP_COLUMNS` definitions — they only surface in the dedicated Archived column when the toggle is on.
 
 ### Undo Implementation
 
-Use the existing toast system. Store previous status in a ref or closure when the action fires. On Undo click, call `updateRoadmapItemStatus(itemId, previousStatus)`.
+Use the existing toast system. Store previous status in a closure when the action fires. On Undo click, call `updateRoadmapItemStatus(itemId, previousStatus)`.
 
 ### "Show Archived" State
 
-Ephemeral (not persisted) — resets when the user navigates away from the project's roadmap view. Stored in local component state or a non-persisted store field.
+`showArchived: boolean` — ephemeral local state in the roadmap board component (or App.tsx alongside `selectedRoadmapItemId`). Not persisted, resets on navigation.
+
+### Item Count Hover Replace
+
+The top-right item count element needs a hover state that swaps its content to the "Show archive" toggle. Can be implemented as a single element with two rendered children — the count text and the toggle — with CSS transitions between them on hover. When `showArchived` is true, force the toggle view regardless of hover state.
 
 ---
 
 ## Phases
 
 ### Phase 1: Complete Action Only
-- Add `CircleCheckBig` button to right side of hover area
+- Add `CircleCheckBig` button to right side of card hover area
 - Toast + Undo
 - Ship this first — minimal surface area, most immediately useful
 
-### Phase 2: Archive Action + Show Archived Toggle
-- Add `Archive` button alongside Complete
-- Hidden-by-default + toggle in roadmap header
-- Resolve the open design question before starting this phase
+### Phase 2: Archive Action + Archived Column
+- Add `Archive` button to card hover area (alongside Complete)
+- Item count hover → "Show archive" toggle replace interaction
+- Archived column renders at far right when toggle is on
+- Archived column header: title + count + Hide button (no chevron, no drag)
+- Archived status added to `RoadmapStatus` union
 
 ### Phase 3: Restore on Archived Cards
-- Hover Restore button when "Show archived" is active
-- Nice-to-have, can ship separately
+- Hover Restore button (`ArchiveRestore` or `RotateCcw`) on archived cards
+- Moves item back to its pre-archive status
