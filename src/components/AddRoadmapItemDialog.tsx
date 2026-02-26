@@ -140,8 +140,8 @@ export function AddRoadmapItemDialog({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    // 3 lines minimum (~60px with line-height 20px), max 160px
-    el.style.height = `${Math.max(60, Math.min(el.scrollHeight, 160))}px`;
+    // 2 lines minimum (~40px with line-height 20px), max 160px
+    el.style.height = `${Math.max(40, Math.min(el.scrollHeight, 160))}px`;
   }, [aiInput]);
 
   if (!open) return null;
@@ -221,7 +221,7 @@ export function AddRoadmapItemDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
       <ModalDragZone />
-      <div className="flex w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+      <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3">
           <div>
@@ -256,8 +256,8 @@ export function AddRoadmapItemDialog({
           </Button>
         </div>
 
-        {/* Body */}
-        <div className="p-5">
+        {/* Body — grows with content, scrolls only when modal hits max-h */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {mode === 'ai' ? (
             <div className="flex flex-col gap-3">
               {/* Chat input — hidden once a message has been sent */}
@@ -284,10 +284,10 @@ export function AddRoadmapItemDialog({
                         ? 'Describe the item and OpenClaw will create the card for you \u2014 add as much context as you need.'
                         : 'Gateway disconnected'
                     }
-                    className="min-h-[60px] w-full resize-none border-0 bg-transparent px-3 py-2.5 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+                    className="min-h-[40px] w-full resize-none border-0 bg-transparent px-3 py-2.5 pr-12 text-sm leading-5 text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
                     disabled={!gatewayConnected || aiSending}
                     autoFocus
-                    rows={3}
+                    rows={2}
                   />
 
                   <button
@@ -306,7 +306,7 @@ export function AddRoadmapItemDialog({
               {(aiMessages.length > 0 || aiStreamingContent) && (
                 <div
                   ref={scrollRef}
-                  className="max-h-[320px] space-y-3 overflow-y-auto"
+                  className="space-y-3"
                 >
                   {aiMessages.map((msg, i) => (
                     <div
