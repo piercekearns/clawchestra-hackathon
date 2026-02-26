@@ -160,7 +160,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     <div
       className={`relative flex w-full flex-col [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
         isFloating
-          ? `max-h-[50vh] rounded-xl border bg-neutral-0/95 backdrop-blur transition-all ${
+          ? `max-h-[50vh] rounded-xl border bg-neutral-0/95 backdrop-blur transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 ${
               sending ? 'border-revival-accent/50' : 'border-neutral-300 dark:border-neutral-600'
             } dark:bg-neutral-900/95 ${
               expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
@@ -352,7 +352,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
       </div>
 
       {images.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+        <div className="flex flex-wrap gap-1.5 border-t border-neutral-300/50 px-3 py-2 dark:border-neutral-700/50">
           {images.map((image, index) => (
             <button
               type="button"
