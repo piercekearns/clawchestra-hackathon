@@ -33,12 +33,13 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
           <MessageList
             messages={session.displayMessages}
             showReadingIndicator={session.sending && !session.streamingContent}
+            scrollPadding="px-4 py-3 md:px-6"
           />
         )}
       </div>
 
       {/* Input bar — reuses the main ChatBar in embedded mode */}
-      <div className="shrink-0 px-4 pt-2">
+      <div className="shrink-0 px-4 md:px-6">
       <div className="overflow-hidden rounded-xl border border-neutral-300 dark:border-neutral-600">
       <ChatBar
         connectionState={session.wsConnectionState}

@@ -115,32 +115,9 @@
     display: none;
   }
 
-  /* Hover-reveal scrollbar — always reserves gutter space, thumb only visible on hover */
+  /* Native overlay scrollbar — no custom styling so macOS overlays work naturally */
   .hover-scrollbar {
-    overflow-y: scroll !important;
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-  }
-
-  .hover-scrollbar::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .hover-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .hover-scrollbar::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    border-radius: 9999px;
-  }
-
-  .hover-scrollbar:hover {
-    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
-  }
-
-  .hover-scrollbar:hover::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.4);
+    overflow-y: auto;
   }
 
 

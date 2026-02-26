@@ -8,6 +8,8 @@ import { SystemBubble } from './SystemBubble';
 interface MessageListProps {
   messages: ChatMessage[];
   className?: string;
+  /** Override the scroll container's padding (default: "p-3") */
+  scrollPadding?: string;
   hasMore?: boolean;
   loadingMore?: boolean;
   showReadingIndicator?: boolean;
@@ -17,7 +19,7 @@ interface MessageListProps {
 }
 
 const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function MessageList(
-  { messages, className, hasMore, loadingMore, showReadingIndicator, isCompacting, onLoadMore, onSystemBubbleAction },
+  { messages, className, scrollPadding, hasMore, loadingMore, showReadingIndicator, isCompacting, onLoadMore, onSystemBubbleAction },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -147,7 +149,7 @@ const MessageListInner = forwardRef<HTMLDivElement, MessageListProps>(function M
     <div className={cn('relative min-h-0 flex-1', className)}>
       <div
         ref={containerRef}
-        className="absolute inset-0 overflow-y-auto p-3 hover-scrollbar"
+        className={cn("absolute inset-0 overflow-y-auto hover-scrollbar", scrollPadding ?? "p-3")}
         onScroll={handleScroll}
       >
       <div className="flex min-h-full flex-col justify-end space-y-2">

@@ -106,7 +106,7 @@ export function SecondaryDrawer({
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
       style={{ width, willChange: 'transform' }}
     >
-      <div className="flex h-full flex-col overflow-hidden px-1 pb-4 md:pb-6">
+      <div className="flex h-full flex-col overflow-hidden">
         <DrawerHeader
           chat={chat}
           projectTitle={projectTitle}
