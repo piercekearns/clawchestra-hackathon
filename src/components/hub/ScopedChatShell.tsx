@@ -32,6 +32,9 @@ interface ScopedChatCacheEntry {
 /** In-memory cache so chat history survives switching between drawer chats. */
 const chatCache = new Map<string, ScopedChatCacheEntry>();
 
+/** Max time to wait for a scoped chat response before surfacing an error. */
+const SCOPED_SEND_TIMEOUT_MS = 2 * 60 * 1000;
+
 let _msgCounter = 0;
 function generateMessageId(): string {
   return `hub-msg-${Date.now()}-${++_msgCounter}`;
@@ -228,23 +231,28 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
 
     try {
       const viewContext = useDashboardStore.getState().viewContext;
-      const result = await sendMessageWithContext(
-        historyForSend,
-        {
-          view: viewContext.type,
-          selectedProject: chat.title,
-        },
-        {
-          sessionKey: chat.sessionKey ?? undefined,
-          skipTurnTracking: true,
-          onStreamDelta: (content) => {
-            // Guard: only update streaming UI if we're still on the originating chat
-            if (chatIdRef.current === originChatId) {
-              setStreamingContent(content);
-            }
+      const result = await Promise.race([
+        sendMessageWithContext(
+          historyForSend,
+          {
+            view: viewContext.type,
+            selectedProject: chat.title,
           },
-        },
-      );
+          {
+            sessionKey: chat.sessionKey ?? undefined,
+            skipTurnTracking: true,
+            onStreamDelta: (content) => {
+              // Guard: only update streaming UI if we're still on the originating chat
+              if (chatIdRef.current === originChatId) {
+                setStreamingContent(content);
+              }
+            },
+          },
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — the connection may be unstable. Try again.')), SCOPED_SEND_TIMEOUT_MS),
+        ),
+      ]);
 
       // Check if user switched away while awaiting the response
       const switchedAway = chatIdRef.current !== originChatId;
