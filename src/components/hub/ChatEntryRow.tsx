@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
+import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import { InlineEdit } from './InlineEdit';
 
@@ -77,8 +77,8 @@ export function ChatEntryRow({
         </span>
       )}
 
-      {/* Chat name — on hover, reserve space for action icons so text clips */}
-      <div className={`min-w-0 flex-1 flex items-center gap-1.5 ${isEditing ? '' : 'group-hover:pr-14'}`}>
+      {/* Chat name — on hover, reserve space for ⋯ button so text clips */}
+      <div className={`min-w-0 flex-1 flex items-center gap-1.5 ${isEditing ? '' : 'group-hover:pr-6'}`}>
         <InlineEdit
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
@@ -92,47 +92,20 @@ export function ChatEntryRow({
         <Check className="h-3 w-3 shrink-0 text-green-500" />
       )}
 
-      {/* Right hover actions — ⋯, pin toggle (non-project), archive (non-project) */}
-      <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md px-0.5 transition-opacity ${
+      {/* Right hover action — single ⋯ menu with all actions */}
+      <div className={`absolute right-1 top-1/2 -translate-y-1/2 rounded-md px-0.5 transition-opacity ${
         isEditing ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
       } ${
         isActive ? 'bg-neutral-200/80 dark:bg-neutral-700/80' : 'bg-neutral-100 dark:bg-neutral-800'
       }`}>
         <ChatEntryMenu
           chat={chat}
+          isProjectChat={isProjectChat}
+          onTogglePin={() => onTogglePin(chat.id, !chat.pinned)}
+          onArchive={() => onArchive(chat.id)}
           onMarkUnread={() => onMarkUnread(chat.id)}
           onDelete={() => onDelete(chat.id)}
         />
-        {!isProjectChat && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePin(chat.id, !chat.pinned);
-            }}
-            className={`flex h-5 w-5 items-center justify-center rounded ${
-              chat.pinned
-                ? 'text-[#DFFF00] hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                : 'text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
-            }`}
-            aria-label={chat.pinned ? 'Unpin' : 'Pin'}
-          >
-            <Pin className="h-3 w-3" />
-          </button>
-        )}
-        {!isProjectChat && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onArchive(chat.id);
-            }}
-            className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-            aria-label="Archive"
-          >
-            <Archive className="h-3 w-3" />
-          </button>
-        )}
       </div>
     </div>
   );
@@ -140,10 +113,16 @@ export function ChatEntryRow({
 
 function ChatEntryMenu({
   chat,
+  isProjectChat,
+  onTogglePin,
+  onArchive,
   onMarkUnread,
   onDelete,
 }: {
   chat: HubChat;
+  isProjectChat?: boolean;
+  onTogglePin: () => void;
+  onArchive: () => void;
   onMarkUnread: () => void;
   onDelete: () => void;
 }) {
@@ -160,6 +139,24 @@ function ChatEntryMenu({
       setOpen(true);
     }
   };
+
+  const menuItem = (label: string, action: () => void, danger = false) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        action();
+        setOpen(false);
+      }}
+      className={`w-full px-3 py-1.5 text-left text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+        danger
+          ? 'text-status-danger'
+          : 'text-neutral-700 dark:text-neutral-300'
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="relative">
@@ -191,29 +188,11 @@ function ChatEntryMenu({
             className="fixed z-[200] w-36 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
             style={{ top: menuPos.top, left: menuPos.left }}
           >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMarkUnread();
-                setOpen(false);
-              }}
-              className="w-full px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              {chat.unread ? 'Mark as read' : 'Mark as unread'}
-            </button>
+            {!isProjectChat && menuItem(chat.pinned ? 'Unpin' : 'Pin', onTogglePin)}
+            {menuItem(chat.unread ? 'Mark as read' : 'Mark as unread', onMarkUnread)}
+            {!isProjectChat && menuItem('Archive', onArchive)}
             <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-                setOpen(false);
-              }}
-              className="w-full px-3 py-1.5 text-left text-xs text-status-danger hover:bg-neutral-100 dark:hover:bg-neutral-800"
-            >
-              Delete
-            </button>
+            {menuItem('Delete', onDelete, true)}
           </div>
         </>,
         document.body,
