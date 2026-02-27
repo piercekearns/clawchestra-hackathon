@@ -114,22 +114,27 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
     const agentCommand = getAgentCommand(chat.agentType);
 
-    // Spawn PTY with tmux
+    // Spawn PTY with tmux via a shell wrapper.
+    // First, capture-pane dumps any existing scrollback (with ANSI escapes)
+    // into xterm.js's buffer so the user can scroll up after an app restart.
+    // Then `exec` replaces the shell with the tmux attach, keeping the same PTY.
     // Use `name` for TERM (proper PTY option), keep env minimal — tauri-pty
     // merges with parent env so PATH/HOME/etc. are inherited.
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
+    const captureCmd = `tmux -L clawchestra capture-pane -t '${sessionName}' -p -e -S -5000 2>/dev/null`;
+    const attachCmd = [
+      `exec tmux -u -f /dev/null -L clawchestra`,
+      `new-session -A -s '${sessionName}'`,
+      `\\; set status off`,
+      // Disable alternate screen on the outer terminal (xterm.js) so all tmux
+      // output goes to the normal buffer with scrollback. Without this, tmux
+      // uses the alternate screen which has no scrollback — wheel events get
+      // converted to up/down arrows instead of scrolling.
+      `\\; set -ga terminal-overrides ',xterm-256color:smcup@:rmcup@'`,
+    ].join(' ');
     let pty: IPty;
     try {
-      pty = spawn('tmux', [
-        '-u', '-f', '/dev/null', '-L', 'clawchestra',
-        'new-session', '-A', '-s', sessionName,
-        ';', 'set', 'status', 'off',
-        // Disable alternate screen on the outer terminal (xterm.js) so all tmux
-        // output goes to the normal buffer with scrollback. Without this, tmux
-        // uses the alternate screen which has no scrollback — wheel events get
-        // converted to up/down arrows instead of scrolling.
-        ';', 'set', '-ga', 'terminal-overrides', ',xterm-256color:smcup@:rmcup@',
-      ], {
+      pty = spawn('sh', ['-c', `${captureCmd}; ${attachCmd}`], {
         name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
