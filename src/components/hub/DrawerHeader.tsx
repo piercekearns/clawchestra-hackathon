@@ -70,7 +70,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   };
 
   return (
-    <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-700">
+    <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
       <div className="min-w-0 flex-1">
         {renaming ? (
           <input
