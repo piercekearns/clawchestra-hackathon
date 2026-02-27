@@ -107,9 +107,7 @@ export function SecondaryDrawer({
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
-      } ${isResizing ? '' : 'transition-[border-color,box-shadow] duration-200 ease-out'} ${
-        terminalFocused && !isResizing ? 'ring-1 ring-inset ring-neutral-500/40' : ''
-      }`}
+      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
       style={{ width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
@@ -121,7 +119,11 @@ export function SecondaryDrawer({
           onOpenLinkedItem={onOpenLinkedItem}
           onOpenLinkedProject={onOpenLinkedProject}
         />
-        <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} />
+        <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
+          terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
+        }`}>
+          <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} />
+        </div>
       </div>
 
       {/* Drag handle — on right edge when side=left, left edge when side=right */}

@@ -66,7 +66,6 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
       scrollback: 5000,
       allowTransparency: true,
       vtExtensions: { kittyKeyboard: true },
-      scrollbar: { width: 0 },
       theme: {
         background: 'transparent',
         foreground: '#d4d4d4',
