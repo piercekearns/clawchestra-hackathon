@@ -1142,6 +1142,18 @@ function isNoReplySentinel(content: string): boolean {
   return compact === 'NOREPLY';
 }
 
+/** Detect partial NO_REPLY or HEARTBEAT sentinel fragments in streaming deltas.
+ *  Pre-.26 OpenClaw may leak these before server-side suppression was added. */
+function isStreamingSentinelFragment(content: string): boolean {
+  const trimmed = content.trim().toUpperCase();
+  if (!trimmed) return false;
+  // Match partial NO_REPLY build-up and full sentinel
+  if ('NO_REPLY'.startsWith(trimmed) || trimmed === 'NO_REPLY') return true;
+  // Match HEARTBEAT_ prefixed sentinels
+  if (trimmed.startsWith('HEARTBEAT_') || 'HEARTBEAT_'.startsWith(trimmed)) return true;
+  return false;
+}
+
 function collectInternalNoReplyRunIds(messages: GatewayHistoryMessage[]): Set<string> {
   const runIds = new Set<string>();
   for (const message of messages) {
@@ -3503,7 +3515,7 @@ async function sendViaTauriWs(
         if (state === 'delta' || state === 'content' || state === 'streaming') {
           lastDeltaTime = Date.now();
           const deltaText = stripAssistantControlDirectives(extractChatEventMessageText(chat));
-          if (deltaText) {
+          if (deltaText && !isStreamingSentinelFragment(deltaText)) {
             transitionLifecycle('stream_delta');
             sawRunOwnedContent = true;
             lastContentSignalAt = Date.now();

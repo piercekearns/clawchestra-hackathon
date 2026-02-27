@@ -361,7 +361,7 @@ export class TauriOpenClawConnection {
       scopes: OPENCLAW_CLIENT_SCOPES,
       auth: this.token ? { token: this.token } : undefined,
       ...(deviceProof ? { device: deviceProof } : {}),
-      userAgent: 'Pipeline-Dashboard/1.0',
+      userAgent: 'Clawchestra/1.0',
       locale: 'en-US',
     });
   }
@@ -419,7 +419,7 @@ export class TauriOpenClawConnection {
         connectUrl,
         {
           Origin: 'tauri://localhost',
-          'User-Agent': 'Pipeline-Dashboard/1.0',
+          'User-Agent': 'Clawchestra/1.0',
         },
         (msg) => this.handleSocketMessage(msg),
       );
