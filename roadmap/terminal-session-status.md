@@ -81,6 +81,40 @@ No dots, no badges, no extra chrome. Just the icon colour.
 
 > Note: "Alive" includes sessions where the pane is closed but the process is still running in the background. Pane visibility is irrelevant — the probe result is the source of truth.
 
+### 5. Dead session ribbon (in-pane restart)
+
+When the terminal pane is open and the session is dead, render a thin ribbon **at the top of the terminal pane** — the same pattern as the `isLinkedItemComplete` ribbon in `DrawerHeader.tsx` (semi-transparent, slim, border-bottom).
+
+Use red/danger palette instead of chartreuse:
+
+```tsx
+{terminalStatus === 'dead' && (
+  <div className="flex items-center gap-2 border-b border-red-500/10 bg-red-500/5 px-4 py-1.5 md:px-6">
+    <CircleX className="h-3.5 w-3.5 shrink-0 text-red-400/70" />
+    <span className="flex-1 text-xs text-neutral-500 dark:text-neutral-400">
+      Session ended
+    </span>
+    <button
+      type="button"
+      onClick={handleRestartSession}
+      className="rounded-full border border-red-500/30 px-2 py-0.5 text-[11px] text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+    >
+      ↺ Restart
+    </button>
+  </div>
+)}
+```
+
+**Placement:** rendered inside `DrawerHeader.tsx` immediately after the `isLinkedItemComplete` ribbon (same slot, same layout position — top of the content area, below the header bar controls).
+
+**Restart behaviour:**
+- Spawns a new PTY of the same type (shell / Claude Code / Codex) for this chat
+- Writes a subtle separator into the xterm.js buffer: `─── session restarted ───` so the user can see where old output ends and new begins
+- Updates stored `terminalMeta.pid` and `terminalMeta.startedAt`
+- Flips status back to alive → ribbon disappears, icon returns to normal colour
+
+The frozen scrollback from the dead session remains visible above the separator — useful context for what the previous session was doing.
+
 ### 5. Quit guard
 
 Intercept `CloseRequested` before the app exits:
@@ -112,9 +146,10 @@ Dialog only appears when at least one session is alive. If all terminals are dea
 | File | Change |
 |------|--------|
 | `src/lib/store.ts` | `terminalMeta` per-chat map (`pid`, `startedAt`); `terminalStatuses` derived liveness map + setters |
-| `src/components/hub/TerminalShell.tsx` | Write `terminalMeta` on PTY spawn; listen to `onExit` to flip status |
+| `src/components/hub/TerminalShell.tsx` | Write `terminalMeta` on PTY spawn; listen to `onExit` to flip status; expose restart handler |
 | `src/lib/pty.ts` (or equivalent) | Expose `probeTerminalStatus(pid, startedAt)` — runs kill-0 + ps start time check |
 | `src/components/hub/ChatEntryRow.tsx` | Red terminal icon when `terminalStatuses[chatId] === 'dead'` |
+| `src/components/hub/DrawerHeader.tsx` | Dead session ribbon (same slot as `isLinkedItemComplete` ribbon); ↺ Restart button |
 | `src/lib/App.tsx` | On mount: probe all terminal chats; register `CloseRequested` handler |
 
 ## Out of Scope
