@@ -9,6 +9,10 @@
     "core:default",
     "core:window:allow-start-dragging",
     "fs:default",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "/tmp/**" }, { "path": "/private/tmp/**" }]
+    },
     "websocket:default",
     "window-state:default",
     "pty:default"

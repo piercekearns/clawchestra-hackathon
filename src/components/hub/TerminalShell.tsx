@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { writeFile } from '@tauri-apps/plugin-fs';
 import { spawn, type IPty } from 'tauri-pty';
 import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
@@ -118,10 +118,15 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // First, capture-pane dumps any existing scrollback (with ANSI escapes)
     // into xterm.js's buffer so the user can scroll up after an app restart.
     // Then `exec` replaces the shell with the tmux attach, keeping the same PTY.
+    //
+    // Note: tmux sanitizes colons to underscores in session names, so the
+    // capture-pane -t target must use the sanitized form.
+    //
     // Use `name` for TERM (proper PTY option), keep env minimal — tauri-pty
     // merges with parent env so PATH/HOME/etc. are inherited.
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
-    const captureCmd = `tmux -L clawchestra capture-pane -t '${sessionName}' -p -e -S -5000 2>/dev/null`;
+    const tmuxSessionSanitized = sessionName.replace(/:/g, '_');
+    const captureCmd = `tmux -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
     const attachCmd = [
       `exec tmux -u -f /dev/null -L clawchestra`,
       `new-session -A -s '${sessionName}'`,
@@ -189,9 +194,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       if (event.metaKey && (event.key === 'k' || event.key === 'n' || event.key === 'w')) {
         return false; // Let the app handle Cmd+K, Cmd+N, Cmd+W
       }
-      // Shift+Enter → insert literal newline (zsh doesn't opt into Kitty keyboard protocol)
+      // Shift+Enter → insert literal newline via bracketed paste so the shell
+      // inserts it instead of executing the command. Plain \n would trigger
+      // accept-line in zsh/bash.
       if (event.shiftKey && event.key === 'Enter' && event.type === 'keydown') {
-        pty.write('\n');
+        pty.write('\x1b[200~\n\x1b[201~');
         return false;
       }
       return true; // Everything else goes to the terminal
@@ -221,34 +228,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // Focus terminal
     term.focus();
 
-    // Native drag-and-drop — Tauri gives us actual file paths from the OS.
-    // The browser-level drag handlers (below) prevent ChatShell from
-    // intercepting the drag, while this handler writes file paths to the PTY.
-    let unlistenDragDrop: (() => void) | undefined;
-    getCurrentWindow().onDragDropEvent((event) => {
-      if (event.payload.type !== 'drop') return;
-      const { paths, position } = event.payload;
-      // Tauri reports physical pixels; getBoundingClientRect returns CSS pixels
-      const scale = window.devicePixelRatio || 1;
-      const cx = position.x / scale;
-      const cy = position.y / scale;
-      const rect = container.getBoundingClientRect();
-      if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) return;
-
-      const imagePaths = paths.filter((p) => {
-        const ext = p.split('.').pop()?.toLowerCase() ?? '';
-        return IMAGE_EXTENSIONS.has(ext);
-      });
-      for (const p of imagePaths) {
-        pty.write(p);
-      }
-    }).then((fn) => { unlistenDragDrop = fn; });
-
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
-      unlistenDragDrop?.();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);
       dataDisposable.dispose();
@@ -295,12 +278,32 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     setDrag(false);
   }, [setDrag]);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
+  const onDrop = useCallback(async (e: React.DragEvent) => {
     e.stopPropagation();
     e.preventDefault();
     setDrag(false);
-    // Actual file handling is done by the Tauri onDragDropEvent listener
-    // registered in useEffect — it gets the real OS file paths.
+
+    // dragDropEnabled is false in tauri.conf.json, so Tauri's native
+    // onDragDropEvent never fires. Handle file drops via the browser File API:
+    // save image to /tmp, then write the path to the PTY (same as native
+    // terminals like Ghostty where dragging an image pastes its file path).
+    const pty = ptyRef.current;
+    if (!pty) return;
+
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    for (const file of files) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!IMAGE_EXTENSIONS.has(ext)) continue;
+
+      try {
+        const buffer = await file.arrayBuffer();
+        const filePath = `/tmp/clawchestra-drop-${Date.now()}.${ext}`;
+        await writeFile(filePath, new Uint8Array(buffer));
+        pty.write(filePath);
+      } catch (err) {
+        console.error('Failed to save dropped image:', err);
+      }
+    }
   }, [setDrag]);
 
   return (
