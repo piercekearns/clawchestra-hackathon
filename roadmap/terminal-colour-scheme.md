@@ -30,14 +30,16 @@ Enumerate every colour token currently used in the terminal layer:
 - Scrollbar track/thumb
 - Header bar (if present)
 
-### 2 — Visual Mockup
-Side-by-side before/after showing:
-- Current xterm default palette
-- Proposed palette matched to app design system:
+### 2 — Visual Mockup (produce this before touching any code)
+The mockup should be reviewable by Pierce before any implementation begins. It should show:
+- **Before:** screenshot or colour swatch grid of the current xterm default palette in the terminal pane
+- **After:** proposed palette matched to app design system, rendered as swatches with hex values:
   - Background → app's `neutral-950` (dark) / `neutral-50` (light)
   - Foreground → app's `neutral-100` / `neutral-800`
   - Accents (green, blue, etc.) → shifted to match Clawchestra's accent hues
   - Error/red → preserve legibility but soften to match app danger colour
+- Show the full 16-colour grid (8 standard + 8 bright) for both current and proposed
+- Optionally: mock a terminal prompt/output snippet in the proposed palette so it reads naturally
 
 ### 3 — Theme Integration
 Wire terminal palette to the app's existing dark/light toggle:
