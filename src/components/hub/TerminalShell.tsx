@@ -12,6 +12,18 @@ interface TerminalShellProps {
 }
 
 export function TerminalShell({ chat }: TerminalShellProps) {
+  // Archived terminal — show static message, don't spawn a new PTY
+  if (chat.archived) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-0" style={{ backgroundColor: '#171717' }}>
+        <p className="text-sm text-neutral-500">Session ended</p>
+      </div>
+    );
+  }
+  return <LiveTerminal chat={chat} />;
+}
+
+function LiveTerminal({ chat }: { chat: HubChat }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -92,13 +104,17 @@ export function TerminalShell({ chat }: TerminalShellProps) {
     const agentCommand = getAgentCommand(chat.agentType);
 
     // Spawn PTY with tmux
+    // Use `name` for TERM (proper PTY option), keep env minimal — tauri-pty
+    // merges with parent env so PATH/HOME/etc. are inherited.
+    // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
     let pty: IPty;
     try {
       pty = spawn('tmux', ['new-session', '-A', '-s', sessionName], {
+        name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
         cwd: projectDirPath ?? undefined,
-        env: { TERM: 'xterm-256color' },
+        env: { COLORTERM: 'truecolor' },
       });
     } catch (e) {
       term.writeln(`\r\n[Error] Failed to spawn terminal: ${e}`);
@@ -151,6 +167,17 @@ export function TerminalShell({ chat }: TerminalShellProps) {
       return true; // Everything else goes to the terminal
     });
 
+    // Intercept scroll wheel at the capture phase so it scrolls xterm.js's
+    // scrollback buffer instead of being forwarded to tmux as mouse events
+    // (which tmux converts to up/down arrow = command history cycling).
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const lines = Math.max(1, Math.ceil(Math.abs(e.deltaY) / 25));
+      term.scrollLines(e.deltaY > 0 ? lines : -lines);
+    };
+    container.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+
     // ResizeObserver for container resize → fit terminal
     let resizeTimeout: ReturnType<typeof setTimeout>;
     const resizeObserver = new ResizeObserver(() => {
@@ -172,6 +199,7 @@ export function TerminalShell({ chat }: TerminalShellProps) {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
+      container.removeEventListener('wheel', handleWheel, { capture: true } as EventListenerOptions);
       dataDisposable.dispose();
       inputDisposable.dispose();
       resizeDisposable.dispose();
