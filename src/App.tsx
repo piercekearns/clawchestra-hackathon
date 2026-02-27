@@ -2998,13 +2998,6 @@ export default function App() {
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Open project board
-                          if (project.hasRoadmap) {
-                            void openRoadmapView(project);
-                          } else {
-                            setSelectedProjectId(project.id);
-                          }
-                          // Open (or create) the project-level chat and surface the drawer
                           void openOrCreateProjectChat(
                             project.id,
                             project.frontmatter?.title ?? project.id,
