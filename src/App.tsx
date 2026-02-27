@@ -1757,46 +1757,12 @@ export default function App() {
         }
       }
 
-      const target = event.target as HTMLElement | null;
-      // Skip navigation if focus is on any interactive element (inputs, buttons, links, etc.)
-      // so arrow keys don't hijack focus when the user is interacting with the board
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(target.tagName)) {
-        return;
-      }
-      // Also skip if a focusable element within a dialog/popover/menu has focus
-      if (target && target.closest('[role="dialog"],[role="menu"],[role="listbox"],[data-radix-popper-content-wrapper]')) {
-        return;
-      }
-
-      if (settingsPageOpen || selectedProjectId || addDialogOpen) {
-        return;
-      }
-
-      if (isRoadmapView || allProjects.length === 0) return;
-
-      const ordered = allProjects;
-      const currentIndex = selectedProjectId
-        ? ordered.findIndex((project) => project.id === selectedProjectId)
-        : -1;
-
-      if (event.key === 'j' || event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        const nextIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, ordered.length - 1);
-        setSelectedProjectId(ordered[nextIndex]?.id);
-      }
-
-      if (event.key === 'k' || event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-        event.preventDefault();
-        const prevIndex = currentIndex < 0 ? 0 : Math.max(currentIndex - 1, 0);
-        setSelectedProjectId(ordered[prevIndex]?.id);
-      }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [
     addDialogOpen,
-    allProjects,
     chatDrawerOpen,
     isRoadmapView,
     searchOpen,
