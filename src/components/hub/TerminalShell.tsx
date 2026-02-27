@@ -13,9 +13,10 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'b
 interface TerminalShellProps {
   chat: HubChat;
   onFocusChange?: (focused: boolean) => void;
+  onDragActiveChange?: (active: boolean) => void;
 }
 
-export function TerminalShell({ chat, onFocusChange }: TerminalShellProps) {
+export function TerminalShell({ chat, onFocusChange, onDragActiveChange }: TerminalShellProps) {
   // Archived terminal — show static message, don't spawn a new PTY
   if (chat.archived) {
     return (
@@ -24,10 +25,10 @@ export function TerminalShell({ chat, onFocusChange }: TerminalShellProps) {
       </div>
     );
   }
-  return <LiveTerminal chat={chat} onFocusChange={onFocusChange} />;
+  return <LiveTerminal chat={chat} onFocusChange={onFocusChange} onDragActiveChange={onDragActiveChange} />;
 }
 
-function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: (focused: boolean) => void }) {
+function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubChat; onFocusChange?: (focused: boolean) => void; onDragActiveChange?: (active: boolean) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -266,40 +267,48 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
   // window-level ChatShell handler from catching drags over the terminal.
   // Missing any event (especially dragenter) leaves ChatShell's dragDepth
   // counter stuck > 0, causing a permanent glow.
+  const setDrag = useCallback((active: boolean) => {
+    setDragActive(active);
+    onDragActiveChange?.(active);
+  }, [onDragActiveChange]);
+
   const onDragEnter = useCallback((e: React.DragEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    setDragActive(true);
-  }, []);
+    setDrag(true);
+  }, [setDrag]);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-    setDragActive(true);
-  }, []);
+    setDrag(true);
+  }, [setDrag]);
 
   const onDragLeave = useCallback((e: React.DragEvent) => {
     e.stopPropagation();
-    setDragActive(false);
-  }, []);
+    setDrag(false);
+  }, [setDrag]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    setDragActive(false);
+    setDrag(false);
     // Actual file handling is done by the Tauri onDragDropEvent listener
     // registered in useEffect — it gets the real OS file paths.
-  }, []);
+  }, [setDrag]);
 
   return (
     <div
-      className={`flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6 rounded-lg transition-shadow ${dragActive ? 'ring-2 ring-[#DFFF00]/50' : ''}`}
+      className="relative flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6"
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-10 border-2 border-dashed border-revival-accent-400 bg-revival-accent-200/10 dark:bg-revival-accent-900/20 rounded-lg" />
+      )}
       <div
         ref={containerRef}
         className="terminal-shell flex-1 min-h-0"

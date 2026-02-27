@@ -7,11 +7,12 @@ import { TerminalShell } from './TerminalShell';
 interface ScopedChatShellProps {
   chat: HubChat;
   onTerminalFocusChange?: (focused: boolean) => void;
+  onTerminalDragActiveChange?: (active: boolean) => void;
 }
 
-export function ScopedChatShell({ chat, onTerminalFocusChange }: ScopedChatShellProps) {
+export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragActiveChange }: ScopedChatShellProps) {
   if (chat.type === 'terminal') {
-    return <TerminalShell chat={chat} onFocusChange={onTerminalFocusChange} />;
+    return <TerminalShell chat={chat} onFocusChange={onTerminalFocusChange} onDragActiveChange={onTerminalDragActiveChange} />;
   }
   return <OpenClawChatShell chat={chat} />;
 }
