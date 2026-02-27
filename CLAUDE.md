@@ -39,9 +39,19 @@
 .clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
 CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
 roadmap/{item-id}.md          — Detail file per roadmap item
-docs/specs/{item-id}-spec.md  — Spec documents
-docs/plans/{item-id}-plan.md  — Plan documents
+docs/specs/{item-id}-spec.md  — Spec documents (auto-discovered by UI convention)
+docs/plans/{item-id}-plan.md  — Plan documents (auto-discovered by UI convention)
 ```
+
+> ⚠️ **`roadmap/*.md` files are NOT auto-rendered in the card detail view.**
+> The UI resolves docs via `doc-resolution.ts` in this order:
+> 1. `specDoc` / `planDoc` field in `state.json` (relative to project root)
+> 2. Convention paths: `docs/specs/{id}-spec.md`, `docs/specs/{id}.md`
+> 3. Nothing — card shows only `nextAction` text
+>
+> `roadmap/{id}.md` files are used for chat context injection only (see `hub-context.ts`).
+> **If you create a `roadmap/*.md` detail file, always also set `specDoc: "roadmap/{id}.md"` in
+> state.json** — otherwise the content is invisible to the user in the UI.
 
 ### Build & Test Commands
 
