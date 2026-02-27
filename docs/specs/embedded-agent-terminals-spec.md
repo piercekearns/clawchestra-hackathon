@@ -264,7 +264,7 @@ EAT adds terminal rendering to the existing hub. These are the specific files to
 | File | What changes |
 |------|-------------|
 | `src/components/hub/ScopedChatShell.tsx` | Branch on `chat.type === 'terminal'` → render xterm.js instead of `MessageList` + `ChatBar` |
-| `src/components/hub/DrawerHeader.tsx` | Add terminal-specific controls: **End Session**, **Detach** (alongside existing pin/archive/rename for OpenClaw chats) |
+| `src/components/hub/DrawerHeader.tsx` | Add terminal-specific control: **End Session** button (with confirmation). Closing the drawer via the existing X button is already the "detach" action — no additional Detach button needed. |
 | `src/components/hub/ChatEntryRow.tsx` | Branch on `chat.type` for right-edge action: `⏹` End/Archive (context-sensitive) for terminals vs `🗄` Archive for chats |
 | `src/components/hub/ThreadSection.tsx` | Remove `disabled` from the Terminal option in `TypePickerButton`; wire up tmux session creation logic |
 | `src/components/hub/SecondaryDrawer.tsx` | Accept a `minWidth` prop (or derive from active chat type) to enforce terminal minimum width |
@@ -373,7 +373,7 @@ When launching from a specific context, Clawchestra can pre-configure the sessio
 
 - Terminal occupies the same `SecondaryDrawer` as OpenClaw chats (conversation hub)
 - Chat list shows terminal sessions alongside OpenClaw chats with distinguishing icons
-- Terminal header bar (`DrawerHeader`): agent icon, session name, project/item scope, status indicator, terminal-specific controls (End Session, Detach)
+- Terminal header bar (`DrawerHeader`): agent icon, session name, project/item scope, status indicator, and one terminal-specific control: **End Session** (see Input Model below for close vs end semantics)
 - Multiple terminals can exist per project — switch between them via the chat list
 - Terminal persists when switching to other views (runs in background via tmux)
 
@@ -389,6 +389,43 @@ The current `SecondaryDrawer` has `MIN_WIDTH = 280px`, which is sufficient for O
 **Why 560px, not 640px:** 560px gives ~70 usable columns at standard terminal font sizes — enough for Claude Code's TUI to render without critical breakage. 640px (true 80-col standard) is ideal and should be the *default* opening width for a new terminal session, but 560px is the hard floor below which things genuinely break.
 
 **Implementation:** Pass the effective minimum as a prop or derive it from the active chat type inside `SecondaryDrawer`. On terminal session open, if `hubDrawerWidth < 560`, auto-set to 640 (one-time snap, then the user controls it freely). The user can drag narrower than 560px if they choose — this is a soft guardrail on open, not a hard enforced constraint during resize.
+
+### Terminal Input Model
+
+This is meaningfully different from OpenClaw chat input and must be designed explicitly.
+
+**No ChatBar.** For `type === 'terminal'`, `ScopedChatShell` renders only xterm.js — full height, no `ChatBar` at the bottom. The compose-and-send model is irrelevant to a terminal. xterm.js *is* the input surface; Claude Code's own TUI handles the prompt, cursor, and echo. The `ChatBar` being absent is the branch, not an afterthought.
+
+**Input flow:**
+```
+User keystroke → xterm.js captures → encodes as terminal sequence
+              → tauri-plugin-pty (Rust) → PTY → tmux pane → agent process
+```
+Character-by-character, real-time. No buffering, no submit action.
+
+**Focus management:** The terminal captures all keyboard input when xterm.js is focused. Clawchestra global shortcuts (Cmd+K, Cmd+N, etc.) only fire when the terminal is *not* focused. The user explicitly clicks into the xterm.js canvas to give it focus, and clicks elsewhere (outside the drawer, on the hub nav) to return focus to Clawchestra. No implicit focus switching.
+
+**Paste:** Cmd+V / Ctrl+V when the terminal is focused must paste into the PTY (as terminal paste), not trigger any Clawchestra paste handler. Bracketed paste mode should be forwarded correctly — Claude Code and most modern CLIs use it to safely handle multi-line pastes.
+
+**Terminal sequence pass-through:** Common terminal sequences must pass through to the PTY uninterrupted when the terminal is focused:
+- Ctrl+C — interrupt / kill foreground process
+- Ctrl+D — EOF / exit shell
+- Ctrl+Z — suspend process
+- Escape — depends on the running TUI; must NOT close the drawer
+- All function keys, arrow keys, modifier combos
+
+xterm.js handles this correctly when focused. The spike should validate that Tauri v2's webview doesn't intercept any of these before they reach xterm.js.
+
+**Close vs End Session — critical distinction:**
+
+| Action | What happens | Warning? |
+|--------|-------------|----------|
+| **Close drawer (X button)** | xterm.js detaches from the tmux session. tmux keeps running. Agent process continues in the background. Session entry stays in the hub sidebar showing current status. Reopen the drawer and you're back where you left off. | **No warning.** Nothing bad is happening — this is a detach, not a stop. The user shouldn't feel anxious about closing the drawer. |
+| **End Session (DrawerHeader button)** | Kills the tmux session. Agent process terminates. Scrollback is preserved (saved to disk before kill). Session moves to Completed state. | **Confirmation required:** *"End the [Claude Code] session? The agent process will stop."* Short, direct. One click to confirm. |
+
+This distinction means the user can freely open and close the drawer as part of their normal workflow — switching contexts, looking at the board, returning to the terminal — without any risk of losing their session. The drawer close is explicitly a detach, and that framing should be visible in the UX: the sidebar entry continues to show a live status indicator (green pulse / amber wait) even when the drawer is closed, making it clear the session is still running.
+
+Escape while the terminal is focused goes to the running process (as a raw Escape terminal sequence), not to Clawchestra. Escape is not a drawer-close shortcut when the terminal has focus.
 
 ### What This Doesn't Solve
 
