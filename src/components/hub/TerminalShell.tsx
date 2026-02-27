@@ -171,17 +171,6 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
       return true; // Everything else goes to the terminal
     });
 
-    // Intercept scroll wheel at the capture phase so it scrolls xterm.js's
-    // scrollback buffer instead of being forwarded to tmux as mouse events
-    // (which tmux converts to up/down arrow = command history cycling).
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const lines = Math.max(1, Math.ceil(Math.abs(e.deltaY) / 25));
-      term.scrollLines(e.deltaY > 0 ? lines : -lines);
-    };
-    container.addEventListener('wheel', handleWheel, { capture: true, passive: false });
-
     // ResizeObserver for container resize → fit terminal
     let resizeTimeout: ReturnType<typeof setTimeout>;
     const resizeObserver = new ResizeObserver(() => {
@@ -203,7 +192,6 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
-      container.removeEventListener('wheel', handleWheel, { capture: true } as EventListenerOptions);
       dataDisposable.dispose();
       inputDisposable.dispose();
       resizeDisposable.dispose();
