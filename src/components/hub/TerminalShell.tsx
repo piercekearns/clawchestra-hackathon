@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { spawn, type IPty } from 'tauri-pty';
@@ -30,6 +30,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
   const ptyRef = useRef<IPty | null>(null);
   const mountedRef = useRef(false);
   const agentLaunchedRef = useRef(false);
+  const [focused, setFocused] = useState(false);
 
   const projects = useDashboardStore((s) => s.projects);
 
@@ -195,6 +196,13 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     });
     resizeObserver.observe(container);
 
+    // Track terminal focus for visual ring
+    const textarea = term.textarea;
+    const onFocus = () => setFocused(true);
+    const onBlur = () => setFocused(false);
+    textarea?.addEventListener('focus', onFocus);
+    textarea?.addEventListener('blur', onBlur);
+
     // Focus terminal
     term.focus();
 
@@ -202,6 +210,8 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
+      textarea?.removeEventListener('focus', onFocus);
+      textarea?.removeEventListener('blur', onBlur);
       dataDisposable.dispose();
       inputDisposable.dispose();
       resizeDisposable.dispose();
@@ -223,7 +233,9 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     <div className="flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6">
       <div
         ref={containerRef}
-        className="terminal-shell flex-1 min-h-0"
+        className={`terminal-shell flex-1 min-h-0 rounded-md transition-shadow duration-150 ${
+          focused ? 'ring-1 ring-neutral-500/50' : ''
+        }`}
       />
     </div>
   );
