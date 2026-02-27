@@ -95,7 +95,7 @@ export function ChatEntryRow({
           value={chat.title}
           onSave={(newTitle) => onRename(chat.id, newTitle)}
           editable={!isProjectChat}
-          className={`block text-xs leading-tight ${isItemComplete ? 'line-through' : ''} ${chat.unread ? 'font-semibold text-neutral-900 dark:text-neutral-100' : ''}`}
+          className={`block text-sm leading-tight ${isItemComplete ? 'line-through' : ''} ${chat.unread ? 'font-semibold text-neutral-900 dark:text-neutral-100' : ''}`}
           useScrollReveal
           onEditingChange={setIsEditing}
         />

@@ -112,7 +112,7 @@ export function ThreadSection({
         <div className="min-w-0 flex-1 group-hover:pr-8">
           <ScrollRevealText
             text={thread.projectTitle}
-            className="text-xs leading-tight text-neutral-500 dark:text-neutral-400"
+            className="text-sm leading-tight text-neutral-500 dark:text-neutral-400"
           />
         </div>
 
