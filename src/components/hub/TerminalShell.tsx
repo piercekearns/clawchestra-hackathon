@@ -113,7 +113,16 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
     let pty: IPty;
     try {
-      pty = spawn('tmux', ['-u', '-f', '/dev/null', '-L', 'clawchestra', 'new-session', '-A', '-s', sessionName, ';', 'set', 'status', 'off'], {
+      pty = spawn('tmux', [
+        '-u', '-f', '/dev/null', '-L', 'clawchestra',
+        'new-session', '-A', '-s', sessionName,
+        ';', 'set', 'status', 'off',
+        // Disable alternate screen on the outer terminal (xterm.js) so all tmux
+        // output goes to the normal buffer with scrollback. Without this, tmux
+        // uses the alternate screen which has no scrollback — wheel events get
+        // converted to up/down arrows instead of scrolling.
+        ';', 'set', '-ga', 'terminal-overrides', ',xterm-256color:smcup@:rmcup@',
+      ], {
         name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
