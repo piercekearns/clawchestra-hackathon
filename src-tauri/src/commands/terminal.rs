@@ -68,7 +68,7 @@ pub(crate) fn detect_agents() -> Vec<DetectedAgent> {
 #[tauri::command]
 pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
     let result = Command::new("tmux")
-        .args(["list-sessions", "-F", "#{session_name}"])
+        .args(["-L", "clawchestra", "list-sessions", "-F", "#{session_name}"])
         .output();
 
     match result {
@@ -88,7 +88,7 @@ pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
 #[tauri::command]
 pub(crate) fn tmux_kill_session(session_name: String) -> Result<(), String> {
     let result = Command::new("tmux")
-        .args(["kill-session", "-t", &session_name])
+        .args(["-L", "clawchestra", "kill-session", "-t", &session_name])
         .output();
 
     match result {
