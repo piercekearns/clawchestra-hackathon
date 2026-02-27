@@ -216,8 +216,12 @@ function ChatEntryMenu({
             {menuItem(chat.unread ? 'Mark as read' : 'Mark as unread', onMarkUnread)}
             {!isProjectChat && menuItem('Archive', onArchive)}
             {isProjectChat && onClearHistory && menuItem('Clear history', onClearHistory)}
-            <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
-            {!isProjectChat && menuItem('Delete', onDelete, true)}
+            {!isProjectChat && (
+              <>
+                <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
+                {menuItem('Delete', onDelete, true)}
+              </>
+            )}
           </div>
         </>,
         document.body,
