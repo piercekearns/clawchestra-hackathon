@@ -214,9 +214,12 @@
   display: none;
 }
 
-/* Hide scrollbar — new VS Code ScrollableElement (6.x) */
-.terminal-shell .xterm-scrollbar {
-  display: none !important;
+/* Hide scrollbar — new VS Code ScrollableElement (6.x)
+   Use opacity + pointer-events instead of display:none to keep
+   scroll event handling intact. */
+.terminal-shell .xterm-scrollable-element > .xterm-scrollbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Brand checkbox — chartreuse fill with dark tick */

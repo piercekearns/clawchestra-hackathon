@@ -120,8 +120,8 @@ export function SecondaryDrawer({
           onOpenLinkedProject={onOpenLinkedProject}
         />
         <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
-          terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
-        }`}>
+          chat.type === 'terminal' ? 'mb-4 md:mb-6' : ''
+        } ${terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''}`}>
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} />
         </div>
       </div>
