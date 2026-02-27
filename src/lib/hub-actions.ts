@@ -22,8 +22,6 @@ export async function openOrCreateProjectChat(
 
   // Prefer the project root chat, fallback to first
   const target = chats.find((c) => c.isProjectRoot) ?? chats[0];
-  store.setSidebarMode('default');
-  store.setSidebarOpen(true);
   store.setHubActiveChatId(target.id);
   store.setHubDrawerOpen(true);
   // Expand the thread if collapsed
@@ -62,8 +60,6 @@ export async function openOrCreateItemChat(
 
   await store.refreshHubChats();
 
-  store.setSidebarMode('default');
-  store.setSidebarOpen(true);
   store.setHubActiveChatId(itemChat.id);
   store.setHubDrawerOpen(true);
   // Expand the thread if collapsed

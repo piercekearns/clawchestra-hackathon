@@ -64,7 +64,7 @@ export function Card<T extends BoardItem>({
 
       {hasBody ? (
         <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-300">
-          {renderHoverActions ? (
+          {renderHoverActions || renderRightHoverActions ? (
             <div className="relative min-h-[1.5rem]">
               <div className="transition-opacity duration-150 group-hover:opacity-0">
                 {item.nextAction ? (
@@ -79,7 +79,7 @@ export function Card<T extends BoardItem>({
                 )}
               </div>
               <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-between opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
-                {renderHoverActions(item)}
+                {renderHoverActions?.(item)}
                 {renderRightHoverActions ? (
                   <div className="flex items-center gap-0.5">
                     {renderRightHoverActions(item)}
