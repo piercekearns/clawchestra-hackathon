@@ -15,7 +15,7 @@ export function TerminalShell({ chat }: TerminalShellProps) {
   // Archived terminal — show static message, don't spawn a new PTY
   if (chat.archived) {
     return (
-      <div className="flex flex-1 items-center justify-center min-h-0" style={{ backgroundColor: '#171717' }}>
+      <div className="flex flex-1 items-center justify-center min-h-0" style={{ backgroundColor: '#0a0a0a' }}>
         <p className="text-sm text-neutral-500">Session ended</p>
       </div>
     );
@@ -60,13 +60,15 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      fontFamily: "'SF Mono', 'Cascadia Code', 'Fira Code', Menlo, Monaco, monospace",
+      fontFamily: "'IBM Plex Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', Menlo, Monaco, monospace",
+      lineHeight: 1.15,
+      scrollback: 5000,
       theme: {
-        background: '#171717',
+        background: '#0a0a0a',
         foreground: '#e5e5e5',
         cursor: '#DFFF00',
         selectionBackground: '#DFFF0033',
-        black: '#171717',
+        black: '#0a0a0a',
         red: '#ff5c57',
         green: '#5af78e',
         yellow: '#f3f99d',
@@ -109,7 +111,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
     let pty: IPty;
     try {
-      pty = spawn('tmux', ['new-session', '-A', '-s', sessionName], {
+      pty = spawn('tmux', ['new-session', '-A', '-s', sessionName, ';', 'set', 'status', 'off'], {
         name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
@@ -220,8 +222,8 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
   return (
     <div
       ref={containerRef}
-      className="flex-1 min-h-0"
-      style={{ backgroundColor: '#171717' }}
+      className="terminal-shell flex-1 min-h-0"
+      style={{ backgroundColor: '#0a0a0a', padding: '8px 8px 4px 12px' }}
     />
   );
 }
