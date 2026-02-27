@@ -15,7 +15,7 @@ export function TerminalShell({ chat }: TerminalShellProps) {
   // Archived terminal — show static message, don't spawn a new PTY
   if (chat.archived) {
     return (
-      <div className="flex flex-1 items-center justify-center min-h-0" style={{ backgroundColor: '#0a0a0a' }}>
+      <div className="flex flex-1 items-center justify-center min-h-0">
         <p className="text-sm text-neutral-500">Session ended</p>
       </div>
     );
@@ -63,8 +63,9 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
       fontFamily: "'IBM Plex Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', Menlo, Monaco, monospace",
       lineHeight: 1.15,
       scrollback: 5000,
+      allowTransparency: true,
       theme: {
-        background: '#0a0a0a',
+        background: 'transparent',
         foreground: '#e5e5e5',
         cursor: '#DFFF00',
         selectionBackground: '#DFFF0033',
@@ -223,7 +224,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     <div
       ref={containerRef}
       className="terminal-shell flex-1 min-h-0"
-      style={{ backgroundColor: '#0a0a0a', padding: '8px 8px 4px 12px' }}
+      style={{ padding: '8px 8px 4px 12px' }}
     />
   );
 }
