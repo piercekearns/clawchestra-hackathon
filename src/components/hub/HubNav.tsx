@@ -103,10 +103,10 @@ export function HubNav({ onToast }: HubNavProps) {
   }, [hubChats, projects, hubThreadOrder]);
 
   // Collect completed item IDs from projects' roadmap items
+  const roadmapItems = useDashboardStore((s) => s.roadmapItems);
   const completedItemIds = useMemo(() => {
-    const items = useDashboardStore.getState().roadmapItems;
     const ids = new Set<string>();
-    for (const projectItems of Object.values(items)) {
+    for (const projectItems of Object.values(roadmapItems)) {
       for (const item of projectItems) {
         if (item.status === 'complete') {
           ids.add(item.id);
@@ -114,7 +114,7 @@ export function HubNav({ onToast }: HubNavProps) {
       }
     }
     return ids;
-  }, [hubChats]); // Re-derive when chats change (proxy for "something happened")
+  }, [roadmapItems]);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
