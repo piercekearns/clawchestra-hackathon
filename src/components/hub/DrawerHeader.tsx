@@ -119,7 +119,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
             </div>
             {isTerminal ? (
               <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-                {chat.agentType ? AGENT_LABELS[chat.agentType] + ' Terminal' : 'Shell'} &middot; {projectTitle}
+                {projectTitle}
               </div>
             ) : !chat.isProjectRoot ? (
               <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">

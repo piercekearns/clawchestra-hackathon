@@ -222,10 +222,10 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
   }, [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex-1 min-h-0 px-4 pt-3 pb-1 md:px-6">
+    <div className="flex flex-1 flex-col min-h-0 px-4 pt-3 pb-1 md:px-6">
       <div
         ref={containerRef}
-        className="terminal-shell h-full"
+        className="terminal-shell flex-1 min-h-0"
       />
     </div>
   );
