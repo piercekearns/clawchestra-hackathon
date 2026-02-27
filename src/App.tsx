@@ -1737,18 +1737,6 @@ export default function App() {
           return;
         }
 
-        if (selectedRoadmapItemId) {
-          event.preventDefault();
-          setSelectedRoadmapItemId(null);
-          return;
-        }
-
-        if (isRoadmapView) {
-          event.preventDefault();
-          setViewContext(defaultView());
-          setRoadmapItems([]);
-          return;
-        }
       }
 
     };
@@ -1758,15 +1746,11 @@ export default function App() {
   }, [
     addDialogOpen,
     chatDrawerOpen,
-    isRoadmapView,
     searchOpen,
     settingsPageOpen,
     syncDialogOpen,
     selectedProjectId,
     setSelectedProjectId,
-    selectedRoadmapItemId,
-    setSelectedRoadmapItemId,
-    setViewContext,
     handleSettingsBack,
   ]);
 
