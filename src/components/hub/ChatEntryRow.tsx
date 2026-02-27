@@ -82,7 +82,7 @@ export function ChatEntryRow({
           )}
         </span>
       ) : chat.type === 'terminal' ? (
-        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-emerald-500 dark:text-emerald-400">
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
           <AgentIcon agentType={chat.agentType} className="h-3.5 w-3.5" />
           {chat.unread && (
             <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
