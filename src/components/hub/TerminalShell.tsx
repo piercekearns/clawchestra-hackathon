@@ -114,7 +114,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
         cols: term.cols,
         rows: term.rows,
         cwd: projectDirPath ?? undefined,
-        env: { COLORTERM: 'truecolor' },
+        env: { TERM: 'xterm-256color', COLORTERM: 'truecolor' },
       });
     } catch (e) {
       term.writeln(`\r\n[Error] Failed to spawn terminal: ${e}`);
