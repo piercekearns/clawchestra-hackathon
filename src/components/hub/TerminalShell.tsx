@@ -194,13 +194,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       if (event.metaKey && (event.key === 'k' || event.key === 'n' || event.key === 'w')) {
         return false; // Let the app handle Cmd+K, Cmd+N, Cmd+W
       }
-      // Shift+Enter → insert literal newline via bracketed paste so the shell
-      // inserts it instead of executing the command. Plain \n would trigger
-      // accept-line in zsh/bash. Block both keydown and keypress to prevent
-      // xterm from also sending \r on the keypress event.
+      // Shift+Enter → insert literal newline. Ctrl-V (\x16) is "quoted-insert"
+      // in zsh/bash, making the shell treat the next char as literal. This
+      // avoids the overhead of bracketed paste mode for snappier response.
       if (event.shiftKey && event.key === 'Enter') {
         if (event.type === 'keydown') {
-          pty.write('\x1b[200~\n\x1b[201~');
+          pty.write('\x16\n');
         }
         return false;
       }
