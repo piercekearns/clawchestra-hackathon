@@ -222,11 +222,12 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
     getCurrentWindow().onDragDropEvent((event) => {
       if (event.payload.type !== 'drop') return;
       const { paths, position } = event.payload;
+      // Tauri reports physical pixels; getBoundingClientRect returns CSS pixels
+      const scale = window.devicePixelRatio || 1;
+      const cx = position.x / scale;
+      const cy = position.y / scale;
       const rect = container.getBoundingClientRect();
-      if (
-        position.x < rect.left || position.x > rect.right ||
-        position.y < rect.top || position.y > rect.bottom
-      ) return;
+      if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) return;
 
       const imagePaths = paths.filter((p) => {
         const ext = p.split('.').pop()?.toLowerCase() ?? '';
@@ -261,8 +262,16 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
     };
   }, [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Drag-and-drop handlers — stopPropagation prevents the window-level
-  // ChatShell handler from intercepting image drops over the terminal.
+  // Drag-and-drop handlers — stopPropagation on ALL drag events prevents the
+  // window-level ChatShell handler from catching drags over the terminal.
+  // Missing any event (especially dragenter) leaves ChatShell's dragDepth
+  // counter stuck > 0, causing a permanent glow.
+  const onDragEnter = useCallback((e: React.DragEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDragActive(true);
+  }, []);
+
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -286,6 +295,7 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
   return (
     <div
       className={`flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6 rounded-lg transition-shadow ${dragActive ? 'ring-2 ring-[#DFFF00]/50' : ''}`}
+      onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
