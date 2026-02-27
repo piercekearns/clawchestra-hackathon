@@ -361,14 +361,20 @@ export default function App() {
   // Restore window size/position from saved state on launch.
   useEffect(() => {
     if (isTauriRuntime()) {
-      // Restore immediately, then again after a short delay as a safety net
-      // in case the initial restore races with window creation.
+      // Restore window size/position from saved state.
+      // Multiple retries at increasing delays because:
+      // - macOS takes time to enumerate displays after app launch (especially multi-monitor)
+      // - If the saved position is on a secondary monitor that isn't yet recognised,
+      //   the plugin considers it invalid and falls back to min size.
+      // - Retrying at 500ms, 1500ms, and 3000ms covers the display-init window.
       const restore = () => restoreStateCurrent(StateFlags.ALL).catch((err) => {
         console.warn('[WindowState] restore failed:', err);
       });
       void restore();
-      const timer = window.setTimeout(() => { void restore(); }, 300);
-      return () => clearTimeout(timer);
+      const t1 = window.setTimeout(() => { void restore(); }, 500);
+      const t2 = window.setTimeout(() => { void restore(); }, 1500);
+      const t3 = window.setTimeout(() => { void restore(); }, 3000);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     }
   }, []);
 

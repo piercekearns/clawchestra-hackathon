@@ -163,7 +163,10 @@ cp -R "$BUNDLE_PATH" "$STAGED_PATH"
 
 echo "🔁 Applying update and restarting app..."
 killall "clawchestra" 2>/dev/null || true
-sleep 0.5
+# Wait for the process to fully exit and for macOS to release window resources
+# before opening the new binary. 0.5s was too short — displays aren't always
+# re-enumerated by the time restoreStateCurrent fires, causing fallback to min size.
+sleep 1.5
 rm -rf "$INSTALL_PATH"
 mv "$STAGED_PATH" "$INSTALL_PATH"
 open "$INSTALL_PATH"
