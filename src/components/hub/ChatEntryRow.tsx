@@ -102,7 +102,7 @@ export function ChatEntryRow({
       </div>
 
       {isItemComplete && (
-        <Check className="h-3 w-3 shrink-0 text-green-500" />
+        <Check className="h-3 w-3 shrink-0 text-[#DFFF00]/50" />
       )}
 
       {/* Right hover action — single ⋯ menu with all actions */}
