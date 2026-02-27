@@ -196,9 +196,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       }
       // Shift+Enter → insert literal newline via bracketed paste so the shell
       // inserts it instead of executing the command. Plain \n would trigger
-      // accept-line in zsh/bash.
-      if (event.shiftKey && event.key === 'Enter' && event.type === 'keydown') {
-        pty.write('\x1b[200~\n\x1b[201~');
+      // accept-line in zsh/bash. Block both keydown and keypress to prevent
+      // xterm from also sending \r on the keypress event.
+      if (event.shiftKey && event.key === 'Enter') {
+        if (event.type === 'keydown') {
+          pty.write('\x1b[200~\n\x1b[201~');
+        }
         return false;
       }
       return true; // Everything else goes to the terminal
