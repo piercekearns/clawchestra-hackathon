@@ -2,11 +2,11 @@
 
 > Give Clawchestra users direct, visible access to coding agent sessions tied to projects and roadmap items — from embedded terminals (Phase 1) through managed sessions (Phase 2) to native protocol integration (Phase 3) — without removing OpenClaw from the loop.
 
-**Status:** Draft (comprehensive spec, Model D chosen, key decisions captured)
+**Status:** Draft (decisions captured — terminal launch UX, MIN_WIDTH approach, hub foundation confirmed; ready for plan)
 **Created:** 2026-02-21
-**Last Updated:** 2026-02-26
+**Last Updated:** 2026-02-27
 **Roadmap Item:** `embedded-agent-terminals`
-**Depends On:** `project-conversation-hub` (thread/container model)
+**Depends On:** `project-conversation-hub` ✅ delivered — see [Hub Foundation](#hub-foundation) below
 **Direction:** Model D (Parallel Tracks) — phased progression
 
 ---
@@ -17,14 +17,15 @@
 2. [Direction: Model D (Non-Destructive Parallel Tracks)](#direction-model-d)
 3. [Current State: How OpenClaw Interacts with Coding Agents](#current-state)
 4. [Landscape: How Other Tools Work](#landscape)
-5. [Phase 1: Embedded Terminals](#phase-1-embedded-terminals)
-6. [Phase 2: Enhanced Terminal + Session Management](#phase-2-enhanced-terminal--session-management)
-7. [Phase 3: Protocol Integration (ACP / JSON-RPC)](#phase-3-protocol-integration)
-8. [OpenClaw's Role Across Phases](#openclaws-role-across-phases)
-9. [Session Lifecycle Management](#session-lifecycle-management)
-10. [Alternative Architectural Models](#alternative-models)
-11. [Decisions](#decisions)
-12. [Open Questions](#open-questions)
+5. [Hub Foundation — What Was Built](#hub-foundation)
+6. [Phase 1: Embedded Terminals](#phase-1-embedded-terminals)
+7. [Phase 2: Enhanced Terminal + Session Management](#phase-2-enhanced-terminal--session-management)
+8. [Phase 3: Protocol Integration (ACP / JSON-RPC)](#phase-3-protocol-integration)
+9. [OpenClaw's Role Across Phases](#openclaws-role-across-phases)
+10. [Session Lifecycle Management](#session-lifecycle-management)
+11. [Alternative Architectural Models](#alternative-models)
+12. [Decisions](#decisions)
+13. [Open Questions](#open-questions)
 
 ---
 
@@ -217,6 +218,75 @@ This is useful regardless of Model D and makes OpenClaw's existing orchestration
 
 ---
 
+<a name="hub-foundation"></a>
+## Hub Foundation — What Was Built
+
+The `project-conversation-hub` feature is fully delivered and provides the container infrastructure EAT builds into. This section documents the actual state of the codebase so implementers start from ground truth, not speculation.
+
+### Data Model (Ready)
+
+`src/lib/hub-types.ts` already contains:
+
+```ts
+type HubChatType = 'openclaw' | 'terminal';
+
+type HubAgentType = 'claude-code' | 'codex' | 'cursor' | 'opencode' | 'generic';
+
+interface HubChat {
+  id: string;
+  projectId: string;
+  itemId: string | null;
+  type: HubChatType;         // ← 'terminal' already in the type system
+  agentType: HubAgentType | null;
+  sessionKey: string | null; // ← null for terminal sessions
+  // ... title, pinned, unread, archived, lastActivity, etc.
+}
+```
+
+The SQLite `chats` table has `type` and `agentType` columns. Terminal sessions will use `type: 'terminal'`, `agentType: <agent>`, `sessionKey: null`. **No schema changes needed.**
+
+### Spatial Layout (Resolved — Option B)
+
+`SecondaryDrawer` is the container. Layout is:
+
+```
+[ThinSidebar] | [Main sidebar — HubNav] | [SecondaryDrawer — active chat/terminal] | [Board]
+```
+
+The drawer is resizable, side-aware, and independently dismissible. Both OpenClaw chats and terminal sessions render inside `SecondaryDrawer`. The hub nav (thread list, chat entries) lives in the main sidebar and persists regardless of drawer state.
+
+**Current drawer dimensions:** `MIN_WIDTH = 280px`, `MAX_WIDTH = 1200px`. See Decision 8 for the terminal-specific minimum width handling.
+
+### Components EAT Will Modify
+
+EAT adds terminal rendering to the existing hub. These are the specific files to touch — no new top-level architecture needed:
+
+| File | What changes |
+|------|-------------|
+| `src/components/hub/ScopedChatShell.tsx` | Branch on `chat.type === 'terminal'` → render xterm.js instead of `MessageList` + `ChatBar` |
+| `src/components/hub/DrawerHeader.tsx` | Add terminal-specific controls: **End Session**, **Detach** (alongside existing pin/archive/rename for OpenClaw chats) |
+| `src/components/hub/ChatEntryRow.tsx` | Branch on `chat.type` for right-edge action: `⏹` End/Archive (context-sensitive) for terminals vs `🗄` Archive for chats |
+| `src/components/hub/ThreadSection.tsx` | Remove `disabled` from the Terminal option in `TypePickerButton`; wire up tmux session creation logic |
+| `src/components/hub/SecondaryDrawer.tsx` | Accept a `minWidth` prop (or derive from active chat type) to enforce terminal minimum width |
+
+### Components That Already Work (Don't Rebuild)
+
+| Component | Status |
+|-----------|--------|
+| `HubNav.tsx` | Full thread list, DnD reordering, collapse/expand, all CRUD — no changes needed |
+| `ChatEntryRow.tsx` | Pin, rename (inline), archive, mark unread, delete, busy indicator — just needs terminal branching added |
+| `QuickAccessPopover.tsx` | Hover popover on thin strip icon, top 5 entries, relative timestamps — no changes needed |
+| `ChatTypeIcon.tsx` | Returns `<Terminal />` for `type === 'terminal'`, `<MessageSquare />` for openclaw — sufficient for Phase 1; agent-specific branding icons are Phase 2 |
+| `hub-context.ts` | Context injection for OpenClaw chats — terminal sessions skip context injection |
+| `hub-actions.ts` | `openOrCreateProjectChat`, `openOrCreateItemChat` — no changes needed |
+| Card integration | `projectHasThread` and `itemHasChat` wired in `App.tsx` for both kanban cards and roadmap item rows — no changes needed |
+
+### What Doesn't Exist Yet
+
+Everything else in this spec. The hub provides the container and the plumbing; EAT provides the content — terminal emulation, tmux session management, PTY bridge, agent launch flow, status detection.
+
+---
+
 <a name="phase-1-embedded-terminals"></a>
 ## Phase 1: Embedded Terminals
 
@@ -263,18 +333,30 @@ This spike validates the *rendering method*. The UX design (sidebar layout, chat
 
 ### Agent Launch Flow
 
-1. User clicks "New chat" on a project card or roadmap item card → selects a terminal type (Claude Code, Codex, Cursor, generic terminal)
-2. Clawchestra creates a tmux session:
-   - Named: `clawchestra:{project-id}:{uuid}` (or similar unique pattern)
+**Option B (chosen):** Agent type is selected *before* the terminal opens, from an expanded type-picker. The add menu (`+` button on thread headers, already implemented in `TypePickerButton`) presents detected agents as primary options alongside Generic Terminal. Clawchestra auto-launches the chosen agent CLI when the session starts — no secondary picker needed after the terminal opens.
+
+1. User clicks `+` on a project thread in HubNav
+2. Type picker shows auto-detected agents + Generic Terminal:
+   ```
+   💬 OpenClaw Chat
+   ─────────────────
+   🖥️ Claude Code      [detected ✓]
+   🖥️ Codex            [not installed]
+   🖥️ Cursor           [not installed]
+   🖥️ OpenCode         [detected ✓]
+   🖥️ Generic Terminal
+   ```
+3. User selects an option → Clawchestra creates a `HubChat` with `type: 'terminal'`, `agentType: <selected>`
+4. Clawchestra creates a tmux session:
+   - Named: `clawchestra:{project-id}:{uuid}` (unique, avoids conflicts with user's own tmux sessions)
    - Working directory set to project's `localPath`
    - Shell spawned (user's default shell)
-3. If agent-specific type was selected:
-   - Auto-send the launch command: `claude` or `codex` or `cursor` or `opencode`
-   - Wait for TUI initialization
-4. xterm.js connects to the tmux session via the PTY bridge
-5. Terminal renders in the sidebar panel (same area as OpenClaw chats)
-6. User interacts directly — full keyboard input, full terminal output
-7. Session tracked in the conversation hub's chat list (with agent-specific icon)
+5. If agent-specific type was selected: auto-send the launch command (`claude`, `codex`, `opencode`, `cursor`) + wait for TUI initialization
+6. xterm.js connects to the tmux session via the PTY bridge
+7. `SecondaryDrawer` opens with `ScopedChatShell` rendering the xterm.js terminal
+8. Session appears in the chat list with a terminal icon and `"Coming soon"` disabled state removed
+
+**Agent detection:** Clawchestra runs `which claude`, `which codex`, `which cursor`, `which opencode` at app launch and caches results. Detected agents display as fully enabled options; undetected agents are either hidden or greyed with "not installed." Rescan triggered from Settings. Detection is trivial (single shell call per agent) and has no meaningful cost.
 
 ### Pre-Configuration Options
 
@@ -289,11 +371,24 @@ When launching from a specific context, Clawchestra can pre-configure the sessio
 
 ### UI Layout
 
-- Terminal occupies the same sidebar/panel area as OpenClaw chats (conversation hub)
+- Terminal occupies the same `SecondaryDrawer` as OpenClaw chats (conversation hub)
 - Chat list shows terminal sessions alongside OpenClaw chats with distinguishing icons
-- Terminal header bar: agent icon, session name, project/item scope, status indicator, controls (end session, detach, fullscreen)
+- Terminal header bar (`DrawerHeader`): agent icon, session name, project/item scope, status indicator, terminal-specific controls (End Session, Detach)
 - Multiple terminals can exist per project — switch between them via the chat list
 - Terminal persists when switching to other views (runs in background via tmux)
+
+### Drawer Width for Terminal Sessions
+
+The current `SecondaryDrawer` has `MIN_WIDTH = 280px`, which is sufficient for OpenClaw chats but too narrow for productive terminal use. A 280px terminal causes severe TUI layout breakage — Claude Code's diff view, file trees, and approval prompts rely on horizontal space.
+
+**Approach: context-sensitive minimum width**
+
+- When an OpenClaw chat is the active entry → MIN_WIDTH stays at **280px** (no change)
+- When a terminal session is the active entry → enforce a higher effective minimum of **560px**, and auto-expand the drawer to at least 560px if it's currently narrower
+
+**Why 560px, not 640px:** 560px gives ~70 usable columns at standard terminal font sizes — enough for Claude Code's TUI to render without critical breakage. 640px (true 80-col standard) is ideal and should be the *default* opening width for a new terminal session, but 560px is the hard floor below which things genuinely break.
+
+**Implementation:** Pass the effective minimum as a prop or derive it from the active chat type inside `SecondaryDrawer`. On terminal session open, if `hubDrawerWidth < 560`, auto-set to 640 (one-time snap, then the user controls it freely). The user can drag narrower than 560px if they choose — this is a soft guardrail on open, not a hard enforced constraint during resize.
 
 ### What This Doesn't Solve
 
@@ -608,13 +703,19 @@ Future: Automated session summaries that close the conversation context gap.
 The xterm.js + Tauri v2 validation spike determines the *rendering method*, not the *UX design*. The sidebar layout, chat-type selection, card entry points, and session management UI can all be planned and built independently. The spike runs in parallel.
 
 ### 5. Default experience: detect available agents
-First-time experience should detect which agent CLIs are available on the user's machine (claude, codex, cursor, opencode) and present them as launch options. If none are found, offer a generic terminal. Don't force the user to configure anything.
+Clawchestra detects installed agent CLIs at app launch (`which claude`, `which codex`, `which cursor`, `which opencode`) and presents only detected agents as enabled options in the type-picker. Generic Terminal is always available. If no agents are detected, only Generic Terminal is shown. Rescan available from Settings. No user configuration required. See Decision 8 for the full terminal launch UX choice.
 
 ### 6. Session naming: auto-generate from context
 Default name format: "{agent} — {scope}" (e.g., "Claude Code — git-sync"). Enhanced with first prompt if identifiable. User can rename anytime via double-click or `⋯` menu. No prompt to name on creation — that adds friction.
 
 ### 7. Notification threshold: configurable, default to approvals + errors
 Notifications fire for approval requests and errors by default. The user can configure: all events, approvals + errors only, errors only, or off. System notifications (macOS) are opt-in.
+
+### 8. Terminal launch UX: Option B (expanded type-picker with auto-detection)
+Agent type is selected *before* the terminal opens, via an expanded `TypePickerButton` menu (already implemented in `ThreadSection.tsx` with Terminal as "Coming soon"). Clawchestra detects installed CLIs at app launch (`which claude`, `which codex`, etc.) and presents detected agents as enabled options; undetected agents are hidden or greyed. Generic Terminal is always available as a catch-all. This is chosen over "open generic shell first, pick agent after" (Option A) because it allows Clawchestra to configure the tmux session and auto-launch the agent CLI correctly from the start — no ambiguous "pending agent selection" session state to manage.
+
+### 9. Drawer minimum width: context-sensitive (280px for chats, 560px floor for terminals)
+The existing `SecondaryDrawer` MIN_WIDTH (280px) is preserved for OpenClaw chats. When a terminal session is the active entry, a higher effective minimum of 560px is enforced. On first open of a terminal session, the drawer auto-expands to 640px if currently narrower — a one-time snap, after which the user controls width freely. 560px is the hard floor (below which Claude Code's TUI breaks critically); 640px is the comfortable default. The user can drag below 560px by choice — this is a soft guardrail on session open, not a rigid resize constraint.
 
 ---
 
@@ -632,15 +733,16 @@ Notifications fire for approval requests and errors by default. The user can con
 6. **tmux session naming convention** — What naming pattern ensures Clawchestra can reliably find its own sessions without conflicting with user's existing tmux sessions?
 7. **tmux-to-xterm.js bridge** — Does `tauri-plugin-pty` support attaching to an existing tmux session, or do we need a custom Rust bridge?
 
-### Layout (shared with `project-conversation-hub` — must resolve before planning)
-8. **Chat drawer vs sidebar for terminal panel** — See `project-conversation-hub-spec.md` OQ-1. Terminal sessions live in the same container as OpenClaw chats, so the spatial layout decision there governs terminal rendering too. Key terminal-specific angle: terminal panels likely need more horizontal real estate than chat bubbles — a resizable drawer that can be made wide is more important for terminals than for text chats. The drawer width floor for a usable terminal (80 columns minimum, ideally 120+) should inform the minimum drawer width in the hub spec.
+### ~~Layout~~ → **Resolved** — see Decision 9
+
+~~8. **Chat drawer vs sidebar for terminal panel**~~ — **Resolved.** Option B was implemented by the hub: `SecondaryDrawer` is the container for all chat types including terminals. Layout is `[ThinSidebar] | [HubNav sidebar] | [SecondaryDrawer] | [Board]`. Terminal-specific width handling is captured in Decision 9 (context-sensitive MIN_WIDTH: 280px for chats, 560px floor / 640px default for terminals). No longer a blocker.
 
 ### Longer-term (design context, not Phase 1 blockers)
 9. **Claude Code remote control handoff** — If Claude Code is launched via embedded terminal and later controlled remotely (cloud handoff), does Clawchestra's project planning/kanban stay up to date with the remote changes? Needs workflow + sync implications testing.
 10. **Claude Code protocol** — Will Anthropic publish a protocol for Claude Code? This determines whether Phase 3 covers the most-used agent. Monitor but don't block on.
 11. **ACP stability** — Is ACP stable enough to build against for Phase 3, or will it change significantly? Same — monitor, don't block.
 12. **Conversation context portability** — How to bridge the context gap between terminal sessions and OpenClaw. Phase 1 accepts manual bridging. Phase 2 adds filesystem-based awareness. Future: automated session summaries. This is the most important longer-term question for the feature's utility.
-13. **Minimum usable terminal width** — Terminal panels need ≥80 columns to be usable (120+ preferred). The chat drawer minimum width in the hub spatial layout should be driven by this constraint, not arbitrary UI preference. Feed into OQ-1 resolution.
+13. ~~**Minimum usable terminal width**~~ — **Resolved** via Decision 9. Context-sensitive MIN_WIDTH: 280px for OpenClaw chats (unchanged), 560px floor / 640px default for terminal sessions. Auto-expand on first open if drawer is currently narrower. User can drag below 560px by choice after open.
 
 ## Relationship to Other Specs
 
