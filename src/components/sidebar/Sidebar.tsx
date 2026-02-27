@@ -172,7 +172,7 @@ export function Sidebar({
 
         {/* Settings button */}
         {sidebarOpen && !isSettingsMode && (
-          <div className="px-2 pb-[calc(0.5rem+4px)]">
+          <div className="px-2 pb-[calc(0.5rem+6px)]">
             <button
               type="button"
               onClick={onOpenSettings}
