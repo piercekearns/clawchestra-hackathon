@@ -313,6 +313,7 @@ function TypePickerButton({
                   }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 >
+                  <Terminal className="h-3.5 w-3.5 text-neutral-400" />
                   {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
                 </button>
               ))}
@@ -324,6 +325,7 @@ function TypePickerButton({
                 }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
+                <Terminal className="h-3.5 w-3.5 text-neutral-400" />
                 Shell
               </button>
             </div>
