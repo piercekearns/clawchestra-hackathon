@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Archive, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
+import { Tooltip } from '../Tooltip';
 import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate } from '../../lib/tauri';
 import { useDashboardStore } from '../../lib/store';
@@ -63,7 +64,6 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   };
 
   const handleOpenLinkedItem = () => {
-    setMenuOpen(false);
     if (chat.itemId && onOpenLinkedItem) {
       onOpenLinkedItem(chat.projectId, projectTitle, chat.itemId);
     }
@@ -119,12 +119,6 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
                 onClick={() => void handleTogglePin()}
               />}
               {!chat.isProjectRoot && <MenuButton icon={Archive} label="Archive" onClick={() => void handleArchive()} />}
-              {chat.itemId && onOpenLinkedItem && (
-                <>
-                  <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
-                  <MenuButton icon={ExternalLink} label="Open linked item" onClick={handleOpenLinkedItem} />
-                </>
-              )}
             </div>
           </>
         )}
@@ -137,6 +131,18 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
       >
         <X className="h-4 w-4" />
       </button>
+      {chat.itemId && onOpenLinkedItem && (
+        <Tooltip text="Open linked item">
+          <button
+            type="button"
+            onClick={handleOpenLinkedItem}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label="Open linked item"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </button>
+        </Tooltip>
+      )}
     </div>
   );
 }

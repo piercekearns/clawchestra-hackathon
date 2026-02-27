@@ -110,9 +110,14 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* Quick Actions heading + buttons */}
         {sidebarOpen && !isSettingsMode && actions.length > 0 && (
           <div className={`flex flex-col gap-0.5 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
+            <div className="px-3 pb-2 pt-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                Quick Actions
+              </span>
+            </div>
             {actions.map((action) => {
               const Icon = action.icon;
               const iconEl = (
