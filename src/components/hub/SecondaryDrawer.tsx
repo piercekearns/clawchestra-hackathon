@@ -36,6 +36,7 @@ export function SecondaryDrawer({
   const rafHandle = useRef(0);
   const [isResizing, setIsResizing] = useState(false);
   const [isHandleHover, setIsHandleHover] = useState(false);
+  const [terminalFocused, setTerminalFocused] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Resolve project title
@@ -106,7 +107,9 @@ export function SecondaryDrawer({
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
-      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
+      } ${isResizing ? '' : 'transition-[border-color,box-shadow] duration-200 ease-out'} ${
+        terminalFocused && !isResizing ? 'ring-1 ring-inset ring-neutral-500/40' : ''
+      }`}
       style={{ width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
@@ -118,7 +121,7 @@ export function SecondaryDrawer({
           onOpenLinkedItem={onOpenLinkedItem}
           onOpenLinkedProject={onOpenLinkedProject}
         />
-        <ScopedChatShell chat={chat} />
+        <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} />
       </div>
 
       {/* Drag handle — on right edge when side=left, left edge when side=right */}

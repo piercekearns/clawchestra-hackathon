@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { spawn, type IPty } from 'tauri-pty';
@@ -9,9 +9,10 @@ import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
 
 interface TerminalShellProps {
   chat: HubChat;
+  onFocusChange?: (focused: boolean) => void;
 }
 
-export function TerminalShell({ chat }: TerminalShellProps) {
+export function TerminalShell({ chat, onFocusChange }: TerminalShellProps) {
   // Archived terminal — show static message, don't spawn a new PTY
   if (chat.archived) {
     return (
@@ -20,17 +21,16 @@ export function TerminalShell({ chat }: TerminalShellProps) {
       </div>
     );
   }
-  return <LiveTerminal chat={chat} />;
+  return <LiveTerminal chat={chat} onFocusChange={onFocusChange} />;
 }
 
-function LiveTerminal({ chat }: { chat: HubChat }) {
+function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: (focused: boolean) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const ptyRef = useRef<IPty | null>(null);
   const mountedRef = useRef(false);
   const agentLaunchedRef = useRef(false);
-  const [focused, setFocused] = useState(false);
 
   const projects = useDashboardStore((s) => s.projects);
 
@@ -66,7 +66,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
       scrollback: 5000,
       allowTransparency: true,
       vtExtensions: { kittyKeyboard: true },
-      scrollbar: { showScrollbar: false },
+      scrollbar: { width: 0 },
       theme: {
         background: 'transparent',
         foreground: '#d4d4d4',
@@ -197,10 +197,10 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     });
     resizeObserver.observe(container);
 
-    // Track terminal focus for visual ring
+    // Track terminal focus — notify parent for drawer-level visual
     const textarea = term.textarea;
-    const onFocus = () => setFocused(true);
-    const onBlur = () => setFocused(false);
+    const onFocus = () => onFocusChange?.(true);
+    const onBlur = () => onFocusChange?.(false);
     textarea?.addEventListener('focus', onFocus);
     textarea?.addEventListener('blur', onBlur);
 
@@ -234,9 +234,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     <div className="flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6">
       <div
         ref={containerRef}
-        className={`terminal-shell flex-1 min-h-0 rounded-md transition-shadow duration-150 ${
-          focused ? 'ring-1 ring-neutral-500/50' : ''
-        }`}
+        className="terminal-shell flex-1 min-h-0"
       />
     </div>
   );
