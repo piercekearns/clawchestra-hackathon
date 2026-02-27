@@ -93,13 +93,16 @@ export function ProjectModal({ project, open, onClose, actions, boardScoped }: P
           </button>
         </div>
 
-        <ProjectModalHeader
-          project={project}
-          localStatus={localStatus}
-          onStatusChange={updateProjectStatus}
-          onClose={onClose}
-          showClose={false}
-        />
+        {/* Hide project header when drilling into a roadmap item — back button provides context */}
+        {modalView.kind !== 'detail' && (
+          <ProjectModalHeader
+            project={project}
+            localStatus={localStatus}
+            onStatusChange={updateProjectStatus}
+            onClose={onClose}
+            showClose={false}
+          />
+        )}
 
         {/* Main content area */}
         {hasRoadmap ? (
