@@ -781,6 +781,40 @@ The existing `SecondaryDrawer` MIN_WIDTH (280px) is preserved for OpenClaw chats
 12. **Conversation context portability** — How to bridge the context gap between terminal sessions and OpenClaw. Phase 1 accepts manual bridging. Phase 2 adds filesystem-based awareness. Future: automated session summaries. This is the most important longer-term question for the feature's utility.
 13. ~~**Minimum usable terminal width**~~ — **Resolved** via Decision 9. Context-sensitive MIN_WIDTH: 280px for OpenClaw chats (unchanged), 560px floor / 640px default for terminal sessions. Auto-expand on first open if drawer is currently narrower. User can drag below 560px by choice after open.
 
+---
+
+## Agent Branding Icons
+
+Available via [Boxicons Brands (`bxl`)](https://icon-sets.iconify.design/bxl/) on Iconify (MIT licence). Use `@iconify/react` or any Iconify integration — same setup as other icons in the codebase.
+
+| Agent | Iconify ID | Notes |
+|-------|-----------|-------|
+| **Claude Code** | `bxl:claude-ai` | Anthropic's Claude logo |
+| **Codex (OpenAI)** | `bxl:openai` | No dedicated Codex icon — use the OpenAI logo |
+| **Cursor** | `bxl:cursor-ai` | Cursor's own logo |
+| **OpenCode** | — | No `bxl` icon as of Feb 2026; fall back to `lucide:terminal` or a generic agent glyph |
+
+### Where to Use
+
+Phase 1: `ChatTypeIcon.tsx` currently returns `<Terminal />` for all `type === 'terminal'` entries. In Phase 2 (agent-specific branding), branch on `agentType` to swap in the bxl icon:
+
+```tsx
+// ChatTypeIcon.tsx — Phase 2 enhancement
+import { Icon } from '@iconify/react';
+
+const AGENT_ICONS: Record<HubAgentType, string> = {
+  'claude-code': 'bxl:claude-ai',
+  'codex':       'bxl:openai',
+  'cursor':      'bxl:cursor-ai',
+  'opencode':    'lucide:terminal',   // fallback until bxl adds one
+  'generic':     'lucide:terminal',
+};
+```
+
+Phase 1 can keep `<Terminal />` for all terminal sessions — no need to pull in bxl for the first ship. Phase 2 is when these icons earn their place (session list, session dashboard, type-picker labels).
+
+---
+
 ## Relationship to Other Specs
 
 - **`project-conversation-hub-spec.md`** — provides the thread/container model. Terminal sessions are a chat type within the conversation hub, alongside OpenClaw chats.
