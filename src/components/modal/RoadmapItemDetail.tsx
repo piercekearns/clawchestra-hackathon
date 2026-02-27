@@ -154,7 +154,7 @@ export function RoadmapItemDetail({
             </div>
           )}
 
-          <div className="prose max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
+          <div className="prose max-w-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm prose-hr:my-3 dark:border-neutral-700 dark:bg-neutral-800 dark:prose-invert">
             {docLoading && activeDocContent === undefined ? (
               <div className="flex flex-col gap-2">
                 {[95, 80, 88, 72].map((w, i) => (
