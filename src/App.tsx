@@ -1758,7 +1758,13 @@ export default function App() {
       }
 
       const target = event.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+      // Skip navigation if focus is on any interactive element (inputs, buttons, links, etc.)
+      // so arrow keys don't hijack focus when the user is interacting with the board
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(target.tagName)) {
+        return;
+      }
+      // Also skip if a focusable element within a dialog/popover/menu has focus
+      if (target && target.closest('[role="dialog"],[role="menu"],[role="listbox"],[data-radix-popper-content-wrapper]')) {
         return;
       }
 

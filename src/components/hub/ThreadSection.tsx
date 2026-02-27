@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -46,6 +46,7 @@ export function ThreadSection({
   onAddTerminal,
 }: ThreadSectionProps) {
   const [showAll, setShowAll] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number } | null>(null);
   const hubBusyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
   const {
     attributes,
@@ -83,6 +84,10 @@ export function ThreadSection({
       <div
         className="hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800"
         onClick={onToggle}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenuPos({ top: e.clientY + 4, left: e.clientX });
+        }}
         {...attributes}
         {...listeners}
       >
@@ -122,7 +127,13 @@ export function ThreadSection({
 
         {/* Hover actions: + */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-neutral-100 px-0.5 opacity-0 group-hover:opacity-100 transition-opacity dark:bg-neutral-800">
-          <TypePickerButton projectId={thread.projectId} onAddChat={onAddChat} onAddTerminal={onAddTerminal} />
+          <TypePickerButton
+            projectId={thread.projectId}
+            onAddChat={onAddChat}
+            onAddTerminal={onAddTerminal}
+            externalMenuPos={contextMenuPos}
+            onExternalMenuClose={() => setContextMenuPos(null)}
+          />
         </div>
       </div>
 
@@ -203,14 +214,27 @@ function TypePickerButton({
   projectId,
   onAddChat,
   onAddTerminal,
+  externalMenuPos,
+  onExternalMenuClose,
 }: {
   projectId: string;
   onAddChat: (projectId: string) => void;
   onAddTerminal?: (projectId: string, agentType: HubAgentType) => void;
+  externalMenuPos?: { top: number; left: number } | null;
+  onExternalMenuClose?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [terminalSubmenu, setTerminalSubmenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Open from external trigger (e.g. right-click on folder header)
+  useEffect(() => {
+    if (externalMenuPos) {
+      setMenuPos(externalMenuPos);
+      setOpen(true);
+      setTerminalSubmenu(false);
+    }
+  }, [externalMenuPos]);
   const detectedAgents = useDashboardStore((s) => s.detectedAgents);
 
   const tmuxAvailable = detectedAgents.some((a) => a.agentType === 'tmux' && a.available);
@@ -223,6 +247,7 @@ function TypePickerButton({
     if (open) {
       setOpen(false);
       setTerminalSubmenu(false);
+      onExternalMenuClose?.();
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
       setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 });
@@ -234,6 +259,7 @@ function TypePickerButton({
   const handleAgentSelect = (agentType: HubAgentType) => {
     setOpen(false);
     setTerminalSubmenu(false);
+    onExternalMenuClose?.();
     onAddTerminal?.(projectId, agentType);
   };
 
@@ -251,7 +277,7 @@ function TypePickerButton({
         <>
           <div
             className="fixed inset-0 z-[200]"
-            onClick={(e) => { e.stopPropagation(); setOpen(false); setTerminalSubmenu(false); }}
+            onClick={(e) => { e.stopPropagation(); setOpen(false); setTerminalSubmenu(false); onExternalMenuClose?.(); }}
           />
           <div
             className="fixed z-[200] w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
@@ -262,6 +288,7 @@ function TypePickerButton({
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen(false);
+                onExternalMenuClose?.();
                 onAddChat(projectId);
               }}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
