@@ -197,7 +197,12 @@
   animation: scroll-reveal var(--scroll-duration, 2s) ease-in-out 300ms forwards;
 }
 
-/* xterm.js terminal overrides — hide scrollbar, scroll via wheel/keyboard */
+/* xterm.js terminal overrides — transparent bg, hide scrollbar */
+.terminal-shell .xterm-viewport,
+.terminal-shell .xterm-screen {
+  background-color: transparent !important;
+}
+
 .terminal-shell .xterm-viewport {
   scrollbar-width: none;
 }
