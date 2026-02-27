@@ -35,7 +35,7 @@ export function Card<T extends BoardItem>({
     opacity: isDragging ? 0.6 : 1,
   };
 
-  const hasBody = Boolean(item.nextAction || item.blockedBy || renderActions || renderHoverActions);
+  const hasBody = Boolean(item.nextAction || item.blockedBy || renderActions || renderHoverActions || renderRightHoverActions);
 
   return (
     <article
