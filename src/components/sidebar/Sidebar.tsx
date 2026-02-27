@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ComponentType } from 'react';
-import { ArrowLeft, ArrowRight, Monitor, Moon, Settings, Sun } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ArrowRight, Monitor, Moon, Palette, Settings, Sun } from 'lucide-react';
 import type { ThemePreference } from '../../lib/schema';
 import {
   useDashboardStore,
@@ -153,6 +154,11 @@ export function Sidebar({
                 </button>
               );
             })}
+            <ThemeQuickAction
+              themePreference={themePreference}
+              onSetTheme={setThemePreference}
+              isRight={isRight}
+            />
           </div>
         )}
 
@@ -164,43 +170,9 @@ export function Sidebar({
         {/* Flex spacer for settings mode */}
         {isSettingsMode && <div className="flex-1" />}
 
-        {/* Theme toggle */}
-        {sidebarOpen && !isSettingsMode && (
-          <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
-            <div
-              className={`pointer-events-auto flex ${isRight ? 'justify-end' : 'justify-start'} ${isRight ? 'mr-1' : 'ml-1'}`}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-600">
-                <ThemeButton
-                  pref="light"
-                  current={themePreference}
-                  onClick={setThemePreference}
-                  icon={Sun}
-                  label="Light theme"
-                />
-                <ThemeButton
-                  pref="dark"
-                  current={themePreference}
-                  onClick={setThemePreference}
-                  icon={Moon}
-                  label="Dark theme"
-                />
-                <ThemeButton
-                  pref="system"
-                  current={themePreference}
-                  onClick={setThemePreference}
-                  icon={Monitor}
-                  label="System theme"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Settings button */}
         {sidebarOpen && !isSettingsMode && (
-          <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
+          <div className="px-2 pb-2">
             <button
               type="button"
               onClick={onOpenSettings}
@@ -243,27 +215,95 @@ export function Sidebar({
   );
 }
 
-function ThemeButton({
-  pref,
-  current,
-  onClick,
-  icon: Icon,
-  label,
+const THEME_OPTIONS: { pref: ThemePreference; icon: ComponentType<{ className?: string }>; label: string }[] = [
+  { pref: 'light', icon: Sun, label: 'Light' },
+  { pref: 'dark', icon: Moon, label: 'Dark' },
+  { pref: 'system', icon: Monitor, label: 'System' },
+];
+
+function ThemeQuickAction({
+  themePreference,
+  onSetTheme,
+  isRight,
 }: {
-  pref: ThemePreference;
-  current: ThemePreference;
-  onClick: (pref: ThemePreference) => void;
-  icon: ComponentType<{ className?: string }>;
-  label: string;
+  themePreference: ThemePreference;
+  onSetTheme: (pref: ThemePreference) => void;
+  isRight: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (open) {
+      setOpen(false);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuPos({ top: rect.top, left: isRight ? rect.left - 148 : rect.right + 8 });
+      setOpen(true);
+    }
+  };
+
+  const iconEl = (
+    <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+      <Palette className="h-4 w-4" />
+    </span>
+  );
+
   return (
-    <button
-      type="button"
-      className={`rounded p-1.5 ${pref === current ? 'bg-neutral-200 dark:bg-neutral-700' : ''}`}
-      onClick={() => onClick(pref)}
-      aria-label={label}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleToggle}
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
+          isRight ? 'justify-end' : 'justify-start'
+        }`}
+      >
+        {isRight ? (
+          <>
+            <span className="min-w-0 truncate text-right">Theme</span>
+            {iconEl}
+          </>
+        ) : (
+          <>
+            {iconEl}
+            <span className="min-w-0 truncate">Theme</span>
+          </>
+        )}
+      </button>
+      {open && menuPos && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[200]"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="fixed z-[200] w-36 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
+            {THEME_OPTIONS.map(({ pref, icon: Icon, label }) => (
+              <button
+                key={pref}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSetTheme(pref);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                  pref === themePreference
+                    ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100'
+                    : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
   );
 }
