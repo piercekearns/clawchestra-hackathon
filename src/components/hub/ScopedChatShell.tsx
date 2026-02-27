@@ -37,13 +37,13 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
         )}
       </div>
 
-      {/* Input bar — border-t separator, ChatBar flush at bottom */}
-      <div className="shrink-0 border-t border-neutral-300/80 dark:border-neutral-700/80">
+      {/* Input bar — floating variant renders its own rounded border/shadow */}
+      <div className="shrink-0 px-4 pb-4 md:px-6 md:pb-6">
       <ChatBar
         connectionState={session.wsConnectionState}
         activityLabel={session.sending ? 'Working...' : null}
         drawerOpen={false}
-        variant="embedded"
+        variant="floating"
         showToggle={false}
         input={session.input}
         sending={session.sending}
