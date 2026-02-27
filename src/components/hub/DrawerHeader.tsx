@@ -11,9 +11,10 @@ interface DrawerHeaderProps {
   onClose: () => void;
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
   onOpenLinkedItem?: (projectId: string, projectTitle: string, itemId: string) => void;
+  onOpenLinkedProject?: (projectId: string, projectTitle: string) => void;
 }
 
-export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinkedItem }: DrawerHeaderProps) {
+export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject }: DrawerHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
@@ -98,31 +99,33 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
           </>
         )}
       </div>
-      {/* ⋯ menu */}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setMenuOpen((prev) => !prev)}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-          aria-label="Chat actions"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-50" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
-              {!chat.isProjectRoot && <MenuButton icon={PenLine} label="Rename" onClick={handleRenameStart} />}
-              {!chat.isProjectRoot && <MenuButton
-                icon={Pin}
-                label={chat.pinned ? 'Unpin' : 'Pin'}
-                onClick={() => void handleTogglePin()}
-              />}
-              {!chat.isProjectRoot && <MenuButton icon={Archive} label="Archive" onClick={() => void handleArchive()} />}
-            </div>
-          </>
-        )}
-      </div>
+      {/* ⋯ menu — only for non-project-root chats */}
+      {!chat.isProjectRoot && (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((prev) => !prev)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label="Chat actions"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-50" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                <MenuButton icon={PenLine} label="Rename" onClick={handleRenameStart} />
+                <MenuButton
+                  icon={Pin}
+                  label={chat.pinned ? 'Unpin' : 'Pin'}
+                  onClick={() => void handleTogglePin()}
+                />
+                <MenuButton icon={Archive} label="Archive" onClick={() => void handleArchive()} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <button
         type="button"
         onClick={onClose}
@@ -131,6 +134,18 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
       >
         <X className="h-4 w-4" />
       </button>
+      {chat.isProjectRoot && onOpenLinkedProject && (
+        <Tooltip text="Open linked project">
+          <button
+            type="button"
+            onClick={() => onOpenLinkedProject(chat.projectId, projectTitle)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label="Open linked project"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </button>
+        </Tooltip>
+      )}
       {chat.itemId && onOpenLinkedItem && (
         <Tooltip text="Open linked item">
           <button

@@ -66,7 +66,7 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
           type="button"
           onClick={() => toggleSidebar('left')}
           disabled={leftLocked}
-          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${leftLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
           onMouseDown={(e) => e.stopPropagation()}
           aria-expanded={leftOpen}
           aria-controls="sidebar"
@@ -130,7 +130,7 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
           type="button"
           onClick={() => toggleSidebar('right')}
           disabled={rightLocked}
-          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightOpen ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : ''} ${rightLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
           onMouseDown={(e) => e.stopPropagation()}
           aria-expanded={rightOpen}
           aria-controls="sidebar"

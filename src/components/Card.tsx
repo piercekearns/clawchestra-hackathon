@@ -78,7 +78,7 @@ export function Card<T extends BoardItem>({
                   </p>
                 )}
               </div>
-              <div className="pointer-events-none invisible absolute inset-0 flex items-center justify-between opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+              <div className={`pointer-events-none invisible absolute inset-0 flex items-center opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 ${renderHoverActions ? 'justify-between' : 'justify-end'}`}>
                 {renderHoverActions?.(item)}
                 {renderRightHoverActions ? (
                   <div className="flex items-center gap-0.5">

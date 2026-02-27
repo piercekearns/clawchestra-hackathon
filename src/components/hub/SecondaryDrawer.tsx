@@ -15,6 +15,7 @@ interface SecondaryDrawerProps {
   onClose: () => void;
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
   onOpenLinkedItem?: (projectId: string, projectTitle: string, itemId: string) => void;
+  onOpenLinkedProject?: (projectId: string, projectTitle: string) => void;
 }
 
 export function SecondaryDrawer({
@@ -25,6 +26,7 @@ export function SecondaryDrawer({
   onClose,
   onToast,
   onOpenLinkedItem,
+  onOpenLinkedProject,
 }: SecondaryDrawerProps) {
   const hubChats = useDashboardStore((s) => s.hubChats);
   const projects = useDashboardStore((s) => s.projects);
@@ -113,6 +115,7 @@ export function SecondaryDrawer({
           onClose={onClose}
           onToast={onToast}
           onOpenLinkedItem={onOpenLinkedItem}
+          onOpenLinkedProject={onOpenLinkedProject}
         />
         <ScopedChatShell chat={chat} />
       </div>

@@ -1592,6 +1592,10 @@ export default function App() {
     setSelectedRoadmapItemId(itemId);
   }, [setViewContext]);
 
+  const handleOpenLinkedProject = useCallback((projectId: string, projectTitle: string) => {
+    setViewContext(projectRoadmapView(projectId, projectTitle));
+  }, [setViewContext]);
+
   const hubUnreadCount = useMemo(
     () => hubChats.filter((c) => c.unread && !c.archived).length,
     [hubChats],
@@ -2498,6 +2502,7 @@ export default function App() {
             onClose={() => setHubDrawerOpen(false)}
             onToast={pushToast}
             onOpenLinkedItem={handleOpenLinkedItem}
+            onOpenLinkedProject={handleOpenLinkedProject}
           />
         )}
         <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
@@ -3216,6 +3221,7 @@ export default function App() {
             onClose={() => setHubDrawerOpen(false)}
             onToast={pushToast}
             onOpenLinkedItem={handleOpenLinkedItem}
+            onOpenLinkedProject={handleOpenLinkedProject}
           />
         )}
         {sidebarSide === 'right' ? (
