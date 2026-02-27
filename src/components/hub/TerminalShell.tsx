@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { writeFile } from '@tauri-apps/plugin-fs';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { spawn, type IPty } from 'tauri-pty';
 import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
@@ -215,10 +215,33 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
     // Focus terminal
     term.focus();
 
+    // Native drag-and-drop — Tauri gives us actual file paths from the OS.
+    // The browser-level drag handlers (below) prevent ChatShell from
+    // intercepting the drag, while this handler writes file paths to the PTY.
+    let unlistenDragDrop: (() => void) | undefined;
+    getCurrentWindow().onDragDropEvent((event) => {
+      if (event.payload.type !== 'drop') return;
+      const { paths, position } = event.payload;
+      const rect = container.getBoundingClientRect();
+      if (
+        position.x < rect.left || position.x > rect.right ||
+        position.y < rect.top || position.y > rect.bottom
+      ) return;
+
+      const imagePaths = paths.filter((p) => {
+        const ext = p.split('.').pop()?.toLowerCase() ?? '';
+        return IMAGE_EXTENSIONS.has(ext);
+      });
+      for (const p of imagePaths) {
+        pty.write(p);
+      }
+    }).then((fn) => { unlistenDragDrop = fn; });
+
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
+      unlistenDragDrop?.();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);
       dataDisposable.dispose();
@@ -252,28 +275,12 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
     setDragActive(false);
   }, []);
 
-  const onDrop = useCallback(async (e: React.DragEvent) => {
+  const onDrop = useCallback((e: React.DragEvent) => {
     e.stopPropagation();
     e.preventDefault();
     setDragActive(false);
-
-    const pty = ptyRef.current;
-    if (!pty) return;
-
-    const files = Array.from(e.dataTransfer?.files ?? []);
-    for (const file of files) {
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (!IMAGE_EXTENSIONS.has(ext)) continue;
-
-      try {
-        const buffer = await file.arrayBuffer();
-        const filePath = `/tmp/clawchestra-drop-${Date.now()}.${ext}`;
-        await writeFile(filePath, new Uint8Array(buffer));
-        pty.write(filePath);
-      } catch (err) {
-        console.error('Failed to save dropped image:', err);
-      }
-    }
+    // Actual file handling is done by the Tauri onDragDropEvent listener
+    // registered in useEffect — it gets the real OS file paths.
   }, []);
 
   return (

@@ -215,12 +215,11 @@
 }
 
 /* Hide scrollbar — new VS Code ScrollableElement (6.x)
-   Keep the scrollbar in layout (width: 1px) so scroll range
-   calculations work, but make it invisible. display:none or
-   larger hiding broke scrollback range. */
+   Use opacity + pointer-events instead of display:none to keep
+   scroll event handling intact. */
 .terminal-shell .xterm-scrollable-element > .xterm-scrollbar {
-  width: 1px !important;
   opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Brand checkbox — chartreuse fill with dark tick */
