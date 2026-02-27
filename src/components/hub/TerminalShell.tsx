@@ -64,6 +64,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
       lineHeight: 1.0,
       scrollback: 5000,
       allowTransparency: true,
+      vtExtensions: { kittyKeyboard: true },
       theme: {
         background: 'transparent',
         foreground: '#d4d4d4',
