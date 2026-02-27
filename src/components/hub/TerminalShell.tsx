@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { writeFile } from '@tauri-apps/plugin-fs';
 import { spawn, type IPty } from 'tauri-pty';
 import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
 
 interface TerminalShellProps {
   chat: HubChat;
@@ -31,6 +34,7 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
   const ptyRef = useRef<IPty | null>(null);
   const mountedRef = useRef(false);
   const agentLaunchedRef = useRef(false);
+  const [dragActive, setDragActive] = useState(false);
 
   const projects = useDashboardStore((s) => s.projects);
 
@@ -179,6 +183,11 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
       if (event.metaKey && (event.key === 'k' || event.key === 'n' || event.key === 'w')) {
         return false; // Let the app handle Cmd+K, Cmd+N, Cmd+W
       }
+      // Shift+Enter → insert literal newline (zsh doesn't opt into Kitty keyboard protocol)
+      if (event.shiftKey && event.key === 'Enter' && event.type === 'keydown') {
+        pty.write('\n');
+        return false;
+      }
       return true; // Everything else goes to the terminal
     });
 
@@ -229,8 +238,51 @@ function LiveTerminal({ chat, onFocusChange }: { chat: HubChat; onFocusChange?: 
     };
   }, [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Drag-and-drop handlers — stopPropagation prevents the window-level
+  // ChatShell handler from intercepting image drops over the terminal.
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    setDragActive(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.stopPropagation();
+    setDragActive(false);
+  }, []);
+
+  const onDrop = useCallback(async (e: React.DragEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDragActive(false);
+
+    const pty = ptyRef.current;
+    if (!pty) return;
+
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    for (const file of files) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!IMAGE_EXTENSIONS.has(ext)) continue;
+
+      try {
+        const buffer = await file.arrayBuffer();
+        const filePath = `/tmp/clawchestra-drop-${Date.now()}.${ext}`;
+        await writeFile(filePath, new Uint8Array(buffer));
+        pty.write(filePath);
+      } catch (err) {
+        console.error('Failed to save dropped image:', err);
+      }
+    }
+  }, []);
+
   return (
-    <div className="flex flex-1 flex-col min-h-0 px-4 pt-3 md:px-6">
+    <div
+      className={`flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6 rounded-lg transition-shadow ${dragActive ? 'ring-2 ring-[#DFFF00]/50' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div
         ref={containerRef}
         className="terminal-shell flex-1 min-h-0"
