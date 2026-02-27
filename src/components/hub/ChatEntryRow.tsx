@@ -214,7 +214,7 @@ function ChatEntryMenu({
         <>
           <div
             className="fixed inset-0 z-[200]"
-            onClick={onClose}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
           />
           <div
             className="fixed z-[200] w-36 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"

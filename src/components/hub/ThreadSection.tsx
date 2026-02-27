@@ -231,12 +231,6 @@ function TypePickerButton({
     }
   };
 
-  const handleTerminalClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!tmuxAvailable) return;
-    setTerminalSubmenu((prev) => !prev);
-  };
-
   const handleAgentSelect = (agentType: HubAgentType) => {
     setOpen(false);
     setTerminalSubmenu(false);
@@ -257,7 +251,7 @@ function TypePickerButton({
         <>
           <div
             className="fixed inset-0 z-[200]"
-            onClick={() => { setOpen(false); setTerminalSubmenu(false); }}
+            onClick={(e) => { e.stopPropagation(); setOpen(false); setTerminalSubmenu(false); }}
           />
           <div
             className="fixed z-[200] w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
@@ -276,15 +270,52 @@ function TypePickerButton({
               OpenClaw Chat
             </button>
             {tmuxAvailable ? (
-              <button
-                type="button"
-                onClick={handleTerminalClick}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              <div
+                className="relative"
+                onMouseEnter={() => setTerminalSubmenu(true)}
+                onMouseLeave={() => setTerminalSubmenu(false)}
               >
-                <Terminal className="h-3.5 w-3.5" />
-                <span>Terminal</span>
-                <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
-              </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  <Terminal className="h-3.5 w-3.5" />
+                  <span>Terminal</span>
+                  <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
+                </button>
+                {/* Terminal agent submenu */}
+                {terminalSubmenu && (
+                  <div
+                    className="absolute left-full top-0 z-[200] ml-1 w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+                  >
+                    {codingAgents.map((agent) => (
+                      <button
+                        key={agent.agentType}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAgentSelect(agent.agentType as HubAgentType);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
+                        {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAgentSelect('generic');
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    >
+                      <Terminal className="h-3.5 w-3.5 text-neutral-400" />
+                      Shell
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 type="button"
@@ -298,39 +329,6 @@ function TypePickerButton({
               </button>
             )}
           </div>
-          {/* Terminal agent submenu */}
-          {terminalSubmenu && (
-            <div
-              className="fixed z-[200] w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-              style={{ top: menuPos.top, left: menuPos.left + 180 }}
-            >
-              {codingAgents.map((agent) => (
-                <button
-                  key={agent.agentType}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleAgentSelect(agent.agentType as HubAgentType);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                >
-                  <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
-                  {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAgentSelect('generic');
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              >
-                <Terminal className="h-3.5 w-3.5 text-neutral-400" />
-                Shell
-              </button>
-            </div>
-          )}
         </>,
         document.body,
       )}
