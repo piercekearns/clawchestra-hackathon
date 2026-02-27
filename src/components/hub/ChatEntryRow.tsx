@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
+import { Check, Home, MessageSquare, MoreHorizontal, Pin, Terminal } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import { InlineEdit } from './InlineEdit';
 
@@ -76,6 +76,13 @@ export function ChatEntryRow({
       ) : chat.pinned ? (
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-[#DFFF00]">
           <Pin className="h-4 w-4" />
+          {chat.unread && (
+            <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+          )}
+        </span>
+      ) : chat.type === 'terminal' ? (
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-emerald-500 dark:text-emerald-400">
+          <Terminal className="h-3.5 w-3.5" />
           {chat.unread && (
             <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
           )}

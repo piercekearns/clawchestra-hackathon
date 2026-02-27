@@ -38,6 +38,9 @@
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.6",
     "zod-to-json-schema": "^3.25.1",
+    "tauri-pty": "^0.2.1",
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "~0.10.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

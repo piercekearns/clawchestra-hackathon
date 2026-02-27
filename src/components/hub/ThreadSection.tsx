@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, Plus, Terminal } from 'lucide-react';
-import type { HubChat, HubThread } from '../../lib/hub-types';
+import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
+import { AGENT_LABELS } from '../../lib/terminal-utils';
 import { ChatEntryRow } from './ChatEntryRow';
 import { ScrollRevealText } from './ScrollRevealText';
 
@@ -24,6 +25,7 @@ interface ThreadSectionProps {
   onDeleteChat: (chatId: string) => void;
   onClearHistory: (chatId: string) => void;
   onAddChat: (projectId: string) => void;
+  onAddTerminal?: (projectId: string, agentType: HubAgentType) => void;
 }
 
 export function ThreadSection({
@@ -40,6 +42,7 @@ export function ThreadSection({
   onDeleteChat,
   onClearHistory,
   onAddChat,
+  onAddTerminal,
 }: ThreadSectionProps) {
   const [showAll, setShowAll] = useState(false);
   const hubBusyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
@@ -118,7 +121,7 @@ export function ThreadSection({
 
         {/* Hover actions: + */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-neutral-100 px-0.5 opacity-0 group-hover:opacity-100 transition-opacity dark:bg-neutral-800">
-          <TypePickerButton projectId={thread.projectId} onAddChat={onAddChat} />
+          <TypePickerButton projectId={thread.projectId} onAddChat={onAddChat} onAddTerminal={onAddTerminal} />
         </div>
       </div>
 
@@ -195,19 +198,48 @@ export function ThreadSection({
   );
 }
 
-function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddChat: (projectId: string) => void }) {
+function TypePickerButton({
+  projectId,
+  onAddChat,
+  onAddTerminal,
+}: {
+  projectId: string;
+  onAddChat: (projectId: string) => void;
+  onAddTerminal?: (projectId: string, agentType: HubAgentType) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [terminalSubmenu, setTerminalSubmenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const detectedAgents = useDashboardStore((s) => s.detectedAgents);
+
+  const tmuxAvailable = detectedAgents.some((a) => a.agentType === 'tmux' && a.available);
+  const codingAgents = detectedAgents.filter(
+    (a) => a.agentType !== 'tmux' && a.available,
+  );
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (open) {
       setOpen(false);
+      setTerminalSubmenu(false);
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
       setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 });
       setOpen(true);
+      setTerminalSubmenu(false);
     }
+  };
+
+  const handleTerminalClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!tmuxAvailable) return;
+    setTerminalSubmenu((prev) => !prev);
+  };
+
+  const handleAgentSelect = (agentType: HubAgentType) => {
+    setOpen(false);
+    setTerminalSubmenu(false);
+    onAddTerminal?.(projectId, agentType);
   };
 
   return (
@@ -224,7 +256,7 @@ function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddCh
         <>
           <div
             className="fixed inset-0 z-[200]"
-            onClick={() => setOpen(false)}
+            onClick={() => { setOpen(false); setTerminalSubmenu(false); }}
           />
           <div
             className="fixed z-[200] w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
@@ -242,16 +274,60 @@ function TypePickerButton({ projectId, onAddChat }: { projectId: string; onAddCh
               <MessageSquare className="h-3.5 w-3.5" />
               OpenClaw Chat
             </button>
-            <button
-              type="button"
-              disabled
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-400 dark:text-neutral-600 cursor-not-allowed"
-            >
-              <Terminal className="h-3.5 w-3.5" />
-              <span>Terminal</span>
-              <span className="ml-auto text-[10px] text-neutral-400 dark:text-neutral-600">Coming soon</span>
-            </button>
+            {tmuxAvailable ? (
+              <button
+                type="button"
+                onClick={handleTerminalClick}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                <span>Terminal</span>
+                <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-400 dark:text-neutral-600 cursor-not-allowed"
+                title="Requires tmux (brew install tmux)"
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                <span>Terminal</span>
+                <span className="ml-auto text-[10px]">No tmux</span>
+              </button>
+            )}
           </div>
+          {/* Terminal agent submenu */}
+          {terminalSubmenu && (
+            <div
+              className="fixed z-[200] w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+              style={{ top: menuPos.top, left: menuPos.left + 180 }}
+            >
+              {codingAgents.map((agent) => (
+                <button
+                  key={agent.agentType}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAgentSelect(agent.agentType as HubAgentType);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAgentSelect('generic');
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                Shell
+              </button>
+            </div>
+          )}
         </>,
         document.body,
       )}

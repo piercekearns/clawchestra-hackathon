@@ -21,6 +21,7 @@ import {
   injectAgentGuidance,
   isTauriRuntime,
   pathExists,
+  type DetectedAgent,
   type PersistedChatMessage,
 } from './tauri';
 import type { HubChat, HubChatModelState } from './hub-types';
@@ -90,6 +91,10 @@ interface DashboardState {
   hubStreamingChatIds: Set<string>;
   /** Tracks whether system context has been injected on first send for each chat (not persisted). */
   hubChatContextInjected: Partial<Record<string, boolean>>;
+  /** Detected coding agents on the system (transient, not persisted). */
+  detectedAgents: DetectedAgent[];
+  /** Terminal chats with confirmed running tmux sessions (transient). */
+  activeTerminalChatIds: Set<string>;
   // Hub actions
   setSidebarMode: (mode: 'default' | 'settings') => void;
   setHubActiveChatId: (id: string | null) => void;
@@ -115,6 +120,10 @@ interface DashboardState {
   addHubStreamingChatId: (id: string) => void;
   /** Unmark a hub chat from streaming. */
   removeHubStreamingChatId: (id: string) => void;
+  /** Set detected agents (from startup scan). */
+  setDetectedAgents: (agents: DetectedAgent[]) => void;
+  /** Set active terminal chat IDs (tmux sessions that are running). */
+  setActiveTerminalChatIds: (ids: Set<string>) => void;
 
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
@@ -473,6 +482,8 @@ export const useDashboardStore = create<DashboardState>()(
       hubChatModelState: {},
       hubStreamingChatIds: new Set<string>(),
       hubChatContextInjected: {},
+      detectedAgents: [],
+      activeTerminalChatIds: new Set<string>(),
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -939,6 +950,9 @@ export const useDashboardStore = create<DashboardState>()(
           next.delete(id);
           return { hubStreamingChatIds: next };
         }),
+
+      setDetectedAgents: (agents) => set({ detectedAgents: agents }),
+      setActiveTerminalChatIds: (ids) => set({ activeTerminalChatIds: ids }),
 
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);

@@ -15,7 +15,8 @@ import {
 import { MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, hubChatDelete, hubChatMessagesClear } from '../../lib/tauri';
-import type { HubChat, HubThread } from '../../lib/hub-types';
+import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
+import { AGENT_LABELS } from '../../lib/terminal-utils';
 import { ThreadSection } from './ThreadSection';
 
 interface HubNavProps {
@@ -202,6 +203,29 @@ export function HubNav({ onToast }: HubNavProps) {
     setHubDrawerOpen(true);
   };
 
+  const handleAddTerminal = async (projectId: string, agentType: HubAgentType) => {
+    const label = AGENT_LABELS[agentType] ?? agentType;
+    const title = `${label} Terminal`;
+    const newChat = await hubChatCreate(
+      projectId,
+      null,
+      'terminal',
+      agentType,
+      title,
+    );
+    await refreshHubChats();
+    if (hubCollapsedThreads.includes(projectId)) {
+      toggleHubThread(projectId);
+    }
+    setHubActiveChatId(newChat.id);
+    setHubDrawerOpen(true);
+    // Auto-expand drawer for terminals
+    const currentWidth = useDashboardStore.getState().hubDrawerWidth;
+    if (currentWidth < 640) {
+      useDashboardStore.getState().setHubDrawerWidth(640);
+    }
+  };
+
   const threadIds = useMemo(() => threads.map((t) => t.projectId), [threads]);
 
   return (
@@ -244,6 +268,7 @@ export function HubNav({ onToast }: HubNavProps) {
                   onDeleteChat={handleDeleteChat}
                   onClearHistory={handleClearHistory}
                   onAddChat={handleAddChat}
+                  onAddTerminal={handleAddTerminal}
                 />
               ))}
             </SortableContext>

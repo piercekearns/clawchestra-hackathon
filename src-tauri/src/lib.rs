@@ -4023,6 +4023,7 @@ pub fn run() {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_pty::init())
         .manage(shared_state.clone())
         .manage(flush_handle.clone())
         .manage(sync_handle.clone())
@@ -4280,6 +4281,10 @@ pub fn run() {
             clear_openclaw_bearer_token,
             get_openclaw_auth_cooldowns,
             reset_openclaw_auth_cooldown,
+            // Terminal commands (commands/terminal.rs)
+            commands::terminal::detect_agents,
+            commands::terminal::tmux_list_clawchestra_sessions,
+            commands::terminal::tmux_kill_session,
             // Phase 7 logging & debug commands
             export_debug_info,
             get_validation_history,

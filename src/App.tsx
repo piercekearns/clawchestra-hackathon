@@ -77,10 +77,13 @@ import {
   batchReorderItems,
   chatRecoveryCursorAdvance,
   getOpenclawBearerToken,
+  detectAgents,
   getAppUpdateLockState,
   getDashboardSettings,
   getValidationHistory,
   isTauriRuntime,
+  tmuxListClawchestraSessions,
+  tmuxKillSession,
   markRejectionResolved,
   resetOpenclawAuthCooldown,
   updateDashboardSettings,
@@ -102,6 +105,7 @@ import {
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
+import { parseTmuxSessionName } from './lib/terminal-utils';
 
 interface Toast {
   id: number;
@@ -838,6 +842,38 @@ export default function App() {
   // Load validation rejection history on startup (Phase 7.3)
   useEffect(() => {
     void getValidationHistory().then(setValidationRejections).catch(() => {});
+  }, []);
+
+  // Detect coding agents + discover tmux sessions on startup
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void (async () => {
+      try {
+        // Detect available agents (claude, codex, opencode, tmux)
+        const agents = await detectAgents();
+        useDashboardStore.getState().setDetectedAgents(agents);
+
+        // Discover running tmux sessions
+        const sessions = await tmuxListClawchestraSessions();
+        const hubChats = useDashboardStore.getState().hubChats;
+        const hubChatIds = new Set(hubChats.map((c) => c.id));
+        const activeChatIds = new Set<string>();
+
+        for (const sessionName of sessions) {
+          const parsed = parseTmuxSessionName(sessionName);
+          if (parsed && hubChatIds.has(parsed.chatId)) {
+            activeChatIds.add(parsed.chatId);
+          } else {
+            // Orphaned tmux session — kill it
+            try { await tmuxKillSession(sessionName); } catch { /* ignore */ }
+          }
+        }
+
+        useDashboardStore.getState().setActiveTerminalChatIds(activeChatIds);
+      } catch {
+        // Agent detection is best-effort
+      }
+    })();
   }, []);
 
   // Load persisted chat messages on startup

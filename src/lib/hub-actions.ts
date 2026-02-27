@@ -1,6 +1,7 @@
 import { useDashboardStore } from './store';
 import { hubChatCreate, hubChatList } from './tauri';
-import type { HubChat } from './hub-types';
+import type { HubChat, HubAgentType } from './hub-types';
+import { AGENT_LABELS } from './terminal-utils';
 
 /**
  * Open or create a project-level chat thread, then navigate the hub UI to it.
@@ -105,4 +106,32 @@ export function getItemUnreadCount(projectId: string, itemId: string): number {
   return chats.filter(
     (c) => c.projectId === projectId && c.itemId === itemId && c.unread && !c.archived,
   ).length;
+}
+
+/**
+ * Open or create a terminal chat for a project, then navigate the hub UI to it.
+ */
+export async function openOrCreateTerminal(
+  projectId: string,
+  agentType: HubAgentType,
+): Promise<void> {
+  const store = useDashboardStore.getState();
+  const label = AGENT_LABELS[agentType] ?? agentType;
+  const title = `${label} Terminal`;
+
+  const newChat = await hubChatCreate(projectId, null, 'terminal', agentType, title);
+  await store.refreshHubChats();
+
+  store.setHubActiveChatId(newChat.id);
+  store.setHubDrawerOpen(true);
+
+  // Auto-expand drawer for terminal
+  if (store.hubDrawerWidth < 640) {
+    store.setHubDrawerWidth(640);
+  }
+
+  // Expand the thread if collapsed
+  if (store.hubCollapsedThreads.includes(projectId)) {
+    store.toggleHubThread(projectId);
+  }
 }

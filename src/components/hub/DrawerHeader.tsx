@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Archive, Check, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
+import { Archive, Check, ExternalLink, MoreHorizontal, Pin, PenLine, Square, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import type { HubChat } from '../../lib/hub-types';
-import { hubChatUpdate } from '../../lib/tauri';
+import { hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
 import { useDashboardStore } from '../../lib/store';
+import { tmuxSessionName, AGENT_LABELS } from '../../lib/terminal-utils';
 
 interface DrawerHeaderProps {
   chat: HubChat;
@@ -18,9 +19,12 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
+  const [confirmEndSession, setConfirmEndSession] = useState(false);
 
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
   const roadmapItems = useDashboardStore((s) => s.roadmapItems);
+
+  const isTerminal = chat.type === 'terminal';
 
   const isLinkedItemComplete = useMemo(() => {
     if (!chat.itemId) return false;
@@ -78,6 +82,19 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
     }
   };
 
+  const handleEndSession = async () => {
+    try {
+      const sessionName = tmuxSessionName(chat.projectId, chat.id);
+      await tmuxKillSession(sessionName);
+    } catch {
+      // tmux session may already be dead
+    }
+    await hubChatUpdate(chat.id, { archived: true });
+    await refreshHubChats();
+    setConfirmEndSession(false);
+    onClose();
+  };
+
   return (
     <>
     <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
@@ -100,16 +117,53 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
             <div className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-200">
               {chat.isProjectRoot ? projectTitle : chat.title}
             </div>
-            {!chat.isProjectRoot && (
+            {isTerminal ? (
+              <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
+                {chat.agentType ? AGENT_LABELS[chat.agentType] + ' Terminal' : 'Shell'} &middot; {projectTitle}
+              </div>
+            ) : !chat.isProjectRoot ? (
               <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
                 {projectTitle}
               </div>
-            )}
+            ) : null}
           </>
         )}
       </div>
-      {/* ⋯ menu — only for non-project-root chats */}
-      {!chat.isProjectRoot && (
+      {/* Terminal: End Session button — other chats: ⋯ menu */}
+      {isTerminal ? (
+        <div className="relative">
+          {confirmEndSession ? (
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-neutral-500 dark:text-neutral-400">End?</span>
+              <button
+                type="button"
+                onClick={() => void handleEndSession()}
+                className="rounded px-1.5 py-0.5 text-[11px] font-medium text-red-500 hover:bg-red-500/10"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmEndSession(false)}
+                className="rounded px-1.5 py-0.5 text-[11px] text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <Tooltip text="End terminal session">
+              <button
+                type="button"
+                onClick={() => setConfirmEndSession(true)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                aria-label="End session"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+      ) : !chat.isProjectRoot ? (
         <div className="relative">
           <button
             type="button"
@@ -134,7 +188,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
             </>
           )}
         </div>
-      )}
+      ) : null}
       <button
         type="button"
         onClick={onClose}

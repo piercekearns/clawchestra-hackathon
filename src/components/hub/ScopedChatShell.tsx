@@ -2,12 +2,20 @@ import type { HubChat } from '../../lib/hub-types';
 import { useScopedChatSession } from '../../hooks/useScopedChatSession';
 import { MessageList } from '../chat/MessageList';
 import { ChatBar } from '../chat/ChatBar';
+import { TerminalShell } from './TerminalShell';
 
 interface ScopedChatShellProps {
   chat: HubChat;
 }
 
 export function ScopedChatShell({ chat }: ScopedChatShellProps) {
+  if (chat.type === 'terminal') {
+    return <TerminalShell chat={chat} />;
+  }
+  return <OpenClawChatShell chat={chat} />;
+}
+
+function OpenClawChatShell({ chat }: { chat: HubChat }) {
   const session = useScopedChatSession({ chat });
 
   return (

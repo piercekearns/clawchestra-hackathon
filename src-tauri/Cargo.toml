@@ -20,6 +20,7 @@ tauri-plugin-fs = "2"
 tauri-plugin-websocket = "2"
 tauri-plugin-clipboard-manager = "2.0.0"
 tauri-plugin-window-state = "2"
+tauri-plugin-pty = "0.2"
 rfd = "0.15"
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }

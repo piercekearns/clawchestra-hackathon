@@ -74,7 +74,8 @@ export function SecondaryDrawer({
           const newWidth = side === 'right'
             ? drawerRight - event.clientX
             : event.clientX - drawerLeft;
-          onWidthChange(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth)));
+          const minW = chat?.type === 'terminal' ? 560 : MIN_WIDTH;
+          onWidthChange(Math.min(MAX_WIDTH, Math.max(minW, newWidth)));
         });
       };
 
@@ -130,7 +131,7 @@ export function SecondaryDrawer({
         onMouseDown={handleDragStart}
         onMouseEnter={() => setIsHandleHover(true)}
         onMouseLeave={() => setIsHandleHover(false)}
-        onDoubleClick={() => onWidthChange(400)}
+        onDoubleClick={() => onWidthChange(chat?.type === 'terminal' ? 640 : 400)}
         className={`group absolute top-0 z-[70] h-full w-[6px] cursor-col-resize [will-change:transform] ${
           side === 'right' ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'
         }`}

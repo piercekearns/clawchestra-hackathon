@@ -474,6 +474,19 @@ type TauriCommands = {
     args: { projectId: string; timestamp: number };
     return: boolean;
   };
+  // Terminal commands (commands/terminal.rs)
+  detect_agents: {
+    args: Record<string, never>;
+    return: Array<{ agentType: string; command: string; path: string | null; available: boolean }>;
+  };
+  tmux_list_clawchestra_sessions: {
+    args: Record<string, never>;
+    return: string[];
+  };
+  tmux_kill_session: {
+    args: { sessionName: string };
+    return: void;
+  };
 };
 
 export function isTauriRuntime(): boolean {
@@ -1118,4 +1131,27 @@ export async function hubChatMessagesClear(chatId: string): Promise<void> {
 
 export async function hubChatUpdateActivity(chatId: string): Promise<void> {
   return typedInvoke('hub_chat_update_activity', { chatId });
+}
+
+// =============================================================================
+// Terminal Commands
+// =============================================================================
+
+export interface DetectedAgent {
+  agentType: string;
+  command: string;
+  path: string | null;
+  available: boolean;
+}
+
+export async function detectAgents(): Promise<DetectedAgent[]> {
+  return typedInvoke('detect_agents');
+}
+
+export async function tmuxListClawchestraSessions(): Promise<string[]> {
+  return typedInvoke('tmux_list_clawchestra_sessions');
+}
+
+export async function tmuxKillSession(sessionName: string): Promise<void> {
+  return typedInvoke('tmux_kill_session', { sessionName });
 }
