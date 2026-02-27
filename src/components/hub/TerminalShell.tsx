@@ -60,7 +60,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      fontFamily: "'IBM Plex Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', Menlo, Monaco, monospace",
+      fontFamily: "'SF Mono', Menlo, 'Cascadia Code', 'Fira Code', 'IBM Plex Mono', Monaco, monospace",
       lineHeight: 1.15,
       scrollback: 5000,
       allowTransparency: true,
