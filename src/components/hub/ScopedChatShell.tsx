@@ -33,6 +33,7 @@ export function ScopedChatShell({ chat }: ScopedChatShellProps) {
           <MessageList
             messages={session.displayMessages}
             showReadingIndicator={session.sending && !session.streamingContent}
+            scrollPadding="px-4 py-3 md:px-6"
           />
         )}
       </div>
