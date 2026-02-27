@@ -1619,17 +1619,17 @@ export default function App() {
         iconClassName: 'h-5 w-5',
       },
       {
-        id: 'refresh',
-        label: 'Refresh Clawchestra',
-        icon: RefreshCcw,
-        onClick: handleRefreshProjects,
-      },
-      {
         id: 'git-sync',
-        label: 'Manage Git Syncs',
+        label: 'Git Syncs',
         icon: Github,
         onClick: handleOpenSync,
         badgeCount: syncBadgeCount > 0 ? syncBadgeCount : undefined,
+      },
+      {
+        id: 'refresh',
+        label: 'Refresh',
+        icon: RefreshCcw,
+        onClick: handleRefreshProjects,
       },
     ],
     [
