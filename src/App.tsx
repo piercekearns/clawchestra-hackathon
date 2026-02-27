@@ -1737,12 +1737,6 @@ export default function App() {
           return;
         }
 
-        if (useDashboardStore.getState().sidebarOpen) {
-          event.preventDefault();
-          useDashboardStore.getState().setSidebarOpen(false);
-          return;
-        }
-
         if (selectedRoadmapItemId) {
           event.preventDefault();
           setSelectedRoadmapItemId(null);
