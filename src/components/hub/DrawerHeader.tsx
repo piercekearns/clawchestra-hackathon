@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Archive, Check, ExternalLink, MoreHorizontal, Pin, PenLine, Square, X } from 'lucide-react';
+import { Archive, Check, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
@@ -158,7 +158,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-500"
                 aria-label="End session"
               >
-                <Square className="h-3.5 w-3.5" />
+                <div className="h-3 w-3 rounded-sm bg-current" />
               </button>
             </Tooltip>
           )}
