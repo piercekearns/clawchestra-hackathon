@@ -81,18 +81,18 @@ export function getProjectUnreadCount(projectId: string): number {
 
 /**
  * Check if a project has any hub chats (for filled/unfilled icon state).
+ * Accepts the reactive hubChats array to ensure re-renders on changes.
  */
-export function projectHasThread(projectId: string): boolean {
-  const chats = useDashboardStore.getState().hubChats;
-  return chats.some((c) => c.projectId === projectId && !c.archived);
+export function projectHasThread(hubChats: HubChat[], projectId: string): boolean {
+  return hubChats.some((c) => c.projectId === projectId && !c.archived);
 }
 
 /**
  * Check if a specific roadmap item has a hub chat.
+ * Accepts the reactive hubChats array to ensure re-renders on changes.
  */
-export function itemHasChat(projectId: string, itemId: string): boolean {
-  const chats = useDashboardStore.getState().hubChats;
-  return chats.some(
+export function itemHasChat(hubChats: HubChat[], projectId: string, itemId: string): boolean {
+  return hubChats.some(
     (c) => c.projectId === projectId && c.itemId === itemId && !c.archived,
   );
 }

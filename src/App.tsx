@@ -2544,7 +2544,7 @@ export default function App() {
               }}
             />
             {isRoadmapView && activeRoadmapProject && (() => {
-              const hasChat = projectHasThread(activeRoadmapProject.id);
+              const hasChat = projectHasThread(hubChats, activeRoadmapProject.id);
               return (
                 <Tooltip text={hasChat ? 'Open project chat' : 'Create project chat'}>
                   <button
@@ -2807,7 +2807,7 @@ export default function App() {
                       />
                     )}
                     renderItemRightHoverActions={(item) => {
-                      const hasChat = activeRoadmapProject ? itemHasChat(activeRoadmapProject.id, item.id) : false;
+                      const hasChat = activeRoadmapProject ? itemHasChat(hubChats, activeRoadmapProject.id, item.id) : false;
                       return (
                       <>
                         <Tooltip text={hasChat ? 'Open chat' : 'Create chat'}>
@@ -2990,7 +2990,7 @@ export default function App() {
                   }}
                   renderItemActions={() => null}
                   renderItemRightHoverActions={(project) => {
-                    const hasChat = projectHasThread(project.id);
+                    const hasChat = projectHasThread(hubChats, project.id);
                     return (
                     <Tooltip text={hasChat ? 'Open project chat' : 'Create project chat'}>
                       <button
