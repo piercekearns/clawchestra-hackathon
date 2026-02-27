@@ -1,96 +1,126 @@
 ---
-title: Terminal Session Status Indicator
+title: Terminal Session Status Indicator + Quit Guard
 id: terminal-session-status
 status: pending
-tags: [terminal, ux, hub, status, tmux]
+tags: [terminal, ux, hub, status, pid, quit-guard]
 icon: "🟢"
-nextAction: "Route all terminal sessions through named tmux sessions; query tmux on app launch for accurate alive/dead state"
+nextAction: "Implement PID tracking at spawn, liveness probe on open/poll, red icon in ChatEntryRow, CloseRequested quit guard"
 lastActivity: "2026-02-27"
 ---
 
-# Terminal Session Status Indicator
+# Terminal Session Status Indicator + Quit Guard
 
-The app always knows the accurate alive/dead state of every terminal — no assumptions, no stale state.
+Two related features, one implementation:
 
-## The key insight: tmux as the backing runtime
+1. **Red terminal icon** — when a terminal session is dead, its icon turns red in the sidebar/hub nav so the user immediately knows their work context is gone before opening it
+2. **Quit guard** — when the user tries to quit the app (Cmd+Q or window close), warn them if any terminal sessions are currently alive
 
-A raw PTY is a child of the app process — it dies when the app exits, and there's no way to query its state after restart. **tmux is a daemon** — it runs independently and survives app restarts. This makes it the right backing runtime for terminal sessions that need queryable state.
+## Key behaviours confirmed via testing
 
-By routing all terminal sessions through **named tmux sessions**, the app can determine accurate state at any time by simply asking tmux.
+- **Closing the terminal pane / switching to another chat** → PTY process keeps running. Process is alive.
+- **Pressing the stop button (square)** → PTY is killed. Process is dead.
+- **App restart via update** → PTY processes survive. Still alive.
+- **Cmd+Q (app quit)** → PTY processes are killed. Dead.
+- **PC restart / shutdown** → PTY processes are dead.
+- **Process exits naturally** (Claude Code finishes, user types `exit`, etc.) → Dead.
+
+**No tmux required.** The PTY is already somewhat detached from the app lifecycle (survives app restarts via update). Liveness is determined by asking the OS directly via PID probe — a zero-cost syscall.
 
 ## How it works
 
-### Session naming
-Each terminal chat gets a tmux session named after its chat ID:
-```
-clawchestra-{chatId}
-```
+### 1. Store PID at spawn time
 
-### On app launch (state reconciliation)
-Run `tmux list-sessions` once at startup, cross-reference with all known terminal chat IDs:
-- Session found → **alive**
-- Session not found → **dead**
+When a PTY is spawned, persist to the chat's metadata in state.json:
 
-This is accurate for all scenarios:
-- **App restart** — tmux server still running → sessions found if still alive ✓
-- **Machine reboot** — tmux server gone → all sessions "not found" = dead ✓
-- **User pressed stop** — session was killed → not found = dead ✓
-- **Process inside terminal exited** — session still exists in tmux until explicitly closed → depends on tmux configuration (can configure `remain-on-exit` or detect via `#{pane_dead}`)
-
-### During a session
-- PTY spawns inside tmux → emit alive
-- `tmux kill-session` (stop button) → emit dead
-- Process exits inside pane → tmux pane enters "dead" state, queryable via `tmux display -p '#{pane_dead}'`
-
-## Visual
-
-In `ChatEntryRow`, for terminal-type chats:
-- **Alive**: normal appearance, no indicator
-- **Dead**: terminal icon turns red (`text-status-danger`)
-
-No dots, no badges — just the icon colour. Clean.
-
-## What about non-tmux terminal types? (Claude Code, Codex, Shell)
-
-These should also be routed through tmux as the underlying transport — tmux handles the PTY, and the agent (Claude Code, Codex, etc.) runs inside the tmux pane. This is already the recommended pattern in the coding-agent skill (tmux for reliable long-running sessions). Making it universal means:
-- Consistent state tracking across all terminal types
-- Sessions survive app restarts (user can pick up a Claude Code session after restarting the app)
-- Single query path for status
-
-## Implementation
-
-### On startup
-```ts
-// In store init or app startup hook:
-const liveSessions = await invoke('tmux_list_sessions'); // returns string[]
-// liveSessions = ['clawchestra-abc123', 'clawchestra-def456', ...]
-for (const chat of allTerminalChats) {
-  const alive = liveSessions.includes(`clawchestra-${chat.id}`);
-  store.setTerminalStatus(chat.id, alive ? 'alive' : 'dead');
+```json
+{
+  "terminalMeta": {
+    "pid": 48291,
+    "startedAt": 1709078400000
+  }
 }
 ```
 
-### Tauri backend
-```rust
-// New command: tmux_list_sessions
-// Runs: tmux list-sessions -F '#{session_name}' 2>/dev/null
-// Returns: Vec<String> of session names (empty if tmux not running)
+`startedAt` is used to guard against **PID recycling** — after a reboot, a new unrelated process might inherit the same PID. Cross-checking start time ensures we don't false-positive a dead session as alive.
+
+### 2. Liveness probe
+
+```ts
+// Node.js — sends no signal, just checks process existence
+try {
+  process.kill(pid, 0);
+  return true; // alive
+} catch {
+  return false; // dead (ESRCH)
+}
 ```
 
-### TerminalShell.tsx
-- Spawn: `tmux new-session -d -s clawchestra-{chatId}` then attach with tauri-pty or via `tmux attach-session`
-- Stop: `tmux kill-session -t clawchestra-{chatId}`
+To guard PID recycling, additionally run:
+```bash
+ps -p <pid> -o lstart=
+```
+If the reported start time doesn't match `startedAt` within a small tolerance → treat as dead (recycled PID).
+
+### 3. When to probe
+
+| Trigger | Action |
+|--------|--------|
+| App launches | Probe all terminal chats with stored PIDs |
+| Terminal chat opened/focused | Probe on demand |
+| Background poll | Every 30s while app is open |
+| `pty.onExit()` fires | Immediate flip to dead (real-time, while app is open) |
+
+### 4. Visual: red terminal icon
+
+In `ChatEntryRow`, for terminal-type chats:
+
+- **Alive** (or no PID stored yet) → normal icon colour, no change
+- **Dead** → terminal icon renders as `text-red-500` (or `text-status-danger`)
+
+No dots, no badges, no extra chrome. Just the icon colour.
+
+> Note: "Alive" includes sessions where the pane is closed but the process is still running in the background. Pane visibility is irrelevant — the probe result is the source of truth.
+
+### 5. Quit guard
+
+Intercept `CloseRequested` before the app exits:
+
+```ts
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+getCurrentWindow().onCloseRequested(async (event) => {
+  const active = getActiveTerminalSessions(); // chats where probe = alive
+  if (active.length > 0) {
+    event.preventDefault();
+    // show confirmation dialog
+    const confirmed = await confirmQuit(active.length);
+    if (confirmed) getCurrentWindow().close();
+  }
+  // else: no active sessions → close immediately, no prompt
+});
+```
+
+**Dialog copy:**
+> **"You have {n} active terminal session{s}"**
+> Quitting Clawchestra will end them. Any running processes (Claude Code, Codex, etc.) will be stopped.
+> **[Cancel]** &nbsp; **[Quit anyway]**
+
+Dialog only appears when at least one session is alive. If all terminals are dead (all red), app quits without prompt.
 
 ## Files Affected
+
 | File | Change |
 |------|--------|
-| `src-tauri/src/lib.rs` | Add `tmux_list_sessions` Tauri command |
-| `src/lib/store.ts` | `terminalStatuses` map + setters; populate on app launch |
-| `src/components/hub/TerminalShell.tsx` | Use named tmux sessions; update status on spawn/exit |
-| `src/components/hub/ChatEntryRow.tsx` | Red terminal icon when dead |
-| `src/lib/App.tsx` | Run tmux reconciliation on app init |
+| `src/lib/store.ts` | `terminalMeta` per-chat map (`pid`, `startedAt`); `terminalStatuses` derived liveness map + setters |
+| `src/components/hub/TerminalShell.tsx` | Write `terminalMeta` on PTY spawn; listen to `onExit` to flip status |
+| `src/lib/pty.ts` (or equivalent) | Expose `probeTerminalStatus(pid, startedAt)` — runs kill-0 + ps start time check |
+| `src/components/hub/ChatEntryRow.tsx` | Red terminal icon when `terminalStatuses[chatId] === 'dead'` |
+| `src/lib/App.tsx` | On mount: probe all terminal chats; register `CloseRequested` handler |
 
-## Open Questions
-1. What happens if tmux isn't installed? Graceful fallback to raw PTY (status always unknown, no indicator shown)?
-2. Should sessions `remain-on-exit` so the user can scroll back through output even after the process exits? Or kill the session on process exit?
-3. Namespace collision: ensure `clawchestra-{chatId}` is unique and doesn't clash with the user's own tmux sessions.
+## Out of Scope
+
+- Reconnecting to a live session after app restart — the PTY already survives restarts, so reattachment happens automatically
+- Recovery suggestions (e.g. "claude --resume") — user's choice, not the app's job
+- tmux — no dependency, no requirement
+</content>
+</invoke>
