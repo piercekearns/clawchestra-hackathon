@@ -4,57 +4,80 @@ id: terminal-session-status
 status: pending
 tags: [terminal, ux, hub, status]
 icon: "🟢"
-nextAction: "Design alive/dead status dot on terminal chat entries; detect PTY exit event; handle stale sessions on app restart"
+nextAction: "Implement red terminal icon on dead sessions; default all to dead on app launch; transition to alive on PTY spawn"
 lastActivity: "2026-02-27"
 ---
 
 # Terminal Session Status Indicator
 
-Show whether a terminal session is alive or dead — without the user having to open it to find out.
+Show when a terminal session is dead — for any reason, at any time.
 
-## Problem
+## Design
 
-Terminal chats look identical whether the underlying PTY is actively running or has been killed. This creates confusion in two scenarios:
+**Binary state, not multi-state:**
+- **Alive** — PTY is running. Normal appearance. No special indicator needed.
+- **Dead** — PTY is gone for any reason (user pressed stop, process crashed, machine rebooted, app quit). Terminal icon turns red.
 
-1. **Idle terminals** — user left a terminal open but hasn't used it in a while. Is it still alive? Is the process still running? No way to tell from the sidebar.
-2. **Post-restart stale sessions** — when the app closes (including desktop shutdown), the OS kills all PTY child processes. When the app reopens, terminal chats still exist in the DB but their PTYs are gone. The chat opens to a blank terminal with no explanation.
+The absence of red means the session is fine. Red means something ended it.
 
-## Proposed Solution
+## The startup rule (solves reboot case)
 
-### Visual: Status dot on terminal chat entries
-Add a small coloured dot to `ChatEntryRow` for terminal-type chats:
-- 🟢 **Green** — PTY is running, process alive
-- ⚫ **Grey** — PTY exited cleanly (user ran `exit`, process completed)
-- 🔴 **Red** — PTY died unexpectedly (non-zero exit code, SIGKILL, etc.)
-- ❓ **Unknown/dash** — App just started, status not yet determined (previous session)
+On every app launch, **all terminal chats start as dead**. This is the only reliable approach — since the OS kills PTY processes when the app exits (including on reboot), we can never assume a session from a previous app lifecycle is still alive. There's no way to carry PTY state across a process boundary.
 
-The dot should be subtle — same visual weight as the unread indicator dot, positioned similarly in the row.
+The transition to alive only happens when the user opens a terminal chat and a new PTY is successfully spawned. Until then: red.
 
-### Detection: PTY exit event
-`tauri-pty` emits an exit/close event when the underlying process terminates. In `TerminalShell.tsx`, listen for this event and update a store state:
+This means:
+- Fresh install: all terminals red ✓
+- After reboot: all terminals red ✓  
+- After app crash: all terminals red ✓
+- After user presses stop: terminal goes red ✓
+- After process inside terminal exits on its own: terminal goes red ✓
+- User opens terminal → new PTY starts: goes back to normal ✓
+
+## Visual
+
+In `ChatEntryRow`, for terminal-type chats where status is `dead`:
+- Swap the terminal icon colour to red/danger (e.g. `text-status-danger` or `text-red-500`)
+- Keep the icon itself the same — just the colour changes
+- No dot, no badge — the icon itself communicates the state
+
+## Implementation
+
+### Store (ephemeral — not persisted)
 ```ts
-pty.onExit(({ exitCode }) => {
-  useDashboardStore.getState().setTerminalStatus(chat.id, exitCode === 0 ? 'exited' : 'crashed');
+// In store.ts
+terminalStatuses: Map<string, 'alive' | 'dead'>  // ephemeral, not persisted
+
+// All terminal chats default to 'dead' on app init (no initialisation needed —
+// absence from map = dead, presence with 'alive' = alive)
+setTerminalAlive: (chatId: string) => void
+setTerminalDead: (chatId: string) => void
+isTerminalAlive: (chatId: string) => boolean
+```
+
+### TerminalShell.tsx
+```ts
+// On PTY spawn success:
+useDashboardStore.getState().setTerminalAlive(chat.id);
+
+// On PTY exit (any exit code, any reason):
+pty.onExit(() => {
+  useDashboardStore.getState().setTerminalDead(chat.id);
 });
 ```
 
-Add `terminalStatuses: Map<string, 'running' | 'exited' | 'crashed' | 'unknown'>` to the store (ephemeral, not persisted).
+### ChatEntryRow.tsx
+```tsx
+const isAlive = useDashboardStore(s => s.isTerminalAlive(chat.id));
+const isDeadTerminal = chat.kind === 'terminal' && !isAlive;
 
-### On app restart: stale session handling
-When the app starts, any terminal chat that was `running` in a previous session is now stale — its PTY no longer exists. On startup, mark all terminal chats as `unknown`. When a terminal pane mounts and attempts to start a PTY, it transitions to `running`.
+// On the terminal icon:
+<Terminal className={cn("h-3.5 w-3.5", isDeadTerminal ? "text-red-500" : "text-neutral-400")} />
+```
 
-Optionally: show a "Session ended" notice inside the terminal pane itself when opening a stale chat, so the user knows what happened and can hit "Restart" to get a fresh shell.
-
-## Implementation Scope
-
-| Component | Change |
-|-----------|--------|
-| `src/lib/store.ts` | Add `terminalStatuses` map + setters (ephemeral) |
-| `src/components/hub/TerminalShell.tsx` | Listen for PTY exit, update store |
-| `src/components/hub/ChatEntryRow.tsx` | Show status dot for terminal-type chats |
-| `src/components/hub/LiveTerminal.tsx` | Optional: "Session ended" notice + Restart button |
-
-## Open Questions
-1. Should the dot only appear on terminal chats, or also on OpenClaw chats that are actively streaming?
-2. If a terminal is `crashed`, should the app auto-offer to restart it?
-3. On desktop shutdown, the PTY exit event may not fire (OS kills the process tree hard) — the app won't record the exit. How do we handle this cleanly on next launch? (Likely: treat any session older than app's last known uptime as `unknown`)
+## Files Affected
+| File | Change |
+|------|--------|
+| `src/lib/store.ts` | Add `terminalStatuses` map + `setTerminalAlive` / `setTerminalDead` / `isTerminalAlive` (ephemeral) |
+| `src/components/hub/TerminalShell.tsx` | Call `setTerminalAlive` on PTY spawn, `setTerminalDead` on exit |
+| `src/components/hub/ChatEntryRow.tsx` | Red icon when `isDeadTerminal` |
