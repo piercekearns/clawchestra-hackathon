@@ -1607,13 +1607,13 @@ export default function App() {
     () => [
       {
         id: 'search',
-        label: 'Search projects',
+        label: 'Search Projects',
         icon: Search,
         onClick: handleSearchOpen,
       },
       {
         id: 'add-project',
-        label: 'Add project',
+        label: 'Add Project',
         icon: Plus,
         onClick: handleAddProjectOpen,
         iconClassName: 'h-5 w-5',

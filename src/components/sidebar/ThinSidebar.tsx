@@ -55,7 +55,7 @@ export function ThinSidebar({
           icon={Search}
           label={
             <span className="inline-flex items-center gap-1">
-              Search projects
+              Search Projects
               <span className="text-[10px] text-neutral-400">⌘K</span>
             </span>
           }
@@ -64,7 +64,7 @@ export function ThinSidebar({
         />
         <ThinSidebarButton
           icon={Plus}
-          label="Add project"
+          label="Add Project"
           onClick={onAddProject}
           ariaLabel="Add project"
           iconClassName="h-5 w-5"
