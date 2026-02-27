@@ -113,7 +113,7 @@ function LiveTerminal({ chat }: { chat: HubChat }) {
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
     let pty: IPty;
     try {
-      pty = spawn('tmux', ['-u', 'new-session', '-A', '-s', sessionName, ';', 'set', 'status', 'off'], {
+      pty = spawn('tmux', ['-u', 'new-session', '-A', '-s', sessionName, ';', 'set', 'status', 'off', ';', 'set', 'mouse', 'off'], {
         name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
