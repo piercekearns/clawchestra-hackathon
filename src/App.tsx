@@ -2665,8 +2665,7 @@ export default function App() {
         )}
 
         <main className="mb-4 min-h-0 flex-1">
-          <section className="h-full min-h-0 min-w-0 rounded-2xl border border-neutral-200 bg-neutral-0 p-3 dark:border-neutral-700 dark:bg-neutral-950/70 md:p-4">
-            <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 min-w-0 overflow-hidden">
               {isRoadmapView ? (() => {
                 const projectId = activeRoadmapProject!.id;
                 const nonArchivedItems = roadmapItems.filter((i) => i.status !== 'archived');
@@ -3025,8 +3024,7 @@ export default function App() {
                   quickAddLabel="Add Project"
                 />
               )}
-            </div>
-          </section>
+          </div>
         </main>
 
         {isRoadmapView ? (
