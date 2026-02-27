@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Archive, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Archive, Check, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate } from '../../lib/tauri';
@@ -20,6 +20,14 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   const [renameValue, setRenameValue] = useState(chat.title);
 
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
+  const roadmapItems = useDashboardStore((s) => s.roadmapItems);
+
+  const isLinkedItemComplete = useMemo(() => {
+    if (!chat.itemId) return false;
+    const projectItems = roadmapItems[chat.projectId];
+    if (!projectItems) return false;
+    return projectItems.some((item) => item.id === chat.itemId && item.status === 'complete');
+  }, [chat.itemId, chat.projectId, roadmapItems]);
 
   const handleTogglePin = async () => {
     setMenuOpen(false);
@@ -71,6 +79,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   };
 
   return (
+    <>
     <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
       <div className="min-w-0 flex-1">
         {renaming ? (
@@ -159,6 +168,22 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
         </Tooltip>
       )}
     </div>
+    {isLinkedItemComplete && (
+      <div className="flex items-center gap-2 border-b border-[#DFFF00]/10 bg-[#DFFF00]/5 px-4 py-1.5 md:px-6">
+        <Check className="h-3.5 w-3.5 shrink-0 text-[#DFFF00]/70" />
+        <span className="flex-1 text-xs text-neutral-500 dark:text-neutral-400">
+          Roadmap item complete
+        </span>
+        <button
+          type="button"
+          onClick={() => void handleArchive()}
+          className="rounded-full border border-[#DFFF00]/30 px-2 py-0.5 text-[11px] text-neutral-500 transition-colors hover:bg-[#DFFF00]/10 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        >
+          Archive chat
+        </button>
+      </div>
+    )}
+    </>
   );
 }
 
