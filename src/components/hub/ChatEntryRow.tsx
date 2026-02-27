@@ -48,7 +48,7 @@ export function ChatEntryRow({
 
   return (
     <div
-      className={`hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer transition-colors ${
+      className={`hub-row group relative flex select-none items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer transition-colors ${
         isActive
           ? 'bg-revival-accent-400/10 text-neutral-900 dark:text-neutral-100'
           : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
