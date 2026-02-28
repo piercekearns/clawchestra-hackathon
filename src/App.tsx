@@ -9,7 +9,6 @@ import { AddProjectDialog } from './components/AddProjectDialog';
 import { AddRoadmapItemDialog } from './components/AddRoadmapItemDialog';
 import { Board } from './components/Board';
 import { Breadcrumb } from './components/Breadcrumb';
-import { LifecycleActionBar } from './components/LifecycleActionBar';
 import { ProjectModal } from './components/modal';
 import type { ProjectModalActions } from './components/modal';
 import { TitleBar } from './components/TitleBar';
@@ -2790,17 +2789,9 @@ export default function App() {
                     items={nonArchivedItems}
                     boardId={`roadmap:${viewContext.type === 'roadmap' ? viewContext.projectId : 'unknown'}`}
                     onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
-                    renderItemHoverActions={(item) => (
-                      <LifecycleActionBar
-                        specExists={Boolean(item.docs?.spec)}
-                        planExists={Boolean(item.docs?.plan)}
-                        onAction={(action) => handleLifecycleAction(item, action)}
-                      />
-                    )}
-                    renderItemRightHoverActions={(item) => {
+                    renderItemHoverActions={(item) => {
                       const hasChat = activeRoadmapProject ? itemHasChat(hubChats, activeRoadmapProject.id, item.id) : false;
                       return (
-                      <>
                         <Tooltip text={hasChat ? 'Open chat' : 'Create chat'}>
                           <button
                             type="button"
@@ -2822,6 +2813,10 @@ export default function App() {
                             <MessageSquare className="h-[15px] w-[15px]" fill={hasChat ? 'currentColor' : 'none'} />
                           </button>
                         </Tooltip>
+                      );
+                    }}
+                    renderItemRightHoverActions={(item) => (
+                      <>
                         {item.status !== 'complete' && (
                           <Tooltip text="Complete">
                             <button
@@ -2847,8 +2842,7 @@ export default function App() {
                           </button>
                         </Tooltip>
                       </>
-                      );
-                    }}
+                    )}
                     onItemsChange={(nextItems) => {
                       void persistRoadmapChanges(nextItems);
                     }}
