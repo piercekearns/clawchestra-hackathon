@@ -3737,7 +3737,7 @@ fn confirm_quit(
     quit_confirmed: tauri::State<'_, Arc<QuitConfirmed>>,
 ) -> Result<(), String> {
     // Kill all clawchestra tmux sessions
-    let _ = Command::new("tmux")
+    let _ = Command::new(commands::terminal::tmux_bin())
         .args(["-L", "clawchestra", "kill-server"])
         .output();
 
@@ -4349,7 +4349,7 @@ pub fn run() {
                         let _ = app_handle.emit("quit-guard-needed", sessions.len());
                     } else {
                         // No active sessions — clean up any orphan tmux server
-                        let _ = Command::new("tmux")
+                        let _ = Command::new(commands::terminal::tmux_bin())
                             .args(["-L", "clawchestra", "kill-server"])
                             .output();
                     }

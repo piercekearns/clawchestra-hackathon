@@ -62,7 +62,7 @@ fn login_which(cmd: &str) -> Option<String> {
 /// Resolve tmux's absolute path via login shell.
 /// Used by all tmux commands so they work when the app is launched from
 /// Dock/Spotlight where PATH lacks /opt/homebrew/bin.
-fn tmux_bin() -> String {
+pub(crate) fn tmux_bin() -> String {
     login_which("tmux").unwrap_or_else(|| "tmux".to_string())
 }
 
