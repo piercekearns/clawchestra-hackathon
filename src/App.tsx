@@ -939,10 +939,12 @@ export default function App() {
           } else if (prev.lastCaptureHash !== hash) {
             // Output changed since last poll — real activity
             const actionRequired = detectActionRequired(captured);
+            // actionRequired is sticky: once set, only markTerminalViewed clears it.
+            // This prevents cursor/title chatter from overwriting a detected prompt.
             store.updateTerminalActivity(chatId, {
               lastOutputAt: Date.now(),
               isActive: true,
-              actionRequired,
+              actionRequired: actionRequired || prev.actionRequired,
               lastCaptureHash: hash,
             });
           } else if (prev.isActive) {

@@ -1,9 +1,12 @@
 /** Strip ANSI escape sequences for pattern matching. */
 export function stripAnsi(str: string): string {
   return str
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')   // CSI sequences (colors, cursor)
-    .replace(/\x1b\][^\x07]*\x07/g, '')       // OSC sequences (title, hyperlinks)
-    .replace(/\x1b\(B/g, '');                  // Character set designation
+    .replace(/\x1b\[[?!>]?[0-9;]*[a-zA-Z~]/g, '')  // CSI sequences (colors, cursor, DEC private modes)
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')  // OSC sequences (title, hyperlinks)
+    .replace(/\x1b[()][A-Z0-9]/g, '')                // Character set designation
+    .replace(/\x1bP[^\x1b]*\x1b\\/g, '')             // DCS (Device Control String)
+    .replace(/\x1b[=>]/g, '')                         // Keypad mode switches
+    .replace(/\r/g, '');                              // Carriage returns
 }
 
 /** Simple hash for change detection (avoid re-processing identical captures). */
@@ -19,15 +22,19 @@ const ACTION_REQUIRED_PATTERNS = [
   /do you want to (?:allow|proceed|continue)/i,
   /\[y\/n\]/i,
   /\(y\/n\)/i,
+  /\(yes\/no\)/i,
+  /yes\s*\/\s*no/i,
   /press enter to continue/i,
   /waiting for (?:input|response|approval)/i,
   /do you want to run/i,
   /allow this action/i,
+  /would you like to (?:proceed|continue)/i,
 ];
 
 /** Detect action-required patterns (permission prompts, Y/n, etc.) in terminal output. */
 export function detectActionRequired(text: string): boolean {
   const clean = stripAnsi(text);
-  const lines = clean.split('\n').slice(-10).join('\n');
+  // Check a generous tail — prompts can appear with surrounding whitespace/decoration
+  const lines = clean.split('\n').slice(-20).join('\n');
   return ACTION_REQUIRED_PATTERNS.some((p) => p.test(lines));
 }
