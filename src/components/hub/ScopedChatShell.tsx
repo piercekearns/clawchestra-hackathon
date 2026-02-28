@@ -1,4 +1,5 @@
 import type { HubChat } from '../../lib/hub-types';
+import { useDashboardStore } from '../../lib/store';
 import { useScopedChatSession } from '../../hooks/useScopedChatSession';
 import { MessageList } from '../chat/MessageList';
 import { ChatBar } from '../chat/ChatBar';
@@ -13,7 +14,19 @@ interface ScopedChatShellProps {
 }
 
 export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragActiveChange, terminalRestartKey = 0 }: ScopedChatShellProps) {
+  const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
+  const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
+
   if (chat.type === 'terminal') {
+    // Dead terminal + no restart requested → show placeholder, don't auto-spawn
+    const isDead = terminalStatusReady && !chat.archived && !activeTerminals.has(chat.id);
+    if (isDead && terminalRestartKey === 0) {
+      return (
+        <div className="flex flex-1 items-center justify-center min-h-0">
+          <p className="text-sm text-neutral-500">Session ended — use Restart above to relaunch</p>
+        </div>
+      );
+    }
     return <TerminalShell key={`terminal-${chat.id}-${terminalRestartKey}`} chat={chat} onFocusChange={onTerminalFocusChange} onDragActiveChange={onTerminalDragActiveChange} />;
   }
   return <OpenClawChatShell chat={chat} />;
