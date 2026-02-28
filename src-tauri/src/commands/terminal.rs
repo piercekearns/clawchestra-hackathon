@@ -59,6 +59,13 @@ fn login_which(cmd: &str) -> Option<String> {
     None
 }
 
+/// Resolve tmux's absolute path via login shell.
+/// Used by all tmux commands so they work when the app is launched from
+/// Dock/Spotlight where PATH lacks /opt/homebrew/bin.
+fn tmux_bin() -> String {
+    login_which("tmux").unwrap_or_else(|| "tmux".to_string())
+}
+
 /// Detect which coding agents and tmux are available on the system.
 /// Uses a login shell so tools installed via npm/homebrew/cargo are found.
 #[tauri::command]
@@ -99,7 +106,7 @@ pub(crate) fn detect_agents() -> Vec<DetectedAgent> {
 /// Returns an empty vec if tmux is not running or not installed.
 #[tauri::command]
 pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
-    let result = Command::new("tmux")
+    let result = Command::new(tmux_bin())
         .args(["-L", "clawchestra", "list-sessions", "-F", "#{session_name}"])
         .output();
 
@@ -119,7 +126,7 @@ pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
 /// Kill all clawchestra tmux sessions by stopping the entire server socket.
 #[tauri::command]
 pub(crate) fn tmux_kill_all_clawchestra_sessions() -> Result<(), String> {
-    let _ = Command::new("tmux")
+    let _ = Command::new(tmux_bin())
         .args(["-L", "clawchestra", "kill-server"])
         .output();
     Ok(())
@@ -132,7 +139,7 @@ pub(crate) fn tmux_kill_all_clawchestra_sessions() -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn tmux_kill_session(session_name: String) -> Result<(), String> {
     let sanitized = session_name.replace(':', "_");
-    let result = Command::new("tmux")
+    let result = Command::new(tmux_bin())
         .args(["-L", "clawchestra", "kill-session", "-t", &sanitized])
         .output();
 

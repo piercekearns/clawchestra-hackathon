@@ -113,6 +113,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
     const agentCommand = getAgentCommand(chat.agentType, detectedAgents);
 
+    // Resolve tmux's absolute path from detect_agents so it works when
+    // launched from Dock/Spotlight where PATH lacks /opt/homebrew/bin.
+    const tmux = detectedAgents?.find(a => a.agentType === 'tmux' && a.available)?.path ?? 'tmux';
+
     // Spawn PTY with tmux via a shell wrapper.
     //
     // Phase 1: capture-pane dumps existing scrollback (with ANSI escapes)
@@ -130,10 +134,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // merges with parent env so PATH/HOME/etc. are inherited.
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
     const tmuxSessionSanitized = sessionName.replace(/:/g, '_');
-    const captureCmd = `tmux -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
-    const hasSessionCheck = `tmux -L clawchestra has-session -t '${tmuxSessionSanitized}' 2>/dev/null && IS_REATTACH=1 || IS_REATTACH=0`;
+    const captureCmd = `${tmux} -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
+    const hasSessionCheck = `${tmux} -L clawchestra has-session -t '${tmuxSessionSanitized}' 2>/dev/null && IS_REATTACH=1 || IS_REATTACH=0`;
     const tmuxBase = [
-      `tmux -u -f /dev/null -L clawchestra`,
+      `${tmux} -u -f /dev/null -L clawchestra`,
       `new-session -A -s '${sessionName}'`,
       `\\; set status off`,
       // Bump history-limit from the default 2000 to 50 000 so long Claude Code
