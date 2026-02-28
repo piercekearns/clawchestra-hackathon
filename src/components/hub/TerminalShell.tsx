@@ -209,13 +209,16 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       return true; // Everything else goes to the terminal
     });
 
-    // ResizeObserver for container resize → fit terminal
+    // ResizeObserver for container resize → fit terminal.
+    // After fit(), scroll to bottom so TUI apps (Claude Code) whose prompt
+    // lives at the bottom of the viewport stay pinned there during redraws.
     let resizeTimeout: ReturnType<typeof setTimeout>;
     const resizeObserver = new ResizeObserver(() => {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         try {
           fitAddon.fit();
+          term.scrollToBottom();
         } catch {
           // Container may have been unmounted
         }
