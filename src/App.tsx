@@ -16,7 +16,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ThinSidebar } from './components/sidebar/ThinSidebar';
 import { SecondaryDrawer } from './components/hub/SecondaryDrawer';
 import { QuickAccessPopover } from './components/hub/QuickAccessPopover';
-import { openOrCreateProjectChat, openOrCreateItemChat, projectHasThread, itemHasChat } from './lib/hub-actions';
+import { openOrCreateProjectChat, openOrCreateItemChat, projectHasThread, itemHasChat, migrateTerminalChatTitles } from './lib/hub-actions';
 import { SettingsPage } from './components/SettingsPage';
 import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
@@ -84,7 +84,6 @@ import {
   isTauriRuntime,
   tmuxListClawchestraSessions,
   tmuxKillSession,
-  tmuxKillAllClawchestraSessions,
   markRejectionResolved,
   resetOpenclawAuthCooldown,
   updateDashboardSettings,
@@ -107,7 +106,7 @@ import {
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
 import { parseTmuxSessionName } from './lib/terminal-utils';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 
 interface Toast {
   id: number;
@@ -880,13 +879,15 @@ export default function App() {
       }
     };
 
-    // Initial: detect agents + discover sessions
+    // Initial: detect agents + discover sessions + migrate old terminal titles
     void (async () => {
       try {
         const agents = await detectAgents();
         useDashboardStore.getState().setDetectedAgents(agents);
       } catch { /* best-effort */ }
       await refreshActiveTerminals();
+      // One-time migration: rename old "X Terminal" titles to new format
+      await migrateTerminalChatTitles();
     })();
 
     // Poll every 30s to catch sessions that died outside our control
@@ -894,19 +895,11 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Quit guard — intercept window close when active terminal sessions exist
+  // Quit guard — listen for Rust-side quit-guard-needed event (fires from CloseRequested / ExitRequested)
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let unlisten: (() => void) | undefined;
-    getCurrentWindow().onCloseRequested(async (event) => {
-      const activeIds = useDashboardStore.getState().activeTerminalChatIds;
-      if (activeIds.size === 0) {
-        // No active sessions — kill tmux server (cleans up orphans) and let close proceed
-        await tmuxKillAllClawchestraSessions();
-        return;
-      }
-      // Active sessions exist — prevent close, show dialog
-      event.preventDefault();
+    listen<number>('quit-guard-needed', () => {
       useDashboardStore.getState().setQuitGuardOpen(true);
     }).then((fn) => { unlisten = fn; });
     return () => unlisten?.();

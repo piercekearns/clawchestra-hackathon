@@ -1,6 +1,5 @@
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
-import { tmuxKillAllClawchestraSessions } from '../lib/tauri';
+import { confirmQuit } from '../lib/tauri';
 import { ModalDragZone } from './ui/ModalDragZone';
 
 export function QuitGuardDialog() {
@@ -13,8 +12,7 @@ export function QuitGuardDialog() {
   const handleCancel = () => setOpen(false);
 
   const handleQuit = async () => {
-    await tmuxKillAllClawchestraSessions();
-    await getCurrentWindow().close();
+    await confirmQuit();
   };
 
   return (

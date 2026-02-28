@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tracing_subscriber::prelude::*;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD};
 use base64::Engine as _;
@@ -39,6 +39,8 @@ type SharedAppState = Arc<tokio::sync::Mutex<AppState>>;
 type SharedFlushHandle = Arc<db_persistence::DbFlushHandle>;
 /// Type alias for the continuous sync handle, used as Tauri managed state.
 type SharedSyncHandle = Arc<sync::SyncHandle>;
+/// Flag set by `confirm_quit` to let close/exit handlers proceed without quit guard.
+struct QuitConfirmed(std::sync::atomic::AtomicBool);
 
 // Embedded at compile time by build.rs
 pub(crate) const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
@@ -3724,6 +3726,31 @@ fn init_tracing() {
     tracing::info!("Clawchestra logging initialized (log file: {})", log_file_path.display());
 }
 
+/// Confirm quit — kills all tmux sessions, sets quit-confirmed flag, and closes the window.
+///
+/// Called from the quit guard dialog when the user clicks "Quit anyway".
+/// The `QuitConfirmed` flag ensures `on_window_event(CloseRequested)` and
+/// `RunEvent::ExitRequested` proceed without re-showing the dialog.
+#[tauri::command]
+fn confirm_quit(
+    app: tauri::AppHandle,
+    quit_confirmed: tauri::State<'_, Arc<QuitConfirmed>>,
+) -> Result<(), String> {
+    // Kill all clawchestra tmux sessions
+    let _ = Command::new("tmux")
+        .args(["-L", "clawchestra", "kill-server"])
+        .output();
+
+    // Set flag so close/exit handlers proceed
+    quit_confirmed.0.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    // Close the main window — triggers flush/sync/close sequence
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+    }
+    Ok(())
+}
+
 /// Export debug info for troubleshooting (Phase 7.2).
 ///
 /// Collects migration state, recent validation results, sync config,
@@ -4013,6 +4040,11 @@ pub fn run() {
     let sync_for_events = sync_handle.clone();
     let launch_migration_summary_for_setup = launch_migration_summary.clone();
 
+    // Quit guard — AtomicBool flag to allow close/exit after user confirms
+    let quit_confirmed = Arc::new(QuitConfirmed(std::sync::atomic::AtomicBool::new(false)));
+    let quit_confirmed_for_events = quit_confirmed.clone();
+    let quit_confirmed_for_exit = quit_confirmed.clone();
+
     // Clones for the on_window_event closure (watcher drain + sync shutdown)
     let watcher_shutdown_for_close = watcher_shutdown.clone();
     let watcher_in_flight_for_close = watcher_in_flight.clone();
@@ -4027,6 +4059,7 @@ pub fn run() {
         .manage(shared_state.clone())
         .manage(flush_handle.clone())
         .manage(sync_handle.clone())
+        .manage(quit_confirmed.clone())
         .setup(move |app| {
             migrate_data_directories();
             run_migrations();
@@ -4093,7 +4126,19 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(move |_window, event| {
+        .on_window_event(move |window, event| {
+            // Quit guard — intercept CloseRequested when active terminal sessions exist
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !quit_confirmed_for_events.0.load(std::sync::atomic::Ordering::SeqCst) {
+                    let sessions = commands::terminal::tmux_list_clawchestra_sessions();
+                    if !sessions.is_empty() {
+                        api.prevent_close();
+                        let _ = window.emit("quit-guard-needed", sessions.len());
+                        return;
+                    }
+                }
+            }
+
             // On-close sequence (Phase 6.6): watcher drain → stop sync → flush → final sync
             // Total budget: 4s (1s watcher drain + 3s flush+sync envelope)
             match event {
@@ -4286,13 +4331,31 @@ pub fn run() {
             commands::terminal::tmux_list_clawchestra_sessions,
             commands::terminal::tmux_kill_session,
             commands::terminal::tmux_kill_all_clawchestra_sessions,
+            confirm_quit,
             // Phase 7 logging & debug commands
             export_debug_info,
             get_validation_history,
             mark_rejection_resolved,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error building tauri application")
+        .run(move |app_handle, event| {
+            // Quit guard — intercept ExitRequested (Cmd+Q on macOS) when active sessions exist
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if !quit_confirmed_for_exit.0.load(std::sync::atomic::Ordering::SeqCst) {
+                    let sessions = commands::terminal::tmux_list_clawchestra_sessions();
+                    if !sessions.is_empty() {
+                        api.prevent_exit();
+                        let _ = app_handle.emit("quit-guard-needed", sessions.len());
+                    } else {
+                        // No active sessions — clean up any orphan tmux server
+                        let _ = Command::new("tmux")
+                            .args(["-L", "clawchestra", "kill-server"])
+                            .output();
+                    }
+                }
+            }
+        });
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 import { useDashboardStore } from './store';
-import { hubChatCreate, hubChatList } from './tauri';
+import { hubChatCreate, hubChatList, hubChatUpdate } from './tauri';
 import type { HubChat, HubAgentType } from './hub-types';
 import { AGENT_LABELS } from './terminal-utils';
 
@@ -139,5 +139,40 @@ export async function openOrCreateTerminal(
   // Expand the thread if collapsed
   if (store.hubCollapsedThreads.includes(projectId)) {
     store.toggleHubThread(projectId);
+  }
+}
+
+/**
+ * One-time migration: rename old-style terminal chat titles.
+ * "Claude Code Terminal" → "Claude Code", "Codex Terminal" → "Codex",
+ * "Shell Terminal" → "Terminal", "OpenCode Terminal" → "OpenCode".
+ * Idempotent — skips chats that already have the new title format.
+ */
+export async function migrateTerminalChatTitles(): Promise<void> {
+  const OLD_TO_NEW: Record<string, string> = {
+    'Claude Code Terminal': 'Claude Code',
+    'Codex Terminal': 'Codex',
+    'Shell Terminal': 'Terminal',
+    'OpenCode Terminal': 'OpenCode',
+  };
+
+  const store = useDashboardStore.getState();
+  const terminalChats = store.hubChats.filter((c) => c.type === 'terminal');
+  let changed = false;
+
+  for (const chat of terminalChats) {
+    const newTitle = OLD_TO_NEW[chat.title];
+    if (newTitle) {
+      try {
+        await hubChatUpdate(chat.id, { title: newTitle });
+        changed = true;
+      } catch (err) {
+        console.warn('[hub-actions] Failed to migrate terminal title:', chat.id, err);
+      }
+    }
+  }
+
+  if (changed) {
+    await store.refreshHubChats();
   }
 }
