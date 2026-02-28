@@ -119,7 +119,10 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
           />
         ) : (
           <>
-            <div className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-200">
+            <div
+              className={`truncate text-sm font-medium text-neutral-800 dark:text-neutral-200 ${!chat.isProjectRoot ? 'cursor-pointer' : ''}`}
+              onDoubleClick={!chat.isProjectRoot ? handleRenameStart : undefined}
+            >
               {chat.isProjectRoot ? projectTitle : chat.title}
             </div>
             {isTerminal ? (
