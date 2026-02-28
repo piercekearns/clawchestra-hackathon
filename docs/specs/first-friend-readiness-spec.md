@@ -435,6 +435,7 @@ The update button is core functionality — the friend will make code changes vi
 | **Full button customisation** | Doesn't exist | Icon picker, label, prompt editor | Large (separate item) |
 | **Settings in sidebar** | Sidebar shell exists, no content | Settings panel as sidebar content | Medium |
 | **Cross-platform update** | macOS-only (`#[cfg]` block, `.app` bundle path) | Remove gate, platform binary detection, Windows update script | Small-Medium |
+| **tmux bundling** | Requires user to install tmux separately (`brew install tmux`). Terminal button disabled without it. | Bundle tmux binary inside `.app`/`.AppImage`/`.msi` (single static binary ~1.2MB). Use bundled path in `spawn()` so terminals work out of the box with no user-installed dependencies. | Small |
 | **Session key config** | Hardcoded default `agent:main:clawchestra` | Make configurable, keep `agent:main:clawchestra` as sensible default | Small |
 | **Deep rename** | Completed as prerequisite (`io.github.piercekearns.clawchestra`, renamed package/paths/session baseline) | No FFR implementation required; consume as baseline | - |
 
