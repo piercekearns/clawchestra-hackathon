@@ -16,13 +16,66 @@ The pairing data already exists implicitly: both session types share the same `i
 
 ## Scope
 
-Three things ship together — removing any one makes the feature feel incomplete:
+Four things ship together — removing any one makes the feature feel incomplete:
 
-1. **Sidebar connector line** — thin vertical line on the left edge spanning paired rows
-2. **Header tab strip** — chat↔terminal switcher in `DrawerHeader.tsx`
-3. **Creation flow** — `+ Chat` / `+ Terminal` button when one side doesn't exist yet
+1. **Card hover actions** — terminal button alongside the existing chat button (already built; this just mirrors it)
+2. **RoadmapItemDialog header** — terminal button alongside the existing chat icon in the sticky header
+3. **Sidebar connector line** — thin vertical line on the left edge spanning paired rows in the hub sidebar
+4. **DrawerHeader tab strip** — chat↔terminal switcher inside the open drawer
 
-## 1. Sidebar connector line
+## 1. Card hover actions (kanban board)
+
+The chat button already exists in `renderItemRightHoverActions` in `App.tsx`. It uses `itemHasChat(hubChats, projectId, itemId)` to determine filled vs outline state, and renders `MessageSquare` with `fill="currentColor"` when a chat exists.
+
+Adding the terminal button is the same pattern next to it:
+
+```tsx
+const hasTerminal = activeRoadmapProject
+  ? itemHasTerminal(hubChats, activeRoadmapProject.id, item.id)
+  : false;
+
+<Tooltip text={hasTerminal ? 'Open terminal' : 'Create terminal'}>
+  <button
+    className={hasTerminal ? `inline-flex h-6 w-6 ... text-[#DFFF00]` : actionBtnClass}
+    onClick={() => openOrCreateItemTerminal(projectId, item.id, item.title)}
+  >
+    <Terminal className="h-[15px] w-[15px]" fill={hasTerminal ? 'currentColor' : 'none'} />
+  </button>
+</Tooltip>
+```
+
+`itemHasTerminal` is a new helper (mirrors `itemHasChat`) that checks `hubChats` for a terminal-type chat with matching `projectId` + `itemId`.
+
+`openOrCreateItemTerminal` opens the existing terminal chat or creates a new one (prompts TypePicker if no default terminal type is configured).
+
+---
+
+## 2. RoadmapItemDialog header
+
+The `onOpenChat` prop + `MessageSquare` button already exists in `RoadmapItemDialog.tsx`'s sticky top bar. Add an `onOpenTerminal` prop and a `Terminal` button immediately alongside it — same styling, same opacity/hover behaviour.
+
+```tsx
+interface RoadmapItemDialogProps {
+  // existing
+  onOpenChat?: (itemId: string, itemTitle: string) => void;
+  // new
+  onOpenTerminal?: (itemId: string, itemTitle: string) => void;
+}
+```
+
+```tsx
+{onOpenTerminal && (
+  <button onClick={() => onOpenTerminal(item.id, item.title)} aria-label="Open terminal">
+    <Terminal className="h-4 w-4" />
+  </button>
+)}
+```
+
+In `App.tsx`, pass `onOpenTerminal` to `<RoadmapItemDialog>` the same way `onOpenChat` is passed.
+
+---
+
+## 3. Sidebar connector line
 
 In the hub sidebar, when a project/item has both a chat session and a terminal session, the two rows are rendered adjacent and connected by a **thin static vertical line** on their left edge.
 
@@ -37,7 +90,7 @@ In the hub sidebar, when a project/item has both a chat session and a terminal s
 - Render a shared left container element that draws the line, or use CSS pseudo-elements / `before`/`after` on the rows themselves
 - Order: chat row first, terminal row second (consistent ordering, not dependent on creation time)
 
-## 2. Header tab strip
+## 4. DrawerHeader tab strip
 
 Inside `DrawerHeader.tsx`, when the active session belongs to a project or roadmap item, query whether a paired session exists on the other side.
 
@@ -69,7 +122,7 @@ The tab strip appears only when the chat/terminal is linked to a project or road
 
 **Placement:** rendered in `DrawerHeader.tsx` below the main header controls, above the ribbon slot (complete / dead session ribbons). Part of the header DOM, not the scrollable content area.
 
-## 3. Creation flow
+## 5. Creation flow
 
 When the user presses `+ Terminal` or `+ Chat`:
 
@@ -92,9 +145,11 @@ These features compose cleanly:
 
 | File | Change |
 |------|--------|
+| `src/App.tsx` | Add terminal button to `renderItemRightHoverActions`; pass `onOpenTerminal` to `RoadmapItemDialog`; add `openOrCreateItemTerminal` handler |
+| `src/components/modal/RoadmapItemDialog.tsx` | Add `onOpenTerminal` prop; `Terminal` button in sticky header alongside existing chat button |
 | `src/components/hub/ThreadSection.tsx` or `HubNav.tsx` | Detect paired rows; render left connector line |
 | `src/components/hub/DrawerHeader.tsx` | Tab strip below header controls; filled/outline/+ states; creation handler |
-| `src/lib/store.ts` | Query helper: `getPairedSession(chatId)` → returns paired chat/terminal for same item |
+| `src/lib/store.ts` | `itemHasTerminal` helper; `getPairedSession(chatId)` → returns paired chat/terminal for same item |
 | `src/components/hub/ChatEntryRow.tsx` | Left edge adjustment to accommodate connector line rendering |
 
 ## Open Questions
