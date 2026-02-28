@@ -131,6 +131,9 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       `exec tmux -u -f /dev/null -L clawchestra`,
       `new-session -A -s '${sessionName}'`,
       `\\; set status off`,
+      // Bump history-limit from the default 2000 to 50 000 so long Claude Code
+      // sessions preserve more scrollback for capture-pane on reattach.
+      `\\; set history-limit 50000`,
       // Disable alternate screen on the outer terminal (xterm.js) so all tmux
       // output goes to the normal buffer with scrollback. Without this, tmux
       // uses the alternate screen which has no scrollback — wheel events get
