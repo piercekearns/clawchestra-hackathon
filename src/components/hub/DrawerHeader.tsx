@@ -26,9 +26,10 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
   const roadmapItems = useDashboardStore((s) => s.roadmapItems);
   const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
+  const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
 
   const isTerminal = chat.type === 'terminal';
-  const isDeadTerminal = isTerminal && !chat.archived && !activeTerminals.has(chat.id);
+  const isDeadTerminal = terminalStatusReady && isTerminal && !chat.archived && !activeTerminals.has(chat.id);
 
   const isLinkedItemComplete = useMemo(() => {
     if (!chat.itemId) return false;

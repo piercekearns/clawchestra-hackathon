@@ -95,6 +95,8 @@ interface DashboardState {
   detectedAgents: DetectedAgent[];
   /** Terminal chats with confirmed running tmux sessions (transient). */
   activeTerminalChatIds: Set<string>;
+  /** True after the first tmux session discovery completes — prevents false-dead flash on startup. */
+  terminalStatusReady: boolean;
   /** Whether the quit guard dialog is visible (transient). */
   quitGuardOpen: boolean;
   // Hub actions
@@ -488,6 +490,7 @@ export const useDashboardStore = create<DashboardState>()(
       hubChatContextInjected: {},
       detectedAgents: [],
       activeTerminalChatIds: new Set<string>(),
+      terminalStatusReady: false,
       quitGuardOpen: false,
 
       setProjects: (projects) => set({ projects }),
@@ -957,7 +960,7 @@ export const useDashboardStore = create<DashboardState>()(
         }),
 
       setDetectedAgents: (agents) => set({ detectedAgents: agents }),
-      setActiveTerminalChatIds: (ids) => set({ activeTerminalChatIds: ids }),
+      setActiveTerminalChatIds: (ids) => set({ activeTerminalChatIds: ids, terminalStatusReady: true }),
       setQuitGuardOpen: (open) => set({ quitGuardOpen: open }),
 
       updateProjectAndReload: async (project, updates) => {

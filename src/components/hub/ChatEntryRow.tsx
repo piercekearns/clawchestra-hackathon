@@ -38,7 +38,8 @@ export function ChatEntryRow({
   onClearHistory,
 }: ChatEntryRowProps) {
   const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
-  const isDeadTerminal = chat.type === 'terminal' && !chat.archived && !activeTerminals.has(chat.id);
+  const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
+  const isDeadTerminal = terminalStatusReady && chat.type === 'terminal' && !chat.archived && !activeTerminals.has(chat.id);
 
   const [isEditing, setIsEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
