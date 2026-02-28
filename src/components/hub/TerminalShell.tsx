@@ -194,16 +194,20 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     //
     // Key insight: agent output arrives WITHOUT user input. Shell echo/rendering
     // arrives immediately AFTER user input. We track the last user input timestamp
-    // and suppress activity detection for 1s after any keystroke. This cleanly
-    // separates agent activity from shell echo, syntax highlighting, and autocomplete.
+    // and suppress activity detection for 1s after any keystroke.
     //
-    // Grace period: ignore data for the first 3s after spawn so the scrollback
+    // The pane is VISIBLE (mounted) here, so:
+    // - Set lastViewedAt = lastOutputAt (output is seen in real time, never "unread")
+    // - Never set actionRequired (user can see the prompt themselves — only the
+    //   capture-pane poll for hidden terminals should set actionRequired)
+    //
+    // Grace period: ignore data for the first 10s after spawn so the scrollback
     // restore (capture-pane dump) and shell prompt don't trigger activity dots.
     const spawnTime = Date.now();
     let lastUserInputAt = 0;
     let lastActivityUpdate = 0;
     let idleTimer: ReturnType<typeof setTimeout>;
-    const STARTUP_GRACE_MS = 3000;
+    const STARTUP_GRACE_MS = 10_000;
     const USER_INPUT_SUPPRESS_MS = 1000;
     const ACTIVITY_THROTTLE_MS = 500;
     const IDLE_TIMEOUT_MS = 2000;
@@ -220,8 +224,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
 
       // Throttled: update store at most every 500ms while data flows
-      // Also set lastViewedAt = lastOutputAt since the pane is mounted and the
-      // user is seeing this output in real time — prevents false "unread" dots.
       if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
         lastActivityUpdate = now;
         useDashboardStore.getState().updateTerminalActivity(chat.id, {
@@ -231,27 +233,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         });
       }
 
-      // Debounced idle: when data stops for 2s, check for action-required patterns
+      // Debounced idle: when data stops for 2s, just clear isActive.
+      // No pattern matching — visible terminal doesn't set actionRequired.
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        // Don't check patterns if user was recently typing
-        if (Date.now() - lastUserInputAt < USER_INPUT_SUPPRESS_MS) {
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            isActive: false,
-          });
-          return;
-        }
-        const buffer = term.buffer.active;
-        const lines: string[] = [];
-        const start = Math.max(0, buffer.cursorY - 10);
-        for (let i = start; i <= buffer.cursorY; i++) {
-          const line = buffer.getLine(i);
-          if (line) lines.push(line.translateToString(true));
-        }
-        const actionRequired = detectActionRequired(lines.join('\n'));
         useDashboardStore.getState().updateTerminalActivity(chat.id, {
           isActive: false,
-          actionRequired,
         });
       }, IDLE_TIMEOUT_MS);
     });
