@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -15,20 +15,48 @@ fn user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
 }
 
-/// Run `which <cmd>` inside a login shell so it inherits the user's full PATH
-/// (picks up ~/.zshrc, ~/.zprofile, ~/.bashrc, etc.).
+/// Run `which <cmd>` inside the user's login shell to resolve its absolute path.
+///
+/// Tries two strategies:
+/// 1. `-lc` (login shell) — sources `.zprofile` / `.bash_profile`
+/// 2. `-lic` (login + interactive) — also sources `.zshrc` / `.bashrc`, which
+///    catches tools installed via nvm/fnm/volta that only set PATH in rc files.
+///
+/// For `-lic`, takes the last stdout line starting with `/` to skip any
+/// prompt/banner output that `.zshrc` may emit.
 fn login_which(cmd: &str) -> Option<String> {
     let shell = user_shell();
-    let result = Command::new(&shell)
+
+    // Strategy 1: login shell (fast, no .zshrc noise)
+    if let Ok(output) = Command::new(&shell)
         .args(["-lc", &format!("which {}", cmd)])
-        .output();
-    match result {
-        Ok(output) if output.status.success() => {
+        .stderr(Stdio::null())
+        .output()
+    {
+        if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if path.is_empty() { None } else { Some(path) }
+            if !path.is_empty() && path.starts_with('/') {
+                return Some(path);
+            }
         }
-        _ => None,
     }
+
+    // Strategy 2: interactive login shell (sources .zshrc/.bashrc for nvm etc.)
+    if let Ok(output) = Command::new(&shell)
+        .args(["-lic", &format!("which {}", cmd)])
+        .stderr(Stdio::null())
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Take the last line starting with / to skip .zshrc banner output
+            if let Some(path) = stdout.lines().rev().find(|l| l.trim().starts_with('/')) {
+                return Some(path.trim().to_string());
+            }
+        }
+    }
+
+    None
 }
 
 /// Detect which coding agents and tmux are available on the system.
