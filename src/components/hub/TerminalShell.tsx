@@ -7,7 +7,6 @@ import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
-import { detectActionRequired } from '../../lib/terminal-activity';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
 
@@ -190,62 +189,35 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       store.setActiveTerminalChatIds(updated);
     }
 
-    // Wire PTY output → terminal display + throttled activity tracking
+    // Wire PTY output → terminal display
     //
-    // Key insight: agent output arrives WITHOUT user input. Shell echo/rendering
-    // arrives immediately AFTER user input. We track the last user input timestamp
-    // and suppress activity detection for 1s after any keystroke.
+    // The pane is VISIBLE (mounted) here — the user can see everything. So:
+    // - Only track lastOutputAt/lastViewedAt (kept equal → never "unread")
+    // - Never set isActive or actionRequired — those are for HIDDEN terminals
+    //   only, handled by the capture-pane poll in App.tsx
     //
-    // The pane is VISIBLE (mounted) here, so:
-    // - Set lastViewedAt = lastOutputAt (output is seen in real time, never "unread")
-    // - Never set actionRequired (user can see the prompt themselves — only the
-    //   capture-pane poll for hidden terminals should set actionRequired)
-    //
-    // Grace period: ignore data for the first 10s after spawn so the scrollback
-    // restore (capture-pane dump) and shell prompt don't trigger activity dots.
-    const spawnTime = Date.now();
-    let lastUserInputAt = 0;
-    let lastActivityUpdate = 0;
-    let idleTimer: ReturnType<typeof setTimeout>;
-    const STARTUP_GRACE_MS = 10_000;
-    const USER_INPUT_SUPPRESS_MS = 1000;
-    const ACTIVITY_THROTTLE_MS = 500;
-    const IDLE_TIMEOUT_MS = 2000;
+    // This avoids false activity signals from Claude Code's title updates,
+    // cursor positioning, and other background PTY chatter.
+    let lastViewedUpdate = 0;
+    const VIEWED_THROTTLE_MS = 2000;
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
 
+      // Throttled: keep lastViewedAt in sync so switching away later
+      // correctly shows "unread" only for genuinely new output
       const now = Date.now();
-
-      // Skip activity tracking during startup grace period
-      if (now - spawnTime < STARTUP_GRACE_MS) return;
-
-      // Skip activity tracking if user recently typed — output is shell echo
-      if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
-
-      // Throttled: update store at most every 500ms while data flows
-      if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
-        lastActivityUpdate = now;
+      if (now - lastViewedUpdate > VIEWED_THROTTLE_MS) {
+        lastViewedUpdate = now;
         useDashboardStore.getState().updateTerminalActivity(chat.id, {
           lastOutputAt: now,
           lastViewedAt: now,
-          isActive: true,
         });
       }
-
-      // Debounced idle: when data stops for 2s, just clear isActive.
-      // No pattern matching — visible terminal doesn't set actionRequired.
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        useDashboardStore.getState().updateTerminalActivity(chat.id, {
-          isActive: false,
-        });
-      }, IDLE_TIMEOUT_MS);
     });
 
     // Wire terminal input → PTY
     const inputDisposable = term.onData((data: string) => {
-      lastUserInputAt = Date.now();
       pty.write(data);
     });
 
@@ -261,7 +233,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // PTY exit — immediately mark as dead (no need to wait for next poll)
     const exitDisposable = pty.onExit(({ exitCode }) => {
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
-      clearTimeout(idleTimer);
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.delete(chat.id);
@@ -316,7 +287,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
-      clearTimeout(idleTimer);
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);

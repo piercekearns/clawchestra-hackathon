@@ -1001,9 +1001,9 @@ export const useDashboardStore = create<DashboardState>()(
               ...state.terminalActivity,
               [chatId]: {
                 lastOutputAt: prev?.lastOutputAt ?? 0,
-                isActive: prev?.isActive ?? false,
                 lastCaptureHash: prev?.lastCaptureHash ?? '',
                 lastViewedAt: Date.now(),
+                isActive: false,
                 actionRequired: false,
               },
             },
