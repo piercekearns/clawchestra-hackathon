@@ -4124,6 +4124,59 @@ pub fn run() {
                 let _ = ready_handle.emit("migration-launch-summary", launch_migration_summary);
             });
 
+            // 6. Custom macOS menu — replace default Quit (which calls process::exit)
+            //    with a guarded quit that checks for active terminal sessions.
+            {
+                use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
+                let quit_item = MenuItem::with_id(
+                    app, "quit-guarded", "Quit Clawchestra", true, Some("CmdOrCtrl+Q"),
+                )?;
+                let menu = MenuBuilder::new(app)
+                    .item(&SubmenuBuilder::new(app, "Clawchestra")
+                        .about(None)
+                        .separator()
+                        .services()
+                        .separator()
+                        .hide()
+                        .hide_others()
+                        .show_all()
+                        .separator()
+                        .item(&quit_item)
+                        .build()?)
+                    .item(&SubmenuBuilder::new(app, "Edit")
+                        .undo()
+                        .redo()
+                        .separator()
+                        .cut()
+                        .copy()
+                        .paste()
+                        .separator()
+                        .select_all()
+                        .build()?)
+                    .item(&SubmenuBuilder::new(app, "Window")
+                        .minimize()
+                        .separator()
+                        .close_window()
+                        .build()?)
+                    .build()?;
+                app.set_menu(menu)?;
+
+                app.on_menu_event(move |app_handle, event| {
+                    if event.id().0.as_str() == "quit-guarded" {
+                        let sessions = commands::terminal::tmux_list_clawchestra_sessions();
+                        if sessions.is_empty() {
+                            // No active sessions — close window (triggers flush/sync/exit)
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.close();
+                            }
+                        } else {
+                            // Active sessions — show quit guard dialog
+                            let _ = app_handle.emit("quit-guard-needed", sessions.len());
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(move |window, event| {
