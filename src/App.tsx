@@ -933,7 +933,11 @@ export default function App() {
           const hash = simpleHash(captured);
           const prev = store.terminalActivity[chatId];
 
-          if (!prev || prev.lastCaptureHash !== hash) {
+          if (!prev || !prev.lastCaptureHash) {
+            // First poll for this terminal — seed the hash without flagging active
+            store.updateTerminalActivity(chatId, { lastCaptureHash: hash });
+          } else if (prev.lastCaptureHash !== hash) {
+            // Output changed since last poll — real activity
             const actionRequired = detectActionRequired(captured);
             store.updateTerminalActivity(chatId, {
               lastOutputAt: Date.now(),
@@ -941,7 +945,7 @@ export default function App() {
               actionRequired,
               lastCaptureHash: hash,
             });
-          } else if (prev?.isActive) {
+          } else if (prev.isActive) {
             store.updateTerminalActivity(chatId, { isActive: false });
           }
         } catch {

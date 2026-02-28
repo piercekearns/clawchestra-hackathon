@@ -192,18 +192,26 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
     // Wire PTY output → terminal display + throttled activity tracking
     //
-    // Byte accumulator filters keyboard echo (1-2 bytes/keystroke) from agent
+    // Grace period: ignore data for the first 3s after spawn so the scrollback
+    // restore (capture-pane dump) and shell prompt don't trigger activity dots.
+    //
+    // Byte accumulator: filters keyboard echo (1-2 bytes/keystroke) from agent
     // output (hundreds+ bytes/interval). Only flag as "active" when accumulated
     // bytes since last update exceed the threshold.
+    const spawnTime = Date.now();
     let lastActivityUpdate = 0;
     let bytesSinceLastUpdate = 0;
     let idleTimer: ReturnType<typeof setTimeout>;
+    const STARTUP_GRACE_MS = 3000;
     const ACTIVITY_THROTTLE_MS = 500;
     const IDLE_TIMEOUT_MS = 2000;
-    const ACTIVE_BYTE_THRESHOLD = 80; // ~40 chars of agent output per 500ms
+    const ACTIVE_BYTE_THRESHOLD = 80;
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
+
+      // Skip activity tracking during startup grace period
+      if (Date.now() - spawnTime < STARTUP_GRACE_MS) return;
 
       bytesSinceLastUpdate += data.length;
 
