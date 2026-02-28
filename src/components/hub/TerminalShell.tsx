@@ -190,34 +190,66 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     }
 
     // Wire PTY output → terminal display
-    //
     // The pane is VISIBLE (mounted) here — the user can see everything. So:
-    // - Only track lastOutputAt/lastViewedAt (kept equal → never "unread")
-    // - Never set isActive or actionRequired — those are for HIDDEN terminals
-    //   only, handled by the capture-pane poll in App.tsx
+    // - lastViewedAt = lastOutputAt (never "unread", no notification bubbles)
+    // - Track isActive for sidebar dots (agent working indicator)
+    // - Never set actionRequired (user can see prompts themselves)
     //
-    // This avoids false activity signals from Claude Code's title updates,
-    // cursor positioning, and other background PTY chatter.
-    let lastViewedUpdate = 0;
-    const VIEWED_THROTTLE_MS = 2000;
+    // To avoid false activity from PTY chatter (title updates, cursor moves),
+    // only significant data (above byte threshold) triggers isActive and resets
+    // the idle timer. Small data events are ignored for activity purposes.
+    const spawnTime = Date.now();
+    let lastUserInputAt = 0;
+    let lastActivityUpdate = 0;
+    let bytesSinceLastUpdate = 0;
+    let idleTimer: ReturnType<typeof setTimeout>;
+    const STARTUP_GRACE_MS = 10_000;
+    const USER_INPUT_SUPPRESS_MS = 1000;
+    const ACTIVITY_THROTTLE_MS = 500;
+    const IDLE_TIMEOUT_MS = 3000;
+    const ACTIVE_BYTE_THRESHOLD = 200;
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
 
-      // Throttled: keep lastViewedAt in sync so switching away later
-      // correctly shows "unread" only for genuinely new output
       const now = Date.now();
-      if (now - lastViewedUpdate > VIEWED_THROTTLE_MS) {
-        lastViewedUpdate = now;
-        useDashboardStore.getState().updateTerminalActivity(chat.id, {
-          lastOutputAt: now,
-          lastViewedAt: now,
-        });
+
+      // Skip during startup (scrollback restore)
+      if (now - spawnTime < STARTUP_GRACE_MS) return;
+
+      // Skip if user recently typed (shell echo)
+      if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
+
+      bytesSinceLastUpdate += data.length;
+
+      // Throttled: only flag active for significant output
+      if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
+        const isSignificant = bytesSinceLastUpdate >= ACTIVE_BYTE_THRESHOLD;
+        lastActivityUpdate = now;
+        bytesSinceLastUpdate = 0;
+
+        if (isSignificant) {
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            lastOutputAt: now,
+            lastViewedAt: now,
+            isActive: true,
+          });
+
+          // Only reset idle timer on significant output — PTY chatter
+          // (title updates, cursor moves) won't prevent isActive from clearing
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            useDashboardStore.getState().updateTerminalActivity(chat.id, {
+              isActive: false,
+            });
+          }, IDLE_TIMEOUT_MS);
+        }
       }
     });
 
     // Wire terminal input → PTY
     const inputDisposable = term.onData((data: string) => {
+      lastUserInputAt = Date.now();
       pty.write(data);
     });
 
@@ -233,6 +265,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // PTY exit — immediately mark as dead (no need to wait for next poll)
     const exitDisposable = pty.onExit(({ exitCode }) => {
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
+      clearTimeout(idleTimer);
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.delete(chat.id);
@@ -287,6 +320,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
+      clearTimeout(idleTimer);
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);

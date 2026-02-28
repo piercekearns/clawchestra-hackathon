@@ -116,9 +116,10 @@ export function ChatEntryRow({
             isDeadTerminal ? 'text-red-400' : 'text-neutral-400 dark:text-neutral-500'
           }`}>
             <AgentIcon agentType={chat.agentType} className="h-3.5 w-3.5" />
-            {isTerminalActionRequired ? (
+            {/* Suppress bubbles while terminal is active — dots will take over after 500ms delay */}
+            {!isTerminalActive && isTerminalActionRequired ? (
               <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-amber-400" />
-            ) : (isTerminalUnread || chat.unread) ? (
+            ) : !isTerminalActive && (isTerminalUnread || chat.unread) ? (
               <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
             ) : null}
           </span>
