@@ -191,22 +191,35 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     }
 
     // Wire PTY output → terminal display + throttled activity tracking
+    //
+    // Byte accumulator filters keyboard echo (1-2 bytes/keystroke) from agent
+    // output (hundreds+ bytes/interval). Only flag as "active" when accumulated
+    // bytes since last update exceed the threshold.
     let lastActivityUpdate = 0;
+    let bytesSinceLastUpdate = 0;
     let idleTimer: ReturnType<typeof setTimeout>;
     const ACTIVITY_THROTTLE_MS = 500;
     const IDLE_TIMEOUT_MS = 2000;
+    const ACTIVE_BYTE_THRESHOLD = 80; // ~40 chars of agent output per 500ms
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
 
+      bytesSinceLastUpdate += data.length;
+
       // Throttled: update store at most every 500ms while data flows
       const now = Date.now();
       if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
+        const isSignificantOutput = bytesSinceLastUpdate >= ACTIVE_BYTE_THRESHOLD;
         lastActivityUpdate = now;
-        useDashboardStore.getState().updateTerminalActivity(chat.id, {
-          lastOutputAt: now,
-          isActive: true,
-        });
+        bytesSinceLastUpdate = 0;
+
+        if (isSignificantOutput) {
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            lastOutputAt: now,
+            isActive: true,
+          });
+        }
       }
 
       // Debounced idle: when data stops for 2s, check for action-required patterns
