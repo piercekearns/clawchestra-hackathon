@@ -117,7 +117,7 @@ export async function openOrCreateTerminal(
 ): Promise<void> {
   const store = useDashboardStore.getState();
   const label = AGENT_LABELS[agentType] ?? agentType;
-  const title = `${label} Terminal`;
+  const title = agentType === 'generic' ? 'Terminal' : label;
 
   const newChat = await hubChatCreate(projectId, null, 'terminal', agentType, title);
   await store.refreshHubChats();
