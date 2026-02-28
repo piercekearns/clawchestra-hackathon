@@ -1099,6 +1099,15 @@ export const useDashboardStore = create<DashboardState>()(
         hubDrawerWidth: state.hubDrawerWidth,
         hubCollapsedThreads: state.hubCollapsedThreads,
         hubThreadOrder: state.hubThreadOrder,
+        // Terminal activity — persist timestamps so unread state survives restarts.
+        // Strip transient fields (isActive, actionRequired, lastCaptureHash).
+        terminalActivity: Object.fromEntries(
+          Object.entries(state.terminalActivity).map(([id, entry]) => [
+            id,
+            { lastOutputAt: entry.lastOutputAt, lastViewedAt: entry.lastViewedAt,
+              isActive: false, actionRequired: false, lastCaptureHash: '' },
+          ]),
+        ),
       }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<DashboardState>;

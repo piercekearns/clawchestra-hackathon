@@ -120,13 +120,15 @@ export async function openOrCreateTerminal(
   const title = agentType === 'generic' ? 'Terminal' : label;
 
   const newChat = await hubChatCreate(projectId, null, 'terminal', agentType, title);
-  await store.refreshHubChats();
 
-  // Optimistically mark as active so TerminalShell spawns immediately
-  // (the poll would otherwise see it as "dead" since tmux session doesn't exist yet)
+  // Optimistically mark as active BEFORE refreshing chats to avoid a
+  // flash of dead state (refreshHubChats triggers a re-render where the
+  // new chat would appear without an active tmux session yet).
   const updated = new Set(store.activeTerminalChatIds);
   updated.add(newChat.id);
   store.setActiveTerminalChatIds(updated);
+
+  await store.refreshHubChats();
 
   store.setHubActiveChatId(newChat.id);
   store.setHubDrawerOpen(true);
