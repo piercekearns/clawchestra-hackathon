@@ -310,10 +310,12 @@ function TypePickerButton({
                   <span>Terminal</span>
                   <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
                 </button>
-                {/* Terminal agent submenu */}
+                {/* Terminal agent submenu — pl-1 creates an invisible hover bridge
+                     so the mouse doesn't leave the parent wrapper crossing the gap */}
                 {terminalSubmenu && (
+                  <div className="absolute left-full top-0 z-[200] pl-1">
                   <div
-                    className="absolute left-full top-0 z-[200] ml-1 w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+                    className="w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
                   >
                     {codingAgents.map((agent) => (
                       <button
@@ -340,6 +342,7 @@ function TypePickerButton({
                       <Terminal className="h-3.5 w-3.5 text-neutral-400" />
                       Shell
                     </button>
+                  </div>
                   </div>
                 )}
               </div>
