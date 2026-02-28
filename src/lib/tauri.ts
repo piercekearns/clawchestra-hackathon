@@ -487,6 +487,10 @@ type TauriCommands = {
     args: { sessionName: string };
     return: void;
   };
+  tmux_kill_all_clawchestra_sessions: {
+    args: Record<string, never>;
+    return: void;
+  };
 };
 
 export function isTauriRuntime(): boolean {
@@ -1154,4 +1158,8 @@ export async function tmuxListClawchestraSessions(): Promise<string[]> {
 
 export async function tmuxKillSession(sessionName: string): Promise<void> {
   return typedInvoke('tmux_kill_session', { sessionName });
+}
+
+export async function tmuxKillAllClawchestraSessions(): Promise<void> {
+  return typedInvoke('tmux_kill_all_clawchestra_sessions');
 }

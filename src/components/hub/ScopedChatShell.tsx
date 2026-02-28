@@ -8,11 +8,13 @@ interface ScopedChatShellProps {
   chat: HubChat;
   onTerminalFocusChange?: (focused: boolean) => void;
   onTerminalDragActiveChange?: (active: boolean) => void;
+  /** Incrementing key to force TerminalShell remount (for restart). */
+  terminalRestartKey?: number;
 }
 
-export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragActiveChange }: ScopedChatShellProps) {
+export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragActiveChange, terminalRestartKey = 0 }: ScopedChatShellProps) {
   if (chat.type === 'terminal') {
-    return <TerminalShell chat={chat} onFocusChange={onTerminalFocusChange} onDragActiveChange={onTerminalDragActiveChange} />;
+    return <TerminalShell key={`terminal-${chat.id}-${terminalRestartKey}`} chat={chat} onFocusChange={onTerminalFocusChange} onDragActiveChange={onTerminalDragActiveChange} />;
   }
   return <OpenClawChatShell chat={chat} />;
 }

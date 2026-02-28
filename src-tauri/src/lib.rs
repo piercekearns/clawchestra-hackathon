@@ -4285,6 +4285,7 @@ pub fn run() {
             commands::terminal::detect_agents,
             commands::terminal::tmux_list_clawchestra_sessions,
             commands::terminal::tmux_kill_session,
+            commands::terminal::tmux_kill_all_clawchestra_sessions,
             // Phase 7 logging & debug commands
             export_debug_info,
             get_validation_history,

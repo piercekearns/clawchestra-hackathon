@@ -95,6 +95,8 @@ interface DashboardState {
   detectedAgents: DetectedAgent[];
   /** Terminal chats with confirmed running tmux sessions (transient). */
   activeTerminalChatIds: Set<string>;
+  /** Whether the quit guard dialog is visible (transient). */
+  quitGuardOpen: boolean;
   // Hub actions
   setSidebarMode: (mode: 'default' | 'settings') => void;
   setHubActiveChatId: (id: string | null) => void;
@@ -124,6 +126,8 @@ interface DashboardState {
   setDetectedAgents: (agents: DetectedAgent[]) => void;
   /** Set active terminal chat IDs (tmux sessions that are running). */
   setActiveTerminalChatIds: (ids: Set<string>) => void;
+  /** Show/hide the quit guard dialog. */
+  setQuitGuardOpen: (open: boolean) => void;
 
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
@@ -484,6 +488,7 @@ export const useDashboardStore = create<DashboardState>()(
       hubChatContextInjected: {},
       detectedAgents: [],
       activeTerminalChatIds: new Set<string>(),
+      quitGuardOpen: false,
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -953,6 +958,7 @@ export const useDashboardStore = create<DashboardState>()(
 
       setDetectedAgents: (agents) => set({ detectedAgents: agents }),
       setActiveTerminalChatIds: (ids) => set({ activeTerminalChatIds: ids }),
+      setQuitGuardOpen: (open) => set({ quitGuardOpen: open }),
 
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);

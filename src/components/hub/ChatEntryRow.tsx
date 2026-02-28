@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
+import { useDashboardStore } from '../../lib/store';
 import { AgentIcon } from './AgentIcon';
 import { InlineEdit } from './InlineEdit';
 
@@ -36,6 +37,9 @@ export function ChatEntryRow({
   onDelete,
   onClearHistory,
 }: ChatEntryRowProps) {
+  const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
+  const isDeadTerminal = chat.type === 'terminal' && !chat.archived && !activeTerminals.has(chat.id);
+
   const [isEditing, setIsEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -82,7 +86,9 @@ export function ChatEntryRow({
           )}
         </span>
       ) : chat.type === 'terminal' ? (
-        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
+        <span className={`relative flex h-5 w-5 shrink-0 items-center justify-center ${
+          isDeadTerminal ? 'text-red-400' : 'text-neutral-400 dark:text-neutral-500'
+        }`}>
           <AgentIcon agentType={chat.agentType} className="h-3.5 w-3.5" />
           {chat.unread && (
             <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />

@@ -22,6 +22,7 @@ import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
+import { QuitGuardDialog } from './components/QuitGuardDialog';
 import type { SearchableRoadmapItem } from './components/search';
 import type {
   ChatConnectionState,
@@ -83,6 +84,7 @@ import {
   isTauriRuntime,
   tmuxListClawchestraSessions,
   tmuxKillSession,
+  tmuxKillAllClawchestraSessions,
   markRejectionResolved,
   resetOpenclawAuthCooldown,
   updateDashboardSettings,
@@ -105,6 +107,7 @@ import {
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
 import { parseTmuxSessionName } from './lib/terminal-utils';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface Toast {
   id: number;
@@ -849,16 +852,13 @@ export default function App() {
     void getValidationHistory().then(setValidationRejections).catch(() => {});
   }, []);
 
-  // Detect coding agents + discover tmux sessions on startup
+  // Detect coding agents + discover tmux sessions on startup + 30s poll
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    void (async () => {
-      try {
-        // Detect available agents (claude, codex, opencode, tmux)
-        const agents = await detectAgents();
-        useDashboardStore.getState().setDetectedAgents(agents);
 
-        // Discover running tmux sessions
+    /** Refresh activeTerminalChatIds from tmux — reused for startup + poll. */
+    const refreshActiveTerminals = async () => {
+      try {
         const sessions = await tmuxListClawchestraSessions();
         const hubChats = useDashboardStore.getState().hubChats;
         const hubChatIds = new Set(hubChats.map((c) => c.id));
@@ -876,9 +876,40 @@ export default function App() {
 
         useDashboardStore.getState().setActiveTerminalChatIds(activeChatIds);
       } catch {
-        // Agent detection is best-effort
+        // tmux discovery is best-effort
       }
+    };
+
+    // Initial: detect agents + discover sessions
+    void (async () => {
+      try {
+        const agents = await detectAgents();
+        useDashboardStore.getState().setDetectedAgents(agents);
+      } catch { /* best-effort */ }
+      await refreshActiveTerminals();
     })();
+
+    // Poll every 30s to catch sessions that died outside our control
+    const interval = setInterval(refreshActiveTerminals, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Quit guard — intercept window close when active terminal sessions exist
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlisten: (() => void) | undefined;
+    getCurrentWindow().onCloseRequested(async (event) => {
+      const activeIds = useDashboardStore.getState().activeTerminalChatIds;
+      if (activeIds.size === 0) {
+        // No active sessions — kill tmux server (cleans up orphans) and let close proceed
+        await tmuxKillAllClawchestraSessions();
+        return;
+      }
+      // Active sessions exist — prevent close, show dialog
+      event.preventDefault();
+      useDashboardStore.getState().setQuitGuardOpen(true);
+    }).then((fn) => { unlisten = fn; });
+    return () => unlisten?.();
   }, []);
 
   // Load persisted chat messages on startup
@@ -3264,6 +3295,8 @@ export default function App() {
           }
         }}
       />
+
+      <QuitGuardDialog />
     </div>
   );
 }

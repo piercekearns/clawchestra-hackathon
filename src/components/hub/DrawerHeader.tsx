@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Archive, Check, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
+import { Archive, Check, CircleX, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
@@ -13,9 +13,11 @@ interface DrawerHeaderProps {
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
   onOpenLinkedItem?: (projectId: string, projectTitle: string, itemId: string) => void;
   onOpenLinkedProject?: (projectId: string, projectTitle: string) => void;
+  /** Callback to restart a dead terminal session (remounts TerminalShell). */
+  onRestart?: () => void;
 }
 
-export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject }: DrawerHeaderProps) {
+export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart }: DrawerHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
@@ -23,8 +25,10 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
 
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
   const roadmapItems = useDashboardStore((s) => s.roadmapItems);
+  const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
 
   const isTerminal = chat.type === 'terminal';
+  const isDeadTerminal = isTerminal && !chat.archived && !activeTerminals.has(chat.id);
 
   const isLinkedItemComplete = useMemo(() => {
     if (!chat.itemId) return false;
@@ -235,6 +239,23 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
         >
           Archive chat
         </button>
+      </div>
+    )}
+    {isDeadTerminal && (
+      <div className="flex items-center gap-2 border-b border-red-500/10 bg-red-500/5 px-4 py-1.5 md:px-6">
+        <CircleX className="h-3.5 w-3.5 shrink-0 text-red-400/70" />
+        <span className="flex-1 text-xs text-neutral-500 dark:text-neutral-400">
+          Session ended
+        </span>
+        {onRestart && (
+          <button
+            type="button"
+            onClick={onRestart}
+            className="rounded-full border border-red-500/30 px-2 py-0.5 text-[11px] text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+          >
+            Restart
+          </button>
+        )}
       </div>
     )}
     </>

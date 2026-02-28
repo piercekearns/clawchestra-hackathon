@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
+import { tmuxKillSession } from '../../lib/tauri';
+import { tmuxSessionName } from '../../lib/terminal-utils';
 import { DrawerHeader } from './DrawerHeader';
 import { ScopedChatShell } from './ScopedChatShell';
 
@@ -38,6 +40,7 @@ export function SecondaryDrawer({
   const [isHandleHover, setIsHandleHover] = useState(false);
   const [terminalFocused, setTerminalFocused] = useState(false);
   const [terminalDragActive, setTerminalDragActive] = useState(false);
+  const [terminalRestartKey, setTerminalRestartKey] = useState(0);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Resolve project title
@@ -55,6 +58,14 @@ export function SecondaryDrawer({
     };
     return findTitle(projects) ?? chat.projectId;
   }, [chat, projects]);
+
+  const handleRestart = useCallback(() => {
+    if (!chat) return;
+    // Kill the old tmux session (handles lingering case), then remount TerminalShell
+    const sessionName = tmuxSessionName(chat.projectId, chat.id);
+    void tmuxKillSession(sessionName).catch(() => { /* session may already be dead */ });
+    setTerminalRestartKey((k) => k + 1);
+  }, [chat]);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -119,11 +130,12 @@ export function SecondaryDrawer({
           onToast={onToast}
           onOpenLinkedItem={onOpenLinkedItem}
           onOpenLinkedProject={onOpenLinkedProject}
+          onRestart={chat.type === 'terminal' ? handleRestart : undefined}
         />
         <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
           terminalDragActive ? '' : terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
         }`}>
-          <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} />
+          <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
         </div>
       </div>
 

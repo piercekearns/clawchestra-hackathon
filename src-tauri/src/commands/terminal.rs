@@ -112,6 +112,15 @@ pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
     }
 }
 
+/// Kill all clawchestra tmux sessions by stopping the entire server socket.
+#[tauri::command]
+pub(crate) fn tmux_kill_all_clawchestra_sessions() -> Result<(), String> {
+    let _ = Command::new("tmux")
+        .args(["-L", "clawchestra", "kill-server"])
+        .output();
+    Ok(())
+}
+
 /// Kill a tmux session by name.
 #[tauri::command]
 pub(crate) fn tmux_kill_session(session_name: String) -> Result<(), String> {

@@ -177,6 +177,14 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
     ptyRef.current = pty;
 
+    // Mark session as active immediately on spawn
+    {
+      const store = useDashboardStore.getState();
+      const updated = new Set(store.activeTerminalChatIds);
+      updated.add(chat.id);
+      store.setActiveTerminalChatIds(updated);
+    }
+
     // Wire PTY output → terminal display
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
@@ -196,9 +204,13 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       }
     });
 
-    // PTY exit
+    // PTY exit — immediately mark as dead (no need to wait for next poll)
     const exitDisposable = pty.onExit(({ exitCode }) => {
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
+      const store = useDashboardStore.getState();
+      const updated = new Set(store.activeTerminalChatIds);
+      updated.delete(chat.id);
+      store.setActiveTerminalChatIds(updated);
     });
 
     // Pass through app keyboard shortcuts while terminal has focus
