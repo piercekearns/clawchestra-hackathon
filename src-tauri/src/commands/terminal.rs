@@ -91,7 +91,11 @@ pub(crate) fn detect_agents() -> Vec<DetectedAgent> {
         .collect()
 }
 
-/// List tmux sessions with the `clawchestra:` prefix.
+/// List tmux sessions belonging to Clawchestra.
+///
+/// tmux sanitizes colons to underscores in stored session names, so a session
+/// created as `clawchestra:proj:chat` is listed as `clawchestra_proj_chat`.
+/// We match both prefixes for robustness.
 /// Returns an empty vec if tmux is not running or not installed.
 #[tauri::command]
 pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
@@ -104,7 +108,7 @@ pub(crate) fn tmux_list_clawchestra_sessions() -> Vec<String> {
             let stdout = String::from_utf8_lossy(&output.stdout);
             stdout
                 .lines()
-                .filter(|line| line.starts_with("clawchestra:"))
+                .filter(|line| line.starts_with("clawchestra:") || line.starts_with("clawchestra_"))
                 .map(|s| s.to_string())
                 .collect()
         }
@@ -122,10 +126,14 @@ pub(crate) fn tmux_kill_all_clawchestra_sessions() -> Result<(), String> {
 }
 
 /// Kill a tmux session by name.
+///
+/// Sanitizes colons to underscores for the `-t` target, since tmux replaces
+/// colons in stored session names and also interprets them as session:window:pane.
 #[tauri::command]
 pub(crate) fn tmux_kill_session(session_name: String) -> Result<(), String> {
+    let sanitized = session_name.replace(':', "_");
     let result = Command::new("tmux")
-        .args(["-L", "clawchestra", "kill-session", "-t", &session_name])
+        .args(["-L", "clawchestra", "kill-session", "-t", &sanitized])
         .output();
 
     match result {
