@@ -20,8 +20,9 @@ const ACTION_REQUIRED_PATTERNS = [
   /\[y\/n\]/i,
   /\(y\/n\)/i,
   /press enter to continue/i,
-  /approve|reject/i,
   /waiting for (?:input|response|approval)/i,
+  /do you want to run/i,
+  /allow this action/i,
 ];
 
 /** Detect action-required patterns (permission prompts, Y/n, etc.) in terminal output. */

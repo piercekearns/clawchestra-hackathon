@@ -192,47 +192,52 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
     // Wire PTY output → terminal display + throttled activity tracking
     //
+    // Key insight: agent output arrives WITHOUT user input. Shell echo/rendering
+    // arrives immediately AFTER user input. We track the last user input timestamp
+    // and suppress activity detection for 1s after any keystroke. This cleanly
+    // separates agent activity from shell echo, syntax highlighting, and autocomplete.
+    //
     // Grace period: ignore data for the first 3s after spawn so the scrollback
     // restore (capture-pane dump) and shell prompt don't trigger activity dots.
-    //
-    // Byte accumulator: filters keyboard echo (1-2 bytes/keystroke) from agent
-    // output (hundreds+ bytes/interval). Only flag as "active" when accumulated
-    // bytes since last update exceed the threshold.
     const spawnTime = Date.now();
+    let lastUserInputAt = 0;
     let lastActivityUpdate = 0;
-    let bytesSinceLastUpdate = 0;
     let idleTimer: ReturnType<typeof setTimeout>;
     const STARTUP_GRACE_MS = 3000;
+    const USER_INPUT_SUPPRESS_MS = 1000;
     const ACTIVITY_THROTTLE_MS = 500;
     const IDLE_TIMEOUT_MS = 2000;
-    const ACTIVE_BYTE_THRESHOLD = 80;
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
 
-      // Skip activity tracking during startup grace period
-      if (Date.now() - spawnTime < STARTUP_GRACE_MS) return;
+      const now = Date.now();
 
-      bytesSinceLastUpdate += data.length;
+      // Skip activity tracking during startup grace period
+      if (now - spawnTime < STARTUP_GRACE_MS) return;
+
+      // Skip activity tracking if user recently typed — output is shell echo
+      if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
 
       // Throttled: update store at most every 500ms while data flows
-      const now = Date.now();
       if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
-        const isSignificantOutput = bytesSinceLastUpdate >= ACTIVE_BYTE_THRESHOLD;
         lastActivityUpdate = now;
-        bytesSinceLastUpdate = 0;
-
-        if (isSignificantOutput) {
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            lastOutputAt: now,
-            isActive: true,
-          });
-        }
+        useDashboardStore.getState().updateTerminalActivity(chat.id, {
+          lastOutputAt: now,
+          isActive: true,
+        });
       }
 
       // Debounced idle: when data stops for 2s, check for action-required patterns
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
+        // Don't check patterns if user was recently typing
+        if (Date.now() - lastUserInputAt < USER_INPUT_SUPPRESS_MS) {
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            isActive: false,
+          });
+          return;
+        }
         const buffer = term.buffer.active;
         const lines: string[] = [];
         const start = Math.max(0, buffer.cursorY - 10);
@@ -250,6 +255,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
     // Wire terminal input → PTY
     const inputDisposable = term.onData((data: string) => {
+      lastUserInputAt = Date.now();
       pty.write(data);
     });
 
