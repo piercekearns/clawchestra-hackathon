@@ -34,10 +34,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
   const fitAddonRef = useRef<FitAddon | null>(null);
   const ptyRef = useRef<IPty | null>(null);
   const mountedRef = useRef(false);
-  const agentLaunchedRef = useRef(false);
   const [dragActive, setDragActive] = useState(false);
 
   const projects = useDashboardStore((s) => s.projects);
+  const detectedAgents = useDashboardStore((s) => s.detectedAgents);
 
   // Resolve project dirPath from the store's project tree
   const projectDirPath = useMemo(() => {
@@ -58,7 +58,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // Prevent double-init in StrictMode
     if (mountedRef.current) return;
     mountedRef.current = true;
-    agentLaunchedRef.current = false;
 
     const container = containerRef.current;
     if (!container) return;
@@ -112,23 +111,29 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     fitAddonRef.current = fitAddon;
 
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
-    const agentCommand = getAgentCommand(chat.agentType);
+    const agentCommand = getAgentCommand(chat.agentType, detectedAgents);
 
     // Spawn PTY with tmux via a shell wrapper.
-    // First, capture-pane dumps any existing scrollback (with ANSI escapes)
-    // into xterm.js's buffer so the user can scroll up after an app restart.
-    // Then `exec` replaces the shell with the tmux attach, keeping the same PTY.
     //
-    // Note: tmux sanitizes colons to underscores in session names, so the
-    // capture-pane -t target must use the sanitized form.
+    // Phase 1: capture-pane dumps existing scrollback (with ANSI escapes)
+    //   into xterm.js's buffer so the user can scroll up after an app restart.
+    // Phase 2: has-session checks if the tmux session already exists.
+    // Phase 3: exec tmux replaces the outer shell with the tmux client.
+    //   For NEW sessions with an agent, tmux `send-keys` types the launch
+    //   command into the shell. For existing sessions (reattach), nothing
+    //   extra is sent — the agent is already running.
+    //
+    // Note: tmux sanitizes colons to underscores in session names, so all
+    //   `-t` targets must use the sanitized form.
     //
     // Use `name` for TERM (proper PTY option), keep env minimal — tauri-pty
     // merges with parent env so PATH/HOME/etc. are inherited.
     // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
     const tmuxSessionSanitized = sessionName.replace(/:/g, '_');
     const captureCmd = `tmux -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
-    const attachCmd = [
-      `exec tmux -u -f /dev/null -L clawchestra`,
+    const hasSessionCheck = `tmux -L clawchestra has-session -t '${tmuxSessionSanitized}' 2>/dev/null && IS_REATTACH=1 || IS_REATTACH=0`;
+    const tmuxBase = [
+      `tmux -u -f /dev/null -L clawchestra`,
       `new-session -A -s '${sessionName}'`,
       `\\; set status off`,
       // Bump history-limit from the default 2000 to 50 000 so long Claude Code
@@ -140,9 +145,25 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // converted to up/down arrows instead of scrolling.
       `\\; set -ga terminal-overrides ',xterm-256color:smcup@:rmcup@'`,
     ].join(' ');
+
+    // Build the full shell command. For agents, conditionally add send-keys
+    // only for new sessions (IS_REATTACH=0) so we don't retype into an
+    // already-running agent on reattach.
+    let shellCmd: string;
+    if (agentCommand) {
+      // Escape single quotes in the command path for the shell
+      const escapedCmd = agentCommand.replace(/'/g, "'\\''");
+      shellCmd = [
+        captureCmd,
+        hasSessionCheck,
+        `if [ "$IS_REATTACH" = "0" ]; then exec ${tmuxBase} \\; send-keys '${escapedCmd}' Enter; else exec ${tmuxBase}; fi`,
+      ].join('; ');
+    } else {
+      shellCmd = `${captureCmd}; exec ${tmuxBase}`;
+    }
     let pty: IPty;
     try {
-      pty = spawn('sh', ['-c', `${captureCmd}; ${attachCmd}`], {
+      pty = spawn('sh', ['-c', shellCmd], {
         name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
@@ -159,18 +180,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // Wire PTY output → terminal display
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
-
-      // Auto-launch agent: detect shell prompt then send command
-      if (agentCommand && !agentLaunchedRef.current) {
-        const text = new TextDecoder().decode(data);
-        if (text.includes('$') || text.includes('%') || text.includes('#')) {
-          agentLaunchedRef.current = true;
-          // Small delay to let the shell fully initialize
-          setTimeout(() => {
-            pty.write(agentCommand + '\n');
-          }, 100);
-        }
-      }
     });
 
     // Wire terminal input → PTY

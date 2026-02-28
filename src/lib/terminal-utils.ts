@@ -1,7 +1,23 @@
 import type { HubAgentType } from './hub-types';
+import type { DetectedAgent } from './tauri';
 
-/** Map agent type to the CLI command that launches it. */
-export function getAgentCommand(agentType: HubAgentType | null): string | null {
+/** Map agent type to the CLI command that launches it.
+ *  When `detectedAgents` is provided, returns the resolved absolute path
+ *  (e.g. `/opt/homebrew/bin/claude`) so the command works regardless of
+ *  the tmux session's PATH. Falls back to the bare command name. */
+export function getAgentCommand(
+  agentType: HubAgentType | null,
+  detectedAgents?: DetectedAgent[],
+): string | null {
+  if (!agentType || agentType === 'generic' || agentType === 'cursor') return null;
+
+  // Use resolved absolute path from detection when available
+  if (detectedAgents) {
+    const agent = detectedAgents.find((a) => a.agentType === agentType && a.available);
+    if (agent?.path) return agent.path;
+  }
+
+  // Fallback to bare command name
   switch (agentType) {
     case 'claude-code':
       return 'claude';
@@ -9,9 +25,7 @@ export function getAgentCommand(agentType: HubAgentType | null): string | null {
       return 'codex';
     case 'opencode':
       return 'opencode';
-    case 'generic':
-    case 'cursor':
-    case null:
+    default:
       return null;
   }
 }
