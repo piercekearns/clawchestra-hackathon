@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
@@ -40,6 +40,24 @@ export function ChatEntryRow({
   const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
   const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
   const isDeadTerminal = terminalStatusReady && chat.type === 'terminal' && !chat.archived && !activeTerminals.has(chat.id);
+  const activity = useDashboardStore((s) => s.terminalActivity[chat.id]);
+
+  // Derived terminal activity states
+  const isTerminalActive = chat.type === 'terminal' && !isDeadTerminal && !!activity?.isActive;
+  const isTerminalActionRequired = chat.type === 'terminal' && !isDeadTerminal && !!activity?.actionRequired;
+  const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !!activity
+    && activity.lastOutputAt > activity.lastViewedAt;
+
+  // Debounced active dots — 500ms enter delay, 5s exit delay to prevent flickering
+  const [showActiveDots, setShowActiveDots] = useState(false);
+  useEffect(() => {
+    if (!isTerminalActive) {
+      const timer = setTimeout(() => setShowActiveDots(false), 5000);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => setShowActiveDots(true), 500);
+    return () => clearTimeout(timer);
+  }, [isTerminalActive]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -87,14 +105,24 @@ export function ChatEntryRow({
           )}
         </span>
       ) : chat.type === 'terminal' ? (
-        <span className={`relative flex h-5 w-5 shrink-0 items-center justify-center ${
-          isDeadTerminal ? 'text-red-400' : 'text-neutral-400 dark:text-neutral-500'
-        }`}>
-          <AgentIcon agentType={chat.agentType} className="h-3.5 w-3.5" />
-          {chat.unread && (
-            <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
-          )}
-        </span>
+        showActiveDots ? (
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center gap-[2px]">
+            <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
+            <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:150ms]" />
+            <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:300ms]" />
+          </span>
+        ) : (
+          <span className={`relative flex h-5 w-5 shrink-0 items-center justify-center ${
+            isDeadTerminal ? 'text-red-400' : 'text-neutral-400 dark:text-neutral-500'
+          }`}>
+            <AgentIcon agentType={chat.agentType} className="h-3.5 w-3.5" />
+            {isTerminalActionRequired ? (
+              <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-amber-400" />
+            ) : (isTerminalUnread || chat.unread) ? (
+              <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
+            ) : null}
+          </span>
+        )
       ) : (
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
           <MessageSquare className="h-3.5 w-3.5" />

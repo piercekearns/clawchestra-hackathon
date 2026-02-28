@@ -132,6 +132,36 @@ pub(crate) fn tmux_kill_all_clawchestra_sessions() -> Result<(), String> {
     Ok(())
 }
 
+/// Capture the last N lines from a tmux pane's scrollback buffer.
+///
+/// Used for terminal activity awareness — lets the frontend detect unread
+/// output, active agents, and action-required prompts without having a PTY
+/// attached. The `-e` flag preserves ANSI escapes (stripped on the TS side).
+#[tauri::command]
+pub(crate) fn tmux_capture_pane(session_name: String, lines: u32) -> Result<String, String> {
+    let sanitized = session_name.replace(':', "_");
+    let start_line = format!("-{}", lines);
+    let result = Command::new(tmux_bin())
+        .args([
+            "-L", "clawchestra",
+            "capture-pane", "-t", &sanitized,
+            "-p",
+            "-e",
+            "-S", &start_line,
+        ])
+        .output();
+
+    match result {
+        Ok(output) if output.status.success() => {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        }
+        Ok(output) => {
+            Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        }
+        Err(e) => Err(format!("Failed to run tmux: {}", e)),
+    }
+}
+
 /// Kill a tmux session by name.
 ///
 /// Sanitizes colons to underscores for the `-t` target, since tmux replaces

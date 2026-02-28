@@ -491,6 +491,10 @@ type TauriCommands = {
     args: Record<string, never>;
     return: void;
   };
+  tmux_capture_pane: {
+    args: { sessionName: string; lines: number };
+    return: string;
+  };
   confirm_quit: {
     args: Record<string, never>;
     return: void;
@@ -1166,6 +1170,10 @@ export async function tmuxKillSession(sessionName: string): Promise<void> {
 
 export async function tmuxKillAllClawchestraSessions(): Promise<void> {
   return typedInvoke('tmux_kill_all_clawchestra_sessions');
+}
+
+export async function tmuxCapturePane(sessionName: string, lines: number = 50): Promise<string> {
+  return typedInvoke('tmux_capture_pane', { sessionName, lines });
 }
 
 export async function confirmQuit(): Promise<void> {

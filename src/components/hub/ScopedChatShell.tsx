@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { useScopedChatSession } from '../../hooks/useScopedChatSession';
@@ -16,6 +17,13 @@ interface ScopedChatShellProps {
 export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragActiveChange, terminalRestartKey = 0 }: ScopedChatShellProps) {
   const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
   const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
+
+  // Mark terminal as viewed when its pane mounts (clears unread + action-required)
+  useEffect(() => {
+    if (chat.type === 'terminal') {
+      useDashboardStore.getState().markTerminalViewed(chat.id);
+    }
+  }, [chat.id, chat.type]);
 
   if (chat.type === 'terminal') {
     // Dead terminal + no restart requested → show placeholder, don't auto-spawn

@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
+import { detectActionRequired } from '../../lib/terminal-activity';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
 
@@ -189,9 +190,41 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       store.setActiveTerminalChatIds(updated);
     }
 
-    // Wire PTY output → terminal display
+    // Wire PTY output → terminal display + throttled activity tracking
+    let lastActivityUpdate = 0;
+    let idleTimer: ReturnType<typeof setTimeout>;
+    const ACTIVITY_THROTTLE_MS = 500;
+    const IDLE_TIMEOUT_MS = 2000;
+
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
+
+      // Throttled: update store at most every 500ms while data flows
+      const now = Date.now();
+      if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
+        lastActivityUpdate = now;
+        useDashboardStore.getState().updateTerminalActivity(chat.id, {
+          lastOutputAt: now,
+          isActive: true,
+        });
+      }
+
+      // Debounced idle: when data stops for 2s, check for action-required patterns
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        const buffer = term.buffer.active;
+        const lines: string[] = [];
+        const start = Math.max(0, buffer.cursorY - 10);
+        for (let i = start; i <= buffer.cursorY; i++) {
+          const line = buffer.getLine(i);
+          if (line) lines.push(line.translateToString(true));
+        }
+        const actionRequired = detectActionRequired(lines.join('\n'));
+        useDashboardStore.getState().updateTerminalActivity(chat.id, {
+          isActive: false,
+          actionRequired,
+        });
+      }, IDLE_TIMEOUT_MS);
     });
 
     // Wire terminal input → PTY
@@ -211,10 +244,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // PTY exit — immediately mark as dead (no need to wait for next poll)
     const exitDisposable = pty.onExit(({ exitCode }) => {
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
+      clearTimeout(idleTimer);
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.delete(chat.id);
       store.setActiveTerminalChatIds(updated);
+      store.updateTerminalActivity(chat.id, { isActive: false, actionRequired: false });
     });
 
     // Pass through app keyboard shortcuts while terminal has focus
@@ -264,6 +299,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
+      clearTimeout(idleTimer);
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);

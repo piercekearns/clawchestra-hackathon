@@ -84,6 +84,7 @@ import {
   isTauriRuntime,
   tmuxListClawchestraSessions,
   tmuxKillSession,
+  tmuxCapturePane,
   markRejectionResolved,
   resetOpenclawAuthCooldown,
   updateDashboardSettings,
@@ -105,7 +106,8 @@ import {
   shouldParseAssistantContentForSessionDiscovery,
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
-import { parseTmuxSessionName } from './lib/terminal-utils';
+import { parseTmuxSessionName, tmuxSessionName } from './lib/terminal-utils';
+import { simpleHash, detectActionRequired } from './lib/terminal-activity';
 import { listen } from '@tauri-apps/api/event';
 
 interface Toast {
@@ -903,6 +905,53 @@ export default function App() {
       useDashboardStore.getState().setQuitGuardOpen(true);
     }).then((fn) => { unlisten = fn; });
     return () => unlisten?.();
+  }, []);
+
+  // Terminal activity awareness — poll tmux capture-pane every 2s for hidden terminals
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
+    const poll = async () => {
+      const store = useDashboardStore.getState();
+      const activeIds = store.activeTerminalChatIds;
+      if (activeIds.size === 0) return;
+
+      const activeChatId = store.hubActiveChatId;
+      const drawerOpen = store.hubDrawerOpen;
+      // Skip terminals whose pane is currently mounted (onData handles those)
+      const visibleChatId = drawerOpen ? activeChatId : null;
+
+      for (const chatId of activeIds) {
+        if (chatId === visibleChatId) continue;
+
+        const chat = store.hubChats.find((c) => c.id === chatId);
+        if (!chat || chat.type !== 'terminal') continue;
+
+        const sessionName = tmuxSessionName(chat.projectId, chat.id);
+        try {
+          const captured = await tmuxCapturePane(sessionName, 50);
+          const hash = simpleHash(captured);
+          const prev = store.terminalActivity[chatId];
+
+          if (!prev || prev.lastCaptureHash !== hash) {
+            const actionRequired = detectActionRequired(captured);
+            store.updateTerminalActivity(chatId, {
+              lastOutputAt: Date.now(),
+              isActive: true,
+              actionRequired,
+              lastCaptureHash: hash,
+            });
+          } else if (prev?.isActive) {
+            store.updateTerminalActivity(chatId, { isActive: false });
+          }
+        } catch {
+          // tmux session may have died — next liveness poll will clean up
+        }
+      }
+    };
+
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   // Load persisted chat messages on startup

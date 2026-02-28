@@ -43,6 +43,14 @@ export const SIDEBAR_MIN_WIDTH = 220;
 export const SIDEBAR_MAX_WIDTH = 480;
 export const SIDEBAR_DEFAULT_WIDTH = 280;
 
+export interface TerminalActivityEntry {
+  lastOutputAt: number;
+  lastViewedAt: number;
+  isActive: boolean;
+  actionRequired: boolean;
+  lastCaptureHash: string;
+}
+
 interface DashboardState {
   projects: ProjectViewModel[];
   /** Roadmap items per project (keyed by project ID). Populated from db.json via get_all_projects. */
@@ -99,6 +107,8 @@ interface DashboardState {
   terminalStatusReady: boolean;
   /** Whether the quit guard dialog is visible (transient). */
   quitGuardOpen: boolean;
+  /** Per-terminal activity state for sidebar indicators (transient). */
+  terminalActivity: Record<string, TerminalActivityEntry>;
   // Hub actions
   setSidebarMode: (mode: 'default' | 'settings') => void;
   setHubActiveChatId: (id: string | null) => void;
@@ -130,6 +140,10 @@ interface DashboardState {
   setActiveTerminalChatIds: (ids: Set<string>) => void;
   /** Show/hide the quit guard dialog. */
   setQuitGuardOpen: (open: boolean) => void;
+  /** Merge partial activity updates for a terminal chat. */
+  updateTerminalActivity: (chatId: string, update: Partial<TerminalActivityEntry>) => void;
+  /** Mark a terminal as viewed — resets unread + action-required. */
+  markTerminalViewed: (chatId: string) => void;
 
   setChatDraft: (message: string | null) => void;
   setValidationRejections: (rejections: Record<string, ValidationRejection[]>) => void;
@@ -492,6 +506,7 @@ export const useDashboardStore = create<DashboardState>()(
       activeTerminalChatIds: new Set<string>(),
       terminalStatusReady: false,
       quitGuardOpen: false,
+      terminalActivity: {},
 
       setProjects: (projects) => set({ projects }),
       setRoadmapItemsForProject: (projectId, items) =>
@@ -962,6 +977,38 @@ export const useDashboardStore = create<DashboardState>()(
       setDetectedAgents: (agents) => set({ detectedAgents: agents }),
       setActiveTerminalChatIds: (ids) => set({ activeTerminalChatIds: ids, terminalStatusReady: true }),
       setQuitGuardOpen: (open) => set({ quitGuardOpen: open }),
+
+      updateTerminalActivity: (chatId, update) =>
+        set((state) => {
+          const defaults: TerminalActivityEntry = {
+            lastOutputAt: 0, lastViewedAt: 0, isActive: false,
+            actionRequired: false, lastCaptureHash: '',
+          };
+          const prev = state.terminalActivity[chatId] ?? defaults;
+          return {
+            terminalActivity: {
+              ...state.terminalActivity,
+              [chatId]: { ...prev, ...update },
+            },
+          };
+        }),
+
+      markTerminalViewed: (chatId) =>
+        set((state) => {
+          const prev = state.terminalActivity[chatId];
+          return {
+            terminalActivity: {
+              ...state.terminalActivity,
+              [chatId]: {
+                lastOutputAt: prev?.lastOutputAt ?? 0,
+                isActive: prev?.isActive ?? false,
+                lastCaptureHash: prev?.lastCaptureHash ?? '',
+                lastViewedAt: Date.now(),
+                actionRequired: false,
+              },
+            },
+          };
+        }),
 
       updateProjectAndReload: async (project, updates) => {
         await updateProject(project, updates);

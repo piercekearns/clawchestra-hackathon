@@ -4384,6 +4384,7 @@ pub fn run() {
             commands::terminal::tmux_list_clawchestra_sessions,
             commands::terminal::tmux_kill_session,
             commands::terminal::tmux_kill_all_clawchestra_sessions,
+            commands::terminal::tmux_capture_pane,
             confirm_quit,
             // Phase 7 logging & debug commands
             export_debug_info,
