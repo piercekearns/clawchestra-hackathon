@@ -220,10 +220,13 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
 
       // Throttled: update store at most every 500ms while data flows
+      // Also set lastViewedAt = lastOutputAt since the pane is mounted and the
+      // user is seeing this output in real time — prevents false "unread" dots.
       if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
         lastActivityUpdate = now;
         useDashboardStore.getState().updateTerminalActivity(chat.id, {
           lastOutputAt: now,
+          lastViewedAt: now,
           isActive: true,
         });
       }
