@@ -3027,6 +3027,7 @@ export default function App() {
             projectFrontmatter={activeRoadmapProject?.frontmatter}
             projectId={activeRoadmapProject?.id}
             isMigrated={activeRoadmapProject?.stateJsonMigrated}
+            hasChat={activeRoadmapProject && selectedRoadmapItemId ? itemHasChat(hubChats, activeRoadmapProject.id, selectedRoadmapItemId) : false}
             boardScoped
             onClose={() => setSelectedRoadmapItemId(null)}
             onStatusChange={(itemId, status) => {
