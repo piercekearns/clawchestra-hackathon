@@ -195,13 +195,14 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // - Track isActive for sidebar dots (agent working indicator)
     // - Never set actionRequired (user can see prompts themselves)
     //
-    // To avoid false activity from PTY chatter (title updates, cursor moves),
-    // only significant data (above byte threshold) triggers isActive and resets
-    // the idle timer. Small data events are ignored for activity purposes.
+    // Activity tracking: byte threshold gates INITIAL activation (filters idle
+    // PTY chatter). Once active, ANY output — even tiny spinner updates — keeps
+    // the idle timer alive so dots don't flicker during thinking animations.
     const spawnTime = Date.now();
     let lastUserInputAt = 0;
     let lastActivityUpdate = 0;
     let bytesSinceLastUpdate = 0;
+    let isCurrentlyActive = false;
     let idleTimer: ReturnType<typeof setTimeout>;
     const STARTUP_GRACE_MS = 10_000;
     const USER_INPUT_SUPPRESS_MS = 300;
@@ -222,23 +223,42 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
       bytesSinceLastUpdate += data.length;
 
-      // Throttled: only flag active for significant output
+      // Once active, ANY output keeps the idle timer alive — even small
+      // spinner/thinking updates below the byte threshold. This prevents
+      // dots from flickering during continuous small output bursts.
+      if (isCurrentlyActive) {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          isCurrentlyActive = false;
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            isActive: false,
+          });
+        }, IDLE_TIMEOUT_MS);
+      }
+
+      // Throttled store updates — avoid hammering on every byte
       if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
         const isSignificant = bytesSinceLastUpdate >= ACTIVE_BYTE_THRESHOLD;
         lastActivityUpdate = now;
         bytesSinceLastUpdate = 0;
 
-        if (isSignificant) {
+        if (isCurrentlyActive) {
+          // Already active — just update timestamps
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            lastOutputAt: now,
+            lastViewedAt: now,
+          });
+        } else if (isSignificant) {
+          // Initial activation — byte threshold met
+          isCurrentlyActive = true;
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             lastOutputAt: now,
             lastViewedAt: now,
             isActive: true,
           });
-
-          // Only reset idle timer on significant output — PTY chatter
-          // (title updates, cursor moves) won't prevent isActive from clearing
           clearTimeout(idleTimer);
           idleTimer = setTimeout(() => {
+            isCurrentlyActive = false;
             useDashboardStore.getState().updateTerminalActivity(chat.id, {
               isActive: false,
             });
@@ -265,6 +285,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // PTY exit — immediately mark as dead (no need to wait for next poll)
     const exitDisposable = pty.onExit(({ exitCode }) => {
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
+      isCurrentlyActive = false;
       clearTimeout(idleTimer);
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
