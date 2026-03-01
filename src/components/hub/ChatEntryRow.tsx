@@ -52,7 +52,7 @@ export function ChatEntryRow({
   const [showActiveDots, setShowActiveDots] = useState(false);
   useEffect(() => {
     if (!isTerminalActive) {
-      const timer = setTimeout(() => setShowActiveDots(false), 1000);
+      const timer = setTimeout(() => setShowActiveDots(false), 500);
       return () => clearTimeout(timer);
     }
     const timer = setTimeout(() => setShowActiveDots(true), 200);

@@ -206,7 +206,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const STARTUP_GRACE_MS = 10_000;
     const USER_INPUT_SUPPRESS_MS = 300;
     const ACTIVITY_THROTTLE_MS = 300;
-    const IDLE_TIMEOUT_MS = 2000;
+    const IDLE_TIMEOUT_MS = 1000;
     const ACTIVE_BYTE_THRESHOLD = 80;
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
