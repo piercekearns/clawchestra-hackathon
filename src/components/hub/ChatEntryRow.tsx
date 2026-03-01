@@ -48,14 +48,14 @@ export function ChatEntryRow({
   const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !!activity
     && activity.lastOutputAt > activity.lastViewedAt;
 
-  // Debounced active dots — 500ms enter delay, 2s exit delay to prevent flickering
+  // Debounced active dots — 200ms enter delay, 1s exit delay to prevent flickering
   const [showActiveDots, setShowActiveDots] = useState(false);
   useEffect(() => {
     if (!isTerminalActive) {
-      const timer = setTimeout(() => setShowActiveDots(false), 2000);
+      const timer = setTimeout(() => setShowActiveDots(false), 1000);
       return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => setShowActiveDots(true), 500);
+    const timer = setTimeout(() => setShowActiveDots(true), 200);
     return () => clearTimeout(timer);
   }, [isTerminalActive]);
 
