@@ -5,6 +5,7 @@ import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
 import { useDashboardStore } from '../../lib/store';
 import { tmuxSessionName, AGENT_LABELS } from '../../lib/terminal-utils';
+import { hasTerminalSpawnGrace } from '../../lib/terminal-activity';
 
 interface DrawerHeaderProps {
   chat: HubChat;
@@ -29,7 +30,7 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
   const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
 
   const isTerminal = chat.type === 'terminal';
-  const isDeadTerminal = terminalStatusReady && isTerminal && !chat.archived && !activeTerminals.has(chat.id);
+  const isDeadTerminal = terminalStatusReady && isTerminal && !chat.archived && !activeTerminals.has(chat.id) && !hasTerminalSpawnGrace(chat.id);
 
   const isLinkedItemComplete = useMemo(() => {
     if (!chat.itemId) return false;

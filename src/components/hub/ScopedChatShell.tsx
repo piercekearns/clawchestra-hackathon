@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
+import { hasTerminalSpawnGrace } from '../../lib/terminal-activity';
 import { useScopedChatSession } from '../../hooks/useScopedChatSession';
 import { MessageList } from '../chat/MessageList';
 import { ChatBar } from '../chat/ChatBar';
@@ -26,8 +27,10 @@ export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragAct
   }, [chat.id, chat.type]);
 
   if (chat.type === 'terminal') {
-    // Dead terminal + no restart requested → show placeholder, don't auto-spawn
-    const isDead = terminalStatusReady && !chat.archived && !activeTerminals.has(chat.id);
+    // Dead terminal + no restart requested → show placeholder, don't auto-spawn.
+    // Respect spawn grace: a terminal created in the last 60s is never "dead"
+    // (its tmux session may not exist yet — TerminalShell creates it on mount).
+    const isDead = terminalStatusReady && !chat.archived && !activeTerminals.has(chat.id) && !hasTerminalSpawnGrace(chat.id);
     if (isDead && terminalRestartKey === 0) {
       return (
         <div className="flex flex-1 items-center justify-center min-h-0">
