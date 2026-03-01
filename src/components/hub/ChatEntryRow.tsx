@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
@@ -48,14 +48,22 @@ export function ChatEntryRow({
   const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !!activity
     && activity.lastOutputAt > activity.lastViewedAt;
 
-  // Debounced active dots — 200ms enter delay, 1s exit delay to prevent flickering
+  // Debounced active dots — 200ms enter delay, 500ms exit delay.
+  // Re-entry cooldown: after dots disappear, require 3s before re-showing
+  // to filter post-response flicker (e.g. tab-suggestion rendering).
   const [showActiveDots, setShowActiveDots] = useState(false);
+  const lastDotsExitRef = useRef(0);
   useEffect(() => {
     if (!isTerminalActive) {
-      const timer = setTimeout(() => setShowActiveDots(false), 500);
+      const timer = setTimeout(() => {
+        setShowActiveDots(false);
+        lastDotsExitRef.current = Date.now();
+      }, 500);
       return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => setShowActiveDots(true), 200);
+    const sinceLastExit = Date.now() - lastDotsExitRef.current;
+    const enterDelay = sinceLastExit < 3000 ? 3000 - sinceLastExit : 200;
+    const timer = setTimeout(() => setShowActiveDots(true), enterDelay);
     return () => clearTimeout(timer);
   }, [isTerminalActive]);
 
