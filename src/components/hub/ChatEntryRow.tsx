@@ -51,10 +51,13 @@ export function ChatEntryRow({
   // Debounced active dots — 200ms enter delay, 500ms exit delay.
   // Re-entry cooldown: after dots disappear, require 3s before re-showing
   // to filter post-response flicker (e.g. tab-suggestion rendering).
+  // During cooldown, bubbles stay visible (inCooldown prevents suppression).
   const [showActiveDots, setShowActiveDots] = useState(false);
+  const [inCooldown, setInCooldown] = useState(false);
   const lastDotsExitRef = useRef(0);
   useEffect(() => {
     if (!isTerminalActive) {
+      setInCooldown(false);
       const timer = setTimeout(() => {
         setShowActiveDots(false);
         lastDotsExitRef.current = Date.now();
@@ -62,8 +65,16 @@ export function ChatEntryRow({
       return () => clearTimeout(timer);
     }
     const sinceLastExit = Date.now() - lastDotsExitRef.current;
-    const enterDelay = sinceLastExit < 3000 ? 3000 - sinceLastExit : 200;
-    const timer = setTimeout(() => setShowActiveDots(true), enterDelay);
+    if (sinceLastExit < 3000 && lastDotsExitRef.current > 0) {
+      // In cooldown — don't show dots yet, let bubbles stay visible
+      setInCooldown(true);
+      const timer = setTimeout(() => {
+        setShowActiveDots(true);
+        setInCooldown(false);
+      }, 3000 - sinceLastExit);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => setShowActiveDots(true), 200);
     return () => clearTimeout(timer);
   }, [isTerminalActive]);
 
@@ -124,10 +135,10 @@ export function ChatEntryRow({
             isDeadTerminal ? 'text-red-400' : 'text-neutral-400 dark:text-neutral-500'
           }`}>
             <AgentIcon agentType={chat.agentType} className="h-3.5 w-3.5" />
-            {/* Suppress bubbles while terminal is active — dots will take over after 500ms delay */}
-            {!isTerminalActive && isTerminalActionRequired ? (
+            {/* Suppress bubbles while dots are about to show (not during cooldown — let badge stay) */}
+            {(inCooldown || !isTerminalActive) && isTerminalActionRequired ? (
               <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-amber-400" />
-            ) : !isTerminalActive && (isTerminalUnread || chat.unread) ? (
+            ) : (inCooldown || !isTerminalActive) && (isTerminalUnread || chat.unread) ? (
               <span className="absolute -top-px -right-0.5 h-2 w-2 rounded-full bg-[#DFFF00]" />
             ) : null}
           </span>
