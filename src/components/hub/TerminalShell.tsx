@@ -195,12 +195,19 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // - Track isActive for sidebar dots (agent working indicator)
     // - Never set actionRequired (user can see prompts themselves)
     //
-    // Sustained output detection: instead of a single byte threshold + idle
-    // timer (which can't distinguish thinking spinners from PTY chatter),
-    // track a sliding window of output history. Agent is "active" only when
-    // output is consistently significant across multiple windows. This
-    // naturally filters one-off bursts (tab suggestion, title updates) while
-    // keeping dots alive during continuous activity (thinking, streaming).
+    // Activity detection — two mechanisms work together:
+    //
+    // ACTIVATION: Sliding window filters one-off bursts (tab suggestion,
+    // title updates). Need output in 2 of 5 recent 200ms windows to start.
+    //
+    // DEACTIVATION: Silence timer only. Once active, ANY non-echo output
+    // resets a 3s timer. Dots stop only when the PTY goes truly silent.
+    // This keeps dots alive through sparse thinking animation (small updates
+    // every 500-1000ms) and transition gaps between thinking → streaming.
+    //
+    // USER INPUT: Silence timer resets on ALL output (even during typing)
+    // so the agent's concurrent output keeps dots alive. But byte counting
+    // for activation is skipped during echo to prevent typing from starting dots.
     const spawnTime = Date.now();
     let lastUserInputAt = 0;
     let lastWindowCheck = 0;
@@ -212,10 +219,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const STARTUP_GRACE_MS = 10_000;
     const USER_INPUT_SUPPRESS_MS = 300;
     const WINDOW_MS = 200;            // check every 200ms
-    const BYTE_THRESHOLD = 15;        // bytes per window to count as significant
+    const BYTE_THRESHOLD = 5;         // bytes per window to count as significant
     const HISTORY_SIZE = 5;           // track last 5 windows (1s)
-    const MIN_ACTIVE_WINDOWS = 3;     // 3 of 5 must be significant
-    const SILENCE_TIMEOUT_MS = 2000;  // fallback: deactivate after 2s of zero output
+    const MIN_ACTIVE_WINDOWS = 2;     // 2 of 5 must be significant to activate
+    const SILENCE_TIMEOUT_MS = 3000;  // deactivate after 3s of zero output
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
@@ -225,12 +232,8 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // Skip during startup (scrollback restore)
       if (now - spawnTime < STARTUP_GRACE_MS) return;
 
-      // Skip if user recently typed (shell echo)
-      if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
-
-      bytesSinceLastWindow += data.length;
-
-      // Reset silence timer — any non-echo output proves the PTY is alive
+      // Reset silence timer BEFORE user-input check — even during typing,
+      // the agent may be producing output that should keep dots alive.
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         if (isCurrentlyActive) {
@@ -242,7 +245,14 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         }
       }, SILENCE_TIMEOUT_MS);
 
-      // Sliding window check
+      // Skip byte counting during user input echo — prevents typing from
+      // ACTIVATING dots, but the silence timer above still keeps dots alive
+      if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
+
+      bytesSinceLastWindow += data.length;
+
+      // Sliding window — only used for ACTIVATION (inactive → active).
+      // Deactivation is handled exclusively by the silence timer above.
       if (now - lastWindowCheck >= WINDOW_MS) {
         const isSignificant = bytesSinceLastWindow >= BYTE_THRESHOLD;
         lastWindowCheck = now;
@@ -251,25 +261,18 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         significantHistory.push(isSignificant);
         if (significantHistory.length > HISTORY_SIZE) significantHistory.shift();
 
-        const activeWindows = significantHistory.filter(Boolean).length;
-        const shouldBeActive = activeWindows >= MIN_ACTIVE_WINDOWS;
-
-        if (shouldBeActive && !isCurrentlyActive) {
-          isCurrentlyActive = true;
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            lastOutputAt: now,
-            lastViewedAt: now,
-            isActive: true,
-          });
-        } else if (!shouldBeActive && isCurrentlyActive) {
-          isCurrentlyActive = false;
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            lastOutputAt: now,
-            lastViewedAt: now,
-            isActive: false,
-          });
-        } else if (isCurrentlyActive) {
-          // Still active — update timestamps
+        if (!isCurrentlyActive) {
+          const activeWindows = significantHistory.filter(Boolean).length;
+          if (activeWindows >= MIN_ACTIVE_WINDOWS) {
+            isCurrentlyActive = true;
+            useDashboardStore.getState().updateTerminalActivity(chat.id, {
+              lastOutputAt: now,
+              lastViewedAt: now,
+              isActive: true,
+            });
+          }
+        } else {
+          // Already active — just update timestamps
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             lastOutputAt: now,
             lastViewedAt: now,
