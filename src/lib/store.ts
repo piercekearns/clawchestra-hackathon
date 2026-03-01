@@ -1005,9 +1005,7 @@ export const useDashboardStore = create<DashboardState>()(
                 // fresh instead of seeing a stale hash diff → false activity.
                 lastCaptureHash: '',
                 lastViewedAt: Date.now(),
-                // Preserve isActive — if the agent is working, dots should
-                // keep showing when the user navigates back to this terminal.
-                isActive: prev?.isActive ?? false,
+                isActive: false,
                 actionRequired: false,
               },
             },

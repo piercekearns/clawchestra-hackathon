@@ -218,13 +218,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // Skip during startup (scrollback restore)
       if (now - spawnTime < STARTUP_GRACE_MS) return;
 
-      // If user recently typed, skip byte accumulation (shell echo) but
-      // still let existing activity keep the idle timer alive — typing
-      // during an active response shouldn't kill the dots.
-      const isUserEcho = now - lastUserInputAt < USER_INPUT_SUPPRESS_MS;
-      if (!isUserEcho) {
-        bytesSinceLastUpdate += data.length;
-      }
+      // Skip if user recently typed (shell echo)
+      if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
+
+      bytesSinceLastUpdate += data.length;
 
       // Once active, ANY output keeps the idle timer alive — even small
       // spinner/thinking updates below the byte threshold. This prevents
