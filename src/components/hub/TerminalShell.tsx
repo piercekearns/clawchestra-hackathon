@@ -195,20 +195,27 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // - Track isActive for sidebar dots (agent working indicator)
     // - Never set actionRequired (user can see prompts themselves)
     //
-    // Activity tracking: byte threshold gates INITIAL activation (filters idle
-    // PTY chatter). Once active, ANY output — even tiny spinner updates — keeps
-    // the idle timer alive so dots don't flicker during thinking animations.
+    // Sustained output detection: instead of a single byte threshold + idle
+    // timer (which can't distinguish thinking spinners from PTY chatter),
+    // track a sliding window of output history. Agent is "active" only when
+    // output is consistently significant across multiple windows. This
+    // naturally filters one-off bursts (tab suggestion, title updates) while
+    // keeping dots alive during continuous activity (thinking, streaming).
     const spawnTime = Date.now();
     let lastUserInputAt = 0;
-    let lastActivityUpdate = 0;
-    let bytesSinceLastUpdate = 0;
+    let lastWindowCheck = 0;
+    let bytesSinceLastWindow = 0;
     let isCurrentlyActive = false;
-    let idleTimer: ReturnType<typeof setTimeout>;
+    let silenceTimer: ReturnType<typeof setTimeout>;
+    const significantHistory: boolean[] = [];
+
     const STARTUP_GRACE_MS = 10_000;
     const USER_INPUT_SUPPRESS_MS = 300;
-    const ACTIVITY_THROTTLE_MS = 300;
-    const IDLE_TIMEOUT_MS = 1000;
-    const ACTIVE_BYTE_THRESHOLD = 80;
+    const WINDOW_MS = 200;            // check every 200ms
+    const BYTE_THRESHOLD = 15;        // bytes per window to count as significant
+    const HISTORY_SIZE = 5;           // track last 5 windows (1s)
+    const MIN_ACTIVE_WINDOWS = 3;     // 3 of 5 must be significant
+    const SILENCE_TIMEOUT_MS = 2000;  // fallback: deactivate after 2s of zero output
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
@@ -221,48 +228,52 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // Skip if user recently typed (shell echo)
       if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
 
-      bytesSinceLastUpdate += data.length;
+      bytesSinceLastWindow += data.length;
 
-      // Once active, ANY output keeps the idle timer alive — even small
-      // spinner/thinking updates below the byte threshold. This prevents
-      // dots from flickering during continuous small output bursts.
-      if (isCurrentlyActive) {
-        clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => {
+      // Reset silence timer — any non-echo output proves the PTY is alive
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        if (isCurrentlyActive) {
           isCurrentlyActive = false;
+          significantHistory.length = 0;
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             isActive: false,
           });
-        }, IDLE_TIMEOUT_MS);
-      }
+        }
+      }, SILENCE_TIMEOUT_MS);
 
-      // Throttled store updates — avoid hammering on every byte
-      if (now - lastActivityUpdate > ACTIVITY_THROTTLE_MS) {
-        const isSignificant = bytesSinceLastUpdate >= ACTIVE_BYTE_THRESHOLD;
-        lastActivityUpdate = now;
-        bytesSinceLastUpdate = 0;
+      // Sliding window check
+      if (now - lastWindowCheck >= WINDOW_MS) {
+        const isSignificant = bytesSinceLastWindow >= BYTE_THRESHOLD;
+        lastWindowCheck = now;
+        bytesSinceLastWindow = 0;
 
-        if (isCurrentlyActive) {
-          // Already active — just update timestamps
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            lastOutputAt: now,
-            lastViewedAt: now,
-          });
-        } else if (isSignificant) {
-          // Initial activation — byte threshold met
+        significantHistory.push(isSignificant);
+        if (significantHistory.length > HISTORY_SIZE) significantHistory.shift();
+
+        const activeWindows = significantHistory.filter(Boolean).length;
+        const shouldBeActive = activeWindows >= MIN_ACTIVE_WINDOWS;
+
+        if (shouldBeActive && !isCurrentlyActive) {
           isCurrentlyActive = true;
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             lastOutputAt: now,
             lastViewedAt: now,
             isActive: true,
           });
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(() => {
-            isCurrentlyActive = false;
-            useDashboardStore.getState().updateTerminalActivity(chat.id, {
-              isActive: false,
-            });
-          }, IDLE_TIMEOUT_MS);
+        } else if (!shouldBeActive && isCurrentlyActive) {
+          isCurrentlyActive = false;
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            lastOutputAt: now,
+            lastViewedAt: now,
+            isActive: false,
+          });
+        } else if (isCurrentlyActive) {
+          // Still active — update timestamps
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            lastOutputAt: now,
+            lastViewedAt: now,
+          });
         }
       }
     });
@@ -286,7 +297,8 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const exitDisposable = pty.onExit(({ exitCode }) => {
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
       isCurrentlyActive = false;
-      clearTimeout(idleTimer);
+      significantHistory.length = 0;
+      clearTimeout(silenceTimer);
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.delete(chat.id);
@@ -341,7 +353,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
-      clearTimeout(idleTimer);
+      clearTimeout(silenceTimer);
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);
