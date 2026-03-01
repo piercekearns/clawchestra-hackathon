@@ -2,6 +2,7 @@ import { useDashboardStore } from './store';
 import { hubChatCreate, hubChatList, hubChatUpdate } from './tauri';
 import type { HubChat, HubAgentType } from './hub-types';
 import { AGENT_LABELS } from './terminal-utils';
+import { addTerminalSpawnGrace } from './terminal-activity';
 
 /**
  * Open or create a project-level chat thread, then navigate the hub UI to it.
@@ -124,9 +125,12 @@ export async function openOrCreateTerminal(
   // Optimistically mark as active BEFORE refreshing chats to avoid a
   // flash of dead state (refreshHubChats triggers a re-render where the
   // new chat would appear without an active tmux session yet).
+  // Also register spawn grace so the 30s liveness poll doesn't remove
+  // this ID before TerminalShell has spawned the tmux session.
   const updated = new Set(store.activeTerminalChatIds);
   updated.add(newChat.id);
   store.setActiveTerminalChatIds(updated);
+  addTerminalSpawnGrace(newChat.id);
 
   await store.refreshHubChats();
 

@@ -1001,7 +1001,9 @@ export const useDashboardStore = create<DashboardState>()(
               ...state.terminalActivity,
               [chatId]: {
                 lastOutputAt: prev?.lastOutputAt ?? 0,
-                lastCaptureHash: prev?.lastCaptureHash ?? '',
+                // Clear hash so the first poll after navigating away seeds
+                // fresh instead of seeing a stale hash diff → false activity.
+                lastCaptureHash: '',
                 lastViewedAt: Date.now(),
                 isActive: false,
                 actionRequired: false,

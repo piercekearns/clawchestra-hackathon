@@ -31,6 +31,24 @@ const ACTION_REQUIRED_PATTERNS = [
   /would you like to (?:proceed|continue)/i,
 ];
 
+/** Grace period for newly spawned terminals — protects from liveness poll removal. */
+const spawnGrace = new Map<string, number>();
+const SPAWN_GRACE_MS = 60_000;
+
+export function addTerminalSpawnGrace(chatId: string): void {
+  spawnGrace.set(chatId, Date.now());
+}
+
+export function hasTerminalSpawnGrace(chatId: string): boolean {
+  const ts = spawnGrace.get(chatId);
+  if (!ts) return false;
+  if (Date.now() - ts > SPAWN_GRACE_MS) {
+    spawnGrace.delete(chatId);
+    return false;
+  }
+  return true;
+}
+
 /** Detect action-required patterns (permission prompts, Y/n, etc.) in terminal output. */
 export function detectActionRequired(text: string): boolean {
   const clean = stripAnsi(text);

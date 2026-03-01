@@ -107,7 +107,7 @@ import {
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
 import { parseTmuxSessionName, tmuxSessionName } from './lib/terminal-utils';
-import { simpleHash, detectActionRequired } from './lib/terminal-activity';
+import { simpleHash, detectActionRequired, hasTerminalSpawnGrace } from './lib/terminal-activity';
 import { listen } from '@tauri-apps/api/event';
 
 interface Toast {
@@ -861,7 +861,8 @@ export default function App() {
     const refreshActiveTerminals = async () => {
       try {
         const sessions = await tmuxListClawchestraSessions();
-        const hubChats = useDashboardStore.getState().hubChats;
+        const store = useDashboardStore.getState();
+        const hubChats = store.hubChats;
         const hubChatIds = new Set(hubChats.map((c) => c.id));
         const activeChatIds = new Set<string>();
 
@@ -875,7 +876,15 @@ export default function App() {
           }
         }
 
-        useDashboardStore.getState().setActiveTerminalChatIds(activeChatIds);
+        // Preserve IDs within spawn grace — TerminalShell may not have
+        // created the tmux session yet (race with this 30s poll).
+        for (const existingId of store.activeTerminalChatIds) {
+          if (!activeChatIds.has(existingId) && hasTerminalSpawnGrace(existingId)) {
+            activeChatIds.add(existingId);
+          }
+        }
+
+        store.setActiveTerminalChatIds(activeChatIds);
       } catch {
         // tmux discovery is best-effort
       }
