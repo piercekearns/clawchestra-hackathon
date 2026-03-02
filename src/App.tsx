@@ -946,14 +946,15 @@ export default function App() {
             // First poll for this terminal — seed the hash without flagging active
             store.updateTerminalActivity(chatId, { lastCaptureHash: hash });
           } else if (prev.lastCaptureHash !== hash) {
-            // Output changed since last poll — real activity
+            // Output changed since last poll — real activity.
+            // Re-evaluate actionRequired from fresh capture each time.
+            // (No sticky carry-over — if new output scrolled past the prompt,
+            // the prompt is no longer at the bottom and shouldn't flag.)
             const actionRequired = detectActionRequired(captured);
-            // actionRequired is sticky: once set, only markTerminalViewed clears it.
-            // This prevents cursor/title chatter from overwriting a detected prompt.
             store.updateTerminalActivity(chatId, {
               lastOutputAt: Date.now(),
               isActive: true,
-              actionRequired: actionRequired || prev.actionRequired,
+              actionRequired,
               lastCaptureHash: hash,
             });
           } else if (prev.isActive) {

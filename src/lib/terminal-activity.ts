@@ -52,7 +52,9 @@ export function hasTerminalSpawnGrace(chatId: string): boolean {
 /** Detect action-required patterns (permission prompts, Y/n, etc.) in terminal output. */
 export function detectActionRequired(text: string): boolean {
   const clean = stripAnsi(text);
-  // Check a generous tail — prompts can appear with surrounding whitespace/decoration
-  const lines = clean.split('\n').slice(-20).join('\n');
+  // Only check the last 3 lines — a real prompt is always at the cursor
+  // (bottom of output). Checking more lines causes false positives when
+  // the agent's conversational text mentions prompts/patterns.
+  const lines = clean.split('\n').filter((l) => l.trim()).slice(-3).join('\n');
   return ACTION_REQUIRED_PATTERNS.some((p) => p.test(lines));
 }
