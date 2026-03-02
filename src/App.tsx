@@ -957,7 +957,13 @@ export default function App() {
               lastCaptureHash: hash,
             });
           } else if (prev.isActive) {
-            store.updateTerminalActivity(chatId, { isActive: false });
+            // Don't deactivate immediately — bridge natural pauses between
+            // tool calls / thinking phases. Only deactivate if the last
+            // detected output was > 4s ago (2 consecutive unchanged polls).
+            const HIDDEN_TAIL_MS = 4000;
+            if (Date.now() - prev.lastOutputAt > HIDDEN_TAIL_MS) {
+              store.updateTerminalActivity(chatId, { isActive: false });
+            }
           }
         } catch {
           // tmux session may have died — next liveness poll will clean up
