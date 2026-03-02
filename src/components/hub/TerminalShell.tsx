@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
+import { detectActionRequired } from '../../lib/terminal-activity';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
 
@@ -239,8 +240,20 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         if (isCurrentlyActive) {
           isCurrentlyActive = false;
           significantHistory.length = 0;
+          // Check terminal buffer for action-required patterns (e.g. Y/n prompt)
+          // so the amber dot shows even when the user is viewing this terminal.
+          const buffer = term.buffer.active;
+          const lines: string[] = [];
+          const end = buffer.baseY + buffer.cursorY;
+          const start = Math.max(0, end - 20);
+          for (let i = start; i <= end; i++) {
+            const line = buffer.getLine(i);
+            if (line) lines.push(line.translateToString(true));
+          }
+          const actionRequired = detectActionRequired(lines.join('\n'));
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             isActive: false,
+            actionRequired,
           });
         }
       }, SILENCE_TIMEOUT_MS);
