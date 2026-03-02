@@ -222,7 +222,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const BYTE_THRESHOLD = 5;         // bytes per window to count as significant
     const HISTORY_SIZE = 5;           // track last 5 windows (1s)
     const MIN_ACTIVE_WINDOWS = 2;     // 2 of 5 must be significant to activate
-    const SILENCE_TIMEOUT_MS = 3000;  // deactivate after 3s of zero output
+    const SILENCE_TIMEOUT_MS = 1500;  // deactivate after 1.5s of zero output
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
