@@ -163,16 +163,29 @@ Rust backend reads `~/.openclaw/openclaw.json` for `gateway.port` and `gateway.a
 **Path B2: Tailscale**
 - Ask: "What's your Tailscale machine name or IP?"
 - Input field for hostname/IP
-- Auto-construct URL: `ws://{input}:18789` (or `wss://{input}` if using Serve)
-- Toggle: "Using Tailscale Serve (HTTPS)?" → switches to `wss://`
+- Auto-construct URL: **`wss://{input}:18789`** (default to `wss://`)
+- Toggle: "Plain WebSocket (ws://)?" → switches to `ws://`, shows warning (see constraint below)
 - Ask for auth token (same instruction as above)
 - "Test Connection" button
 
 **Path B3: Direct**
 - Free-form URL input: "Gateway WebSocket URL"
-- Placeholder: `ws://your-server:18789`
+- Placeholder: `wss://your-server:18789`
 - Auth token input
 - "Test Connection" button
+
+> **⚠️ WebSocket loopback constraint (OpenClaw ≥ 2026.3.2):**
+> Plain `ws://` connections are restricted to loopback addresses (`127.0.0.1`, `::1`) by default.
+> Non-loopback `ws://` URLs (Tailscale IPs, direct remote IPs) will be rejected unless:
+> 1. The connection uses `wss://` (TLS) — **recommended default for all remote paths**, or
+> 2. OpenClaw is started with an env var opt-in (e.g. `OC_WS_ALLOW_REMOTE=1` — verify flag name in OpenClaw docs)
+>
+> **Impact on paths:**
+> - **B1 (SSH Tunnel):** Unaffected — tunnel terminates at `127.0.0.1`, which is loopback.
+> - **B2 (Tailscale):** Defaults to `wss://`. Plain `ws://` requires env var on the OpenClaw host.
+> - **B3 (Direct):** Defaults to `wss://`. Same env var escape hatch applies.
+>
+> The onboarding wizard should warn when a user manually enters a `ws://` URL with a non-loopback host.
 
 **All paths produce the same output:** `{ wsUrl, token, sessionKey }`
 

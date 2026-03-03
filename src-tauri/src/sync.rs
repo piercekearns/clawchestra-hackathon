@@ -67,6 +67,7 @@ export default function (api: any) {{
 
   api.registerHttpRoute({{
     path: '/clawchestra/data/*',
+    auth: 'plugin',
     handler: async (req: any, res: any) => {{
       // Bearer token auth — fail-closed
       const settingsRaw = await fs.readFile(path.join(DATA_ROOT, 'settings.json'), 'utf-8').catch(() => null);

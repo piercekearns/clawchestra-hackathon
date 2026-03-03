@@ -111,7 +111,7 @@ function getOpenClawCommands(): SlashCommand[] {
     // Session lifecycle
     { name: 'new', desc: 'Start a new session', category: 'openclaw', source: 'openclaw' },
     { name: 'reset', desc: 'Reset the current session', category: 'openclaw', source: 'openclaw' },
-    { name: 'abort', desc: 'Abort the active run', category: 'openclaw', source: 'openclaw' },
+    { name: 'stop', desc: 'Stop the active run', category: 'openclaw', source: 'openclaw' },
     { name: 'settings', desc: 'Open settings panel', category: 'openclaw', source: 'openclaw' },
     { name: 'context', desc: 'Show session context', category: 'openclaw', source: 'openclaw' },
   ];
