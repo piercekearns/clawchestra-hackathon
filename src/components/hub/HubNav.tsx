@@ -17,7 +17,7 @@ import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
 import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
-import { ArchivedSection, ThreadSection } from './ThreadSection';
+import { ThreadSection } from './ThreadSection';
 
 interface HubNavProps {
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
@@ -309,7 +309,6 @@ export function HubNav({ onToast }: HubNavProps) {
                     completedItemIds={completedItemIds}
                     isCustomFolder={isCustom}
                     isRenaming={renamingFolderId === thread.projectId}
-                    hideArchived
                     onRenameFolder={isCustom ? (name) => {
                       renameCustomFolder(thread.projectId, name);
                       setRenamingFolderId(null);
@@ -330,34 +329,17 @@ export function HubNav({ onToast }: HubNavProps) {
           </DndContext>
         )}
 
-        {/* New Folder — below active rows, above archived */}
+        {/* New Folder — outside all folders, visually separated */}
         <button
           type="button"
           onClick={() => void handleNewFolder()}
-          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-1 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+          className="mt-2 flex w-full items-center gap-2 border-t border-neutral-200 px-3 pt-2.5 pb-1.5 text-sm text-neutral-400 hover:text-neutral-600 dark:border-neutral-700 dark:hover:text-neutral-300"
         >
           <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-            <FolderPlus className="h-3.5 w-3.5" />
+            <FolderPlus className="h-4 w-4" />
           </span>
           New Folder
         </button>
-
-        {/* Archived sections — rendered after New Folder, one per expanded thread */}
-        {threads.map((thread) => {
-          if (hubCollapsedThreads.includes(thread.projectId)) return null;
-          const archivedChats = thread.chats.filter((c) => c.archived);
-          if (archivedChats.length === 0) return null;
-          return (
-            <ArchivedSection
-              key={`archived-${thread.projectId}`}
-              count={archivedChats.length}
-              chats={archivedChats}
-              activeChatId={hubActiveChatId}
-              onSelectChat={handleSelectChat}
-              onDeleteChat={(id) => handleDeleteChats([id])}
-            />
-          );
-        })}
       </div>
     </div>
   );
