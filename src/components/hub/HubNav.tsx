@@ -283,10 +283,18 @@ export function HubNav({ onToast }: HubNavProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-1.5 px-5 pb-2 pt-5">
+      <div className="flex items-center justify-between px-5 pb-2 pt-5">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
           Conversations
         </span>
+        <button
+          type="button"
+          onClick={() => void handleNewFolder()}
+          className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+          aria-label="New folder"
+        >
+          <FolderPlus className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* Thread list */}
@@ -335,18 +343,6 @@ export function HubNav({ onToast }: HubNavProps) {
           </DndContext>
         )}
 
-        {/* New Folder — outside all folders, visually separated */}
-        <hr className="mx-3 mt-3 border-neutral-200 dark:border-neutral-700" />
-        <button
-          type="button"
-          onClick={() => void handleNewFolder()}
-          className="flex w-full items-center gap-2 px-3 pt-2 pb-1.5 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-        >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-            <FolderPlus className="h-4 w-4" />
-          </span>
-          New Folder
-        </button>
       </div>
     </div>
   );
