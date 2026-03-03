@@ -336,11 +336,11 @@ export function HubNav({ onToast }: HubNavProps) {
         )}
 
         {/* New Folder — outside all folders, visually separated */}
-        <hr className="mx-3 mt-2 border-neutral-200 dark:border-neutral-700" />
+        <hr className="mx-3 mt-3 border-neutral-200 dark:border-neutral-700" />
         <button
           type="button"
           onClick={() => void handleNewFolder()}
-          className="flex w-full items-center gap-2 px-3 pt-1.5 pb-1.5 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+          className="flex w-full items-center gap-2 px-3 pt-2 pb-1.5 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
         >
           <span className="flex h-5 w-5 shrink-0 items-center justify-center">
             <FolderPlus className="h-4 w-4" />
