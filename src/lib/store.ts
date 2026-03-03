@@ -1029,9 +1029,11 @@ export const useDashboardStore = create<DashboardState>()(
               ...state.terminalActivity,
               [chatId]: {
                 lastOutputAt: prev?.lastOutputAt ?? 0,
-                // Clear hash so the first poll after navigating away seeds
-                // fresh instead of seeing a stale hash diff → false activity.
-                lastCaptureHash: '',
+                // Preserve lastCaptureHash — TerminalShell snapshots the buffer
+                // hash on unmount, giving the background poll a valid baseline.
+                // Clearing it here would force a wasted "seeding" cycle, during
+                // which any output that finishes goes undetected (no unread).
+                lastCaptureHash: prev?.lastCaptureHash ?? '',
                 lastViewedAt: Date.now(),
                 // Don't clear actionRequired — it should persist until the user
                 // actually resolves the prompt and the PTY detects resumed output.
