@@ -190,7 +190,7 @@ function RowIcon({ activity, isProjectSurface, isPinned }: { activity: 1 | 2 | 3
     // Active — animated dots
     return (
       <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[10px] font-bold leading-none text-revival-accent-400">
-        <span className="loading-dots"><span>.</span><span>.</span><span>.</span></span>
+        <span className="loading-dots -mb-[0.35em]"><span>.</span><span>.</span><span>.</span></span>
       </span>
     );
   }
