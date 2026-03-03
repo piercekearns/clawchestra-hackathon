@@ -94,7 +94,7 @@ export function TabStrip({
         <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
           <div
             ref={scrollRef}
-            className="flex items-center gap-1 overflow-x-auto scrollbar-none"
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
           >
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
@@ -196,9 +196,10 @@ function TabItem({
   const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !!activity
     && activity.lastOutputAt > activity.lastViewedAt;
 
-  // For the selected tab, suppress terminal isActive (typing echo causes false positives).
-  // busyChatIds is a reliable agent-working signal, so always honour it.
-  const effectiveActive = busyChatIds.has(chat.id) || (!isActive && isTerminalActive);
+  // busyChatIds tracks openclaw AI-responding; isTerminalActive tracks terminal output.
+  // The debounce (200ms enter, 3s cooldown) already filters brief typing echoes,
+  // so no need to suppress on the selected tab — matches old ChatEntryRow behaviour.
+  const effectiveActive = busyChatIds.has(chat.id) || isTerminalActive;
 
   // Debounced active dots — 200ms enter delay, 500ms exit delay.
   // Re-entry cooldown: after dots disappear, require 3s before re-showing
