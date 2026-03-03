@@ -54,13 +54,14 @@ function getTabActivity(
   busyChatIds: Set<string>,
   isSelected: boolean,
 ): 1 | 2 | 3 | 4 {
-  // Don't show activity indicators on the selected tab — user can see the content directly
-  if (isSelected) return 4;
   if (chat.type === 'terminal') {
     const a = terminalActivity[chat.id];
     if (a?.actionRequired) return 1;
     if (a && a.lastOutputAt > a.lastViewedAt) return 2;
-    if (a?.isActive || busyChatIds.has(chat.id)) return 3;
+    // Suppress a?.isActive on the selected tab — user typing echoes as output,
+    // causing false-positive isActive. Action-required and unread still show.
+    // busyChatIds is a reliable agent-working signal, so always show dots for it.
+    if (busyChatIds.has(chat.id) || (!isSelected && a?.isActive)) return 3;
   } else {
     if (busyChatIds.has(chat.id)) return 3;
     if (chat.unread) return 2;
@@ -112,7 +113,7 @@ export function TabStrip({
   const tabIds = tabs.map((t) => t.id);
 
   return (
-    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-900/80 px-1.5 py-1">
+    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-1.5 py-1">
       {/* Scrollable tab + button area — button flows inline after tabs */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
