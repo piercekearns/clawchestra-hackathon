@@ -63,11 +63,11 @@ export function TabStrip({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50">
-      {/* Scrollable tab area */}
+    <div className="flex items-end border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-900/80 px-1.5 pt-1.5">
+      {/* Scrollable tab + button area — button flows inline after tabs */}
       <div
         ref={scrollRef}
-        className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto scrollbar-none"
+        className="flex items-end gap-0.5 overflow-x-auto scrollbar-none"
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -86,24 +86,24 @@ export function TabStrip({
             />
           );
         })}
-      </div>
 
-      {/* + button */}
-      <div className="shrink-0 px-1">
-        <TypePickerMenu
-          onAddChat={onAddChat}
-          onAddTerminal={onAddTerminal}
-          renderTrigger={(toggle) => (
-            <button
-              type="button"
-              onClick={toggle}
-              className="flex h-6 w-6 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-              aria-label="New tab"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          )}
-        />
+        {/* + button — inline right after the last tab */}
+        <div className="shrink-0 pb-1 px-0.5">
+          <TypePickerMenu
+            onAddChat={onAddChat}
+            onAddTerminal={onAddTerminal}
+            renderTrigger={(toggle) => (
+              <button
+                type="button"
+                onClick={toggle}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="New tab"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+          />
+        </div>
       </div>
     </div>
   );
@@ -128,10 +128,10 @@ function TabItem({
     <button
       type="button"
       onClick={onSelect}
-      className={`group/tab relative flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs transition-colors ${
+      className={`group/tab relative flex shrink-0 items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-xs transition-colors ${
         isActive
-          ? 'bg-white text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100 border-b-2 border-revival-accent-400'
-          : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 border-b-2 border-transparent'
+          ? 'bg-white text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+          : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700/60 dark:hover:text-neutral-200'
       }`}
     >
       {/* Tab icon with activity overlay */}
