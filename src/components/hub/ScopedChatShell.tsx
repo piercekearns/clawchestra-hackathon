@@ -28,9 +28,11 @@ export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragAct
 
   if (chat.type === 'terminal') {
     // Dead terminal + no restart requested → show placeholder, don't auto-spawn.
-    // Respect spawn grace: a terminal created in the last 60s is never "dead"
-    // (its tmux session may not exist yet — TerminalShell creates it on mount).
-    const isDead = terminalStatusReady && !chat.archived && !activeTerminals.has(chat.id) && !hasTerminalSpawnGrace(chat.id);
+    // A terminal created in the last 60s is never "dead" — its tmux session
+    // may not exist yet (TerminalShell creates it on mount). Use the DB
+    // timestamp (reliable) plus the in-memory spawn grace (fast fallback).
+    const isRecentlyCreated = Date.now() - chat.createdAt < 60_000;
+    const isDead = terminalStatusReady && !chat.archived && !activeTerminals.has(chat.id) && !isRecentlyCreated && !hasTerminalSpawnGrace(chat.id);
     if (isDead && terminalRestartKey === 0) {
       return (
         <div className="flex flex-1 items-center justify-center min-h-0">
