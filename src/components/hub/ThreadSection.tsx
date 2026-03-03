@@ -226,7 +226,7 @@ export function ThreadSection({
       {/* Custom folder context menu */}
       {isCustomFolder && folderContextMenuPos && (
         <div
-          className="fixed z-50"
+          className="fixed z-[80]"
           style={{ top: folderContextMenuPos.top, left: folderContextMenuPos.left }}
         >
           <div
