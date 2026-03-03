@@ -8,6 +8,8 @@ interface TooltipProps {
   children: ReactNode;
   /** Extra classes on the wrapper span */
   className?: string;
+  /** Position the tooltip above or below the trigger (default: above) */
+  position?: 'above' | 'below';
 }
 
 /**
@@ -18,16 +20,16 @@ interface TooltipProps {
  * Positions entirely in integer pixels (no CSS percentage transforms)
  * to avoid sub-pixel blur on varying tooltip widths.
  */
-export function Tooltip({ text, children, className }: TooltipProps) {
+export function Tooltip({ text, children, className, position = 'above' }: TooltipProps) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLSpanElement>(null);
-  const [anchor, setAnchor] = useState<{ cx: number; top: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ cx: number; top: number; bottom: number } | null>(null);
   const [offset, setOffset] = useState<{ left: number; top: number } | null>(null);
 
   const show = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    setAnchor({ cx: rect.left + rect.width / 2, top: rect.top });
+    setAnchor({ cx: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom });
   }, []);
 
   const hide = useCallback(() => {
@@ -48,7 +50,9 @@ export function Tooltip({ text, children, className }: TooltipProps) {
       const clampedLeft = Math.max(MARGIN, Math.min(rawLeft, window.innerWidth - w - MARGIN));
       setOffset({
         left: clampedLeft,
-        top: Math.round(anchor.top - h - 6),
+        top: position === 'below'
+          ? Math.round(anchor.bottom + 6)
+          : Math.round(anchor.top - h - 6),
       });
     },
     [anchor],

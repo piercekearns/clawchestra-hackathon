@@ -127,7 +127,7 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
               </Tooltip>
             )}
             {canCycleDown && (
-              <Tooltip text="Next row">
+              <Tooltip text="Next row" position={bothVisible ? 'below' : 'above'}>
                 <button type="button" onClick={onCycleDown} className={btnClass} aria-label="Next row">
                   <ChevronDown className="h-3 w-3" />
                 </button>
