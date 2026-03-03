@@ -314,7 +314,7 @@ export function ThreadSection({
   );
 }
 
-export function ArchivedSection({
+function ArchivedSection({
   count,
   chats,
   activeChatId,
