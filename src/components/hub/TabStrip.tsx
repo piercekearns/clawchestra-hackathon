@@ -303,15 +303,10 @@ function TabIcon({
   if (isOpenclawBusy) return dots;
 
   if (chat.type === 'terminal') {
-    // Debounced active dots override icon
-    if (showActiveDots) return dots;
-
-    // When dots aren't showing: show badges if not about to show dots
-    // (inCooldown || !isTerminalActive) means dots won't appear imminently
-    const showBadges = inCooldown || !isTerminalActive;
     const icon = <AgentIcon agentType={chat.agentType} className="h-3 w-3" />;
 
-    if (showBadges && isTerminalActionRequired) {
+    // Action-required always shows immediately — highest priority, overrides dots
+    if (isTerminalActionRequired) {
       return (
         <span className="relative shrink-0">
           {icon}
@@ -319,7 +314,13 @@ function TabIcon({
         </span>
       );
     }
-    if (showBadges && (isTerminalUnread || chat.unread)) {
+
+    // Debounced active dots
+    if (showActiveDots) return dots;
+
+    // When dots aren't showing: show unread badge if not about to show dots
+    // (inCooldown || !isTerminalActive) means dots won't appear imminently
+    if ((inCooldown || !isTerminalActive) && (isTerminalUnread || chat.unread)) {
       return (
         <span className="relative shrink-0">
           {icon}

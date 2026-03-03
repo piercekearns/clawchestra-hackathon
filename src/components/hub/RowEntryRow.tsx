@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat, HubRow } from '../../lib/hub-types';
@@ -61,7 +61,45 @@ export function RowEntryRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
-  const activity = getRowActivity(row.tabs, terminalActivity, busyChatIds);
+  const rawActivity = getRowActivity(row.tabs, terminalActivity, busyChatIds);
+  const isRawActive = rawActivity === 3;
+
+  // Debounced active dots — same timing as TabItem: 200ms enter, 500ms exit, 3s cooldown.
+  const [showActiveDots, setShowActiveDots] = useState(false);
+  const [inCooldown, setInCooldown] = useState(false);
+  const lastDotsExitRef = useRef(0);
+  useEffect(() => {
+    if (!isRawActive) {
+      setInCooldown(false);
+      const timer = setTimeout(() => {
+        setShowActiveDots(false);
+        lastDotsExitRef.current = Date.now();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    const sinceLastExit = Date.now() - lastDotsExitRef.current;
+    if (sinceLastExit < 3000 && lastDotsExitRef.current > 0) {
+      setInCooldown(true);
+      const timer = setTimeout(() => {
+        setShowActiveDots(true);
+        setInCooldown(false);
+      }, 3000 - sinceLastExit);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => setShowActiveDots(true), 200);
+    return () => clearTimeout(timer);
+  }, [isRawActive]);
+
+  // Derive display activity: action-required and unread are immediate;
+  // active dots use the debounced state.
+  const activity: 1 | 2 | 3 | 4 =
+    rawActivity === 1 ? 1
+    : rawActivity === 2 ? 2
+    : showActiveDots ? 3
+    // During cooldown or when not active, show unread badges that were hidden by dots
+    : (inCooldown || !isRawActive) && rawActivity <= 2 ? rawActivity
+    : 4;
+
   const isPinned = row.tabs.some((t) => t.pinned);
   const hasUnread = activity <= 2;
   const tabCount = row.tabs.length;
