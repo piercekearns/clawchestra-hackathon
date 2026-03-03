@@ -58,6 +58,7 @@ interface DashboardState {
   errors: DashboardError[];
   gatewayConnected: boolean;
   wsConnectionState: ChatConnectionState;
+  wsConnectionErrorReason: string | null;
   agentActivity: 'idle' | 'typing' | 'working' | 'compacting';
   viewContext: ViewContext;
   chatMessages: ChatMessage[];
@@ -172,6 +173,7 @@ interface DashboardState {
   clearErrorsByType: (type: DashboardError['type']) => void;
   setGatewayConnected: (connected: boolean) => void;
   setWsConnectionState: (state: ChatConnectionState) => void;
+  setWsConnectionErrorReason: (reason: string | null) => void;
   setAgentActivity: (state: 'idle' | 'typing' | 'working' | 'compacting') => void;
   setViewContext: (view: ViewContext) => void;
   setThemePreference: (pref: ThemePreference) => void;
@@ -477,6 +479,7 @@ export const useDashboardStore = create<DashboardState>()(
       errors: [],
       gatewayConnected: false,
       wsConnectionState: 'disconnected' as ChatConnectionState,
+      wsConnectionErrorReason: null,
       agentActivity: 'idle',
       viewContext: defaultView(),
       chatMessages: [],
@@ -583,6 +586,8 @@ export const useDashboardStore = create<DashboardState>()(
       setGatewayConnected: (gatewayConnected) => set({ gatewayConnected }),
 
       setWsConnectionState: (wsConnectionState) => set({ wsConnectionState }),
+
+      setWsConnectionErrorReason: (wsConnectionErrorReason) => set({ wsConnectionErrorReason }),
 
       setAgentActivity: (agentActivity) => set({ agentActivity }),
 

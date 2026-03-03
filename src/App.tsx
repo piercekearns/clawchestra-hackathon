@@ -1422,9 +1422,16 @@ export default function App() {
       } else if (nextState === 'error') {
         clearLossBubbleTimer();
         lossBubbleShown = false;
-        void addSystemBubble('failure', 'Connection failed after 5 attempts', {
-          Action: 'Click retry to try again.',
-        });
+        const errorReason = useDashboardStore.getState().wsConnectionErrorReason;
+        if (errorReason) {
+          void addSystemBubble('failure', 'Device pairing required', {
+            Fix: 'Run `openclaw devices approve --latest` in your terminal, then retry.',
+          });
+        } else {
+          void addSystemBubble('failure', 'Connection failed after 5 attempts', {
+            Action: 'Click retry to try again.',
+          });
+        }
       } else if (nextState === 'disconnected' && prevState === 'connected') {
         scheduleLossBubble();
       }

@@ -1,6 +1,7 @@
 import { Circle, Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Tooltip } from '../Tooltip';
+import { useDashboardStore } from '../../lib/store';
 import type { ChatConnectionState } from './types';
 
 interface StatusBadgeProps {
@@ -41,8 +42,9 @@ export function StatusBadge({
   usagePercent,
   usageTooltip,
 }: StatusBadgeProps) {
+  const errorReason = useDashboardStore((s) => s.wsConnectionErrorReason);
   const config = STATE_CONFIG[state];
-  const label = labelOverride ?? config.label;
+  const label = labelOverride ?? (state === 'error' && errorReason ? 'Pairing Required' : config.label);
   const showUsage = typeof usagePercent === 'number' && Number.isFinite(usagePercent);
   const clampedUsage = showUsage ? Math.min(100, Math.max(0, usagePercent)) : 0;
   const radius = 4;
@@ -79,7 +81,7 @@ export function StatusBadge({
 
   const badgePaddingClass = showUsage ? 'pr-[22px]' : 'pr-2';
 
-  return (
+  const badgeContent = (
     <span
       className={`relative inline-flex flex-none items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] text-neutral-700 dark:border-neutral-600 dark:text-neutral-300 ${badgePaddingClass}`}
     >
@@ -107,4 +109,14 @@ export function StatusBadge({
       ) : null}
     </span>
   );
+
+  if (state === 'error' && errorReason) {
+    return (
+      <Tooltip text={errorReason}>
+        {badgeContent}
+      </Tooltip>
+    );
+  }
+
+  return badgeContent;
 }

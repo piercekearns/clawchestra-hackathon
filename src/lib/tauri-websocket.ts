@@ -156,7 +156,13 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function isPairingRequiredError(error: unknown): boolean {
+  const message = toErrorMessage(error).toLowerCase();
+  return message.includes('pairing required') || message.includes('pairing_required');
+}
+
 function shouldRetryWithDeviceChallenge(error: unknown): boolean {
+  if (isPairingRequiredError(error)) return false;
   const message = toErrorMessage(error).toLowerCase();
   return (
     message.includes('missing scope') ||
@@ -262,11 +268,11 @@ export class TauriOpenClawConnection {
     }, WS_KEEPALIVE_INTERVAL_MS);
   }
 
-  private forceReconnect(reason: string): void {
+  private forceReconnect(reason: string, terminal = false): void {
     if (this.disposed) return;
     if (this.reconnectTimer) return;
 
-    console.warn(`[TauriWS] Force reconnect: ${reason}`);
+    console.warn(`[TauriWS] Force reconnect: ${reason}${terminal ? ' (terminal — no retry)' : ''}`);
     this.stopKeepalive();
     this.rejectPendingCallbacks(`WebSocket reconnect: ${reason}`);
     this.clearConnectChallengeState(new Error(`WebSocket reconnect: ${reason}`));
@@ -280,7 +286,11 @@ export class TauriOpenClawConnection {
       });
     }
 
-    this.scheduleReconnect();
+    if (terminal) {
+      this.setState('error');
+    } else {
+      this.scheduleReconnect();
+    }
   }
 
   private clearConnectChallengeState(error?: Error): void {
@@ -443,6 +453,12 @@ export class TauriOpenClawConnection {
       await this.sendConnect(deviceProof);
       await this.verifyGatewayScopes();
     } catch (error) {
+      if (isPairingRequiredError(error)) {
+        const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal, then click Retry.';
+        useDashboardStore.getState().setWsConnectionErrorReason(reason);
+        this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`, true);
+        throw error;
+      }
       if (!shouldRetryWithDeviceChallenge(error)) {
         this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`);
         throw error;
@@ -453,6 +469,12 @@ export class TauriOpenClawConnection {
         await this.sendConnect();
         await this.verifyGatewayScopes();
       } catch (fallbackError) {
+        if (isPairingRequiredError(fallbackError)) {
+          const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal, then click Retry.';
+          useDashboardStore.getState().setWsConnectionErrorReason(reason);
+          this.forceReconnect(`handshake failed: ${toErrorMessage(fallbackError)}`, true);
+          throw fallbackError;
+        }
         if (this.connectChallengeNonce && shouldRetryWithDeviceChallenge(fallbackError)) {
           try {
             const deviceProof = await getOpenClawWsDeviceAuth({
@@ -466,7 +488,13 @@ export class TauriOpenClawConnection {
             await this.sendConnect(deviceProof);
             await this.verifyGatewayScopes();
             // Recovered with device-auth challenge; continue with normal connected flow.
-          } catch {
+          } catch (retryError) {
+            if (isPairingRequiredError(retryError)) {
+              const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal, then click Retry.';
+              useDashboardStore.getState().setWsConnectionErrorReason(reason);
+              this.forceReconnect(`handshake failed: ${toErrorMessage(retryError)}`, true);
+              throw retryError;
+            }
             // Fall through to normal reconnect/error path.
           }
         }
@@ -700,10 +728,13 @@ export class TauriOpenClawConnection {
 
 // Zustand bridge — wires connection state changes to the store
 function wireConnectionStateToStore(connection: TauriOpenClawConnection): void {
-  const { setWsConnectionState, setGatewayConnected } = useDashboardStore.getState();
+  const { setWsConnectionState, setGatewayConnected, setWsConnectionErrorReason } = useDashboardStore.getState();
   connection.onStateChange((state) => {
     setWsConnectionState(state);
     setGatewayConnected(state === 'connected');
+    if (state === 'connected') {
+      setWsConnectionErrorReason(null);
+    }
   });
 }
 
