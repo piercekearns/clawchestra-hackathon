@@ -111,7 +111,7 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
   return (
     <>
     <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex flex-col justify-center min-h-9">
         {renaming ? (
           <input
             type="text"
