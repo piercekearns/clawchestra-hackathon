@@ -17,6 +17,7 @@ interface ThreadSectionProps {
   completedItemIds?: Set<string>;
   isCustomFolder?: boolean;
   isRenaming?: boolean;
+  hideArchived?: boolean;
   onRenameFolder?: (name: string) => void;
   onDeleteFolder?: () => void;
   onToggle: () => void;
@@ -91,6 +92,7 @@ export function ThreadSection({
   completedItemIds,
   isCustomFolder,
   isRenaming,
+  hideArchived,
   onRenameFolder,
   onDeleteFolder,
   onToggle,
@@ -299,7 +301,7 @@ export function ThreadSection({
             );
           })}
 
-          {archivedChats.length > 0 && (
+          {!hideArchived && archivedChats.length > 0 && (
             <ArchivedSection
               count={archivedChats.length}
               chats={archivedChats}
@@ -314,7 +316,7 @@ export function ThreadSection({
   );
 }
 
-function ArchivedSection({
+export function ArchivedSection({
   count,
   chats,
   activeChatId,

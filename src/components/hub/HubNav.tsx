@@ -17,7 +17,7 @@ import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
 import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
-import { ThreadSection } from './ThreadSection';
+import { ArchivedSection, ThreadSection } from './ThreadSection';
 
 interface HubNavProps {
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
@@ -285,18 +285,6 @@ export function HubNav({ onToast }: HubNavProps) {
 
       {/* Thread list */}
       <div className="flex-1 overflow-y-auto px-2 py-1">
-        {/* New Folder button — above threads so it sits above per-thread archived sections */}
-        <button
-          type="button"
-          onClick={() => void handleNewFolder()}
-          className="mb-1 flex w-full items-center gap-2 rounded-md px-3 py-1 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-        >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-            <FolderPlus className="h-3.5 w-3.5" />
-          </span>
-          New Folder
-        </button>
-
         {threads.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
             <MessageSquare className="h-8 w-8 text-neutral-300 dark:text-neutral-600" />
@@ -321,6 +309,7 @@ export function HubNav({ onToast }: HubNavProps) {
                     completedItemIds={completedItemIds}
                     isCustomFolder={isCustom}
                     isRenaming={renamingFolderId === thread.projectId}
+                    hideArchived
                     onRenameFolder={isCustom ? (name) => {
                       renameCustomFolder(thread.projectId, name);
                       setRenamingFolderId(null);
@@ -340,6 +329,35 @@ export function HubNav({ onToast }: HubNavProps) {
             </SortableContext>
           </DndContext>
         )}
+
+        {/* New Folder — below active rows, above archived */}
+        <button
+          type="button"
+          onClick={() => void handleNewFolder()}
+          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-1 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+            <FolderPlus className="h-3.5 w-3.5" />
+          </span>
+          New Folder
+        </button>
+
+        {/* Archived sections — rendered after New Folder, one per expanded thread */}
+        {threads.map((thread) => {
+          if (hubCollapsedThreads.includes(thread.projectId)) return null;
+          const archivedChats = thread.chats.filter((c) => c.archived);
+          if (archivedChats.length === 0) return null;
+          return (
+            <ArchivedSection
+              key={`archived-${thread.projectId}`}
+              count={archivedChats.length}
+              chats={archivedChats}
+              activeChatId={hubActiveChatId}
+              onSelectChat={handleSelectChat}
+              onDeleteChat={(id) => handleDeleteChats([id])}
+            />
+          );
+        })}
       </div>
     </div>
   );
