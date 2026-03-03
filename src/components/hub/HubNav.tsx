@@ -250,6 +250,12 @@ export function HubNav({ onToast }: HubNavProps) {
     addCustomFolder(id, 'New Folder');
     const newChat = await hubChatCreate(id, null, 'openclaw', null, 'Chat');
     await refreshHubChats();
+    // Place new folder at the bottom — use current thread order (or derive
+    // from current activity-sorted list) and append the new id.
+    const currentOrder = hubThreadOrder.length > 0
+      ? hubThreadOrder
+      : threads.map((t) => t.projectId);
+    setHubThreadOrder([...currentOrder.filter((x) => x !== id), id]);
     if (hubCollapsedThreads.includes(id)) {
       toggleHubThread(id);
     }
