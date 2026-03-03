@@ -352,7 +352,7 @@ export function ArchivedSection({
           {chats.map((chat) => (
             <div
               key={chat.id}
-              className={`group/archived flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer ${
+              className={`group/archived relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer ${
                 activeChatId === chat.id
                   ? 'bg-revival-accent-400/10 text-neutral-900 dark:text-neutral-100'
                   : 'text-neutral-800 hover:bg-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-800'
@@ -360,10 +360,10 @@ export function ArchivedSection({
               onClick={() => onSelectChat(chat.id)}
             >
               <span className="h-5 w-5 shrink-0" />
-              <div className="min-w-0 flex-1 group-hover/archived:pr-8">
+              <div className="min-w-0 flex-1 group-hover/archived:pr-6">
                 <ScrollRevealText text={chat.title} className="text-xs" />
               </div>
-              <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover/archived:opacity-100 transition-opacity">
+              <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-neutral-100 px-0.5 opacity-0 group-hover/archived:opacity-100 transition-opacity dark:bg-neutral-800">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); void handleUnarchive(chat.id); }}
