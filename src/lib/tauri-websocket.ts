@@ -268,11 +268,11 @@ export class TauriOpenClawConnection {
     }, WS_KEEPALIVE_INTERVAL_MS);
   }
 
-  private forceReconnect(reason: string, terminal = false): void {
+  private forceReconnect(reason: string, pairingRetry = false): void {
     if (this.disposed) return;
     if (this.reconnectTimer) return;
 
-    console.warn(`[TauriWS] Force reconnect: ${reason}${terminal ? ' (terminal — no retry)' : ''}`);
+    console.warn(`[TauriWS] Force reconnect: ${reason}${pairingRetry ? ' (pairing — slow retry)' : ''}`);
     this.stopKeepalive();
     this.rejectPendingCallbacks(`WebSocket reconnect: ${reason}`);
     this.clearConnectChallengeState(new Error(`WebSocket reconnect: ${reason}`));
@@ -286,8 +286,11 @@ export class TauriOpenClawConnection {
       });
     }
 
-    if (terminal) {
+    if (pairingRetry) {
+      // Keep retrying on a slow interval so the pairing request stays
+      // alive on the gateway while the user runs `devices approve`.
       this.setState('error');
+      this.reconnectTimer = setTimeout(() => void this.attemptReconnect(), 10_000);
     } else {
       this.scheduleReconnect();
     }
@@ -454,7 +457,7 @@ export class TauriOpenClawConnection {
       await this.verifyGatewayScopes();
     } catch (error) {
       if (isPairingRequiredError(error)) {
-        const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal, then click Retry.';
+        const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal — retrying automatically.';
         useDashboardStore.getState().setWsConnectionErrorReason(reason);
         this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`, true);
         throw error;
@@ -470,7 +473,7 @@ export class TauriOpenClawConnection {
         await this.verifyGatewayScopes();
       } catch (fallbackError) {
         if (isPairingRequiredError(fallbackError)) {
-          const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal, then click Retry.';
+          const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal — retrying automatically.';
           useDashboardStore.getState().setWsConnectionErrorReason(reason);
           this.forceReconnect(`handshake failed: ${toErrorMessage(fallbackError)}`, true);
           throw fallbackError;
@@ -490,7 +493,7 @@ export class TauriOpenClawConnection {
             // Recovered with device-auth challenge; continue with normal connected flow.
           } catch (retryError) {
             if (isPairingRequiredError(retryError)) {
-              const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal, then click Retry.';
+              const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal — retrying automatically.';
               useDashboardStore.getState().setWsConnectionErrorReason(reason);
               this.forceReconnect(`handshake failed: ${toErrorMessage(retryError)}`, true);
               throw retryError;
