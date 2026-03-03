@@ -113,13 +113,13 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
     <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
       {/* Row cycle chevrons — left of title, aligned with tab icons below */}
       {(canCycleUp || canCycleDown) && (
-        <div className="flex items-center gap-0.5 -ml-[9px]">
+        <div className="flex flex-col items-center -ml-[9px]">
           {canCycleUp && (
             <Tooltip text="Previous row">
               <button
                 type="button"
                 onClick={onCycleUp}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                className="flex h-4 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
                 aria-label="Previous row"
               >
                 <ChevronUp className="h-3 w-3" />
@@ -131,7 +131,7 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
               <button
                 type="button"
                 onClick={onCycleDown}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                className="flex h-4 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
                 aria-label="Next row"
               >
                 <ChevronDown className="h-3 w-3" />
