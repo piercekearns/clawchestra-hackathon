@@ -360,7 +360,7 @@ export function ArchivedSection({
               onClick={() => onSelectChat(chat.id)}
             >
               <span className="h-5 w-5 shrink-0" />
-              <div className="min-w-0 flex-1 pr-6">
+              <div className="min-w-0 flex-1 pr-8">
                 <ScrollRevealText text={chat.title} className="text-xs" />
               </div>
               <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-neutral-100 px-0.5 opacity-0 group-hover/archived:opacity-100 transition-opacity dark:bg-neutral-800">
