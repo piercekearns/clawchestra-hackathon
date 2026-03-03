@@ -16,7 +16,8 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ThinSidebar } from './components/sidebar/ThinSidebar';
 import { SecondaryDrawer } from './components/hub/SecondaryDrawer';
 import { QuickAccessPopover } from './components/hub/QuickAccessPopover';
-import { openOrCreateProjectChat, openOrCreateItemChat, projectHasThread, itemHasChat, migrateTerminalChatTitles } from './lib/hub-actions';
+import { openOrCreateProjectChat, openOrCreateItemChat, createProjectChatWithType, createItemChatWithType, projectHasThread, itemHasChat, migrateTerminalChatTitles } from './lib/hub-actions';
+import { TypePickerMenu } from './components/hub/TypePickerMenu';
 import { SettingsPage } from './components/SettingsPage';
 import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
@@ -2631,26 +2632,46 @@ export default function App() {
             />
             {isRoadmapView && activeRoadmapProject && (() => {
               const hasChat = projectHasThread(hubChats, activeRoadmapProject.id);
+              if (hasChat) {
+                return (
+                  <Tooltip text="Open project chat">
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 items-center justify-center rounded transition-colors text-[#DFFF00]"
+                      onClick={() => {
+                        void openOrCreateProjectChat(
+                          activeRoadmapProject.id,
+                          activeRoadmapProject.title,
+                        );
+                      }}
+                      aria-label="Open project chat"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" fill="currentColor" />
+                    </button>
+                  </Tooltip>
+                );
+              }
               return (
-                <Tooltip text={hasChat ? 'Open project chat' : 'Create project chat'}>
-                  <button
-                    type="button"
-                    className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
-                      hasChat
-                        ? 'text-[#DFFF00]'
-                        : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
-                    }`}
-                    onClick={() => {
-                      void openOrCreateProjectChat(
-                        activeRoadmapProject.id,
-                        activeRoadmapProject.title,
-                      );
-                    }}
-                    aria-label={hasChat ? 'Open project chat' : 'Create project chat'}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" fill={hasChat ? 'currentColor' : 'none'} />
-                  </button>
-                </Tooltip>
+                <TypePickerMenu
+                  onAddChat={() => {
+                    void createProjectChatWithType(activeRoadmapProject.id, activeRoadmapProject.title, 'openclaw', null);
+                  }}
+                  onAddTerminal={(agentType) => {
+                    void createProjectChatWithType(activeRoadmapProject.id, activeRoadmapProject.title, 'terminal', agentType);
+                  }}
+                  renderTrigger={(toggle) => (
+                    <Tooltip text="Create project workspace">
+                      <button
+                        type="button"
+                        className="flex h-5 w-5 items-center justify-center rounded transition-colors text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                        onClick={toggle}
+                        aria-label="Create project workspace"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
+                  )}
+                />
               );
             })()}
           </div>
@@ -2886,28 +2907,57 @@ export default function App() {
                     onItemClick={(item) => setSelectedRoadmapItemId(item.id)}
                     renderItemHoverActions={(item) => {
                       const hasChat = activeRoadmapProject ? itemHasChat(hubChats, activeRoadmapProject.id, item.id) : false;
+                      if (hasChat) {
+                        return (
+                          <Tooltip text="Open chat">
+                            <button
+                              type="button"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded transition-all text-[#DFFF00]"
+                              onPointerDown={stopDrag}
+                              onClick={(e) => {
+                                stopClick(e);
+                                if (activeRoadmapProject) {
+                                  void openOrCreateItemChat(
+                                    activeRoadmapProject.id,
+                                    activeRoadmapProject.title,
+                                    item.id,
+                                    item.title,
+                                  );
+                                }
+                              }}
+                              aria-label="Open chat"
+                            >
+                              <MessageSquare className="h-[15px] w-[15px]" fill="currentColor" />
+                            </button>
+                          </Tooltip>
+                        );
+                      }
                       return (
-                        <Tooltip text={hasChat ? 'Open chat' : 'Create chat'}>
-                          <button
-                            type="button"
-                            className={hasChat ? `inline-flex h-6 w-6 items-center justify-center rounded transition-all text-[#DFFF00]` : actionBtnClass}
-                            onPointerDown={stopDrag}
-                            onClick={(e) => {
-                              stopClick(e);
-                              if (activeRoadmapProject) {
-                                void openOrCreateItemChat(
-                                  activeRoadmapProject.id,
-                                  activeRoadmapProject.title,
-                                  item.id,
-                                  item.title,
-                                );
-                              }
-                            }}
-                            aria-label={hasChat ? 'Open chat' : 'Create chat'}
-                          >
-                            <MessageSquare className="h-[15px] w-[15px]" fill={hasChat ? 'currentColor' : 'none'} />
-                          </button>
-                        </Tooltip>
+                        <TypePickerMenu
+                          onAddChat={() => {
+                            if (activeRoadmapProject) {
+                              void createItemChatWithType(activeRoadmapProject.id, activeRoadmapProject.title, item.id, item.title, 'openclaw', null);
+                            }
+                          }}
+                          onAddTerminal={(agentType) => {
+                            if (activeRoadmapProject) {
+                              void createItemChatWithType(activeRoadmapProject.id, activeRoadmapProject.title, item.id, item.title, 'terminal', agentType);
+                            }
+                          }}
+                          renderTrigger={(toggle) => (
+                            <Tooltip text="Create workspace">
+                              <button
+                                type="button"
+                                className={actionBtnClass}
+                                onPointerDown={stopDrag}
+                                onClick={(e) => { stopClick(e); toggle(e); }}
+                                aria-label="Create workspace"
+                              >
+                                <MessageSquare className="h-[15px] w-[15px]" />
+                              </button>
+                            </Tooltip>
+                          )}
+                        />
                       );
                     }}
                     renderItemRightHoverActions={(item) => (
@@ -3071,28 +3121,47 @@ export default function App() {
                   renderItemActions={() => null}
                   renderItemRightHoverActions={(project) => {
                     const hasChat = projectHasThread(hubChats, project.id);
+                    const projectTitle = project.frontmatter?.title ?? project.id;
+                    if (hasChat) {
+                      return (
+                        <Tooltip text="Open project chat">
+                          <button
+                            type="button"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded transition-all text-[#DFFF00]"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void openOrCreateProjectChat(project.id, projectTitle);
+                            }}
+                            aria-label="Open project chat"
+                          >
+                            <MessageSquare className="h-[15px] w-[15px]" fill="currentColor" />
+                          </button>
+                        </Tooltip>
+                      );
+                    }
                     return (
-                    <Tooltip text={hasChat ? 'Open project chat' : 'Create project chat'}>
-                      <button
-                        type="button"
-                        className={`inline-flex h-6 w-6 items-center justify-center rounded transition-all ${
-                          hasChat
-                            ? 'text-[#DFFF00]'
-                            : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100'
-                        }`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void openOrCreateProjectChat(
-                            project.id,
-                            project.frontmatter?.title ?? project.id,
-                          );
+                      <TypePickerMenu
+                        onAddChat={() => {
+                          void createProjectChatWithType(project.id, projectTitle, 'openclaw', null);
                         }}
-                        aria-label={hasChat ? 'Open project chat' : 'Create project chat'}
-                      >
-                        <MessageSquare className="h-[15px] w-[15px]" fill={hasChat ? 'currentColor' : 'none'} />
-                      </button>
-                    </Tooltip>
+                        onAddTerminal={(agentType) => {
+                          void createProjectChatWithType(project.id, projectTitle, 'terminal', agentType);
+                        }}
+                        renderTrigger={(toggle) => (
+                          <Tooltip text="Create project workspace">
+                            <button
+                              type="button"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded transition-all text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 hover:text-neutral-900 hover:shadow-sm dark:hover:bg-neutral-600/50 dark:hover:text-neutral-100"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => { e.stopPropagation(); toggle(e); }}
+                              aria-label="Create project workspace"
+                            >
+                              <MessageSquare className="h-[15px] w-[15px]" />
+                            </button>
+                          </Tooltip>
+                        )}
+                      />
                     );
                   }}
                   onItemsChange={(nextItems) => {
@@ -3132,6 +3201,18 @@ export default function App() {
                   activeRoadmapProject.title,
                   itemId,
                   itemTitle,
+                );
+              }
+            }}
+            onCreateChatWithType={(itemId, itemTitle, type, agentType) => {
+              if (activeRoadmapProject) {
+                void createItemChatWithType(
+                  activeRoadmapProject.id,
+                  activeRoadmapProject.title,
+                  itemId,
+                  itemTitle,
+                  type,
+                  agentType,
                 );
               }
             }}

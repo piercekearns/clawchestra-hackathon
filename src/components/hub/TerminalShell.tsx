@@ -201,14 +201,15 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // ACTIVATION: Sliding window filters one-off bursts (tab suggestion,
     // title updates). Need output in 2 of 5 recent 200ms windows to start.
     //
-    // DEACTIVATION: Silence timer only. Once active, ANY non-echo output
-    // resets a 3s timer. Dots stop only when the PTY goes truly silent.
-    // This keeps dots alive through sparse thinking animation (small updates
-    // every 500-1000ms) and transition gaps between thinking → streaming.
+    // DEACTIVATION: Two paths:
+    // 1. Silence timer (1.5s) — resets only on data >= 3 bytes (filters
+    //    cursor reports, keep-alive). Fires when real output stops.
+    // 2. Window backstop — if active but 0 of last 5 windows were
+    //    significant (>= 5 bytes), force-deactivate. Catches cases
+    //    where periodic noise data prevents silence timer from firing.
     //
-    // USER INPUT: Silence timer resets on ALL output (even during typing)
-    // so the agent's concurrent output keeps dots alive. But byte counting
-    // for activation is skipped during echo to prevent typing from starting dots.
+    // USER INPUT: All data during echo (300ms after keypress) is ignored
+    // for both activation and silence timer reset.
     const spawnTime = Date.now();
     let lastUserInputAt = 0;
     let lastWindowCheck = 0;
@@ -233,34 +234,39 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // Skip during startup (scrollback restore)
       if (now - spawnTime < STARTUP_GRACE_MS) return;
 
-      // Reset silence timer BEFORE user-input check — even during typing,
-      // the agent may be producing output that should keep dots alive.
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => {
-        if (isCurrentlyActive) {
-          isCurrentlyActive = false;
-          significantHistory.length = 0;
-          // Check terminal buffer for action-required patterns (e.g. Y/n prompt)
-          // so the amber dot shows even when the user is viewing this terminal.
-          const buffer = term.buffer.active;
-          const lines: string[] = [];
-          const end = buffer.baseY + buffer.cursorY;
-          const start = Math.max(0, end - 20);
-          for (let i = start; i <= end; i++) {
-            const line = buffer.getLine(i);
-            if (line) lines.push(line.translateToString(true));
-          }
-          const actionRequired = detectActionRequired(lines.join('\n'));
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            isActive: false,
-            actionRequired,
-          });
-        }
-      }, SILENCE_TIMEOUT_MS);
-
       // Skip byte counting during user input echo — prevents typing from
-      // ACTIVATING dots, but the silence timer above still keeps dots alive
+      // ACTIVATING dots. Also skip silence timer reset for echo data so
+      // that idle detection works even while the user is typing.
       if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
+
+      // Only reset silence timer for non-trivial data. Terminals send
+      // tiny periodic messages (cursor position reports, title updates,
+      // keep-alive sequences) even when idle — these shouldn't prevent
+      // deactivation. Threshold of 3 bytes filters most control sequences.
+      if (data.length >= 3) {
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          if (isCurrentlyActive) {
+            isCurrentlyActive = false;
+            significantHistory.length = 0;
+            // Check terminal buffer for action-required patterns (e.g. Y/n prompt)
+            // so the amber dot shows even when the user is viewing this terminal.
+            const buffer = term.buffer.active;
+            const lines: string[] = [];
+            const end = buffer.baseY + buffer.cursorY;
+            const start = Math.max(0, end - 20);
+            for (let i = start; i <= end; i++) {
+              const line = buffer.getLine(i);
+              if (line) lines.push(line.translateToString(true));
+            }
+            const actionRequired = detectActionRequired(lines.join('\n'));
+            useDashboardStore.getState().updateTerminalActivity(chat.id, {
+              isActive: false,
+              actionRequired,
+            });
+          }
+        }, SILENCE_TIMEOUT_MS);
+      }
 
       bytesSinceLastWindow += data.length;
 
@@ -284,11 +290,32 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
               isActive: true,
             });
           }
-        } else {
-          // Already active — just update timestamps
+        } else if (isSignificant) {
+          // Already active with real output — update timestamps
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             lastOutputAt: now,
             lastViewedAt: now,
+          });
+        } else if (significantHistory.length >= HISTORY_SIZE && significantHistory.every((s) => !s)) {
+          // Active but no significant output in the entire window history —
+          // force deactivation as a backstop. This catches cases where tiny
+          // periodic data (ANSI sequences, prompt renders) keeps arriving
+          // but no real output is being produced.
+          isCurrentlyActive = false;
+          significantHistory.length = 0;
+          clearTimeout(silenceTimer);
+          const buffer = term.buffer.active;
+          const lines: string[] = [];
+          const end = buffer.baseY + buffer.cursorY;
+          const start = Math.max(0, end - 20);
+          for (let i = start; i <= end; i++) {
+            const line = buffer.getLine(i);
+            if (line) lines.push(line.translateToString(true));
+          }
+          const actionRequired = detectActionRequired(lines.join('\n'));
+          useDashboardStore.getState().updateTerminalActivity(chat.id, {
+            isActive: false,
+            actionRequired,
           });
         }
       }

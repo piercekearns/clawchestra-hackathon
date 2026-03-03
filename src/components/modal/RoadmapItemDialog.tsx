@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare, X } from 'lucide-react';
 import { ModalDragZone } from '../ui/ModalDragZone';
 import { Tooltip } from '../Tooltip';
+import { TypePickerMenu } from '../hub/TypePickerMenu';
+import type { HubAgentType } from '../../lib/hub-types';
 import type { ProjectFrontmatter, RoadmapItem, RoadmapItemWithDocs, RoadmapStatus } from '../../lib/schema';
 import { resolveDocFiles, enrichItemsWithDocs } from '../../lib/doc-resolution';
 import { readFile, gitReadFileAtRef, gitGetBranchStates, getProject, isTauriRuntime } from '../../lib/tauri';
@@ -17,6 +19,7 @@ interface RoadmapItemDialogProps {
   onClose: () => void;
   onStatusChange: (itemId: string, status: RoadmapStatus) => void;
   onOpenChat?: (itemId: string, itemTitle: string) => void;
+  onCreateChatWithType?: (itemId: string, itemTitle: string, type: 'openclaw' | 'terminal', agentType: HubAgentType | null) => void;
   hasChat?: boolean;
   boardScoped?: boolean;
 }
@@ -35,6 +38,7 @@ export function RoadmapItemDialog({
   onClose,
   onStatusChange,
   onOpenChat,
+  onCreateChatWithType,
   hasChat,
   boardScoped,
 }: RoadmapItemDialogProps) {
@@ -257,17 +261,35 @@ export function RoadmapItemDialog({
         aria-label={`Roadmap item: ${item.title}`}
       >
         <div className="sticky top-0 z-10 flex justify-end gap-1">
-          {onOpenChat && (
-            <Tooltip text={hasChat ? 'Open chat' : 'Create chat'}>
+          {hasChat && onOpenChat && (
+            <Tooltip text="Open chat">
               <button
                 type="button"
-                className={`rounded-md p-1 opacity-0 transition-opacity hover:bg-neutral-100 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-events-none dark:hover:bg-neutral-800 ${hasChat ? 'text-[#DFFF00]' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+                className="rounded-md p-1 opacity-0 transition-opacity hover:bg-neutral-100 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-events-none dark:hover:bg-neutral-800 text-[#DFFF00]"
                 onClick={() => onOpenChat(item.id, item.title)}
-                aria-label={hasChat ? 'Open chat' : 'Create chat'}
+                aria-label="Open chat"
               >
-                <MessageSquare className="h-4 w-4" fill={hasChat ? 'currentColor' : 'none'} />
+                <MessageSquare className="h-4 w-4" fill="currentColor" />
               </button>
             </Tooltip>
+          )}
+          {!hasChat && onCreateChatWithType && (
+            <TypePickerMenu
+              onAddChat={() => onCreateChatWithType(item.id, item.title, 'openclaw', null)}
+              onAddTerminal={(agentType) => onCreateChatWithType(item.id, item.title, 'terminal', agentType)}
+              renderTrigger={(toggle) => (
+                <Tooltip text="Create workspace">
+                  <button
+                    type="button"
+                    className="rounded-md p-1 opacity-0 transition-opacity hover:bg-neutral-100 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-events-none dark:hover:bg-neutral-800 text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+                    onClick={toggle}
+                    aria-label="Create workspace"
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                  </button>
+                </Tooltip>
+              )}
+            />
           )}
           <button
             type="button"

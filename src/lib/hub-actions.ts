@@ -34,6 +34,84 @@ export async function openOrCreateProjectChat(
 }
 
 /**
+ * Create a project-level chat of a specific type (first-time creation via TypePickerMenu).
+ */
+export async function createProjectChatWithType(
+  projectId: string,
+  projectTitle: string,
+  type: 'openclaw' | 'terminal',
+  agentType: HubAgentType | null,
+): Promise<void> {
+  const store = useDashboardStore.getState();
+
+  const title = type === 'openclaw'
+    ? projectTitle
+    : (agentType === 'generic' ? 'Terminal' : (AGENT_LABELS[agentType!] ?? agentType));
+  const newChat = await hubChatCreate(projectId, null, type, agentType, title, type === 'openclaw');
+
+  if (type === 'terminal') {
+    const updated = new Set(store.activeTerminalChatIds);
+    updated.add(newChat.id);
+    store.setActiveTerminalChatIds(updated);
+    addTerminalSpawnGrace(newChat.id);
+  }
+
+  await store.refreshHubChats();
+  store.setHubActiveChatId(newChat.id);
+  store.setHubDrawerOpen(true);
+  if (type === 'terminal' && store.hubDrawerWidth < 640) {
+    store.setHubDrawerWidth(640);
+  }
+  if (store.hubCollapsedThreads.includes(projectId)) {
+    store.toggleHubThread(projectId);
+  }
+}
+
+/**
+ * Create an item-level chat of a specific type (first-time creation via TypePickerMenu).
+ */
+export async function createItemChatWithType(
+  projectId: string,
+  projectTitle: string,
+  itemId: string,
+  itemTitle: string,
+  type: 'openclaw' | 'terminal',
+  agentType: HubAgentType | null,
+): Promise<void> {
+  const store = useDashboardStore.getState();
+
+  // Ensure project has at least a thread
+  const projectChats = store.hubChats.filter(
+    (c) => c.projectId === projectId && !c.archived,
+  );
+  if (projectChats.length === 0) {
+    await hubChatCreate(projectId, null, 'openclaw', null, projectTitle, true);
+  }
+
+  const title = type === 'openclaw'
+    ? itemTitle
+    : (agentType === 'generic' ? 'Terminal' : (AGENT_LABELS[agentType!] ?? agentType));
+  const newChat = await hubChatCreate(projectId, itemId, type, agentType, title);
+
+  if (type === 'terminal') {
+    const updated = new Set(store.activeTerminalChatIds);
+    updated.add(newChat.id);
+    store.setActiveTerminalChatIds(updated);
+    addTerminalSpawnGrace(newChat.id);
+  }
+
+  await store.refreshHubChats();
+  store.setHubActiveChatId(newChat.id);
+  store.setHubDrawerOpen(true);
+  if (type === 'terminal' && store.hubDrawerWidth < 640) {
+    store.setHubDrawerWidth(640);
+  }
+  if (store.hubCollapsedThreads.includes(projectId)) {
+    store.toggleHubThread(projectId);
+  }
+}
+
+/**
  * Open or create an item-level chat within a project thread, then navigate.
  */
 export async function openOrCreateItemChat(
