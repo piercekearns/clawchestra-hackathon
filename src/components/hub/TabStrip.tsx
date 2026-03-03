@@ -236,7 +236,7 @@ function TabItem({
     <button
       type="button"
       onClick={onSelect}
-      className={`group/tab relative flex w-full min-w-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors ${
+      className={`group/tab relative flex w-full min-w-0 items-center gap-1.5 rounded-md px-2.5 py-[6px] text-xs transition-colors ${
         isActive
           ? 'bg-neutral-50 text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
           : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
