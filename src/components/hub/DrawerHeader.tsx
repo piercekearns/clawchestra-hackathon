@@ -111,9 +111,9 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
   return (
     <>
     <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
-      {/* Row cycle chevrons — left of title */}
+      {/* Row cycle chevrons — left of title, aligned with tab icons below */}
       {(canCycleUp || canCycleDown) && (
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 -ml-[7px]">
           {canCycleUp && (
             <Tooltip text="Previous row">
               <button

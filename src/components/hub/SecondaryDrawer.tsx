@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HubAgentType, HubChat, HubThread } from '../../lib/hub-types';
 import { buildRows } from '../../lib/hub-utils';
 import { useDashboardStore } from '../../lib/store';
@@ -48,6 +48,8 @@ export function SecondaryDrawer({
   const [terminalDragActive, setTerminalDragActive] = useState(false);
   const [terminalRestartKey, setTerminalRestartKey] = useState(0);
   const drawerRef = useRef<HTMLDivElement>(null);
+  // Track the last active tab per row (keyed by "projectId:itemId") for cycling back
+  const lastActiveTabPerRow = useRef(new Map<string, string>());
 
   // Local toast state — drawer toasts render inside the header, not on the kanban board
   const [drawerToasts, setDrawerToasts] = useState<{ id: number; kind: 'success' | 'error'; message: string; action?: { label: string; onClick: () => void } }[]>([]);
@@ -58,6 +60,13 @@ export function SecondaryDrawer({
       setDrawerToasts((current) => current.filter((t) => t.id !== id));
     }, 5000);
   }, []);
+
+  // Record the current tab as the last active for its row
+  useEffect(() => {
+    if (!chat) return;
+    const rowKey = `${chat.projectId}:${chat.itemId ?? '__project__'}`;
+    lastActiveTabPerRow.current.set(rowKey, chat.id);
+  }, [chat]);
 
   // Resolve project title
   const projectTitle = useMemo(() => {
@@ -128,11 +137,12 @@ export function SecondaryDrawer({
     (direction: 'up' | 'down') => {
       const targetIndex = direction === 'up' ? currentRowIndex - 1 : currentRowIndex + 1;
       const targetRow = threadRows[targetIndex];
-      if (!targetRow) return;
-      // Pick the best tab (most recent activity) in the target row
-      const bestTab = targetRow.tabs.reduce((best, tab) =>
-        tab.lastActivity > best.lastActivity ? tab : best,
-      );
+      if (!targetRow || targetRow.tabs.length === 0) return;
+      // Prefer the tab last viewed in this row, fall back to first by sort order
+      const rowKey = `${targetRow.projectId}:${targetRow.itemId ?? '__project__'}`;
+      const lastId = lastActiveTabPerRow.current.get(rowKey);
+      const lastTab = lastId ? targetRow.tabs.find((t) => t.id === lastId) : undefined;
+      const bestTab = lastTab ?? targetRow.tabs[0];
       setHubActiveChatId(bestTab.id);
       // Auto-expand for terminals
       if (bestTab.type === 'terminal') {
