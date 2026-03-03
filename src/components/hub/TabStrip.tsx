@@ -293,10 +293,8 @@ function TabIcon({
   isTerminalUnread: boolean;
 }) {
   const dots = (
-    <span className="flex shrink-0 items-center gap-[1.5px]">
-      <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
-      <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:150ms]" />
-      <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:300ms]" />
+    <span className="shrink-0 text-[10px] font-bold leading-none text-revival-accent-400">
+      <span className="loading-dots"><span>.</span><span>.</span><span>.</span></span>
     </span>
   );
 

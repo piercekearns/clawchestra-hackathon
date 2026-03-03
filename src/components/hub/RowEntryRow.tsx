@@ -189,10 +189,8 @@ function RowIcon({ activity, isProjectSurface, isPinned }: { activity: 1 | 2 | 3
   if (activity === 3) {
     // Active — animated dots
     return (
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center gap-[2px]">
-        <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
-        <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:150ms]" />
-        <span className="h-1 w-1 rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:300ms]" />
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[10px] font-bold leading-none text-revival-accent-400">
+        <span className="loading-dots"><span>.</span><span>.</span><span>.</span></span>
       </span>
     );
   }
