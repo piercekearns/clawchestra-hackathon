@@ -218,7 +218,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     let lastSignificantAt = 0;         // when we last saw real output
     const significantHistory: boolean[] = [];
 
-    const STARTUP_GRACE_MS = 10_000;
+    const STARTUP_GRACE_MS = 3_000;   // scrollback restore + tmux reattach; 10s was too long — short agent responses were missed entirely
     const USER_INPUT_SUPPRESS_MS = 300;
     const WINDOW_MS = 200;            // check every 200ms
     const BYTE_THRESHOLD = 5;         // bytes per window to count as significant
