@@ -16,6 +16,7 @@ import { FolderPlus, MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
 import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
+import { buildRows } from '../../lib/hub-utils';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
 import { ThreadSection } from './ThreadSection';
 
@@ -193,13 +194,43 @@ export function HubNav({ onToast }: HubNavProps) {
 
   /** Delete multiple chats at once (row-level action). */
   const handleDeleteChats = async (chatIds: string[]) => {
+    // Before deleting, find an adjacent row to switch to if needed
+    let fallbackChatId: string | null = null;
+    if (hubActiveChatId && chatIds.includes(hubActiveChatId)) {
+      const activeChat = hubChats.find((c) => c.id === hubActiveChatId);
+      if (activeChat) {
+        const threadChats = hubChats.filter((c) => c.projectId === activeChat.projectId);
+        const project = projects.find((p) => p.id === activeChat.projectId);
+        const pTitle = project?.frontmatter?.title ?? activeChat.projectId;
+        const itemMap = new Map<string, string>();
+        for (const item of (roadmapItems[activeChat.projectId] ?? [])) {
+          itemMap.set(item.id, item.title);
+        }
+        const thread: HubThread = { projectId: activeChat.projectId, projectTitle: pTitle, chats: threadChats };
+        const rows = buildRows(thread, itemMap);
+        const deletedIds = new Set(chatIds);
+        const currentItemId = activeChat.itemId ?? null;
+        const rowIndex = rows.findIndex((r) => r.itemId === currentItemId);
+        // Find the nearest row that isn't being deleted
+        const adjacent = (rowIndex > 0 ? rows[rowIndex - 1] : rows[rowIndex + 1]);
+        if (adjacent && adjacent.tabs.some((t) => !deletedIds.has(t.id))) {
+          const bestTab = adjacent.tabs.find((t) => !deletedIds.has(t.id));
+          if (bestTab) fallbackChatId = bestTab.id;
+        }
+      }
+    }
+
     for (const id of chatIds) {
       await hubChatDelete(id);
       useDashboardStore.getState().clearHubChatState(id);
     }
     if (hubActiveChatId && chatIds.includes(hubActiveChatId)) {
-      setHubActiveChatId(null);
-      setHubDrawerOpen(false);
+      if (fallbackChatId) {
+        setHubActiveChatId(fallbackChatId);
+      } else {
+        setHubActiveChatId(null);
+        setHubDrawerOpen(false);
+      }
     }
     await refreshHubChats();
   };
