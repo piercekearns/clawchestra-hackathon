@@ -88,7 +88,7 @@ export function TabStrip({
   const tabIds = tabs.map((t) => t.id);
 
   return (
-    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-1.5 py-1.5">
+    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-1.5 py-1.5 md:px-3.5">
       {/* Scrollable tab + button area — button flows inline after tabs */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
@@ -265,7 +265,7 @@ function TabItem({
           e.stopPropagation();
           onClose();
         }}
-        className="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded opacity-0 group-hover/tab:opacity-100 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-opacity"
+        className="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded opacity-0 group-hover/tab:opacity-100 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-opacity"
         aria-label="Close tab"
       >
         <X className="h-3 w-3" />

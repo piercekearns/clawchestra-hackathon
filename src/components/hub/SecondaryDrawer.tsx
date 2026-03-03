@@ -48,6 +48,16 @@ export function SecondaryDrawer({
   const [terminalRestartKey, setTerminalRestartKey] = useState(0);
   const drawerRef = useRef<HTMLDivElement>(null);
 
+  // Local toast state — drawer toasts render inside the header, not on the kanban board
+  const [drawerToasts, setDrawerToasts] = useState<{ id: number; kind: 'success' | 'error'; message: string; action?: { label: string; onClick: () => void } }[]>([]);
+  const pushDrawerToast = useCallback((kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => {
+    const id = Date.now() + Math.round(Math.random() * 1000);
+    setDrawerToasts((current) => [...current, { id, kind, message, action }]);
+    window.setTimeout(() => {
+      setDrawerToasts((current) => current.filter((t) => t.id !== id));
+    }, 5000);
+  }, []);
+
   // Resolve project title
   const projectTitle = useMemo(() => {
     if (!chat) return '';
@@ -131,19 +141,17 @@ export function SecondaryDrawer({
         }
       }
 
-      if (onToast) {
-        const archived = hubChats.find((c) => c.id === tabChatId);
-        if (archived) {
-          onToast('success', `"${archived.title}" archived`, {
-            label: 'Undo',
-            onClick: () => {
-              void hubChatUpdate(tabChatId, { archived: false }).then(() => refreshHubChats());
-            },
-          });
-        }
+      const archived = hubChats.find((c) => c.id === tabChatId);
+      if (archived) {
+        pushDrawerToast('success', `"${archived.title}" archived`, {
+          label: 'Undo',
+          onClick: () => {
+            void hubChatUpdate(tabChatId, { archived: false }).then(() => refreshHubChats());
+          },
+        });
       }
     },
-    [chatId, rowTabs, hubChats, setHubActiveChatId, refreshHubChats, onClose, onToast],
+    [chatId, rowTabs, hubChats, setHubActiveChatId, refreshHubChats, onClose, pushDrawerToast],
   );
 
   const handleAddChat = useCallback(async () => {
@@ -248,16 +256,48 @@ export function SecondaryDrawer({
       style={{ width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
+        <div className="relative">
         <DrawerHeader
           chat={chat}
           projectTitle={projectTitle}
           rowTitle={rowTitle}
           onClose={onClose}
-          onToast={onToast}
+          onToast={pushDrawerToast}
           onOpenLinkedItem={onOpenLinkedItem}
           onOpenLinkedProject={onOpenLinkedProject}
           onRestart={chat.type === 'terminal' ? handleRestart : undefined}
         />
+        {drawerToasts.length > 0 && (
+          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center px-4">
+            <div className="pointer-events-auto flex flex-col items-center gap-2">
+              {drawerToasts.map((toast) => (
+                <div
+                  key={toast.id}
+                  className={`flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-1.5 text-sm shadow-md ${
+                    toast.kind === 'error'
+                      ? 'border-status-danger/60 bg-red-50 text-status-danger dark:border-red-500/40 dark:bg-[#1f1012] dark:text-red-300'
+                      : 'border-revival-accent-400/40 bg-revival-accent-100 text-neutral-900 dark:bg-[#202210] dark:text-neutral-100'
+                  }`}
+                >
+                  <span>{toast.message}</span>
+                  {toast.action ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.action!.onClick();
+                        setDrawerToasts((current) => current.filter((t) => t.id !== toast.id));
+                      }}
+                      className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold text-revival-accent-600 transition-colors hover:bg-revival-accent-400/20 dark:text-revival-accent-300"
+                    >
+                      {toast.action.label}
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        </div>
         {/* Tab strip — shown when the row has multiple tabs, or always to allow adding tabs */}
         <TabStrip
           tabs={rowTabs}
