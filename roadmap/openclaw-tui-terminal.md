@@ -52,6 +52,15 @@ For first-friend-readiness and beyond, we need to handle these scenarios:
 - **Detection:** After detecting `openclaw` binary, check if `openclaw tui --help` returns successfully
 - **If absent:** Don't show the TUI option; show "OpenClaw TUI requires version 2026.x.x or later"
 
+### Scenario 6: Device needs re-pairing after gateway update
+- When a user runs `openclaw gateway install --force` (required after major updates because the LaunchAgent hardcodes the path to the old version), all device trust is invalidated
+- Both the TUI and Clawchestra's own WebSocket connection silently fail — no error surfaced to the user
+- The gateway holds a pending `repair` request that requires `openclaw devices approve --latest` from the terminal
+- **This is the hardest failure mode for non-technical users** — there is zero in-app indication of what's wrong
+- **Detection:** If the WebSocket connect handshake returns a device-auth or pairing-needed error, surface it in the UI
+- **Desired:** Show "Device pairing required. Run `openclaw devices approve --latest` in your terminal." in the connection status area, not buried in logs
+- **Broader lesson:** This applies to Clawchestra's own connection, not just the TUI. The version detection roadmap item should include connection failure diagnostics
+
 ## Implementation Plan: Version Detection Layer
 
 ### Phase 1: Version detection (prerequisite for robust TUI)

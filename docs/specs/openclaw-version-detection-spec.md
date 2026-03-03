@@ -61,9 +61,39 @@ Clawchestra currently has zero knowledge of which OpenClaw version it's connecte
 | `src/components/sidebar/Sidebar.tsx` | Settings badge (Phase 2) |
 | Settings UI component | Version display + update nudge (Phase 2) |
 
+## Connection Failure Diagnostics (learned 2026-03-03)
+
+Version detection alone isn't enough. When the connection to OpenClaw fails, Clawchestra currently gives **zero feedback** — it silently retries forever. This section captures failure modes discovered during the 2026.3.2 upgrade that a first-friend user would be completely stuck on.
+
+### Device re-pairing after gateway update
+
+When OpenClaw updates and the gateway is reinstalled (`openclaw gateway install --force`), all device trust is invalidated. Clawchestra's WebSocket connect handshake fails with a device-auth error, but the user sees nothing — just a disconnected state with no explanation.
+
+The fix requires running `openclaw devices approve --latest` in a terminal, which a non-technical user would never discover.
+
+**Required:** If the connect handshake returns a pairing/auth failure, surface an actionable message: "Device pairing required. Run `openclaw devices approve --latest` in your terminal." This should appear in a connection status banner, not just logs.
+
+### Silent extension API breakage
+
+OpenClaw 2026.3.2 added a mandatory `auth` field to `registerHttpRoute`. Without it, the route silently fails — no error, no exception, the sync extension just stops working. Clawchestra's sync data disappears with no indication of why.
+
+**Required:** After registering the HTTP route, verify it was actually registered (e.g., probe the route or check for an acknowledgement). If registration fails silently, surface a diagnostic message.
+
+### Gateway path breakage after pnpm update
+
+`pnpm update -g openclaw` installs to a new directory (`openclaw@2026.3.2/...`) but the LaunchAgent plist still points to the old directory (`openclaw@2026.2.22-2/...`). The gateway crashes on start with `MODULE_NOT_FOUND`. The user must run `openclaw gateway install --force` to regenerate the plist — non-obvious.
+
+**Consideration:** If Clawchestra detects the gateway is unreachable AND the CLI version doesn't match the last-known gateway version, suggest "Try `openclaw gateway install --force && openclaw gateway start`".
+
+### Design implication
+
+These failures argue for a **connection health panel** — a small, normally-hidden status area that expands when the connection is unhealthy, showing the specific failure reason and an actionable fix. This is more important than version nudges for first-friend readiness.
+
 ## Open Questions
 
 1. Does the `connect` RPC response already include a server version field? Need to inspect against .22 and .26.
 2. How to resolve "latest available version" — hardcode per release, or fetch from a known URL?
 3. Should the update nudge link to release notes or just state the version number?
 4. How granular should feature gating be — per-version or per-capability?
+5. What error codes/messages does the connect handshake return for device-auth failures? Need to inspect the WebSocket response to know what to match on.
+6. Can we detect the `registerHttpRoute` silent failure from the Clawchestra side, or do we need OpenClaw to return an acknowledgement?
