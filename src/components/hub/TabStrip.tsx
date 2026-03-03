@@ -88,13 +88,13 @@ export function TabStrip({
   const tabIds = tabs.map((t) => t.id);
 
   return (
-    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-1.5 py-1">
+    <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-1.5 py-1.5">
       {/* Scrollable tab + button area — button flows inline after tabs */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
           <div
             ref={scrollRef}
-            className="flex items-center gap-0.5 overflow-x-auto scrollbar-none"
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none"
           >
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
