@@ -309,7 +309,7 @@ export function SecondaryDrawer({
         />
         <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
           terminalDragActive ? '' : terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
-        }`}>
+        } ${side === 'right' ? 'ml-px' : 'mr-px'}`}>
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
         </div>
       </div>
