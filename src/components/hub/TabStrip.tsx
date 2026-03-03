@@ -33,7 +33,7 @@ interface TabStripProps {
 /** Get display label for a tab, with auto-numbering for duplicates. */
 function getTabLabel(chat: HubChat, allTabs: HubChat[]): string {
   const baseLabel = chat.type === 'openclaw'
-    ? 'Chat'
+    ? 'OpenClaw Chat'
     : (AGENT_LABELS[chat.agentType!] ?? 'Terminal');
 
   const sameType = allTabs.filter((t) =>

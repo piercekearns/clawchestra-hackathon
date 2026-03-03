@@ -64,5 +64,5 @@ export const AGENT_LABELS: Record<HubAgentType, string> = {
   codex: 'Codex',
   opencode: 'OpenCode',
   cursor: 'Cursor',
-  generic: 'Shell',
+  generic: 'Terminal',
 };

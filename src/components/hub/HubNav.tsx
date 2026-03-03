@@ -255,7 +255,7 @@ export function HubNav({ onToast }: HubNavProps) {
 
   const handleAddTerminal = async (projectId: string, agentType: HubAgentType) => {
     const label = AGENT_LABELS[agentType] ?? agentType;
-    const title = `${label} Terminal`;
+    const title = agentType === 'generic' ? 'Terminal' : label;
     const rowId = `custom-${Date.now()}`;
     const newChat = await hubChatCreate(
       projectId,
