@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Archive, Check, CircleX, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
+import { Archive, Check, ChevronDown, ChevronUp, CircleX, ExternalLink, MoreHorizontal, Pin, PenLine, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import type { HubChat } from '../../lib/hub-types';
 import { hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
@@ -18,9 +18,13 @@ interface DrawerHeaderProps {
   onOpenLinkedProject?: (projectId: string, projectTitle: string) => void;
   /** Callback to restart a dead terminal session (remounts TerminalShell). */
   onRestart?: () => void;
+  canCycleUp?: boolean;
+  canCycleDown?: boolean;
+  onCycleUp?: () => void;
+  onCycleDown?: () => void;
 }
 
-export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart }: DrawerHeaderProps) {
+export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart, canCycleUp, canCycleDown, onCycleUp, onCycleDown }: DrawerHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
@@ -137,6 +141,35 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
           </>
         )}
       </div>
+      {/* Row cycle chevrons */}
+      {(canCycleUp || canCycleDown) && (
+        <div className="flex items-center gap-0.5">
+          {canCycleUp && (
+            <Tooltip text="Previous row">
+              <button
+                type="button"
+                onClick={onCycleUp}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Previous row"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+          {canCycleDown && (
+            <Tooltip text="Next row">
+              <button
+                type="button"
+                onClick={onCycleDown}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Next row"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+      )}
       {/* Terminal: End Session button — other chats: ⋯ menu */}
       {isTerminal ? (
         <div className="relative">

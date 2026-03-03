@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { HubAgentType, HubChat } from '../../lib/hub-types';
+import type { HubAgentType, HubChat, HubThread } from '../../lib/hub-types';
+import { buildRows } from '../../lib/hub-utils';
 import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
 import { tmuxSessionName, AGENT_LABELS } from '../../lib/terminal-utils';
@@ -97,6 +98,51 @@ export function SecondaryDrawer({
     }
     return projectTitle;
   }, [chat, projectTitle, roadmapItems]);
+
+  // Build sorted rows for the current folder to enable row cycling
+  const roadmapItemMap = useMemo(() => {
+    if (!chat) return new Map<string, string>();
+    const map = new Map<string, string>();
+    const items = roadmapItems[chat.projectId] ?? [];
+    for (const item of items) {
+      map.set(item.id, item.title);
+    }
+    return map;
+  }, [chat, roadmapItems]);
+
+  const threadRows = useMemo(() => {
+    if (!chat) return [];
+    const threadChats = hubChats.filter((c) => c.projectId === chat.projectId);
+    const thread: HubThread = { projectId: chat.projectId, projectTitle, chats: threadChats };
+    return buildRows(thread, roadmapItemMap);
+  }, [chat, hubChats, projectTitle, roadmapItemMap]);
+
+  const currentRowIndex = threadRows.findIndex(
+    (r) => r.itemId === chat?.itemId,
+  );
+  const canGoUp = currentRowIndex > 0;
+  const canGoDown = currentRowIndex >= 0 && currentRowIndex < threadRows.length - 1;
+
+  const handleCycleRow = useCallback(
+    (direction: 'up' | 'down') => {
+      const targetIndex = direction === 'up' ? currentRowIndex - 1 : currentRowIndex + 1;
+      const targetRow = threadRows[targetIndex];
+      if (!targetRow) return;
+      // Pick the best tab (most recent activity) in the target row
+      const bestTab = targetRow.tabs.reduce((best, tab) =>
+        tab.lastActivity > best.lastActivity ? tab : best,
+      );
+      setHubActiveChatId(bestTab.id);
+      // Auto-expand for terminals
+      if (bestTab.type === 'terminal') {
+        const currentWidth = useDashboardStore.getState().hubDrawerWidth;
+        if (currentWidth < 640) {
+          useDashboardStore.getState().setHubDrawerWidth(640);
+        }
+      }
+    },
+    [currentRowIndex, threadRows, setHubActiveChatId],
+  );
 
   const handleRestart = useCallback(() => {
     if (!chat) return;
@@ -266,6 +312,10 @@ export function SecondaryDrawer({
           onOpenLinkedItem={onOpenLinkedItem}
           onOpenLinkedProject={onOpenLinkedProject}
           onRestart={chat.type === 'terminal' ? handleRestart : undefined}
+          canCycleUp={canGoUp}
+          canCycleDown={canGoDown}
+          onCycleUp={canGoUp ? () => handleCycleRow('up') : undefined}
+          onCycleDown={canGoDown ? () => handleCycleRow('down') : undefined}
         />
         {drawerToasts.length > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center px-4">
