@@ -2,7 +2,7 @@ import type { UsageSnapshot } from './gateway';
 
 export type HubChatType = 'openclaw' | 'terminal';
 
-export type HubAgentType = 'claude-code' | 'codex' | 'cursor' | 'opencode' | 'generic';
+export type HubAgentType = 'claude-code' | 'codex' | 'cursor' | 'opencode' | 'openclaw-tui' | 'generic';
 
 export interface HubChatModelState {
   label: string | null;

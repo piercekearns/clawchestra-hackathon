@@ -32,6 +32,7 @@ export function AgentIcon({ agentType, className = 'h-3.5 w-3.5' }: AgentIconPro
     case 'codex':
       return <OpenAIIcon className={className} />;
     case 'opencode':
+    case 'openclaw-tui':
     case 'generic':
     case 'cursor':
     default:

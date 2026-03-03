@@ -74,6 +74,7 @@ pub(crate) fn detect_agents() -> Vec<DetectedAgent> {
         ("claude-code", "claude"),
         ("codex", "codex"),
         ("opencode", "opencode"),
+        ("openclaw-tui", "openclaw"),
         ("tmux", "tmux"),
     ];
 

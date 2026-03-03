@@ -11,13 +11,23 @@ export function getAgentCommand(
 ): string | null {
   if (!agentType || agentType === 'generic' || agentType === 'cursor') return null;
 
+  // Subcommands appended after the resolved binary path
+  const subcommands: Partial<Record<HubAgentType, string>> = {
+    'openclaw-tui': 'tui',
+  };
+
   // Use resolved absolute path from detection when available
   if (detectedAgents) {
+    // openclaw-tui detects via the 'openclaw-tui' agent type entry
     const agent = detectedAgents.find((a) => a.agentType === agentType && a.available);
-    if (agent?.path) return agent.path;
+    if (agent?.path) {
+      const sub = subcommands[agentType];
+      return sub ? `${agent.path} ${sub}` : agent.path;
+    }
   }
 
   // Fallback to bare command name
+  const sub = subcommands[agentType];
   switch (agentType) {
     case 'claude-code':
       return 'claude';
@@ -25,6 +35,8 @@ export function getAgentCommand(
       return 'codex';
     case 'opencode':
       return 'opencode';
+    case 'openclaw-tui':
+      return sub ? `openclaw ${sub}` : 'openclaw';
     default:
       return null;
   }
@@ -63,6 +75,7 @@ export const AGENT_LABELS: Record<HubAgentType, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode',
+  'openclaw-tui': 'OpenClaw TUI',
   cursor: 'Cursor',
   generic: 'Terminal',
 };
