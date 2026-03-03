@@ -184,7 +184,8 @@ export function SecondaryDrawer({
       await hubChatUpdate(tabChatId, { archived: true });
       await refreshHubChats();
 
-      // If closing the active tab, switch to another tab or close drawer
+      // If closing the active tab, switch to another tab in the row,
+      // or cycle to an adjacent row, or close the drawer as a last resort
       if (tabChatId === chatId) {
         const remaining = rowTabs.filter((t) => t.id !== tabChatId);
         if (remaining.length > 0) {
@@ -194,7 +195,19 @@ export function SecondaryDrawer({
           );
           setHubActiveChatId(best.id);
         } else {
-          onClose();
+          // Last tab in this row — try to cycle to an adjacent row (prefer above)
+          const adjacentRow = currentRowIndex > 0
+            ? threadRows[currentRowIndex - 1]
+            : threadRows[currentRowIndex + 1];
+          if (adjacentRow && adjacentRow.tabs.length > 0) {
+            const rowKey = `${adjacentRow.projectId}:${adjacentRow.itemId ?? '__project__'}`;
+            const lastId = lastActiveTabPerRow.current.get(rowKey);
+            const lastTab = lastId ? adjacentRow.tabs.find((t) => t.id === lastId) : undefined;
+            const bestTab = lastTab ?? adjacentRow.tabs[0];
+            setHubActiveChatId(bestTab.id);
+          } else {
+            onClose();
+          }
         }
       }
 
