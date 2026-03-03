@@ -193,8 +193,9 @@ function TabItem({
   // Raw terminal activity states (same derivation as ChatEntryRow)
   const isTerminalActive = chat.type === 'terminal' && !isDeadTerminal && !!activity?.isActive;
   const isTerminalActionRequired = chat.type === 'terminal' && !isDeadTerminal && !!activity?.actionRequired;
-  const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !!activity
-    && activity.lastOutputAt > activity.lastViewedAt;
+  // Unread only when NOT active — active output is in-progress, not "unread"
+  const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !isTerminalActive
+    && !!activity && activity.lastOutputAt > activity.lastViewedAt;
 
   // busyChatIds tracks openclaw AI-responding; isTerminalActive tracks terminal output.
   // The debounce (200ms enter, 3s cooldown) already filters brief typing echoes,

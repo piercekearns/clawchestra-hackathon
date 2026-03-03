@@ -22,8 +22,12 @@ function getRowActivity(
     if (tab.type === 'terminal') {
       const a = terminalActivity[tab.id];
       if (a?.actionRequired) hasActionRequired = true;
-      if (a && a.lastOutputAt > a.lastViewedAt) hasUnread = true;
-      if (a?.isActive) hasActive = true;
+      if (a?.isActive) {
+        hasActive = true;
+        // Don't count as unread — output is in progress, not waiting to be read
+      } else if (a && a.lastOutputAt > a.lastViewedAt) {
+        hasUnread = true;
+      }
     }
   }
 

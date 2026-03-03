@@ -1005,7 +1005,8 @@ export const useDashboardStore = create<DashboardState>()(
                 // fresh instead of seeing a stale hash diff → false activity.
                 lastCaptureHash: '',
                 lastViewedAt: Date.now(),
-                isActive: false,
+                // Preserve isActive — viewing a terminal doesn't stop it working
+                isActive: prev?.isActive ?? false,
                 actionRequired: false,
               },
             },
