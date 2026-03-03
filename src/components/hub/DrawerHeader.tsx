@@ -10,6 +10,8 @@ import { hasTerminalSpawnGrace } from '../../lib/terminal-activity';
 interface DrawerHeaderProps {
   chat: HubChat;
   projectTitle: string;
+  /** Row-level title (item title for item rows, project title for project rows). */
+  rowTitle?: string;
   onClose: () => void;
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
   onOpenLinkedItem?: (projectId: string, projectTitle: string, itemId: string) => void;
@@ -18,7 +20,7 @@ interface DrawerHeaderProps {
   onRestart?: () => void;
 }
 
-export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart }: DrawerHeaderProps) {
+export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart }: DrawerHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
@@ -122,20 +124,16 @@ export function DrawerHeader({ chat, projectTitle, onClose, onToast, onOpenLinke
         ) : (
           <>
             <div
-              className={`truncate text-sm font-medium text-neutral-800 dark:text-neutral-200 ${!chat.isProjectRoot ? 'cursor-pointer' : ''}`}
-              onDoubleClick={!chat.isProjectRoot ? handleRenameStart : undefined}
+              className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-200"
             >
-              {chat.isProjectRoot ? projectTitle : chat.title}
+              {rowTitle ?? (chat.isProjectRoot ? projectTitle : chat.title)}
             </div>
-            {isTerminal ? (
+            {/* Subtitle: project name for non-project rows */}
+            {(chat.itemId || (!chat.isProjectRoot && !rowTitle)) && (
               <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
                 {projectTitle}
               </div>
-            ) : !chat.isProjectRoot ? (
-              <div className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-                {projectTitle}
-              </div>
-            ) : null}
+            )}
           </>
         )}
       </div>

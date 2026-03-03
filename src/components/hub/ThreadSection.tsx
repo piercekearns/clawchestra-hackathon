@@ -1,16 +1,12 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, MessageSquare, Plus, Terminal } from 'lucide-react';
-import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
+import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
+import type { HubAgentType, HubChat, HubRow, HubThread } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
-import { AGENT_LABELS } from '../../lib/terminal-utils';
-import { AgentIcon } from './AgentIcon';
-import { ChatEntryRow } from './ChatEntryRow';
+import { RowEntryRow } from './RowEntryRow';
 import { ScrollRevealText } from './ScrollRevealText';
-
-const MAX_VISIBLE_CHATS = 5;
+import { TypePickerMenu } from './TypePickerMenu';
 
 interface ThreadSectionProps {
   thread: HubThread;
@@ -19,14 +15,67 @@ interface ThreadSectionProps {
   completedItemIds?: Set<string>;
   onToggle: () => void;
   onSelectChat: (chatId: string) => void;
-  onRenameChat: (chatId: string, newTitle: string) => void;
   onTogglePinChat: (chatId: string, pinned: boolean) => void;
-  onArchiveChat: (chatId: string) => void;
-  onMarkUnreadChat: (chatId: string) => void;
-  onDeleteChat: (chatId: string) => void;
-  onClearHistory: (chatId: string) => void;
+  onArchiveChats: (chatIds: string[]) => void;
+  onMarkReadChats: (chatIds: string[]) => void;
+  onDeleteChats: (chatIds: string[]) => void;
   onAddChat: (projectId: string) => void;
   onAddTerminal?: (projectId: string, agentType: HubAgentType) => void;
+}
+
+/** Group non-archived chats in a thread into HubRows by (projectId, itemId). */
+function buildRows(thread: HubThread, roadmapItemMap: Map<string, string>): HubRow[] {
+  const nonArchived = thread.chats.filter((c) => !c.archived);
+  const groups = new Map<string, HubChat[]>();
+
+  for (const chat of nonArchived) {
+    const key = chat.itemId ?? '__project__';
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(chat);
+    } else {
+      groups.set(key, [chat]);
+    }
+  }
+
+  const rows: HubRow[] = [];
+  for (const [key, tabs] of groups) {
+    const itemId = key === '__project__' ? null : key;
+    const isProjectSurface = itemId === null;
+
+    let title: string;
+    if (isProjectSurface) {
+      title = thread.projectTitle;
+    } else {
+      title = roadmapItemMap.get(itemId!) ?? tabs[0]?.title ?? 'Untitled';
+    }
+
+    // Sort tabs: by sortOrder, then creation time
+    const sortedTabs = [...tabs].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt,
+    );
+
+    rows.push({
+      projectId: thread.projectId,
+      itemId,
+      title,
+      tabs: sortedTabs,
+      isProjectSurface,
+    });
+  }
+
+  // Order: project surface first, then pinned rows, then by lastActivity desc
+  rows.sort((a, b) => {
+    if (a.isProjectSurface !== b.isProjectSurface) return a.isProjectSurface ? -1 : 1;
+    const aPinned = a.tabs.some((t) => t.pinned);
+    const bPinned = b.tabs.some((t) => t.pinned);
+    if (aPinned !== bPinned) return aPinned ? -1 : 1;
+    const aMax = Math.max(...a.tabs.map((t) => t.lastActivity));
+    const bMax = Math.max(...b.tabs.map((t) => t.lastActivity));
+    return bMax - aMax;
+  });
+
+  return rows;
 }
 
 export function ThreadSection({
@@ -36,18 +85,16 @@ export function ThreadSection({
   completedItemIds,
   onToggle,
   onSelectChat,
-  onRenameChat,
   onTogglePinChat,
-  onArchiveChat,
-  onMarkUnreadChat,
-  onDeleteChat,
-  onClearHistory,
+  onArchiveChats,
+  onMarkReadChats,
+  onDeleteChats,
   onAddChat,
   onAddTerminal,
 }: ThreadSectionProps) {
-  const [showAll, setShowAll] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const hubBusyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
+  const roadmapItems = useDashboardStore((s) => s.roadmapItems);
+
   const {
     attributes,
     listeners,
@@ -62,17 +109,29 @@ export function ThreadSection({
     transition,
   };
 
-  // Project root chat always floats to the top, separate from pin sort
-  const projectChat = thread.chats.find((c) => c.isProjectRoot && !c.archived) ?? null;
-  const restChats = thread.chats.filter((c) => c !== projectChat);
+  // Build a title lookup for roadmap items in this project
+  const roadmapItemMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const items = roadmapItems[thread.projectId] ?? [];
+    for (const item of items) {
+      map.set(item.id, item.title);
+    }
+    return map;
+  }, [roadmapItems, thread.projectId]);
 
-  const pinnedChats = restChats.filter((c) => c.pinned && !c.archived);
-  const unpinnedChats = restChats.filter((c) => !c.pinned && !c.archived);
+  // Group chats into rows
+  const rows = useMemo(
+    () => buildRows(thread, roadmapItemMap),
+    [thread, roadmapItemMap],
+  );
+
+  // Check if the active chat belongs to any row in this thread
+  const activeRow = activeChatId
+    ? rows.find((r) => r.tabs.some((t) => t.id === activeChatId))
+    : null;
+
+  // Archived chats (for the collapsible archived section)
   const archivedChats = thread.chats.filter((c) => c.archived);
-
-  const visibleUnpinned = showAll ? unpinnedChats : unpinnedChats.slice(0, MAX_VISIBLE_CHATS);
-  const hiddenCount = unpinnedChats.length - visibleUnpinned.length;
-  const allVisible = [...pinnedChats, ...visibleUnpinned];
 
   return (
     <div
@@ -80,7 +139,7 @@ export function ThreadSection({
       style={style}
       className={`mb-1 ${isDragging ? 'opacity-50' : ''}`}
     >
-      {/* Thread header — drag handle lives here, not on the entire section */}
+      {/* Folder header — drag handle */}
       <div
         className="hub-row group relative flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800"
         onClick={onToggle}
@@ -117,7 +176,7 @@ export function ThreadSection({
           </span>
         </button>
 
-        {/* Project name — on hover, reserve space for + button so text clips */}
+        {/* Project name */}
         <div className="min-w-0 flex-1 group-hover:pr-8">
           <ScrollRevealText
             text={thread.projectTitle}
@@ -127,81 +186,58 @@ export function ThreadSection({
 
         {/* Hover actions: + */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-neutral-100 px-0.5 opacity-0 group-hover:opacity-100 transition-opacity dark:bg-neutral-800">
-          <TypePickerButton
-            projectId={thread.projectId}
-            onAddChat={onAddChat}
-            onAddTerminal={onAddTerminal}
+          <TypePickerMenu
+            onAddChat={() => onAddChat(thread.projectId)}
+            onAddTerminal={onAddTerminal ? (agentType) => onAddTerminal(thread.projectId, agentType) : undefined}
             externalMenuPos={contextMenuPos}
             onExternalMenuClose={() => setContextMenuPos(null)}
           />
         </div>
       </div>
 
-      {/* Chat entries — NO indentation, same alignment as project header */}
+      {/* Rows — grouped chat surfaces */}
       {!collapsed && (
         <div>
-          {/* Project-level chat always first, with a persistent home icon */}
-          {projectChat && (
-            <ChatEntryRow
-              key={projectChat.id}
-              chat={projectChat}
-              isActive={activeChatId === projectChat.id}
-              isProjectChat
-              isBusy={hubBusyChatIds.has(projectChat.id)}
-              onSelect={onSelectChat}
-              onRename={onRenameChat}
-              onTogglePin={onTogglePinChat}
-              onArchive={onArchiveChat}
-              onMarkUnread={onMarkUnreadChat}
-              onDelete={onDeleteChat}
-              onClearHistory={onClearHistory}
-            />
-          )}
-          {allVisible.map((chat) => (
-            <ChatEntryRow
-              key={chat.id}
-              chat={chat}
-              isActive={activeChatId === chat.id}
-              isItemComplete={chat.itemId ? completedItemIds?.has(chat.itemId) : false}
-              isBusy={hubBusyChatIds.has(chat.id)}
-              onSelect={onSelectChat}
-              onRename={onRenameChat}
-              onTogglePin={onTogglePinChat}
-              onArchive={onArchiveChat}
-              onMarkUnread={onMarkUnreadChat}
-              onDelete={onDeleteChat}
-            />
-          ))}
+          {rows.map((row) => {
+            if (row.tabs.length === 0) return null;
+            const rowKey = `${row.projectId}:${row.itemId ?? '__project__'}`;
+            const isRowActive = activeRow === row;
+            const isItemComplete = row.itemId ? (completedItemIds?.has(row.itemId) ?? false) : false;
 
-          {hiddenCount > 0 && !showAll && (
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className="w-full px-3 py-1 text-left text-[11px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-            >
-              Show {hiddenCount} more...
-            </button>
-          )}
-          {showAll && hiddenCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAll(false)}
-              className="w-full px-3 py-1 text-left text-[11px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-            >
-              Show less
-            </button>
-          )}
+            // Pick the best tab to open when clicking the row
+            const bestTab = row.tabs.reduce((best, tab) =>
+              tab.lastActivity > best.lastActivity ? tab : best,
+            );
+
+            return (
+              <RowEntryRow
+                key={rowKey}
+                row={row}
+                isActive={isRowActive}
+                isItemComplete={isItemComplete}
+                onSelect={() => onSelectChat(bestTab.id)}
+                onRenameRow={() => {/* Row rename not yet supported */}}
+                onTogglePinRow={() => {
+                  const isPinned = row.tabs.some((t) => t.pinned);
+                  const newPinned = !isPinned;
+                  for (const tab of row.tabs) {
+                    onTogglePinChat(tab.id, newPinned);
+                  }
+                }}
+                onArchiveRow={() => onArchiveChats(row.tabs.map((t) => t.id))}
+                onMarkReadRow={() => onMarkReadChats(row.tabs.map((t) => t.id))}
+                onDeleteRow={() => onDeleteChats(row.tabs.map((t) => t.id))}
+              />
+            );
+          })}
 
           {archivedChats.length > 0 && (
             <ArchivedSection
+              count={archivedChats.length}
               chats={archivedChats}
               activeChatId={activeChatId}
               onSelectChat={onSelectChat}
-              onRenameChat={onRenameChat}
-              onTogglePinChat={onTogglePinChat}
-              onArchiveChat={onArchiveChat}
-              onMarkUnreadChat={onMarkUnreadChat}
-              onDeleteChat={onDeleteChat}
+              onDeleteChat={(id) => onDeleteChats([id])}
             />
           )}
         </div>
@@ -210,183 +246,20 @@ export function ThreadSection({
   );
 }
 
-function TypePickerButton({
-  projectId,
-  onAddChat,
-  onAddTerminal,
-  externalMenuPos,
-  onExternalMenuClose,
-}: {
-  projectId: string;
-  onAddChat: (projectId: string) => void;
-  onAddTerminal?: (projectId: string, agentType: HubAgentType) => void;
-  externalMenuPos?: { top: number; left: number } | null;
-  onExternalMenuClose?: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [terminalSubmenu, setTerminalSubmenu] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-
-  // Open from external trigger (e.g. right-click on folder header)
-  useEffect(() => {
-    if (externalMenuPos) {
-      setMenuPos(externalMenuPos);
-      setOpen(true);
-      setTerminalSubmenu(false);
-    }
-  }, [externalMenuPos]);
-  const detectedAgents = useDashboardStore((s) => s.detectedAgents);
-
-  const tmuxAvailable = detectedAgents.some((a) => a.agentType === 'tmux' && a.available);
-  const codingAgents = detectedAgents.filter(
-    (a) => a.agentType !== 'tmux' && a.available,
-  );
-
-  const handleToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (open) {
-      setOpen(false);
-      setTerminalSubmenu(false);
-      onExternalMenuClose?.();
-    } else {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 });
-      setOpen(true);
-      setTerminalSubmenu(false);
-    }
-  };
-
-  const handleAgentSelect = (agentType: HubAgentType) => {
-    setOpen(false);
-    setTerminalSubmenu(false);
-    onExternalMenuClose?.();
-    onAddTerminal?.(projectId, agentType);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={handleToggle}
-        className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-        aria-label="New chat"
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-      {open && menuPos && createPortal(
-        <>
-          <div
-            className="fixed inset-0 z-[200]"
-            onClick={(e) => { e.stopPropagation(); setOpen(false); setTerminalSubmenu(false); onExternalMenuClose?.(); }}
-          />
-          <div
-            className="fixed z-[200] w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-            style={{ top: menuPos.top, left: menuPos.left }}
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpen(false);
-                onExternalMenuClose?.();
-                onAddChat(projectId);
-              }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              OpenClaw Chat
-            </button>
-            {tmuxAvailable ? (
-              <div
-                className="relative"
-                onMouseEnter={() => setTerminalSubmenu(true)}
-                onMouseLeave={() => setTerminalSubmenu(false)}
-              >
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                >
-                  <Terminal className="h-3.5 w-3.5" />
-                  <span>Terminal</span>
-                  <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
-                </button>
-                {/* Terminal agent submenu — pl-1 creates an invisible hover bridge
-                     so the mouse doesn't leave the parent wrapper crossing the gap */}
-                {terminalSubmenu && (
-                  <div className="absolute left-full top-0 z-[200] pl-1">
-                  <div
-                    className="w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-                  >
-                    {codingAgents.map((agent) => (
-                      <button
-                        key={agent.agentType}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAgentSelect(agent.agentType as HubAgentType);
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                      >
-                        <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
-                        {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAgentSelect('generic');
-                      }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    >
-                      <Terminal className="h-3.5 w-3.5 text-neutral-400" />
-                      Shell
-                    </button>
-                  </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-400 dark:text-neutral-600 cursor-not-allowed"
-                title="Requires tmux (brew install tmux)"
-              >
-                <Terminal className="h-3.5 w-3.5" />
-                <span>Terminal</span>
-                <span className="ml-auto text-[10px]">No tmux</span>
-              </button>
-            )}
-          </div>
-        </>,
-        document.body,
-      )}
-    </div>
-  );
-}
-
 function ArchivedSection({
+  count,
   chats,
   activeChatId,
   onSelectChat,
-  onRenameChat,
-  onTogglePinChat,
-  onArchiveChat,
-  onMarkUnreadChat,
   onDeleteChat,
 }: {
+  count: number;
   chats: HubChat[];
   activeChatId: string | null;
   onSelectChat: (id: string) => void;
-  onRenameChat: (id: string, title: string) => void;
-  onTogglePinChat: (id: string, pinned: boolean) => void;
-  onArchiveChat: (id: string) => void;
-  onMarkUnreadChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const hubBusyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
 
   return (
     <div className="mt-1">
@@ -396,23 +269,22 @@ function ArchivedSection({
         className="flex items-center gap-1 px-3 py-1 text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
       >
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        Archived ({chats.length})
+        Archived ({count})
       </button>
       {expanded && (
         <div className="opacity-50">
           {chats.map((chat) => (
-            <ChatEntryRow
+            <div
               key={chat.id}
-              chat={chat}
-              isActive={activeChatId === chat.id}
-              isBusy={hubBusyChatIds.has(chat.id)}
-              onSelect={onSelectChat}
-              onRename={onRenameChat}
-              onTogglePin={onTogglePinChat}
-              onArchive={onArchiveChat}
-              onMarkUnread={onMarkUnreadChat}
-              onDelete={onDeleteChat}
-            />
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer ${
+                activeChatId === chat.id
+                  ? 'bg-revival-accent-400/10 text-neutral-900 dark:text-neutral-100'
+                  : 'text-neutral-800 hover:bg-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-800'
+              }`}
+              onClick={() => onSelectChat(chat.id)}
+            >
+              <span className="truncate text-xs">{chat.title}</span>
+            </div>
           ))}
         </div>
       )}

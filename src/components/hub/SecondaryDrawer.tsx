@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { HubChat } from '../../lib/hub-types';
+import type { HubAgentType, HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
-import { tmuxKillSession } from '../../lib/tauri';
-import { tmuxSessionName } from '../../lib/terminal-utils';
+import { hubChatCreate, hubChatUpdate, tmuxKillSession } from '../../lib/tauri';
+import { tmuxSessionName, AGENT_LABELS } from '../../lib/terminal-utils';
+import { addTerminalSpawnGrace } from '../../lib/terminal-activity';
 import { DrawerHeader } from './DrawerHeader';
 import { ScopedChatShell } from './ScopedChatShell';
+import { TabStrip } from './TabStrip';
 
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 1200;
@@ -32,6 +34,9 @@ export function SecondaryDrawer({
 }: SecondaryDrawerProps) {
   const hubChats = useDashboardStore((s) => s.hubChats);
   const projects = useDashboardStore((s) => s.projects);
+  const roadmapItems = useDashboardStore((s) => s.roadmapItems);
+  const setHubActiveChatId = useDashboardStore((s) => s.setHubActiveChatId);
+  const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
 
   const chat = hubChats.find((c) => c.id === chatId);
   const isDragging = useRef(false);
@@ -59,13 +64,133 @@ export function SecondaryDrawer({
     return findTitle(projects) ?? chat.projectId;
   }, [chat, projects]);
 
+  // Derive the row: all non-archived chats sharing the same (projectId, itemId) as the active chat
+  const rowTabs = useMemo(() => {
+    if (!chat) return [];
+    return hubChats
+      .filter(
+        (c) =>
+          c.projectId === chat.projectId &&
+          c.itemId === chat.itemId &&
+          !c.archived,
+      )
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
+  }, [chat, hubChats]);
+
+  // Resolve row title: for item-level rows, use roadmap item title
+  const rowTitle = useMemo(() => {
+    if (!chat) return '';
+    if (chat.itemId) {
+      const items = roadmapItems[chat.projectId] ?? [];
+      const item = items.find((i) => i.id === chat.itemId);
+      return item?.title ?? chat.title;
+    }
+    return projectTitle;
+  }, [chat, projectTitle, roadmapItems]);
+
   const handleRestart = useCallback(() => {
     if (!chat) return;
-    // Kill the old tmux session (handles lingering case), then remount TerminalShell
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
-    void tmuxKillSession(sessionName).catch(() => { /* session may already be dead */ });
+    void tmuxKillSession(sessionName).catch(() => {});
     setTerminalRestartKey((k) => k + 1);
   }, [chat]);
+
+  const handleSelectTab = useCallback(
+    (tabChatId: string) => {
+      setHubActiveChatId(tabChatId);
+      // Reset terminal restart key when switching tabs
+      setTerminalRestartKey(0);
+      // Auto-expand for terminals
+      const tabChat = hubChats.find((c) => c.id === tabChatId);
+      if (tabChat?.type === 'terminal') {
+        const currentWidth = useDashboardStore.getState().hubDrawerWidth;
+        if (currentWidth < 640) {
+          useDashboardStore.getState().setHubDrawerWidth(640);
+        }
+      }
+    },
+    [hubChats, setHubActiveChatId],
+  );
+
+  const handleCloseTab = useCallback(
+    async (tabChatId: string) => {
+      await hubChatUpdate(tabChatId, { archived: true });
+      await refreshHubChats();
+
+      // If closing the active tab, switch to another tab or close drawer
+      if (tabChatId === chatId) {
+        const remaining = rowTabs.filter((t) => t.id !== tabChatId);
+        if (remaining.length > 0) {
+          // Switch to the most recently active remaining tab
+          const best = remaining.reduce((a, b) =>
+            a.lastActivity > b.lastActivity ? a : b,
+          );
+          setHubActiveChatId(best.id);
+        } else {
+          onClose();
+        }
+      }
+
+      if (onToast) {
+        const archived = hubChats.find((c) => c.id === tabChatId);
+        if (archived) {
+          onToast('success', `"${archived.title}" archived`, {
+            label: 'Undo',
+            onClick: () => {
+              void hubChatUpdate(tabChatId, { archived: false }).then(() => refreshHubChats());
+            },
+          });
+        }
+      }
+    },
+    [chatId, rowTabs, hubChats, setHubActiveChatId, refreshHubChats, onClose, onToast],
+  );
+
+  const handleAddChat = useCallback(async () => {
+    if (!chat) return;
+    const title = `New Chat ${new Date().toLocaleDateString()}`;
+    const newChat = await hubChatCreate(
+      chat.projectId,
+      chat.itemId,
+      'openclaw',
+      null,
+      title,
+    );
+    await refreshHubChats();
+    setHubActiveChatId(newChat.id);
+  }, [chat, refreshHubChats, setHubActiveChatId]);
+
+  const handleAddTerminal = useCallback(
+    async (agentType: HubAgentType) => {
+      if (!chat) return;
+      const label = AGENT_LABELS[agentType] ?? agentType;
+      const title = agentType === 'generic' ? 'Terminal' : label;
+      const newChat = await hubChatCreate(
+        chat.projectId,
+        chat.itemId,
+        'terminal',
+        agentType,
+        title,
+      );
+
+      // Optimistic active terminal tracking (same as openOrCreateTerminal)
+      const store = useDashboardStore.getState();
+      const updated = new Set(store.activeTerminalChatIds);
+      updated.add(newChat.id);
+      store.setActiveTerminalChatIds(updated);
+      addTerminalSpawnGrace(newChat.id);
+
+      await refreshHubChats();
+      setHubActiveChatId(newChat.id);
+
+      // Auto-expand for terminals
+      const currentWidth = useDashboardStore.getState().hubDrawerWidth;
+      if (currentWidth < 640) {
+        useDashboardStore.getState().setHubDrawerWidth(640);
+      }
+    },
+    [chat, refreshHubChats, setHubActiveChatId],
+  );
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -105,7 +230,7 @@ export function SecondaryDrawer({
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     },
-    [onWidthChange],
+    [onWidthChange, chat, side],
   );
 
   if (!chat) return null;
@@ -126,11 +251,21 @@ export function SecondaryDrawer({
         <DrawerHeader
           chat={chat}
           projectTitle={projectTitle}
+          rowTitle={rowTitle}
           onClose={onClose}
           onToast={onToast}
           onOpenLinkedItem={onOpenLinkedItem}
           onOpenLinkedProject={onOpenLinkedProject}
           onRestart={chat.type === 'terminal' ? handleRestart : undefined}
+        />
+        {/* Tab strip — shown when the row has multiple tabs, or always to allow adding tabs */}
+        <TabStrip
+          tabs={rowTabs}
+          activeTabId={chatId}
+          onSelectTab={handleSelectTab}
+          onCloseTab={handleCloseTab}
+          onAddChat={handleAddChat}
+          onAddTerminal={handleAddTerminal}
         />
         <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
           terminalDragActive ? '' : terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
@@ -139,7 +274,7 @@ export function SecondaryDrawer({
         </div>
       </div>
 
-      {/* Drag handle — on right edge when side=left, left edge when side=right */}
+      {/* Drag handle */}
       <div
         role="separator"
         aria-orientation="vertical"

@@ -34,6 +34,15 @@ export interface HubThread {
   chats: HubChat[];
 }
 
+/** A row groups HubChats sharing the same (projectId, itemId) — rendered as one sidebar entry with tabs. */
+export interface HubRow {
+  projectId: string;
+  itemId: string | null;
+  title: string;
+  tabs: HubChat[];
+  isProjectSurface: boolean;
+}
+
 export interface HubChatUpdate {
   title?: string;
   pinned?: boolean;

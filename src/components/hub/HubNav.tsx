@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/sortable';
 import { MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
-import { hubChatCreate, hubChatUpdate, hubChatDelete, hubChatMessagesClear } from '../../lib/tauri';
+import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
 import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
 import { ThreadSection } from './ThreadSection';
@@ -87,7 +87,6 @@ export function HubNav({ onToast }: HubNavProps) {
         const aIdx = orderIndex.get(a.projectId) ?? Number.MAX_SAFE_INTEGER;
         const bIdx = orderIndex.get(b.projectId) ?? Number.MAX_SAFE_INTEGER;
         if (aIdx !== bIdx) return aIdx - bIdx;
-        // Both unordered — fall back to activity
         const aMax = Math.max(...a.chats.map((c) => c.lastActivity));
         const bMax = Math.max(...b.chats.map((c) => c.lastActivity));
         return bMax - aMax;
@@ -136,52 +135,59 @@ export function HubNav({ onToast }: HubNavProps) {
     setHubDrawerOpen(true);
   };
 
-  const handleRenameChat = async (chatId: string, newTitle: string) => {
-    await hubChatUpdate(chatId, { title: newTitle });
-    await refreshHubChats();
-  };
-
   const handleTogglePinChat = async (chatId: string, pinned: boolean) => {
     await hubChatUpdate(chatId, { pinned });
     await refreshHubChats();
   };
 
-  const handleArchiveChat = async (chatId: string) => {
-    const chat = hubChats.find((c) => c.id === chatId);
-    await hubChatUpdate(chatId, { archived: true });
+  /** Archive multiple chats at once (row-level action). */
+  const handleArchiveChats = async (chatIds: string[]) => {
+    for (const id of chatIds) {
+      await hubChatUpdate(id, { archived: true });
+    }
     await refreshHubChats();
-    if (onToast && chat) {
-      onToast('success', `"${chat.title}" archived`, {
+    // If the active chat was archived, close the drawer
+    if (hubActiveChatId && chatIds.includes(hubActiveChatId)) {
+      setHubActiveChatId(null);
+      setHubDrawerOpen(false);
+    }
+    if (onToast && chatIds.length > 0) {
+      const label = chatIds.length === 1 ? '1 chat archived' : `${chatIds.length} chats archived`;
+      onToast('success', label, {
         label: 'Undo',
         onClick: () => {
-          void hubChatUpdate(chatId, { archived: false }).then(() => refreshHubChats());
+          void (async () => {
+            for (const id of chatIds) {
+              await hubChatUpdate(id, { archived: false });
+            }
+            await refreshHubChats();
+          })();
         },
       });
     }
   };
 
-  const handleMarkUnreadChat = async (chatId: string) => {
-    const chat = hubChats.find((c) => c.id === chatId);
-    if (!chat) return;
-    await hubChatUpdate(chatId, { unread: !chat.unread });
-    await refreshHubChats();
-  };
-
-  const handleDeleteChat = async (chatId: string) => {
-    await hubChatDelete(chatId);
-    // Clean up transient store state for the deleted chat (prevents memory leaks)
-    useDashboardStore.getState().clearHubChatState(chatId);
-    if (hubActiveChatId === chatId) {
-      setHubActiveChatId(null);
-      setHubDrawerOpen(false);
+  /** Mark multiple chats as read (row-level action). */
+  const handleMarkReadChats = async (chatIds: string[]) => {
+    for (const id of chatIds) {
+      const chat = hubChats.find((c) => c.id === id);
+      if (chat?.unread) {
+        await hubChatUpdate(id, { unread: false });
+      }
     }
     await refreshHubChats();
   };
 
-  const handleClearHistory = async (chatId: string) => {
-    useDashboardStore.getState().setHubChatMessages(chatId, []);
-    await hubChatMessagesClear(chatId);
-    await hubChatUpdate(chatId, { messageCount: 0 });
+  /** Delete multiple chats at once (row-level action). */
+  const handleDeleteChats = async (chatIds: string[]) => {
+    for (const id of chatIds) {
+      await hubChatDelete(id);
+      useDashboardStore.getState().clearHubChatState(id);
+    }
+    if (hubActiveChatId && chatIds.includes(hubActiveChatId)) {
+      setHubActiveChatId(null);
+      setHubDrawerOpen(false);
+    }
     await refreshHubChats();
   };
 
@@ -195,7 +201,6 @@ export function HubNav({ onToast }: HubNavProps) {
       title,
     );
     await refreshHubChats();
-    // Expand the thread if it's collapsed
     if (hubCollapsedThreads.includes(projectId)) {
       toggleHubThread(projectId);
     }
@@ -219,7 +224,6 @@ export function HubNav({ onToast }: HubNavProps) {
     }
     setHubActiveChatId(newChat.id);
     setHubDrawerOpen(true);
-    // Auto-expand drawer for terminals
     const currentWidth = useDashboardStore.getState().hubDrawerWidth;
     if (currentWidth < 640) {
       useDashboardStore.getState().setHubDrawerWidth(640);
@@ -261,12 +265,10 @@ export function HubNav({ onToast }: HubNavProps) {
                   completedItemIds={completedItemIds}
                   onToggle={() => toggleHubThread(thread.projectId)}
                   onSelectChat={handleSelectChat}
-                  onRenameChat={handleRenameChat}
                   onTogglePinChat={handleTogglePinChat}
-                  onArchiveChat={handleArchiveChat}
-                  onMarkUnreadChat={handleMarkUnreadChat}
-                  onDeleteChat={handleDeleteChat}
-                  onClearHistory={handleClearHistory}
+                  onArchiveChats={handleArchiveChats}
+                  onMarkReadChats={handleMarkReadChats}
+                  onDeleteChats={handleDeleteChats}
                   onAddChat={handleAddChat}
                   onAddTerminal={handleAddTerminal}
                 />
