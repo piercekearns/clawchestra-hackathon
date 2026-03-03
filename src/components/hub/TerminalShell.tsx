@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
-import { detectActionRequired } from '../../lib/terminal-activity';
+import { detectActionRequired, detectConnectionError } from '../../lib/terminal-activity';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
 
@@ -39,6 +39,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
   const projects = useDashboardStore((s) => s.projects);
   const detectedAgents = useDashboardStore((s) => s.detectedAgents);
+  const connectionError = useDashboardStore((s) => s.terminalActivity[chat.id]?.connectionError ?? null);
 
   // Resolve project dirPath from the store's project tree
   const projectDirPath = useMemo(() => {
@@ -237,10 +238,13 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         const line = buffer.getLine(i);
         if (line) lines.push(line.translateToString(true));
       }
-      const actionRequired = detectActionRequired(lines.join('\n'));
+      const text = lines.join('\n');
+      const actionRequired = detectActionRequired(text);
+      const connectionError = detectConnectionError(text);
       useDashboardStore.getState().updateTerminalActivity(chat.id, {
         isActive: false,
         actionRequired,
+        connectionError,
       });
     };
 
@@ -259,7 +263,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // one-shot check clears the amber dot without waiting for new output.
     const postGraceCheck = setTimeout(() => {
       const prev = useDashboardStore.getState().terminalActivity[chat.id];
-      if (!prev?.actionRequired) return;
       const buffer = term.buffer.active;
       const lines: string[] = [];
       const end = buffer.baseY + buffer.cursorY;
@@ -268,8 +271,17 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         const line = buffer.getLine(i);
         if (line) lines.push(line.translateToString(true));
       }
-      if (!detectActionRequired(lines.join('\n'))) {
-        useDashboardStore.getState().updateTerminalActivity(chat.id, { actionRequired: false });
+      const text = lines.join('\n');
+      const updates: Record<string, unknown> = {};
+      if (prev?.actionRequired && !detectActionRequired(text)) {
+        updates.actionRequired = false;
+      }
+      // Check for connection errors after scrollback restore completes —
+      // TUI errors typically appear within the first 2-3s.
+      const connectionError = detectConnectionError(text);
+      updates.connectionError = connectionError;
+      if (Object.keys(updates).length > 0) {
+        useDashboardStore.getState().updateTerminalActivity(chat.id, updates);
       }
     }, STARTUP_GRACE_MS + 500);
 
@@ -500,6 +512,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     >
       {dragActive && (
         <div className="pointer-events-none absolute inset-0 z-10 border-2 border-dashed border-revival-accent-400 bg-revival-accent-200/10 dark:bg-revival-accent-900/20" />
+      )}
+      {connectionError && (
+        <div className="absolute bottom-4 left-4 right-4 z-10 rounded-md border border-amber-500/30 bg-amber-50 px-3 py-2 text-xs text-amber-900 shadow-sm dark:border-amber-400/20 dark:bg-amber-950/80 dark:text-amber-200">
+          {connectionError}
+        </div>
       )}
       <div
         ref={containerRef}

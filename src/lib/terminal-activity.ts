@@ -49,6 +49,22 @@ export function hasTerminalSpawnGrace(chatId: string): boolean {
   return true;
 }
 
+const CONNECTION_ERROR_PATTERNS: { pattern: RegExp; message: string }[] = [
+  { pattern: /pairing required/i, message: 'Device pairing required. Run `openclaw devices approve --latest` in your terminal.' },
+  { pattern: /device signature invalid/i, message: 'Device signature invalid. Your OpenClaw CLI and gateway may be different versions.' },
+  { pattern: /gateway connect failed/i, message: 'Gateway connection failed. Check that your OpenClaw gateway is running.' },
+];
+
+/** Detect connection errors (pairing, auth, gateway) in terminal output. */
+export function detectConnectionError(text: string): string | null {
+  const clean = stripAnsi(text);
+  const lines = clean.split('\n').filter((l) => l.trim()).slice(-10).join('\n');
+  for (const { pattern, message } of CONNECTION_ERROR_PATTERNS) {
+    if (pattern.test(lines)) return message;
+  }
+  return null;
+}
+
 /** Detect action-required patterns (permission prompts, Y/n, etc.) in terminal output. */
 export function detectActionRequired(text: string): boolean {
   const clean = stripAnsi(text);

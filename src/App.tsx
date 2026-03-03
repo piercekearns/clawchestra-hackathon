@@ -108,7 +108,7 @@ import {
 } from './lib/chat-reliability';
 import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
 import { parseTmuxSessionName, tmuxSessionName } from './lib/terminal-utils';
-import { simpleHash, detectActionRequired, hasTerminalSpawnGrace } from './lib/terminal-activity';
+import { simpleHash, detectActionRequired, detectConnectionError, hasTerminalSpawnGrace } from './lib/terminal-activity';
 import { listen } from '@tauri-apps/api/event';
 
 interface Toast {
@@ -958,14 +958,16 @@ export default function App() {
             store.updateTerminalActivity(chatId, { lastCaptureHash: hash });
           } else if (prev.lastCaptureHash !== hash) {
             // Output changed since last poll — real activity.
-            // Re-evaluate actionRequired from fresh capture each time.
+            // Re-evaluate actionRequired + connectionError from fresh capture each time.
             // (No sticky carry-over — if new output scrolled past the prompt,
             // the prompt is no longer at the bottom and shouldn't flag.)
             const actionRequired = detectActionRequired(captured);
+            const connectionError = detectConnectionError(captured);
             store.updateTerminalActivity(chatId, {
               lastOutputAt: Date.now(),
               isActive: true,
               actionRequired,
+              connectionError,
               lastCaptureHash: hash,
             });
           } else if (prev.isActive) {
@@ -974,7 +976,10 @@ export default function App() {
             // detected output was > 4s ago (2 consecutive unchanged polls).
             const HIDDEN_TAIL_MS = 4000;
             if (Date.now() - prev.lastOutputAt > HIDDEN_TAIL_MS) {
-              store.updateTerminalActivity(chatId, { isActive: false });
+              // Re-check connection errors on deactivation so the banner
+              // persists even after the terminal goes idle.
+              const connectionError = detectConnectionError(captured);
+              store.updateTerminalActivity(chatId, { isActive: false, connectionError });
             }
           }
         } catch {
