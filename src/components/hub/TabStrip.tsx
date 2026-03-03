@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -16,7 +16,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { MessageSquare, Plus, X } from 'lucide-react';
 import type { HubAgentType, HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
-import type { TerminalActivityEntry } from '../../lib/store';
 import { hubChatUpdate } from '../../lib/tauri';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
 import { AgentIcon } from './AgentIcon';
@@ -47,28 +46,6 @@ function getTabLabel(chat: HubChat, allTabs: HubChat[]): string {
   return index === 0 ? baseLabel : `${baseLabel} ${index + 1}`;
 }
 
-/** Get per-tab activity: 1=action-required, 2=unread, 3=active, 4=idle */
-function getTabActivity(
-  chat: HubChat,
-  terminalActivity: Record<string, TerminalActivityEntry>,
-  busyChatIds: Set<string>,
-  isSelected: boolean,
-): 1 | 2 | 3 | 4 {
-  if (chat.type === 'terminal') {
-    const a = terminalActivity[chat.id];
-    if (a?.actionRequired) return 1;
-    if (a && a.lastOutputAt > a.lastViewedAt) return 2;
-    // Suppress a?.isActive on the selected tab — user typing echoes as output,
-    // causing false-positive isActive. Action-required and unread still show.
-    // busyChatIds is a reliable agent-working signal, so always show dots for it.
-    if (busyChatIds.has(chat.id) || (!isSelected && a?.isActive)) return 3;
-  } else {
-    if (busyChatIds.has(chat.id)) return 3;
-    if (chat.unread) return 2;
-  }
-  return 4;
-}
-
 export function TabStrip({
   tabs,
   activeTabId,
@@ -77,8 +54,6 @@ export function TabStrip({
   onAddChat,
   onAddTerminal,
 }: TabStripProps) {
-  const terminalActivity = useDashboardStore((s) => s.terminalActivity);
-  const busyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -124,14 +99,12 @@ export function TabStrip({
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
               const label = getTabLabel(tab, tabs);
-              const activity = getTabActivity(tab, terminalActivity, busyChatIds, isActive);
 
               return (
                 <SortableTabItem
                   key={tab.id}
                   chat={tab}
                   label={label}
-                  activity={activity}
                   isActive={isActive}
                   onSelect={() => onSelectTab(tab.id)}
                   onClose={() => onCloseTab(tab.id)}
@@ -166,7 +139,6 @@ export function TabStrip({
 function SortableTabItem(props: {
   chat: HubChat;
   label: string;
-  activity: 1 | 2 | 3 | 4;
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
@@ -195,30 +167,85 @@ function SortableTabItem(props: {
 function TabItem({
   chat,
   label,
-  activity,
   isActive,
   onSelect,
   onClose,
 }: {
   chat: HubChat;
   label: string;
-  activity: 1 | 2 | 3 | 4;
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
 }) {
+  const activity = useDashboardStore((s) => s.terminalActivity[chat.id]);
+  const busyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
+  const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
+  const terminalStatusReady = useDashboardStore((s) => s.terminalStatusReady);
+
+  const isDeadTerminal = terminalStatusReady && chat.type === 'terminal' && !chat.archived && !activeTerminals.has(chat.id);
+
+  // Raw terminal activity states (same derivation as ChatEntryRow)
+  const isTerminalActive = chat.type === 'terminal' && !isDeadTerminal && !!activity?.isActive;
+  const isTerminalActionRequired = chat.type === 'terminal' && !isDeadTerminal && !!activity?.actionRequired;
+  const isTerminalUnread = chat.type === 'terminal' && !isDeadTerminal && !!activity
+    && activity.lastOutputAt > activity.lastViewedAt;
+
+  // For the selected tab, suppress terminal isActive (typing echo causes false positives).
+  // busyChatIds is a reliable agent-working signal, so always honour it.
+  const effectiveActive = busyChatIds.has(chat.id) || (!isActive && isTerminalActive);
+
+  // Debounced active dots — 200ms enter delay, 500ms exit delay.
+  // Re-entry cooldown: after dots disappear, require 3s before re-showing
+  // to filter post-response flicker (e.g. tab-suggestion rendering).
+  // During cooldown, badges stay visible (inCooldown prevents suppression).
+  const [showActiveDots, setShowActiveDots] = useState(false);
+  const [inCooldown, setInCooldown] = useState(false);
+  const lastDotsExitRef = useRef(0);
+  useEffect(() => {
+    if (!effectiveActive) {
+      setInCooldown(false);
+      const timer = setTimeout(() => {
+        setShowActiveDots(false);
+        lastDotsExitRef.current = Date.now();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    const sinceLastExit = Date.now() - lastDotsExitRef.current;
+    if (sinceLastExit < 3000 && lastDotsExitRef.current > 0) {
+      setInCooldown(true);
+      const timer = setTimeout(() => {
+        setShowActiveDots(true);
+        setInCooldown(false);
+      }, 3000 - sinceLastExit);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => setShowActiveDots(true), 200);
+    return () => clearTimeout(timer);
+  }, [effectiveActive]);
+
+  // For openclaw chats, busy = dots
+  const isOpenclawBusy = chat.type === 'openclaw' && busyChatIds.has(chat.id);
+
   return (
     <button
       type="button"
       onClick={onSelect}
       className={`group/tab relative flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors ${
         isActive
-          ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
-          : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700/60 dark:hover:text-neutral-200'
+          ? 'bg-neutral-50 text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
+          : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
       }`}
     >
-      {/* Tab icon with activity overlay */}
-      <TabIcon chat={chat} activity={activity} />
+      {/* Tab icon — matches ChatEntryRow activity logic exactly */}
+      <TabIcon
+        chat={chat}
+        showActiveDots={showActiveDots}
+        isOpenclawBusy={isOpenclawBusy}
+        inCooldown={inCooldown}
+        isTerminalActive={isTerminalActive}
+        isTerminalActionRequired={isTerminalActionRequired}
+        isTerminalUnread={isTerminalUnread}
+      />
 
       {/* Label */}
       <span className="max-w-[120px] truncate">{label}</span>
@@ -240,28 +267,65 @@ function TabItem({
   );
 }
 
-function TabIcon({ chat, activity }: { chat: HubChat; activity: 1 | 2 | 3 | 4 }) {
-  // Activity states override the icon
-  if (activity === 1) {
-    return <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />;
-  }
-  if (activity === 3) {
-    return (
-      <span className="flex shrink-0 items-center gap-[1.5px]">
-        <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
-        <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:150ms]" />
-        <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:300ms]" />
-      </span>
-    );
+function TabIcon({
+  chat,
+  showActiveDots,
+  isOpenclawBusy,
+  inCooldown,
+  isTerminalActive,
+  isTerminalActionRequired,
+  isTerminalUnread,
+}: {
+  chat: HubChat;
+  showActiveDots: boolean;
+  isOpenclawBusy: boolean;
+  inCooldown: boolean;
+  isTerminalActive: boolean;
+  isTerminalActionRequired: boolean;
+  isTerminalUnread: boolean;
+}) {
+  const dots = (
+    <span className="flex shrink-0 items-center gap-[1.5px]">
+      <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:0ms]" />
+      <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:150ms]" />
+      <span className="h-[3px] w-[3px] rounded-full bg-revival-accent-400 animate-dotBounce [animation-delay:300ms]" />
+    </span>
+  );
+
+  // Openclaw busy → dots
+  if (isOpenclawBusy) return dots;
+
+  if (chat.type === 'terminal') {
+    // Debounced active dots override icon
+    if (showActiveDots) return dots;
+
+    // When dots aren't showing: show badges if not about to show dots
+    // (inCooldown || !isTerminalActive) means dots won't appear imminently
+    const showBadges = inCooldown || !isTerminalActive;
+    const icon = <AgentIcon agentType={chat.agentType} className="h-3 w-3" />;
+
+    if (showBadges && isTerminalActionRequired) {
+      return (
+        <span className="relative shrink-0">
+          {icon}
+          <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" />
+        </span>
+      );
+    }
+    if (showBadges && (isTerminalUnread || chat.unread)) {
+      return (
+        <span className="relative shrink-0">
+          {icon}
+          <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-[#DFFF00]" />
+        </span>
+      );
+    }
+    return <span className="shrink-0">{icon}</span>;
   }
 
-  // Default type icon
-  const icon = chat.type === 'terminal'
-    ? <AgentIcon agentType={chat.agentType} className="h-3 w-3" />
-    : <MessageSquare className="h-3 w-3" />;
-
-  // Unread indicator as dot overlay
-  if (activity === 2) {
+  // Openclaw — default icon with optional unread badge
+  const icon = <MessageSquare className="h-3 w-3" />;
+  if (chat.unread) {
     return (
       <span className="relative shrink-0">
         {icon}
@@ -269,6 +333,5 @@ function TabIcon({ chat, activity }: { chat: HubChat; activity: 1 | 2 | 3 | 4 })
       </span>
     );
   }
-
   return <span className="shrink-0">{icon}</span>;
 }
