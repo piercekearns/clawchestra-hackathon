@@ -293,7 +293,7 @@ function TabIcon({
   isTerminalUnread: boolean;
 }) {
   const dots = (
-    <span className="inline-flex shrink-0 items-center text-[10px] font-bold leading-none text-revival-accent-400">
+    <span className="inline-flex shrink-0 items-center text-[10px] font-bold leading-none tracking-[0.15em] text-revival-accent-400">
       <span className="loading-dots"><span>·</span><span>·</span><span>·</span></span>
     </span>
   );
