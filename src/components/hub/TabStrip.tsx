@@ -294,7 +294,7 @@ function TabIcon({
 }) {
   const dots = (
     <span className="inline-flex shrink-0 items-center text-[10px] font-bold leading-none text-revival-accent-400">
-      <span className="loading-dots -mb-[0.35em]"><span>.</span><span>.</span><span>.</span></span>
+      <span className="loading-dots"><span>·</span><span>·</span><span>·</span></span>
     </span>
   );
 
