@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
-import { detectActionRequired, simpleHash } from '../../lib/terminal-activity';
+import { detectActionRequired } from '../../lib/terminal-activity';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
 
@@ -409,26 +409,17 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       resizeDisposable.dispose();
       exitDisposable.dispose();
 
-      // Snapshot the terminal buffer hash before disposing — gives the
-      // background poll a valid baseline to compare against. Without this,
-      // the first poll after navigating away wastes a cycle "seeding" the
-      // hash and any output that finishes before the second poll is missed
-      // (lastOutputAt never gets updated → no unread indicator).
-      try {
-        const buffer = term.buffer.active;
-        const lines: string[] = [];
-        const end = buffer.baseY + buffer.cursorY;
-        const start = Math.max(0, end - 50);
-        for (let i = start; i <= end; i++) {
-          const line = buffer.getLine(i);
-          if (line) lines.push(line.translateToString(true));
-        }
-        const hash = simpleHash(lines.join('\n'));
+      // Clear the capture hash so the background poll seeds fresh from
+      // tmuxCapturePane (same source it uses for comparison). If the
+      // terminal was actively outputting, stamp lastOutputAt so unread
+      // shows even if the terminal finishes before the second poll.
+      {
+        const prev = useDashboardStore.getState().terminalActivity[chat.id];
+        const wasActive = prev?.isActive || isCurrentlyActive;
         useDashboardStore.getState().updateTerminalActivity(chat.id, {
-          lastCaptureHash: hash,
+          lastCaptureHash: '',
+          ...(wasActive ? { lastOutputAt: Date.now() } : {}),
         });
-      } catch {
-        // Terminal may already be partially disposed
       }
 
       // Kill PTY attachment only — tmux session keeps running

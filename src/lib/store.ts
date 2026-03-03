@@ -1029,11 +1029,9 @@ export const useDashboardStore = create<DashboardState>()(
               ...state.terminalActivity,
               [chatId]: {
                 lastOutputAt: prev?.lastOutputAt ?? 0,
-                // Preserve lastCaptureHash — TerminalShell snapshots the buffer
-                // hash on unmount, giving the background poll a valid baseline.
-                // Clearing it here would force a wasted "seeding" cycle, during
-                // which any output that finishes goes undetected (no unread).
-                lastCaptureHash: prev?.lastCaptureHash ?? '',
+                // Clear hash so the background poll seeds fresh from tmux
+                // on the next cycle (avoids stale hash → false activity).
+                lastCaptureHash: '',
                 lastViewedAt: Date.now(),
                 // Don't clear actionRequired — it should persist until the user
                 // actually resolves the prompt and the PTY detects resumed output.
