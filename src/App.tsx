@@ -940,6 +940,16 @@ export default function App() {
         const sessionName = tmuxSessionName(chat.projectId, chat.id);
         try {
           const captured = await tmuxCapturePane(sessionName, 50);
+
+          // Re-check visibility AFTER the async capture — user may have navigated
+          // to this terminal while capture was in flight. Without this, the poll
+          // overwrites markTerminalViewed's cleared state (actionRequired, hash).
+          {
+            const fresh = useDashboardStore.getState();
+            const visibleNow = fresh.hubDrawerOpen ? fresh.hubActiveChatId : null;
+            if (chatId === visibleNow) continue;
+          }
+
           const hash = simpleHash(captured);
           const prev = store.terminalActivity[chatId];
 

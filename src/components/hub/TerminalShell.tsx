@@ -287,6 +287,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
               lastOutputAt: now,
               lastViewedAt: now,
               isActive: true,
+              // Clear action-required — user is watching, and resumed output
+              // means the prompt was answered. Also guards against a race where
+              // an in-flight background poll re-sets actionRequired after
+              // markTerminalViewed cleared it.
+              actionRequired: false,
             });
           }
         } else if (isSignificant) {
