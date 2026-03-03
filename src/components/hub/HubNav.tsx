@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -12,7 +12,7 @@ import {
   arrayMove,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { MessageSquare } from 'lucide-react';
+import { FolderPlus, MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
 import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
 import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
@@ -29,11 +29,17 @@ export function HubNav({ onToast }: HubNavProps) {
   const hubCollapsedThreads = useDashboardStore((s) => s.hubCollapsedThreads);
   const hubActiveChatId = useDashboardStore((s) => s.hubActiveChatId);
   const hubThreadOrder = useDashboardStore((s) => s.hubThreadOrder);
+  const customFolders = useDashboardStore((s) => s.customFolders);
   const setHubActiveChatId = useDashboardStore((s) => s.setHubActiveChatId);
   const setHubDrawerOpen = useDashboardStore((s) => s.setHubDrawerOpen);
   const toggleHubThread = useDashboardStore((s) => s.toggleHubThread);
   const setHubThreadOrder = useDashboardStore((s) => s.setHubThreadOrder);
+  const addCustomFolder = useDashboardStore((s) => s.addCustomFolder);
+  const renameCustomFolder = useDashboardStore((s) => s.renameCustomFolder);
+  const deleteCustomFolder = useDashboardStore((s) => s.deleteCustomFolder);
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
+
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -75,9 +81,16 @@ export function HubNav({ onToast }: HubNavProps) {
       });
       result.push({
         projectId,
-        projectTitle: titleLookup.get(projectId) ?? projectId,
+        projectTitle: titleLookup.get(projectId) ?? customFolders[projectId]?.name ?? projectId,
         chats: sorted,
       });
+    }
+
+    // Ensure custom folders appear even if they have no chats
+    for (const [folderId, folder] of Object.entries(customFolders)) {
+      if (!byProject.has(folderId)) {
+        result.push({ projectId: folderId, projectTitle: folder.name, chats: [] });
+      }
     }
 
     // Apply manual order if set, otherwise sort by most recent activity
@@ -100,7 +113,7 @@ export function HubNav({ onToast }: HubNavProps) {
     }
 
     return result;
-  }, [hubChats, projects, hubThreadOrder]);
+  }, [hubChats, projects, hubThreadOrder, customFolders]);
 
   // Collect completed item IDs from projects' roadmap items
   const roadmapItems = useDashboardStore((s) => s.roadmapItems);
@@ -232,6 +245,33 @@ export function HubNav({ onToast }: HubNavProps) {
     }
   };
 
+  const handleNewFolder = async () => {
+    const id = `folder-${Date.now()}`;
+    addCustomFolder(id, 'New Folder');
+    const newChat = await hubChatCreate(id, null, 'openclaw', null, 'Chat');
+    await refreshHubChats();
+    if (hubCollapsedThreads.includes(id)) {
+      toggleHubThread(id);
+    }
+    setHubActiveChatId(newChat.id);
+    setHubDrawerOpen(true);
+    setRenamingFolderId(id);
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    const folderChats = hubChats.filter((c) => c.projectId === folderId);
+    for (const chat of folderChats) {
+      await hubChatDelete(chat.id);
+      useDashboardStore.getState().clearHubChatState(chat.id);
+    }
+    deleteCustomFolder(folderId);
+    if (hubActiveChatId && folderChats.some((c) => c.id === hubActiveChatId)) {
+      setHubActiveChatId(null);
+      setHubDrawerOpen(false);
+    }
+    await refreshHubChats();
+  };
+
   const threadIds = useMemo(() => threads.map((t) => t.projectId), [threads]);
 
   return (
@@ -258,26 +298,46 @@ export function HubNav({ onToast }: HubNavProps) {
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={threadIds} strategy={verticalListSortingStrategy}>
-              {threads.map((thread) => (
-                <ThreadSection
-                  key={thread.projectId}
-                  thread={thread}
-                  collapsed={hubCollapsedThreads.includes(thread.projectId)}
-                  activeChatId={hubActiveChatId}
-                  completedItemIds={completedItemIds}
-                  onToggle={() => toggleHubThread(thread.projectId)}
-                  onSelectChat={handleSelectChat}
-                  onTogglePinChat={handleTogglePinChat}
-                  onArchiveChats={handleArchiveChats}
-                  onMarkReadChats={handleMarkReadChats}
-                  onDeleteChats={handleDeleteChats}
-                  onAddChat={handleAddChat}
-                  onAddTerminal={handleAddTerminal}
-                />
-              ))}
+              {threads.map((thread) => {
+                const isCustom = thread.projectId in customFolders;
+                return (
+                  <ThreadSection
+                    key={thread.projectId}
+                    thread={thread}
+                    collapsed={hubCollapsedThreads.includes(thread.projectId)}
+                    activeChatId={hubActiveChatId}
+                    completedItemIds={completedItemIds}
+                    isCustomFolder={isCustom}
+                    isRenaming={renamingFolderId === thread.projectId}
+                    onRenameFolder={isCustom ? (name) => {
+                      renameCustomFolder(thread.projectId, name);
+                      setRenamingFolderId(null);
+                    } : undefined}
+                    onDeleteFolder={isCustom ? () => void handleDeleteFolder(thread.projectId) : undefined}
+                    onToggle={() => toggleHubThread(thread.projectId)}
+                    onSelectChat={handleSelectChat}
+                    onTogglePinChat={handleTogglePinChat}
+                    onArchiveChats={handleArchiveChats}
+                    onMarkReadChats={handleMarkReadChats}
+                    onDeleteChats={handleDeleteChats}
+                    onAddChat={handleAddChat}
+                    onAddTerminal={handleAddTerminal}
+                  />
+                );
+              })}
             </SortableContext>
           </DndContext>
         )}
+
+        {/* New Folder button */}
+        <button
+          type="button"
+          onClick={() => void handleNewFolder()}
+          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+        >
+          <FolderPlus className="h-3.5 w-3.5" />
+          New Folder
+        </button>
       </div>
     </div>
   );

@@ -89,6 +89,8 @@ interface DashboardState {
   hubCollapsedThreads: string[];
   hubThreadOrder: string[];
   hubChats: HubChat[];
+  /** Custom folders not linked to any project — keyed by synthetic folder ID (e.g. "folder-{timestamp}"). */
+  customFolders: Record<string, { name: string }>;
   /** Transient set of chat IDs currently waiting for a response (not persisted). */
   hubBusyChatIds: Set<string>;
   /** Transient per-chat message history — keyed by chatId (not persisted). */
@@ -140,6 +142,12 @@ interface DashboardState {
   setActiveTerminalChatIds: (ids: Set<string>) => void;
   /** Show/hide the quit guard dialog. */
   setQuitGuardOpen: (open: boolean) => void;
+  /** Add a custom folder. */
+  addCustomFolder: (id: string, name: string) => void;
+  /** Rename a custom folder. */
+  renameCustomFolder: (id: string, name: string) => void;
+  /** Delete a custom folder. */
+  deleteCustomFolder: (id: string) => void;
   /** Merge partial activity updates for a terminal chat. */
   updateTerminalActivity: (chatId: string, update: Partial<TerminalActivityEntry>) => void;
   /** Mark a terminal as viewed — resets unread + action-required. */
@@ -497,6 +505,7 @@ export const useDashboardStore = create<DashboardState>()(
       hubCollapsedThreads: [],
       hubThreadOrder: [],
       hubChats: [],
+      customFolders: {},
       hubBusyChatIds: new Set<string>(),
       hubChatMessages: {},
       hubChatModelState: {},
@@ -848,6 +857,24 @@ export const useDashboardStore = create<DashboardState>()(
           return { hubCollapsedThreads: [...collapsed, projectId] };
         }),
       setHubThreadOrder: (hubThreadOrder) => set({ hubThreadOrder }),
+      addCustomFolder: (id, name) =>
+        set((state) => ({
+          customFolders: { ...state.customFolders, [id]: { name } },
+        })),
+      renameCustomFolder: (id, name) =>
+        set((state) => {
+          if (!state.customFolders[id]) return {};
+          return { customFolders: { ...state.customFolders, [id]: { name } } };
+        }),
+      deleteCustomFolder: (id) =>
+        set((state) => {
+          const { [id]: _, ...rest } = state.customFolders;
+          return {
+            customFolders: rest,
+            hubCollapsedThreads: state.hubCollapsedThreads.filter((t) => t !== id),
+            hubThreadOrder: state.hubThreadOrder.filter((t) => t !== id),
+          };
+        }),
       setHubChats: (hubChats) => set({ hubChats }),
       refreshHubChats: async () => {
         if (!isTauriRuntime()) return;
@@ -1102,6 +1129,7 @@ export const useDashboardStore = create<DashboardState>()(
         hubDrawerWidth: state.hubDrawerWidth,
         hubCollapsedThreads: state.hubCollapsedThreads,
         hubThreadOrder: state.hubThreadOrder,
+        customFolders: state.customFolders,
         // Terminal activity — persist timestamps so unread state survives restarts.
         // Strip transient fields (isActive, actionRequired, lastCaptureHash).
         terminalActivity: Object.fromEntries(

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import type { HubAgentType, HubChat, HubRow, HubThread } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { hubChatUpdate } from '../../lib/tauri';
+import { InlineEdit } from './InlineEdit';
 import { RowEntryRow } from './RowEntryRow';
 import { ScrollRevealText } from './ScrollRevealText';
 import { TypePickerMenu } from './TypePickerMenu';
@@ -14,6 +15,10 @@ interface ThreadSectionProps {
   collapsed: boolean;
   activeChatId: string | null;
   completedItemIds?: Set<string>;
+  isCustomFolder?: boolean;
+  isRenaming?: boolean;
+  onRenameFolder?: (name: string) => void;
+  onDeleteFolder?: () => void;
   onToggle: () => void;
   onSelectChat: (chatId: string) => void;
   onTogglePinChat: (chatId: string, pinned: boolean) => void;
@@ -84,6 +89,10 @@ export function ThreadSection({
   collapsed,
   activeChatId,
   completedItemIds,
+  isCustomFolder,
+  isRenaming,
+  onRenameFolder,
+  onDeleteFolder,
   onToggle,
   onSelectChat,
   onTogglePinChat,
@@ -94,6 +103,9 @@ export function ThreadSection({
   onAddTerminal,
 }: ThreadSectionProps) {
   const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [folderContextMenuPos, setFolderContextMenuPos] = useState<{ top: number; left: number } | null>(null);
+  // Increment to force InlineEdit remount in startEditing mode (context menu "Rename")
+  const [renameKey, setRenameKey] = useState(0);
   const roadmapItems = useDashboardStore((s) => s.roadmapItems);
 
   const {
@@ -146,7 +158,11 @@ export function ThreadSection({
         onClick={onToggle}
         onContextMenu={(e) => {
           e.preventDefault();
-          setContextMenuPos({ top: e.clientY + 4, left: e.clientX });
+          if (isCustomFolder) {
+            setFolderContextMenuPos({ top: e.clientY + 4, left: e.clientX });
+          } else {
+            setContextMenuPos({ top: e.clientY + 4, left: e.clientX });
+          }
         }}
         {...attributes}
         {...listeners}
@@ -177,12 +193,23 @@ export function ThreadSection({
           </span>
         </button>
 
-        {/* Project name */}
+        {/* Folder name — InlineEdit for custom folders, ScrollRevealText for project folders */}
         <div className="min-w-0 flex-1 group-hover:pr-8">
-          <ScrollRevealText
-            text={thread.projectTitle}
-            className="text-sm leading-tight text-neutral-700 dark:text-neutral-300"
-          />
+          {isCustomFolder ? (
+            <InlineEdit
+              key={renameKey}
+              value={thread.projectTitle}
+              onSave={(name) => onRenameFolder?.(name)}
+              startEditing={isRenaming || renameKey > 0}
+              useScrollReveal
+              className="text-sm leading-tight text-neutral-700 dark:text-neutral-300"
+            />
+          ) : (
+            <ScrollRevealText
+              text={thread.projectTitle}
+              className="text-sm leading-tight text-neutral-700 dark:text-neutral-300"
+            />
+          )}
         </div>
 
         {/* Hover actions: + */}
@@ -190,11 +217,51 @@ export function ThreadSection({
           <TypePickerMenu
             onAddChat={() => onAddChat(thread.projectId)}
             onAddTerminal={onAddTerminal ? (agentType) => onAddTerminal(thread.projectId, agentType) : undefined}
-            externalMenuPos={contextMenuPos}
+            externalMenuPos={isCustomFolder ? null : contextMenuPos}
             onExternalMenuClose={() => setContextMenuPos(null)}
           />
         </div>
       </div>
+
+      {/* Custom folder context menu */}
+      {isCustomFolder && folderContextMenuPos && (
+        <div
+          className="fixed z-50"
+          style={{ top: folderContextMenuPos.top, left: folderContextMenuPos.left }}
+        >
+          <div
+            className="rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+            onClick={() => setFolderContextMenuPos(null)}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFolderContextMenuPos(null);
+                setRenameKey((k) => k + 1);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Rename
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-status-danger hover:bg-neutral-100 dark:hover:bg-neutral-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFolderContextMenuPos(null);
+                onDeleteFolder?.();
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete folder
+            </button>
+          </div>
+          {/* Click-away backdrop */}
+          <div className="fixed inset-0 -z-10" onClick={() => setFolderContextMenuPos(null)} />
+        </div>
+      )}
 
       {/* Rows — grouped chat surfaces */}
       {!collapsed && (

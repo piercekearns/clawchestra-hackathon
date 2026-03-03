@@ -12,12 +12,23 @@ interface InlineEditProps {
   useScrollReveal?: boolean;
   /** Notify parent when editing state changes */
   onEditingChange?: (editing: boolean) => void;
+  /** When true, immediately enter editing state on mount */
+  startEditing?: boolean;
 }
 
-export function InlineEdit({ value, onSave, editable = true, className, inputClassName, useScrollReveal, onEditingChange }: InlineEditProps) {
+export function InlineEdit({ value, onSave, editable = true, className, inputClassName, useScrollReveal, onEditingChange, startEditing: startEditingProp }: InlineEditProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
+  const startEditingConsumed = useRef(false);
+
+  // Enter editing mode on mount when startEditing is true
+  useEffect(() => {
+    if (startEditingProp && !startEditingConsumed.current) {
+      startEditingConsumed.current = true;
+      setEditingState(true);
+    }
+  }, [startEditingProp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing && inputRef.current) {
