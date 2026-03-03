@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, RotateCcw, Trash2 } from 'lucide-react';
 import type { HubAgentType, HubChat, HubRow, HubThread } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
+import { hubChatUpdate } from '../../lib/tauri';
 import { RowEntryRow } from './RowEntryRow';
 import { ScrollRevealText } from './ScrollRevealText';
 import { TypePickerMenu } from './TypePickerMenu';
@@ -260,6 +261,12 @@ function ArchivedSection({
   onDeleteChat: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
+
+  const handleUnarchive = async (id: string) => {
+    await hubChatUpdate(id, { archived: false });
+    await refreshHubChats();
+  };
 
   return (
     <div className="mt-1">
@@ -276,14 +283,32 @@ function ArchivedSection({
           {chats.map((chat) => (
             <div
               key={chat.id}
-              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer ${
+              className={`group/archived flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer ${
                 activeChatId === chat.id
                   ? 'bg-revival-accent-400/10 text-neutral-900 dark:text-neutral-100'
                   : 'text-neutral-800 hover:bg-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-800'
               }`}
               onClick={() => onSelectChat(chat.id)}
             >
-              <span className="truncate text-xs">{chat.title}</span>
+              <span className="min-w-0 flex-1 truncate text-xs">{chat.title}</span>
+              <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover/archived:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); void handleUnarchive(chat.id); }}
+                  className="flex h-4 w-4 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                  aria-label="Restore"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onDeleteChat(chat.id); }}
+                  className="flex h-4 w-4 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-status-danger dark:hover:bg-neutral-700"
+                  aria-label="Delete"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                </button>
+              </span>
             </div>
           ))}
         </div>

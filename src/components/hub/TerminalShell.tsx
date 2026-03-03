@@ -209,13 +209,13 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     //    where periodic noise data prevents silence timer from firing.
     //
     // USER INPUT: All data during echo (300ms after keypress) is ignored
-    // for both activation and silence timer reset.
+    // for both activation and deactivation checks.
     const spawnTime = Date.now();
     let lastUserInputAt = 0;
     let lastWindowCheck = 0;
     let bytesSinceLastWindow = 0;
     let isCurrentlyActive = false;
-    let silenceTimer: ReturnType<typeof setTimeout>;
+    let lastSignificantAt = 0;         // when we last saw real output
     const significantHistory: boolean[] = [];
 
     const STARTUP_GRACE_MS = 10_000;
@@ -224,7 +224,34 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     const BYTE_THRESHOLD = 5;         // bytes per window to count as significant
     const HISTORY_SIZE = 5;           // track last 5 windows (1s)
     const MIN_ACTIVE_WINDOWS = 2;     // 2 of 5 must be significant to activate
-    const SILENCE_TIMEOUT_MS = 1500;  // deactivate after 1.5s of zero output
+    const DEACTIVATE_MS = 1500;       // deactivate after 1.5s without significant output
+
+    const deactivate = () => {
+      isCurrentlyActive = false;
+      significantHistory.length = 0;
+      const buffer = term.buffer.active;
+      const lines: string[] = [];
+      const end = buffer.baseY + buffer.cursorY;
+      const start = Math.max(0, end - 20);
+      for (let i = start; i <= end; i++) {
+        const line = buffer.getLine(i);
+        if (line) lines.push(line.translateToString(true));
+      }
+      const actionRequired = detectActionRequired(lines.join('\n'));
+      useDashboardStore.getState().updateTerminalActivity(chat.id, {
+        isActive: false,
+        actionRequired,
+      });
+    };
+
+    // Periodic deactivation check — runs every 500ms independently of
+    // data events. This avoids relying on silence timers that get reset
+    // by prompt renders, cursor reports, and other periodic terminal noise.
+    const deactivateInterval = setInterval(() => {
+      if (isCurrentlyActive && lastSignificantAt > 0 && Date.now() - lastSignificantAt > DEACTIVATE_MS) {
+        deactivate();
+      }
+    }, 500);
 
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
@@ -235,43 +262,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       if (now - spawnTime < STARTUP_GRACE_MS) return;
 
       // Skip byte counting during user input echo — prevents typing from
-      // ACTIVATING dots. Also skip silence timer reset for echo data so
-      // that idle detection works even while the user is typing.
+      // activating dots.
       if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
-
-      // Only reset silence timer for non-trivial data. Terminals send
-      // tiny periodic messages (cursor position reports, title updates,
-      // keep-alive sequences) even when idle — these shouldn't prevent
-      // deactivation. Threshold of 3 bytes filters most control sequences.
-      if (data.length >= 3) {
-        clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => {
-          if (isCurrentlyActive) {
-            isCurrentlyActive = false;
-            significantHistory.length = 0;
-            // Check terminal buffer for action-required patterns (e.g. Y/n prompt)
-            // so the amber dot shows even when the user is viewing this terminal.
-            const buffer = term.buffer.active;
-            const lines: string[] = [];
-            const end = buffer.baseY + buffer.cursorY;
-            const start = Math.max(0, end - 20);
-            for (let i = start; i <= end; i++) {
-              const line = buffer.getLine(i);
-              if (line) lines.push(line.translateToString(true));
-            }
-            const actionRequired = detectActionRequired(lines.join('\n'));
-            useDashboardStore.getState().updateTerminalActivity(chat.id, {
-              isActive: false,
-              actionRequired,
-            });
-          }
-        }, SILENCE_TIMEOUT_MS);
-      }
 
       bytesSinceLastWindow += data.length;
 
-      // Sliding window — only used for ACTIVATION (inactive → active).
-      // Deactivation is handled exclusively by the silence timer above.
       if (now - lastWindowCheck >= WINDOW_MS) {
         const isSignificant = bytesSinceLastWindow >= BYTE_THRESHOLD;
         lastWindowCheck = now;
@@ -279,6 +274,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
         significantHistory.push(isSignificant);
         if (significantHistory.length > HISTORY_SIZE) significantHistory.shift();
+
+        if (isSignificant) {
+          lastSignificantAt = now;
+        }
 
         if (!isCurrentlyActive) {
           const activeWindows = significantHistory.filter(Boolean).length;
@@ -295,27 +294,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
           useDashboardStore.getState().updateTerminalActivity(chat.id, {
             lastOutputAt: now,
             lastViewedAt: now,
-          });
-        } else if (significantHistory.length >= HISTORY_SIZE && significantHistory.every((s) => !s)) {
-          // Active but no significant output in the entire window history —
-          // force deactivation as a backstop. This catches cases where tiny
-          // periodic data (ANSI sequences, prompt renders) keeps arriving
-          // but no real output is being produced.
-          isCurrentlyActive = false;
-          significantHistory.length = 0;
-          clearTimeout(silenceTimer);
-          const buffer = term.buffer.active;
-          const lines: string[] = [];
-          const end = buffer.baseY + buffer.cursorY;
-          const start = Math.max(0, end - 20);
-          for (let i = start; i <= end; i++) {
-            const line = buffer.getLine(i);
-            if (line) lines.push(line.translateToString(true));
-          }
-          const actionRequired = detectActionRequired(lines.join('\n'));
-          useDashboardStore.getState().updateTerminalActivity(chat.id, {
-            isActive: false,
-            actionRequired,
           });
         }
       }
@@ -341,7 +319,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       term.writeln(`\r\n[Session ended with code ${exitCode}]`);
       isCurrentlyActive = false;
       significantHistory.length = 0;
-      clearTimeout(silenceTimer);
+      clearInterval(deactivateInterval);
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.delete(chat.id);
@@ -396,7 +374,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
-      clearTimeout(silenceTimer);
+      clearInterval(deactivateInterval);
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);
