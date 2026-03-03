@@ -253,6 +253,26 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       }
     }, 500);
 
+    // After startup grace, re-evaluate actionRequired from the terminal buffer.
+    // markTerminalViewed no longer clears it (the user must actually resolve the
+    // prompt), but if the prompt has already scrolled away (stale detection), this
+    // one-shot check clears the amber dot without waiting for new output.
+    const postGraceCheck = setTimeout(() => {
+      const prev = useDashboardStore.getState().terminalActivity[chat.id];
+      if (!prev?.actionRequired) return;
+      const buffer = term.buffer.active;
+      const lines: string[] = [];
+      const end = buffer.baseY + buffer.cursorY;
+      const start = Math.max(0, end - 20);
+      for (let i = start; i <= end; i++) {
+        const line = buffer.getLine(i);
+        if (line) lines.push(line.translateToString(true));
+      }
+      if (!detectActionRequired(lines.join('\n'))) {
+        useDashboardStore.getState().updateTerminalActivity(chat.id, { actionRequired: false });
+      }
+    }, STARTUP_GRACE_MS + 500);
+
     const dataDisposable = pty.onData((data: Uint8Array) => {
       term.write(data);
 
@@ -379,6 +399,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
+      clearTimeout(postGraceCheck);
       clearInterval(deactivateInterval);
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);

@@ -1023,6 +1023,7 @@ export const useDashboardStore = create<DashboardState>()(
       markTerminalViewed: (chatId) =>
         set((state) => {
           const prev = state.terminalActivity[chatId];
+          const wasActionRequired = prev?.actionRequired ?? false;
           return {
             terminalActivity: {
               ...state.terminalActivity,
@@ -1032,9 +1033,13 @@ export const useDashboardStore = create<DashboardState>()(
                 // fresh instead of seeing a stale hash diff → false activity.
                 lastCaptureHash: '',
                 lastViewedAt: Date.now(),
-                // Preserve isActive — viewing a terminal doesn't stop it working
-                isActive: prev?.isActive ?? false,
-                actionRequired: false,
+                // Don't clear actionRequired — it should persist until the user
+                // actually resolves the prompt and the PTY detects resumed output.
+                actionRequired: wasActionRequired,
+                // Clear stale isActive when action-required is set — the terminal
+                // is waiting for input, not working. Prevents dots from flashing
+                // before the user answers the prompt.
+                isActive: wasActionRequired ? false : (prev?.isActive ?? false),
               },
             },
           };
