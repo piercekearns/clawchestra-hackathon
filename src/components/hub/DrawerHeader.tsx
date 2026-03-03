@@ -111,6 +111,35 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
   return (
     <>
     <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700 md:px-6">
+      {/* Row cycle chevrons — left of title */}
+      {(canCycleUp || canCycleDown) && (
+        <div className="flex items-center gap-0.5">
+          {canCycleUp && (
+            <Tooltip text="Previous row">
+              <button
+                type="button"
+                onClick={onCycleUp}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Previous row"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+          {canCycleDown && (
+            <Tooltip text="Next row">
+              <button
+                type="button"
+                onClick={onCycleDown}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Next row"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+      )}
       <div className="min-w-0 flex-1 flex flex-col justify-center min-h-9">
         {renaming ? (
           <input
@@ -141,35 +170,6 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
           </>
         )}
       </div>
-      {/* Row cycle chevrons */}
-      {(canCycleUp || canCycleDown) && (
-        <div className="flex items-center gap-0.5">
-          {canCycleUp && (
-            <Tooltip text="Previous row">
-              <button
-                type="button"
-                onClick={onCycleUp}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-                aria-label="Previous row"
-              >
-                <ChevronUp className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-          )}
-          {canCycleDown && (
-            <Tooltip text="Next row">
-              <button
-                type="button"
-                onClick={onCycleDown}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-                aria-label="Next row"
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-          )}
-        </div>
-      )}
       {/* Terminal: End Session button — other chats: ⋯ menu */}
       {isTerminal ? (
         <div className="relative">

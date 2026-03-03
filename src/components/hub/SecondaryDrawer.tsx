@@ -117,8 +117,9 @@ export function SecondaryDrawer({
     return buildRows(thread, roadmapItemMap);
   }, [chat, hubChats, projectTitle, roadmapItemMap]);
 
+  const currentItemId = chat?.itemId ?? null;
   const currentRowIndex = threadRows.findIndex(
-    (r) => r.itemId === chat?.itemId,
+    (r) => r.itemId === currentItemId,
   );
   const canGoUp = currentRowIndex > 0;
   const canGoDown = currentRowIndex >= 0 && currentRowIndex < threadRows.length - 1;
