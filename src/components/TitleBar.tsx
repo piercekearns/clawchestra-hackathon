@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { Loader2, PanelLeft, PanelLeftClose } from 'lucide-react';
+import { Columns2, Loader2, PanelLeft, PanelLeftClose, Rows2 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useDashboardStore } from '../lib/store';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import { StatusBadge } from './StatusBadge';
+import { Tooltip } from './Tooltip';
 import logoChartreuse from '../assets/logo.png';
 import logoDark from '../assets/logo-dark.png';
 
@@ -13,10 +14,9 @@ interface TitleBarProps {
 
 export function TitleBar({ settingsMode = false }: TitleBarProps) {
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
-  const sidebarSide = useDashboardStore((s) => s.sidebarSide);
-  const thinSidebarSide = useDashboardStore((s) => s.thinSidebarSide);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
-  const setSidebarSide = useDashboardStore((s) => s.setSidebarSide);
+  const layoutOrientation = useDashboardStore((s) => s.layoutOrientation);
+  const setLayoutOrientation = useDashboardStore((s) => s.setLayoutOrientation);
   const { updateAvailable, updating, updateBlockedReason, updateFailureReason, handleUpdate } = useAppUpdate();
   const addBuildError = useDashboardStore((s) => s.addBuildError);
   const clearBuildErrors = useDashboardStore((s) => s.clearBuildErrors);
@@ -30,22 +30,11 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
     }
   }, [updateFailureReason, addBuildError, clearBuildErrors]);
 
-  const leftOpen = sidebarOpen && sidebarSide === 'left';
-  const rightOpen = sidebarOpen && sidebarSide === 'right';
-  const LeftToggleIcon = leftOpen ? PanelLeftClose : PanelLeft;
-  const RightToggleIcon = rightOpen ? PanelLeftClose : PanelLeft;
-  const leftLocked = settingsMode && leftOpen;
-  const rightLocked = settingsMode && rightOpen;
-  const toggleSidebar = (side: 'left' | 'right') => {
-    if (settingsMode && sidebarOpen && sidebarSide === side) {
-      return;
-    }
-    if (sidebarOpen && sidebarSide === side) {
-      setSidebarOpen(false);
-      return;
-    }
-    setSidebarSide(side);
-    setSidebarOpen(true);
+  const ToggleIcon = sidebarOpen ? PanelLeftClose : PanelLeft;
+  const sidebarLocked = settingsMode && sidebarOpen;
+  const toggleSidebar = () => {
+    if (sidebarLocked) return;
+    setSidebarOpen(!sidebarOpen);
   };
   const startWindowDrag = () => {
     void getCurrentWindow().startDragging().catch(() => {});
@@ -61,18 +50,18 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
         <div className="w-[78px] shrink-0" />
 
-        {/* Left sidebar toggle */}
+        {/* Sidebar toggle */}
         <button
           type="button"
-          onClick={() => toggleSidebar('left')}
-          disabled={leftLocked}
-          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${leftLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+          onClick={toggleSidebar}
+          disabled={sidebarLocked}
+          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${sidebarLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
           onMouseDown={(e) => e.stopPropagation()}
-          aria-expanded={leftOpen}
+          aria-expanded={sidebarOpen}
           aria-controls="sidebar"
-          aria-label="Toggle left sidebar"
+          aria-label="Toggle sidebar"
         >
-          <LeftToggleIcon className="h-4 w-4" />
+          <ToggleIcon className="h-4 w-4" />
         </button>
       </div>
 
@@ -124,20 +113,23 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         </div>
       </div>
 
-      {/* Right sidebar toggle — shifts inward when thin sidebar is on the right */}
-      <div className={`ml-auto flex items-center ${thinSidebarSide === 'right' ? '-mr-2 md:-mr-4' : ''}`}>
-        <button
-          type="button"
-          onClick={() => toggleSidebar('right')}
-          disabled={rightLocked}
-          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${rightLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
-          onMouseDown={(e) => e.stopPropagation()}
-          aria-expanded={rightOpen}
-          aria-controls="sidebar"
-          aria-label="Toggle right sidebar"
-        >
-          <RightToggleIcon className="h-4 w-4 -scale-x-100" />
-        </button>
+      {/* Orientation toggle */}
+      <div className="ml-auto flex items-center">
+        <Tooltip text={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}>
+          <button
+            type="button"
+            onClick={() => setLayoutOrientation(layoutOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}
+          >
+            {layoutOrientation === 'horizontal' ? (
+              <Rows2 className="h-4 w-4" />
+            ) : (
+              <Columns2 className="h-4 w-4" />
+            )}
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

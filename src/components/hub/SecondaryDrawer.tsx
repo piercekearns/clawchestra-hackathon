@@ -11,27 +11,33 @@ import { TabStrip } from './TabStrip';
 
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 1200;
+const MIN_HEIGHT = 200;
+const MAX_HEIGHT = 800;
 
 interface SecondaryDrawerProps {
   chatId: string;
   width: number;
-  side?: 'left' | 'right';
   onWidthChange: (width: number) => void;
   onClose: () => void;
   onToast?: (kind: 'success' | 'error', message: string, action?: { label: string; onClick: () => void }) => void;
   onOpenLinkedItem?: (projectId: string, projectTitle: string, itemId: string) => void;
   onOpenLinkedProject?: (projectId: string, projectTitle: string) => void;
+  orientation?: 'horizontal' | 'vertical';
+  height?: number;
+  onHeightChange?: (height: number) => void;
 }
 
 export function SecondaryDrawer({
   chatId,
   width,
-  side = 'left',
   onWidthChange,
   onClose,
   onToast,
   onOpenLinkedItem,
   onOpenLinkedProject,
+  orientation = 'horizontal',
+  height = 400,
+  onHeightChange,
 }: SecondaryDrawerProps) {
   const hubChats = useDashboardStore((s) => s.hubChats);
   const projects = useDashboardStore((s) => s.projects);
@@ -270,28 +276,34 @@ export function SecondaryDrawer({
     [chat, refreshHubChats, setHubActiveChatId],
   );
 
+  const isVertical = orientation === 'vertical';
+
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       isDragging.current = true;
       setIsResizing(true);
       document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'col-resize';
+      document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
 
       const rect = drawerRef.current?.getBoundingClientRect();
-      const drawerLeft = rect?.left ?? 0;
-      const drawerRight = rect?.right ?? 0;
 
       const onMouseMove = (event: MouseEvent) => {
         if (!isDragging.current) return;
         cancelAnimationFrame(rafHandle.current);
         rafHandle.current = requestAnimationFrame(() => {
           if (!isDragging.current) return;
-          const newWidth = side === 'right'
-            ? drawerRight - event.clientX
-            : event.clientX - drawerLeft;
-          const minW = chat?.type === 'terminal' ? 560 : MIN_WIDTH;
-          onWidthChange(Math.min(MAX_WIDTH, Math.max(minW, newWidth)));
+          if (isVertical) {
+            const drawerBottom = rect?.bottom ?? 0;
+            const newHeight = drawerBottom - event.clientY;
+            const minH = chat?.type === 'terminal' ? 300 : MIN_HEIGHT;
+            onHeightChange?.(Math.min(MAX_HEIGHT, Math.max(minH, newHeight)));
+          } else {
+            const drawerLeft = rect?.left ?? 0;
+            const newWidth = event.clientX - drawerLeft;
+            const minW = chat?.type === 'terminal' ? 560 : MIN_WIDTH;
+            onWidthChange(Math.min(MAX_WIDTH, Math.max(minW, newWidth)));
+          }
         });
       };
 
@@ -308,7 +320,7 @@ export function SecondaryDrawer({
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     },
-    [onWidthChange, chat, side],
+    [onWidthChange, onHeightChange, chat, isVertical],
   );
 
   if (!chat) return null;
@@ -316,14 +328,14 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-[60] flex shrink-0 flex-col overflow-visible ${side === 'right' ? 'border-l' : 'border-r'} ${
+      className={`relative z-[60] flex shrink-0 flex-col overflow-visible ${isVertical ? 'border-t' : 'border-r'} ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
-      style={{ width, willChange: 'transform' }}
+      style={isVertical ? { height, willChange: 'transform' } : { width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
         <div className="relative">
@@ -383,7 +395,7 @@ export function SecondaryDrawer({
         />
         <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
           terminalDragActive ? '' : terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
-        } ${side === 'right' ? 'ml-px' : 'mr-px'}`}>
+        } ${isVertical ? 'mt-px' : 'mr-px'}`}>
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
         </div>
       </div>
@@ -391,20 +403,29 @@ export function SecondaryDrawer({
       {/* Drag handle */}
       <div
         role="separator"
-        aria-orientation="vertical"
-        aria-valuenow={width}
-        aria-valuemin={MIN_WIDTH}
-        aria-valuemax={MAX_WIDTH}
+        aria-orientation={isVertical ? 'horizontal' : 'vertical'}
+        aria-valuenow={isVertical ? height : width}
+        aria-valuemin={isVertical ? MIN_HEIGHT : MIN_WIDTH}
+        aria-valuemax={isVertical ? MAX_HEIGHT : MAX_WIDTH}
         onMouseDown={handleDragStart}
         onMouseEnter={() => setIsHandleHover(true)}
         onMouseLeave={() => setIsHandleHover(false)}
-        onDoubleClick={() => onWidthChange(chat?.type === 'terminal' ? 640 : 400)}
-        className={`group absolute top-0 z-[70] h-full w-[6px] cursor-col-resize [will-change:transform] ${
-          side === 'right' ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'
-        }`}
+        onDoubleClick={() => {
+          if (isVertical) {
+            onHeightChange?.(chat?.type === 'terminal' ? 400 : 300);
+          } else {
+            onWidthChange(chat?.type === 'terminal' ? 640 : 400);
+          }
+        }}
+        className={isVertical
+          ? 'group absolute left-0 top-0 z-[70] h-[6px] w-full -translate-y-1/2 cursor-row-resize [will-change:transform]'
+          : 'group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize [will-change:transform]'
+        }
       >
         <div
-          className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-sm transition-colors duration-150 ${
+          className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-sm transition-colors duration-150 ${
+            isVertical ? 'h-1.5 w-6' : 'h-6 w-1.5'
+          } ${
             isResizing
               ? 'border-[#DFFF00] bg-[#DFFF00]'
               : isHandleHover

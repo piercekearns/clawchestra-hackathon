@@ -400,10 +400,12 @@ This app uses:
 - **Brand color**: `#DFFF00` (revival yellow) for accents, buttons, badges
 
 **Sidebar controls:**
-- Title bar includes **left + right** sidebar toggles (mirrored icons).
-- Sidebar can dock **left or right**; only one side open at a time.
-- Theme toggle lives **inside the sidebar**, aligned to the top-left (left dock) or top-right (right dock).
-- **Settings mode:** clicking Settings switches the board to a full settings page; sidebar shows a “Back to Clawchestra” control (no tabs yet). Sidebar toggles cannot close the sidebar while in settings mode (can swap sides only).
+- Sidebar is always on the **left** (no side-switching).
+- Title bar has a sidebar toggle (left) and a **layout orientation toggle** (right).
+- Orientation toggle switches the secondary drawer + board between **horizontal** (side-by-side) and **vertical** (stacked) arrangement. Horizontal: drawer left, board right. Vertical: board top, drawer bottom.
+- The thin sidebar's **Conversations button** (MessageSquare) toggles the secondary drawer open/closed when a chat is active; falls back to opening the sidebar hub view when no chat is active.
+- Theme toggle lives **inside the sidebar**, aligned to the left.
+- **Settings mode:** clicking Settings switches the board to a full settings page; sidebar shows a “Back to Clawchestra” control.
 
 When adding new UI:
 - Check existing components in `src/components/ui/` first

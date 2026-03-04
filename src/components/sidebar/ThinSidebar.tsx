@@ -1,18 +1,16 @@
 import { useState, type ComponentType, type ReactNode } from 'react';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeftRight, Github, MessageSquare, Monitor, Moon, Palette, Plus, RefreshCcw, Search, Settings, Sun } from 'lucide-react';
+import { Github, MessageSquare, Monitor, Moon, Palette, Plus, RefreshCcw, Search, Settings, Sun } from 'lucide-react';
 import type { ThemePreference } from '../../lib/schema';
 import { useDashboardStore } from '../../lib/store';
 import { Tooltip } from '../Tooltip';
 
 interface ThinSidebarProps {
-  side: 'left' | 'right';
   onSearch: () => void;
   onAddProject: () => void;
   onRefresh: () => void;
   onOpenSync: () => void;
-  onSwitchSide: () => void;
   onOpenSettings: () => void;
   onToggleHub: () => void;
   hubButtonRef?: React.Ref<HTMLDivElement>;
@@ -23,12 +21,10 @@ interface ThinSidebarProps {
 const THIN_SIDEBAR_WIDTH = 44;
 
 export function ThinSidebar({
-  side,
   onSearch,
   onAddProject,
   onRefresh,
   onOpenSync,
-  onSwitchSide,
   onOpenSettings,
   onToggleHub,
   hubButtonRef,
@@ -37,16 +33,12 @@ export function ThinSidebar({
 }: ThinSidebarProps) {
   const themePreference = useDashboardStore((s) => s.themePreference);
   const setThemePreference = useDashboardStore((s) => s.setThemePreference);
-  const isRight = side === 'right';
-  const switchLabel = 'Switch panel side';
   const hasSyncBadge = syncBadgeCount > 0;
   const hasHubBadge = hubUnreadCount > 0;
 
   return (
     <aside
-      className={`flex shrink-0 flex-col items-center justify-between border-neutral-200 py-3 dark:border-neutral-700 ${
-        isRight ? 'border-l' : 'border-r'
-      }`}
+      className="flex shrink-0 flex-col items-center justify-between border-r border-neutral-200 py-3 dark:border-neutral-700"
       style={{ width: THIN_SIDEBAR_WIDTH }}
       aria-label="Thin sidebar"
     >
@@ -85,7 +77,6 @@ export function ThinSidebar({
         <ThinThemeButton
           themePreference={themePreference}
           onSetTheme={setThemePreference}
-          isRight={isRight}
         />
         <div ref={hubButtonRef}>
           <ThinSidebarButton
@@ -96,12 +87,6 @@ export function ThinSidebar({
             badgeCount={hasHubBadge ? hubUnreadCount : undefined}
           />
         </div>
-        <ThinSidebarButton
-          icon={ArrowLeftRight}
-          label={switchLabel}
-          onClick={onSwitchSide}
-          ariaLabel={switchLabel}
-        />
       </div>
 
       <div className="mb-[9px] flex flex-col items-center gap-2">
@@ -159,11 +144,9 @@ const THEME_OPTIONS: { pref: ThemePreference; icon: ComponentType<{ className?: 
 function ThinThemeButton({
   themePreference,
   onSetTheme,
-  isRight,
 }: {
   themePreference: ThemePreference;
   onSetTheme: (pref: ThemePreference) => void;
-  isRight: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -174,7 +157,7 @@ function ThinThemeButton({
       setOpen(false);
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
-      setMenuPos({ top: rect.top, left: isRight ? rect.left - 148 : rect.right + 8 });
+      setMenuPos({ top: rect.top, left: rect.right + 8 });
       setOpen(true);
     }
   };

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Monitor, Moon, Palette, Settings, Sun } from 'lucide-react';
+import { ArrowLeft, Monitor, Moon, Palette, Settings, Sun } from 'lucide-react';
 import type { ThemePreference } from '../../lib/schema';
 import {
   useDashboardStore,
@@ -20,7 +20,6 @@ interface SidebarAction {
 }
 
 interface SidebarProps {
-  side: 'left' | 'right';
   mode?: 'default' | 'settings';
   onOpenSettings: () => void;
   onBack?: () => void;
@@ -30,7 +29,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-  side,
   mode = 'default',
   onOpenSettings,
   onBack,
@@ -47,9 +45,7 @@ export function Sidebar({
   const rafHandle = useRef(0);
   const [isResizing, setIsResizing] = useState(false);
   const [isHandleHover, setIsHandleHover] = useState(false);
-  const isRight = side === 'right';
   const isSettingsMode = mode === 'settings';
-  const BackIcon = isRight ? ArrowRight : ArrowLeft;
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -65,8 +61,7 @@ export function Sidebar({
         cancelAnimationFrame(rafHandle.current);
         rafHandle.current = requestAnimationFrame(() => {
           if (!isDragging.current) return;
-          const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-          const width = isRight ? viewportWidth - x : x;
+          const width = x;
           setSidebarWidth(width);
         });
       };
@@ -92,7 +87,7 @@ export function Sidebar({
       id="sidebar"
       role="complementary"
       aria-label="Sidebar"
-      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible ${isRight ? 'border-l' : 'border-r'} ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : sidebarOpen ? 'border-neutral-200 dark:border-neutral-700' : 'border-transparent'} ${isResizing ? '' : 'transition-[width,border-color] duration-200 ease-out'}`}
+      className={`relative ${elevated ? 'z-[70]' : 'z-20'} flex shrink-0 flex-col overflow-visible border-r ${isResizing ? 'border-[#9fbf00] dark:border-[#9fbf00]' : isHandleHover ? 'border-[#8ca800] dark:border-[#8ca800]' : sidebarOpen ? 'border-neutral-200 dark:border-neutral-700' : 'border-transparent'} ${isResizing ? '' : 'transition-[width,border-color] duration-200 ease-out'}`}
       style={{ width: sidebarOpen ? sidebarWidth : 0 }}
     >
       <div className={`flex h-full flex-col overflow-hidden ${sidebarOpen ? '' : 'pointer-events-none'}`} style={{ width: sidebarWidth }}>
@@ -102,18 +97,17 @@ export function Sidebar({
             <button
               type="button"
               onClick={onBack}
-              className={`flex items-center gap-2 rounded-md px-2 py-1 text-sm text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-100 ${isRight ? 'justify-end' : 'justify-start'} w-full`}
+              className="flex w-full items-center justify-start gap-2 rounded-md px-2 py-1 text-sm text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-100"
             >
-              {!isRight && <BackIcon className="h-4 w-4" />}
+              <ArrowLeft className="h-4 w-4" />
               <span>Back to Clawchestra</span>
-              {isRight && <BackIcon className="h-4 w-4" />}
             </button>
           </div>
         )}
 
         {/* Quick Actions heading + buttons */}
         {sidebarOpen && !isSettingsMode && actions.length > 0 && (
-          <div className={`flex flex-col gap-0.5 px-2 pb-2 pt-4 ${isRight ? 'items-end' : 'items-start'}`}>
+          <div className="flex flex-col items-start gap-0.5 px-2 pb-2 pt-4">
             <div className="px-3 pb-2 pt-1">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                 Quick Actions
@@ -136,28 +130,16 @@ export function Sidebar({
                   key={action.id}
                   type="button"
                   onClick={action.onClick}
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
-                    isRight ? 'justify-end' : 'justify-start'
-                  }`}
+                  className="flex w-full items-center justify-start gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
                 >
-                  {isRight ? (
-                    <>
-                      <span className="min-w-0 truncate text-right">{action.label}</span>
-                      {iconEl}
-                    </>
-                  ) : (
-                    <>
-                      {iconEl}
-                      <span className="min-w-0 truncate">{action.label}</span>
-                    </>
-                  )}
+                  {iconEl}
+                  <span className="min-w-0 truncate">{action.label}</span>
                 </button>
               );
             })}
             <ThemeQuickAction
               themePreference={themePreference}
               onSetTheme={setThemePreference}
-              isRight={isRight}
             />
           </div>
         )}
@@ -176,11 +158,10 @@ export function Sidebar({
             <button
               type="button"
               onClick={onOpenSettings}
-              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${isRight ? 'justify-end' : 'justify-start'}`}
+              className="flex w-full items-center justify-start gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
             >
-              {!isRight && <Settings className="h-4 w-4" />}
+              <Settings className="h-4 w-4" />
               Settings
-              {isRight && <Settings className="h-4 w-4" />}
             </button>
           </div>
         )}
@@ -198,7 +179,7 @@ export function Sidebar({
           onMouseEnter={() => setIsHandleHover(true)}
           onMouseLeave={() => setIsHandleHover(false)}
           onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
-          className={`group absolute top-0 h-full w-[6px] cursor-col-resize ${isRight ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`}
+          className="group absolute right-0 top-0 h-full w-[6px] translate-x-1/2 cursor-col-resize"
         >
           <div
             className={`pointer-events-none absolute left-1/2 top-1/2 h-6 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-sm transition-colors duration-150 ${
@@ -224,11 +205,9 @@ const THEME_OPTIONS: { pref: ThemePreference; icon: ComponentType<{ className?: 
 function ThemeQuickAction({
   themePreference,
   onSetTheme,
-  isRight,
 }: {
   themePreference: ThemePreference;
   onSetTheme: (pref: ThemePreference) => void;
-  isRight: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -239,7 +218,7 @@ function ThemeQuickAction({
       setOpen(false);
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
-      setMenuPos({ top: rect.top, left: isRight ? rect.left - 148 : rect.right + 8 });
+      setMenuPos({ top: rect.top, left: rect.right + 8 });
       setOpen(true);
     }
   };
@@ -255,21 +234,10 @@ function ThemeQuickAction({
       <button
         type="button"
         onClick={handleToggle}
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 ${
-          isRight ? 'justify-end' : 'justify-start'
-        }`}
+        className="flex w-full items-center justify-start gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
       >
-        {isRight ? (
-          <>
-            <span className="min-w-0 truncate text-right">Theme</span>
-            {iconEl}
-          </>
-        ) : (
-          <>
-            {iconEl}
-            <span className="min-w-0 truncate">Theme</span>
-          </>
-        )}
+        {iconEl}
+        <span className="min-w-0 truncate">Theme</span>
       </button>
       {open && menuPos && createPortal(
         <>

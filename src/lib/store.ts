@@ -80,14 +80,14 @@ interface DashboardState {
   validationRejections: Record<string, ValidationRejection[]>;
   buildErrors: { message: string; timestamp: number }[];
   sidebarOpen: boolean;
-  sidebarSide: 'left' | 'right';
   sidebarWidth: number;
-  thinSidebarSide: 'left' | 'right';
+  layoutOrientation: 'horizontal' | 'vertical';
   // Hub state
   sidebarMode: 'default' | 'settings';
   hubActiveChatId: string | null;
   hubDrawerOpen: boolean;
   hubDrawerWidth: number;
+  hubDrawerHeight: number;
   hubCollapsedThreads: string[];
   hubThreadOrder: string[];
   hubChats: HubChat[];
@@ -162,9 +162,9 @@ interface DashboardState {
   dismissBuildError: (timestamp: number) => void;
   clearBuildErrors: () => void;
   setSidebarOpen: (open: boolean) => void;
-  setSidebarSide: (side: 'left' | 'right') => void;
   setSidebarWidth: (width: number) => void;
-  setThinSidebarSide: (side: 'left' | 'right') => void;
+  setLayoutOrientation: (o: 'horizontal' | 'vertical') => void;
+  setHubDrawerHeight: (height: number) => void;
 
   setProjects: (projects: ProjectViewModel[]) => void;
   setRoadmapItemsForProject: (projectId: string, items: RoadmapItemState[]) => void;
@@ -498,14 +498,14 @@ export const useDashboardStore = create<DashboardState>()(
       validationRejections: {},
       buildErrors: [],
       sidebarOpen: false,
-      sidebarSide: 'left',
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
-      thinSidebarSide: 'left',
+      layoutOrientation: 'horizontal',
       // Hub defaults
       sidebarMode: 'default',
       hubActiveChatId: null,
       hubDrawerOpen: false,
       hubDrawerWidth: 400,
+      hubDrawerHeight: 400,
       hubCollapsedThreads: [],
       hubThreadOrder: [],
       hubChats: [],
@@ -843,10 +843,11 @@ export const useDashboardStore = create<DashboardState>()(
         })),
       clearBuildErrors: () => set({ buildErrors: [] }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
-      setSidebarSide: (sidebarSide) => set({ sidebarSide }),
       setSidebarWidth: (width) =>
         set({ sidebarWidth: Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width)) }),
-      setThinSidebarSide: (thinSidebarSide) => set({ thinSidebarSide }),
+      setLayoutOrientation: (layoutOrientation) => set({ layoutOrientation }),
+      setHubDrawerHeight: (height) =>
+        set({ hubDrawerHeight: Math.min(800, Math.max(200, height)) }),
 
       // Hub actions
       setSidebarMode: (sidebarMode) => set({ sidebarMode }),
@@ -1137,12 +1138,13 @@ export const useDashboardStore = create<DashboardState>()(
         columnOrder: state.columnOrder,
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,
-        thinSidebarSide: state.thinSidebarSide,
+        layoutOrientation: state.layoutOrientation,
         // Hub state (persisted)
         sidebarMode: state.sidebarMode,
         hubActiveChatId: state.hubActiveChatId,
         hubDrawerOpen: state.hubDrawerOpen,
         hubDrawerWidth: state.hubDrawerWidth,
+        hubDrawerHeight: state.hubDrawerHeight,
         hubCollapsedThreads: state.hubCollapsedThreads,
         hubThreadOrder: state.hubThreadOrder,
         customFolders: state.customFolders,
