@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUp, ChevronDown, ChevronUp, X, Clock, RotateCcw } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronUp, X, Clock, RotateCcw, Square } from 'lucide-react';
 import { ActivityIndicator } from './ActivityIndicator';
 import { CommandDropdown } from './CommandDropdown';
 import { StatusBadge } from './StatusBadge';
@@ -51,6 +51,7 @@ interface ChatBarProps {
   onDropFiles: (files: File[]) => Promise<void>;
   onDragStateChange: (active: boolean) => void;
   onComposerHeightChange?: (heightDelta: number) => void;
+  onStop?: () => void;
 }
 
 export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function ChatBar(
@@ -80,6 +81,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     onDropFiles,
     onDragStateChange,
     onComposerHeightChange,
+    onStop,
   },
   forwardedRef,
 ) {
@@ -164,6 +166,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
   const expanded = composerHeight > 72;
   const isFloating = variant === 'floating';
   const hasContent = input.trim() || images.length > 0;
+  const showDualButtons = sending && !!onStop && !!hasContent;
   const usagePercent =
     connectionState === 'connected' && activeModelUsage ? activeModelUsage.percent : null;
   const usageTooltip =
@@ -354,22 +357,46 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                 ? 'Message OpenClaw'
                 : 'Gateway offline. You can still draft here.'
           }
-          className="max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] pr-12 text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400"
+          className={`max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400 ${showDualButtons ? 'pr-[4.75rem]' : 'pr-12'}`}
         />
 
-        <button
-          type="button"
-          disabled={!hasContent}
-          onClick={onSubmit}
-          aria-label={sending ? 'Queue message' : 'Send message'}
-          className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
-            sending
-              ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
-              : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
-          }`}
-        >
-          {sending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
-        </button>
+        {/* Stop button — replaces send when agent is working and onStop is provided */}
+        {sending && onStop ? (
+          <>
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label="Stop active run"
+              className="absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]"
+            >
+              <Square className="h-3.5 w-3.5" fill="currentColor" />
+            </button>
+            {hasContent ? (
+              <button
+                type="button"
+                onClick={onSubmit}
+                aria-label="Queue message"
+                className="absolute bottom-[var(--input-pad)] right-[calc(var(--input-pad)+1.75rem+0.375rem)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90"
+              >
+                <Clock className="h-4 w-4 text-[#DFFF00]" />
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={!hasContent}
+            onClick={onSubmit}
+            aria-label={sending ? 'Queue message' : 'Send message'}
+            className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+              sending
+                ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
+                : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
+            }`}
+          >
+            {sending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
+          </button>
+        )}
       </div>
 
       {images.length > 0 ? (

@@ -50,6 +50,7 @@ import {
   subscribeTurnRegistry,
   subscribeSystemEvents,
   retryGatewayConnection,
+  abortActiveRun,
   sendMessageWithContext,
   teardownSystemEventBus,
   type ChatMessage,
@@ -266,13 +267,13 @@ export default function App() {
   const loading = useDashboardStore((state) => state.loading);
   const selectedProjectId = useDashboardStore((state) => state.selectedProjectId);
   const sidebarOpen = useDashboardStore((state) => state.sidebarOpen);
-  const sidebarSide = useDashboardStore((state) => state.sidebarSide);
-  const thinSidebarSide = useDashboardStore((state) => state.thinSidebarSide);
   const sidebarMode = useDashboardStore((state) => state.sidebarMode);
   const hubChats = useDashboardStore((state) => state.hubChats);
   const hubActiveChatId = useDashboardStore((state) => state.hubActiveChatId);
   const hubDrawerOpen = useDashboardStore((state) => state.hubDrawerOpen);
   const hubDrawerWidth = useDashboardStore((state) => state.hubDrawerWidth);
+  const hubDrawerHeight = useDashboardStore((state) => state.hubDrawerHeight);
+  const layoutOrientation = useDashboardStore((state) => state.layoutOrientation);
   const activeSessionModel = useDashboardStore((state) => state.activeSessionModel);
   const activeSessionProvider = useDashboardStore((state) => state.activeSessionProvider);
   const storeRoadmapItems = useDashboardStore((state) => state.roadmapItems);
@@ -294,10 +295,10 @@ export default function App() {
   const chatLoadingMore = useDashboardStore((state) => state.chatLoadingMore);
   const setSelectedProjectId = useDashboardStore((state) => state.setSelectedProjectId);
   const updateProjectAndReload = useDashboardStore((state) => state.updateProjectAndReload);
-  const setThinSidebarSide = useDashboardStore((state) => state.setThinSidebarSide);
   const setSidebarMode = useDashboardStore((state) => state.setSidebarMode);
   const setHubDrawerOpen = useDashboardStore((state) => state.setHubDrawerOpen);
   const setHubDrawerWidth = useDashboardStore((state) => state.setHubDrawerWidth);
+  const setHubDrawerHeight = useDashboardStore((state) => state.setHubDrawerHeight);
   const deleteProjectAndReload = useDashboardStore((state) => state.deleteProjectAndReload);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -381,6 +382,34 @@ export default function App() {
       return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     }
   }, []);
+
+  // Dynamic window minimum size based on layout orientation and open panels
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const sideW = sidebarOpen ? 220 : 44;
+    const drawerVisible = hubDrawerOpen && !!hubActiveChatId;
+    let minW: number;
+    let minH: number;
+
+    if (layoutOrientation === 'vertical' && drawerVisible) {
+      minW = sideW + 480;
+      minH = 200 + 200 + 46; // board + drawer + titlebar
+    } else if (drawerVisible) {
+      minW = sideW + 280 + 480;
+      minH = 600;
+    } else {
+      minW = sideW + 480;
+      minH = 600;
+    }
+    minW = Math.max(minW, 744);
+    minH = Math.max(minH, 446);
+
+    void import('@tauri-apps/api/dpi').then(({ LogicalSize }) =>
+      import('@tauri-apps/api/window').then(({ getCurrentWindow }) =>
+        getCurrentWindow().setMinSize(new LogicalSize(minW, minH)).catch(() => {})
+      )
+    );
+  }, [layoutOrientation, hubDrawerOpen, hubActiveChatId, sidebarOpen]);
 
   // Gather roadmap items from all projects for search
   const [allSearchableRoadmapItems, setAllSearchableRoadmapItems] = useState<SearchableRoadmapItem[]>([]);
@@ -1723,20 +1752,18 @@ export default function App() {
     setSyncDialogOpen(true);
   }, []);
 
-  const handleSwitchThinSidebarSide = useCallback(() => {
-    setThinSidebarSide(thinSidebarSide === 'left' ? 'right' : 'left');
-  }, [setThinSidebarSide, thinSidebarSide]);
-
   const handleToggleHub = useCallback(() => {
     const store = useDashboardStore.getState();
-    if (store.sidebarOpen && !settingsPageOpen) {
-      store.setSidebarOpen(false);
+    if (store.hubActiveChatId) {
+      // Active chat exists → toggle drawer directly
+      store.setHubDrawerOpen(!store.hubDrawerOpen);
     } else {
+      // No active chat → open sidebar hub view to pick a conversation
       setSettingsPageOpen(false);
       setSidebarMode('default');
       store.setSidebarOpen(true);
     }
-  }, [setSidebarMode, settingsPageOpen]);
+  }, [setSidebarMode]);
 
   const handleQuickAccessSelectChat = useCallback((chatId: string) => {
     setSettingsPageOpen(false);
@@ -2221,6 +2248,19 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeBackgroundSessions, addSystemBubble, chatSending, gatewayActiveTurns]);
 
+  // --- Stop active run via chat.abort RPC ---
+  const lastAbortAtRef = useRef(0);
+  const stopActiveRun = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastAbortAtRef.current < 500) return; // debounce rapid clicks
+    lastAbortAtRef.current = now;
+    try {
+      await abortActiveRun();
+    } catch (err) {
+      console.warn('[App] chat.abort failed:', err);
+    }
+  }, []);
+
   const sendChatMessage = async (
     payload: ChatSendPayload,
     options?: SendChatOptions,
@@ -2577,33 +2617,30 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
       <TitleBar settingsMode={settingsPageOpen} />
       <div className="flex min-h-0 flex-1">
-        {showThinSidebar && thinSidebarSide === 'left' ? (
+        {showThinSidebar && (
           <ThinSidebar
-            side="left"
             onSearch={handleSearchOpen}
             onAddProject={handleAddProjectOpen}
             onRefresh={handleRefreshProjects}
             onOpenSync={handleOpenSync}
-            onSwitchSide={handleSwitchThinSidebarSide}
             onOpenSettings={handleSettingsOpen}
             onToggleHub={handleToggleHub}
             hubButtonRef={hubButtonRef}
             syncBadgeCount={syncBadgeCount}
             hubUnreadCount={hubUnreadCount}
           />
-        ) : null}
-        {sidebarSide === 'left' ? (
-          <Sidebar
-            side="left"
-            mode={resolvedSidebarMode}
-            onOpenSettings={handleSettingsOpen}
-            onBack={handleSettingsBack}
-            elevated={boardModalOpen}
-            actions={sidebarActions}
-            onToast={pushToast}
-          />
-        ) : null}
-        {hubDrawerOpen && hubActiveChatId && sidebarSide === 'left' && (
+        )}
+        <Sidebar
+          mode={resolvedSidebarMode}
+          onOpenSettings={handleSettingsOpen}
+          onBack={handleSettingsBack}
+          elevated={boardModalOpen}
+          actions={sidebarActions}
+          onToast={pushToast}
+        />
+        <div className={`flex min-w-0 flex-1 ${layoutOrientation === 'vertical' ? 'flex-col' : 'flex-row'}`}>
+        {/* Horizontal: drawer renders left of board */}
+        {layoutOrientation === 'horizontal' && hubDrawerOpen && hubActiveChatId && (
           <SecondaryDrawer
             chatId={hubActiveChatId}
             width={hubDrawerWidth}
@@ -2614,11 +2651,10 @@ export default function App() {
             onOpenLinkedProject={handleOpenLinkedProject}
           />
         )}
-        <div className={`relative flex min-w-0 flex-1 flex-col ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
+        <div className={`relative flex min-w-0 flex-1 flex-col ${layoutOrientation === 'vertical' ? 'min-h-[200px]' : ''} ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
         {settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
-            <div className={`h-full min-h-0 overflow-y-auto ${sidebarSide === 'right' ? '[direction:rtl]' : ''}`}>
-              <div className={sidebarSide === 'right' ? '[direction:ltr]' : ''}>
+            <div className="h-full min-h-0 overflow-y-auto">
               <SettingsPage
                 active={settingsPageOpen}
                 settings={dashboardSettings}
@@ -2637,7 +2673,6 @@ export default function App() {
                   }
                 }}
               />
-              </div>
             </div>
           </main>
         ) : (
@@ -3277,6 +3312,7 @@ export default function App() {
           onLoadMore={loadMoreChatMessages}
           onRetryConnection={retryGatewayConnection}
           onSystemBubbleAction={handleSystemBubbleAction}
+          onStop={stopActiveRun}
         />
       </div>
 
@@ -3395,44 +3431,22 @@ export default function App() {
         </>
       )}
         </div>
-        {hubDrawerOpen && hubActiveChatId && sidebarSide === 'right' && (
+        {/* Vertical: drawer renders below board */}
+        {layoutOrientation === 'vertical' && hubDrawerOpen && hubActiveChatId && (
           <SecondaryDrawer
             chatId={hubActiveChatId}
             width={hubDrawerWidth}
-            side="right"
             onWidthChange={setHubDrawerWidth}
             onClose={() => setHubDrawerOpen(false)}
             onToast={pushToast}
             onOpenLinkedItem={handleOpenLinkedItem}
             onOpenLinkedProject={handleOpenLinkedProject}
+            orientation="vertical"
+            height={hubDrawerHeight}
+            onHeightChange={setHubDrawerHeight}
           />
         )}
-        {sidebarSide === 'right' ? (
-          <Sidebar
-            side="right"
-            mode={resolvedSidebarMode}
-            onOpenSettings={handleSettingsOpen}
-            onBack={handleSettingsBack}
-            elevated={boardModalOpen}
-            actions={sidebarActions}
-            onToast={pushToast}
-          />
-        ) : null}
-        {showThinSidebar && thinSidebarSide === 'right' ? (
-          <ThinSidebar
-            side="right"
-            onSearch={handleSearchOpen}
-            onAddProject={handleAddProjectOpen}
-            onRefresh={handleRefreshProjects}
-            onOpenSync={handleOpenSync}
-            onSwitchSide={handleSwitchThinSidebarSide}
-            onOpenSettings={handleSettingsOpen}
-            onToggleHub={handleToggleHub}
-            hubButtonRef={hubButtonRef}
-            syncBadgeCount={syncBadgeCount}
-            hubUnreadCount={hubUnreadCount}
-          />
-        ) : null}
+        </div>
       </div>
 
       {/* Quick access popover for hub conversations */}

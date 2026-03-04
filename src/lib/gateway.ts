@@ -564,6 +564,29 @@ export function getResolvedDefaultSessionKey(): string {
   return readSessionKeyOverride() ?? DEFAULT_SESSION_KEY;
 }
 
+/**
+ * Abort the active run via OpenClaw's `chat.abort` RPC.
+ * Uses the shared TauriOpenClawConnection singleton — no new connection needed.
+ * Silently returns `{ aborted: false }` if no connection exists.
+ */
+export async function abortActiveRun(
+  sessionKey?: string,
+): Promise<{ aborted: boolean; runIds: string[] }> {
+  const { getConnectionInstance } = await import('./tauri-websocket');
+  const connection = getConnectionInstance();
+  if (!connection) return { aborted: false, runIds: [] };
+
+  const key = sessionKey?.trim() || getResolvedDefaultSessionKey();
+  const result = await connection.request<{ aborted?: boolean; runIds?: string[] }>(
+    'chat.abort',
+    { sessionKey: key },
+  );
+  return {
+    aborted: result?.aborted ?? false,
+    runIds: Array.isArray(result?.runIds) ? result.runIds : [],
+  };
+}
+
 function buildRecoverySessionKey(baseSessionKey: string): string {
   const root = normalizeSessionKeyForRecovery(baseSessionKey);
   const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

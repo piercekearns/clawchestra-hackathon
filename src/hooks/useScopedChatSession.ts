@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HubChat } from '../lib/hub-types';
 import type { ChatMessage, UsageSnapshot } from '../lib/gateway';
-import { sendMessageWithContext, fetchSessionModel } from '../lib/gateway';
+import { sendMessageWithContext, fetchSessionModel, abortActiveRun } from '../lib/gateway';
 import { useDashboardStore, EMPTY_HUB_MESSAGES } from '../lib/store';
 import {
   hubChatUpdate,
@@ -66,6 +66,7 @@ export interface ScopedChatSession {
   setInput: (value: string) => void;
   setDragActive: (value: boolean) => void;
   handleSend: () => Promise<void>;
+  handleStop: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +356,18 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
     }
   }, [input, sending, chat.id, chat.sessionKey, chat.title]);
 
+  const lastAbortAtRef = useRef(0);
+  const handleStop = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastAbortAtRef.current < 500) return;
+    lastAbortAtRef.current = now;
+    try {
+      await abortActiveRun(chat.sessionKey ?? undefined);
+    } catch (err) {
+      console.warn('[ScopedChat] chat.abort failed:', err);
+    }
+  }, [chat.sessionKey]);
+
   return {
     messages,
     displayMessages,
@@ -371,5 +384,6 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
     setInput,
     setDragActive,
     handleSend,
+    handleStop,
   };
 }

@@ -102,6 +102,7 @@ function OpenClawChatShell({ chat }: { chat: HubChat }) {
         onPasteFiles={async () => {}}
         onDropFiles={async () => {}}
         onDragStateChange={session.setDragActive}
+        onStop={() => void session.handleStop()}
       />
       </div>
     </div>

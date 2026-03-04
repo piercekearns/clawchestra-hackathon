@@ -165,6 +165,7 @@ interface ChatShellProps {
   onLoadMore?: () => void;
   onRetryConnection?: () => void;
   onSystemBubbleAction?: (actionId: string, payload?: Record<string, unknown>) => void;
+  onStop?: () => void;
 }
 
 export function ChatShell({
@@ -194,6 +195,7 @@ export function ChatShell({
   onLoadMore,
   onRetryConnection,
   onSystemBubbleAction,
+  onStop,
 }: ChatShellProps) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -674,6 +676,7 @@ export function ChatShell({
                     setDragActive(active);
                     if (!active) setDragDepth(0);
                   }}
+                  onStop={onStop}
                 />
               </div>
             </section>
@@ -733,6 +736,7 @@ export function ChatShell({
                   setDragActive(active);
                   if (!active) setDragDepth(0);
                 }}
+                onStop={onStop}
               />
             </div>
           </div>
