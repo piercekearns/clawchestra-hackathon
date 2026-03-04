@@ -4412,12 +4412,12 @@ pub fn run() {
                     if !sessions.is_empty() {
                         api.prevent_exit();
                         let _ = app_handle.emit("quit-guard-needed", sessions.len());
-                    } else {
-                        // No active sessions — clean up any orphan tmux server
-                        let _ = Command::new(commands::terminal::tmux_bin())
-                            .args(["-L", "clawchestra", "kill-server"])
-                            .output();
                     }
+                    // else: no active sessions (or discovery failed during shutdown).
+                    // Do NOT kill-server here — on update restarts (SIGTERM via killall),
+                    // tmux session discovery can fail, and killing the server would destroy
+                    // sessions that should survive the restart. Explicit quit cleanup is
+                    // handled by confirm_quit() which runs kill-server before setting the flag.
                 }
             }
         });
