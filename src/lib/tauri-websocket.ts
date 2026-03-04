@@ -211,6 +211,7 @@ export class TauriOpenClawConnection {
   private disposed = false;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private lastSocketActivityAt = 0;
+  private pairingAutoApproveAttempts = 0;
 
   constructor(private wsUrl: string, sessionKey: string, token?: string) {
     this.sessionKey = sessionKey;
@@ -277,6 +278,18 @@ export class TauriOpenClawConnection {
     }, WS_KEEPALIVE_INTERVAL_MS);
   }
 
+  private handlePairingError(error: unknown): void {
+    this.pairingAutoApproveAttempts++;
+    attemptAutoApproval();
+    // Only surface the error to the user after 5 failed auto-approval attempts.
+    // Until then, the UI shows "reconnecting" so it looks like a normal connect.
+    if (this.pairingAutoApproveAttempts >= 5) {
+      const reason = 'Device pairing required — auto-approve failed. Run `openclaw devices approve --latest` manually.';
+      useDashboardStore.getState().setWsConnectionErrorReason(reason);
+    }
+    this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`, true);
+  }
+
   private forceReconnect(reason: string, pairingRetry = false): void {
     if (this.disposed) return;
     if (this.reconnectTimer) return;
@@ -296,10 +309,13 @@ export class TauriOpenClawConnection {
     }
 
     if (pairingRetry) {
-      // Keep retrying on a slow interval so the pairing request stays
-      // alive on the gateway while the user runs `devices approve`.
-      this.setState('error');
-      this.reconnectTimer = setTimeout(() => void this.attemptReconnect(), 10_000);
+      // Keep retrying so the pairing request stays alive on the gateway.
+      // While auto-approval is still being attempted (< 5 tries), stay in
+      // 'reconnecting' state with fast retries so the UI shows "connecting"
+      // instead of an error. After 5 failures, surface the real error.
+      const quiet = this.pairingAutoApproveAttempts < 5;
+      this.setState(quiet ? 'reconnecting' : 'error');
+      this.reconnectTimer = setTimeout(() => void this.attemptReconnect(), quiet ? 3_000 : 10_000);
     } else {
       this.scheduleReconnect();
     }
@@ -466,10 +482,7 @@ export class TauriOpenClawConnection {
       await this.verifyGatewayScopes();
     } catch (error) {
       if (isPairingRequiredError(error)) {
-        attemptAutoApproval();
-        const reason = 'Device pairing required — approving automatically, retrying. If this persists, run `openclaw devices approve --latest` manually.';
-        useDashboardStore.getState().setWsConnectionErrorReason(reason);
-        this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`, true);
+        this.handlePairingError(error);
         throw error;
       }
       if (!shouldRetryWithDeviceChallenge(error)) {
@@ -483,10 +496,7 @@ export class TauriOpenClawConnection {
         await this.verifyGatewayScopes();
       } catch (fallbackError) {
         if (isPairingRequiredError(fallbackError)) {
-          attemptAutoApproval();
-          const reason = 'Device pairing required — approving automatically, retrying. If this persists, run `openclaw devices approve --latest` manually.';
-          useDashboardStore.getState().setWsConnectionErrorReason(reason);
-          this.forceReconnect(`handshake failed: ${toErrorMessage(fallbackError)}`, true);
+          this.handlePairingError(fallbackError);
           throw fallbackError;
         }
         if (this.connectChallengeNonce && shouldRetryWithDeviceChallenge(fallbackError)) {
@@ -504,10 +514,7 @@ export class TauriOpenClawConnection {
             // Recovered with device-auth challenge; continue with normal connected flow.
           } catch (retryError) {
             if (isPairingRequiredError(retryError)) {
-              attemptAutoApproval();
-              const reason = 'Device pairing required — approving automatically, retrying. If this persists, run `openclaw devices approve --latest` manually.';
-              useDashboardStore.getState().setWsConnectionErrorReason(reason);
-              this.forceReconnect(`handshake failed: ${toErrorMessage(retryError)}`, true);
+              this.handlePairingError(retryError);
               throw retryError;
             }
             // Fall through to normal reconnect/error path.
@@ -520,8 +527,10 @@ export class TauriOpenClawConnection {
 
     this.setState('connected');
     this.reconnectAttempt = 0;
+    this.pairingAutoApproveAttempts = 0;
     this.reconnectTimer = null;
     this.startKeepalive();
+    useDashboardStore.getState().setWsConnectionErrorReason(null);
     console.log('[TauriWS] Connected and authenticated');
   }
 

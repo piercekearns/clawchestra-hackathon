@@ -48,7 +48,6 @@ export interface TerminalActivityEntry {
   lastViewedAt: number;
   isActive: boolean;
   actionRequired: boolean;
-  connectionError: string | null;
   lastCaptureHash: string;
 }
 
@@ -1016,7 +1015,7 @@ export const useDashboardStore = create<DashboardState>()(
         set((state) => {
           const defaults: TerminalActivityEntry = {
             lastOutputAt: 0, lastViewedAt: 0, isActive: false,
-            actionRequired: false, connectionError: null, lastCaptureHash: '',
+            actionRequired: false, lastCaptureHash: '',
           };
           const prev = state.terminalActivity[chatId] ?? defaults;
           return {
@@ -1043,9 +1042,6 @@ export const useDashboardStore = create<DashboardState>()(
                 // Don't clear actionRequired — it should persist until the user
                 // actually resolves the prompt and the PTY detects resumed output.
                 actionRequired: wasActionRequired,
-                // Don't clear connectionError — it persists until the TUI
-                // reconnects and detectConnectionError returns null.
-                connectionError: prev?.connectionError ?? null,
                 // Always clear isActive — once the user is viewing the terminal,
                 // TerminalShell's onData handler takes over activity management.
                 // Stale isActive from the background poll would otherwise persist
@@ -1149,12 +1145,12 @@ export const useDashboardStore = create<DashboardState>()(
         hubThreadOrder: state.hubThreadOrder,
         customFolders: state.customFolders,
         // Terminal activity — persist timestamps so unread state survives restarts.
-        // Strip transient fields (isActive, actionRequired, connectionError, lastCaptureHash).
+        // Strip transient fields (isActive, actionRequired, lastCaptureHash).
         terminalActivity: Object.fromEntries(
           Object.entries(state.terminalActivity).map(([id, entry]) => [
             id,
             { lastOutputAt: entry.lastOutputAt, lastViewedAt: entry.lastViewedAt,
-              isActive: false, actionRequired: false, connectionError: null, lastCaptureHash: '' },
+              isActive: false, actionRequired: false, lastCaptureHash: '' },
           ]),
         ),
       }),
