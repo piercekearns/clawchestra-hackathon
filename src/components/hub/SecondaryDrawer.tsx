@@ -328,7 +328,7 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-[60] flex flex-col overflow-visible ${isVertical ? 'min-h-0 border-t' : 'shrink-0 border-r'} ${
+      className={`relative z-[60] flex flex-col ${isVertical ? 'min-h-0 overflow-hidden border-t' : 'shrink-0 overflow-visible border-r'} ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
@@ -418,7 +418,7 @@ export function SecondaryDrawer({
           }
         }}
         className={isVertical
-          ? 'group absolute left-0 top-0 z-[70] h-[6px] w-full -translate-y-1/2 cursor-row-resize [will-change:transform]'
+          ? 'group absolute left-0 top-0 z-[70] h-[6px] w-full cursor-row-resize [will-change:transform]'
           : 'group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize [will-change:transform]'
         }
       >
