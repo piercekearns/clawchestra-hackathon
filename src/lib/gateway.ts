@@ -567,20 +567,23 @@ export function getResolvedDefaultSessionKey(): string {
 /**
  * Abort the active run via OpenClaw's `chat.abort` RPC.
  * Uses the shared TauriOpenClawConnection singleton — no new connection needed.
- * Silently returns `{ aborted: false }` if no connection exists.
+ * Throws if no connection exists or the RPC fails.
  */
 export async function abortActiveRun(
   sessionKey?: string,
 ): Promise<{ aborted: boolean; runIds: string[] }> {
   const { getConnectionInstance } = await import('./tauri-websocket');
   const connection = getConnectionInstance();
-  if (!connection) return { aborted: false, runIds: [] };
+  if (!connection) throw new Error('No gateway connection');
 
   const key = sessionKey?.trim() || getResolvedDefaultSessionKey();
+  console.log('[gateway] chat.abort → sessionKey:', key);
+
   const result = await connection.request<{ aborted?: boolean; runIds?: string[] }>(
     'chat.abort',
     { sessionKey: key },
   );
+  console.log('[gateway] chat.abort response:', JSON.stringify(result));
   return {
     aborted: result?.aborted ?? false,
     runIds: Array.isArray(result?.runIds) ? result.runIds : [],

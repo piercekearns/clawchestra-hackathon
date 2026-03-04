@@ -368,6 +368,7 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
       await abortActiveRun(chat.sessionKey ?? undefined);
     } catch (err) {
       console.warn('[ScopedChat] chat.abort failed:', err);
+      // Scoped chats don't have system bubbles — error is logged only
     }
   }, [chat.sessionKey]);
 

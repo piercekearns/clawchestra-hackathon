@@ -2249,10 +2249,12 @@ export default function App() {
     const now = Date.now();
     if (now - lastAbortAtRef.current < 500) return; // debounce rapid clicks
     lastAbortAtRef.current = now;
+    console.log('[App] stopActiveRun fired');
     try {
-      await abortActiveRun();
+      const result = await abortActiveRun();
+      console.log('[App] chat.abort result:', result);
     } catch (err) {
-      console.warn('[App] chat.abort failed:', err);
+      console.error('[App] chat.abort failed:', err);
     }
   }, []);
 
