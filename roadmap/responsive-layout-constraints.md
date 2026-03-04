@@ -40,12 +40,16 @@ Reference apps to study:
 | Project modal | 600px | 500px | Constrained by window; scrolls internally |
 
 ### Concertina logic (cascade order)
-When the window is made narrower, panels should hide in this order:
-1. Secondary chat drawer → auto-hides (becomes a floating/slideover drawer)
-2. Sidebar → snaps to thin strip only
-3. Kanban board → minimum window width enforced by Tauri `setMinSize`
+When the window is made narrower, panels should respond in this order:
+1. **Auto-flip to vertical** — if in horizontal mode with terminal active and width drops below terminal + board minimums, auto-switch to vertical stacking (from `flexible-layout-orientation`). Both panels get full width; the constraint shifts to height. This avoids the need to collapse panels entirely in many cases.
+2. Secondary chat drawer → auto-hides (becomes a floating/slideover drawer)
+3. Sidebar → snaps to thin strip only
+4. Kanban board → minimum window width enforced by Tauri `setMinSize`
+
+Step 1 is only applicable when the secondary drawer is open and contains a terminal. For chat-only drawer scenarios, skip to step 2.
 
 ### At narrow widths (< ~900px)
+- If drawer has terminal: auto-flip to vertical (step 1 above) before hiding
 - Secondary chat drawer becomes a full-height **slideover** from the right (overlays the board, doesn't push it)
 - Sidebar collapses to thin strip automatically
 - Board gets full available width
@@ -108,8 +112,7 @@ Both may be partially true — the signal propagation should be correct regardle
 
 ## Relation to Other Items
 
-- **embedded-agent-terminals** (p2, in-progress) — terminal minimum width requirements (Claude Code column floor) directly inform the drawer min-width values here; coordinate on xterm.js `.fit()` + SIGWINCH propagation correctness
-- **flexible-layout-orientation** (p4, up-next) — vertical stacking mode adds height constraint requirements; coordinate min-height logic
-- **hub-session-pairing** (p1, in-progress) — terminal tabs live in the drawer this spec constrains; minimum drawer width affects pairing UX
-- **sidebar-position-rethink** (p14, pending) — if sidebar moves to right side, concertina order changes
+- **embedded-agent-terminals** (in-progress) — terminal minimum width requirements (Claude Code column floor) directly inform the drawer min-width values here; coordinate on xterm.js `.fit()` + SIGWINCH propagation correctness
+- **flexible-layout-orientation** (in-progress) — vertical stacking mode is now a first-class concertina strategy (auto-flip to vertical before collapsing to slideover). Sidebar is locked to left as part of that work, simplifying the concertina cascade (no right-side sidebar scenarios to consider). Height constraints in vertical mode (min 200px per panel, taller for terminal-active) coordinate with this spec's Layer 2 JS coordinator
+- **hub-session-pairing** (complete) — terminal tabs live in the drawer this spec constrains; minimum drawer width affects pairing UX
 - **pre-release-hardening** — layout bugs are user-visible; constraint system should ship before first public sharing

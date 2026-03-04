@@ -476,6 +476,24 @@ pub fn merge_state_json(
         }
     }
 
+    // --- Process explicit deletions via _deletedItems ---
+    if let Some(ref deleted_ids) = incoming.deleted_items {
+        let db_entry = app_state.db.projects.get_mut(project_id)
+            .expect("project entry must exist: inserted above if missing");
+        for del_id in deleted_ids {
+            if del_id.is_empty() {
+                continue;
+            }
+            if db_entry.roadmap_items.remove(del_id).is_some() {
+                applied.push(AppliedChange {
+                    field: format!("roadmapItems.{}", del_id),
+                    old_value: Some("existed".to_string()),
+                    new_value: "deleted via _deletedItems".to_string(),
+                });
+            }
+        }
+    }
+
     // Restore unconsumed write-back hashes (Phase 6.6 echo prevention)
     app_state.writeback_hashes = wb_hashes;
 

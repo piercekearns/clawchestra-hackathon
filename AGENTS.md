@@ -171,10 +171,26 @@ The user may be mid-conversation in the chat drawer. Killing the app means lost 
 | **View roadmap** | Read `.clawchestra/state.json` `roadmapItems` array |
 | **Add item** | Add to `roadmapItems` array in `.clawchestra/state.json` |
 | **Mark complete** | Set item `status: complete` + `completedAt: YYYY-MM-DD` (NOT `done`). Completion is a status change, not a file move |
-| **Remove** | Remove from `roadmapItems` array (not a file deletion) |
+| **Remove** | Add the item ID to `_deletedItems` array in `.clawchestra/state.json` (see below) |
 | **Reprioritize** | Change `priority` values in `.clawchestra/state.json` |
 
 **Roadmap status values (ONLY these — app rejects others):** `pending` | `up-next` | `in-progress` | `complete`
+
+### Deleting Roadmap Items via state.json
+
+To delete roadmap items, add a `_deletedItems` array to state.json containing the IDs to remove:
+
+```json
+{
+  "_deletedItems": ["item-id-to-remove"],
+  "project": { ... },
+  "roadmapItems": [ ... ]
+}
+```
+
+The merge engine processes the deletions and removes the items from db.json. The `_deletedItems` field is consumed on merge and never appears in the projected state.json output. Non-existent IDs are silently ignored.
+
+**Important:** Simply omitting an item from `roadmapItems` does NOT delete it — the merge engine treats omission as "not included" and restores the item. You must use `_deletedItems` for explicit deletion.
 
 ### Completed Items
 

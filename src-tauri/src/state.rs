@@ -101,6 +101,8 @@ pub struct StateJson {
     pub project: StateJsonProject,
     #[serde(rename = "roadmapItems")]
     pub roadmap_items: Vec<StateJsonRoadmapItem>,
+    #[serde(rename = "_deletedItems", default, skip_serializing_if = "Option::is_none")]
+    pub deleted_items: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -425,6 +427,7 @@ impl AppState {
             generated_by: "clawchestra".to_string(),
             project,
             roadmap_items: items,
+            deleted_items: None,
         })
     }
 
