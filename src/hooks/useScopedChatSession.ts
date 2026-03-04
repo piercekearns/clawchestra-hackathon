@@ -299,9 +299,12 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
         useDashboardStore.getState().setHubChatModelState(originChatId, { usage: result.usage });
       }
 
-      // Mark unread if user navigated away or drawer closed
+      // Mark unread if user isn't currently viewing this chat
       const currentStore = useDashboardStore.getState();
-      if (switchedAway || !currentStore.hubDrawerOpen) {
+      const notViewing = switchedAway
+        || !currentStore.hubDrawerOpen
+        || currentStore.hubActiveChatId !== originChatId;
+      if (notViewing) {
         void hubChatUpdate(originChatId, { unread: true });
         currentStore.setHubChats(
           currentStore.hubChats.map((c) => (c.id === originChatId ? { ...c, unread: true } : c)),
