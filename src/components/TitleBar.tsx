@@ -63,6 +63,23 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         >
           <ToggleIcon className="h-4 w-4" />
         </button>
+
+        {/* Orientation toggle */}
+        <Tooltip text={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'} position="below">
+          <button
+            type="button"
+            onClick={() => setLayoutOrientation(layoutOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            aria-label={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}
+          >
+            {layoutOrientation === 'horizontal' ? (
+              <Rows2 className="h-4 w-4" />
+            ) : (
+              <Columns2 className="h-4 w-4" />
+            )}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Centered logo + title group */}
@@ -113,24 +130,7 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         </div>
       </div>
 
-      {/* Orientation toggle */}
-      <div className="ml-auto flex items-center">
-        <Tooltip text={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}>
-          <button
-            type="button"
-            onClick={() => setLayoutOrientation(layoutOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-            aria-label={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}
-          >
-            {layoutOrientation === 'horizontal' ? (
-              <Rows2 className="h-4 w-4" />
-            ) : (
-              <Columns2 className="h-4 w-4" />
-            )}
-          </button>
-        </Tooltip>
-      </div>
+      <div className="ml-auto" />
     </div>
   );
 }
