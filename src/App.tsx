@@ -2326,7 +2326,11 @@ export default function App() {
       // Aborted runs: show confirmation and return early — no output to process
       if (result.aborted) {
         setChatPendingBubbleVisible(false);
-        addSystemBubble('info', 'Run stopped.');
+        await addChatMessage({
+          role: 'assistant',
+          content: '*Run stopped.*',
+          timestamp: Date.now(),
+        });
         void processNextQueuedMessage();
         return true;
       }

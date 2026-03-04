@@ -278,6 +278,17 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
       }
       useDashboardStore.getState().setGatewayConnected(true);
 
+      // Aborted runs: show confirmation and return early
+      if (result.aborted) {
+        useDashboardStore.getState().addHubChatMessage(originChatId, {
+          role: 'assistant',
+          content: '*Run stopped.*',
+          timestamp: Date.now(),
+          _id: generateMessageId(),
+        });
+        return;
+      }
+
       // Add response messages via store (each goes through dedup pipeline)
       for (const msg of result.messages) {
         const withId: ChatMessage = { ...msg, _id: msg._id ?? generateMessageId() };
