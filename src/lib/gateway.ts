@@ -56,6 +56,8 @@ export interface SendResult {
   runtimeProvider?: string | null;
   runtimeSource?: 'run' | 'session';
   usage?: UsageSnapshot | null;
+  /** True when the run was terminated by a user-initiated chat.abort. */
+  aborted?: boolean;
 }
 
 export interface GatewayImageAttachment {
@@ -3759,7 +3761,9 @@ async function sendViaTauriWs(
     // keep polling history according to timeout class:
     // - no observed progress -> 3 minutes
     // - observed run activity -> 12 minutes
-    if (assistantMessages.length === 0 && !streamedTrimmed) {
+    // Skip recovery entirely for aborted runs — the user intentionally stopped,
+    // there's no output to recover.
+    if (assistantMessages.length === 0 && !streamedTrimmed && !sawAbortedEvent) {
       const sawAnyProgress =
         sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent || sawAbortedEvent;
       const hardDeadline = sendRequestedAt + (
@@ -3898,6 +3902,29 @@ async function sendViaTauriWs(
     }
 
     const finalStreamedText = streamedText.trim();
+
+    // Aborted runs: the user intentionally stopped — resolve cleanly with
+    // whatever partial content we have (or empty). Not an error.
+    if (sawAbortedEvent && assistantMessages.length === 0 && !finalStreamedText) {
+      transitionLifecycle('complete');
+      finalizeTurn(turnToken, 'completed', {
+        sessionKey,
+        runId,
+        completionReason: 'user_aborted',
+      });
+      _setAgentActivity('idle', onActivityChange);
+      _clearActiveSendRun(runId);
+      return {
+        messages: [],
+        lastContent: '',
+        aborted: true,
+        runtimeModel,
+        runtimeProvider,
+        ...(runtimeSource ? { runtimeSource } : {}),
+        usage: runtimeUsage ?? null,
+      };
+    }
+
     if (assistantMessages.length === 0 && !finalStreamedText) {
       const timedOutWithProgress =
         sawRunOwnedProgress || sawRunOwnedContent || sawFinalEvent;

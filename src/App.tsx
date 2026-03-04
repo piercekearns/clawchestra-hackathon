@@ -2323,6 +2323,14 @@ export default function App() {
       setChatStreamingContent(null);
       setGatewayConnected(true);
 
+      // Aborted runs: show confirmation and return early — no output to process
+      if (result.aborted) {
+        setChatPendingBubbleVisible(false);
+        addSystemBubble('info', 'Run stopped.');
+        void processNextQueuedMessage();
+        return true;
+      }
+
       // Add ALL assistant messages (fixes dropped message bug)
       for (const msg of result.messages) {
         await addChatMessage(msg);
@@ -2635,7 +2643,7 @@ export default function App() {
           actions={sidebarActions}
           onToast={pushToast}
         />
-        <div className={`flex min-h-0 min-w-0 flex-1 ${layoutOrientation === 'vertical' ? 'flex-col' : 'flex-row'}`}>
+        <div className={`flex min-h-0 min-w-0 flex-1 ${layoutOrientation === 'vertical' ? 'flex-col overflow-hidden' : 'flex-row'}`}>
         {/* Horizontal: drawer renders left of board */}
         {layoutOrientation === 'horizontal' && hubDrawerOpen && hubActiveChatId && (
           <SecondaryDrawer
