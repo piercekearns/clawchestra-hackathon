@@ -161,6 +161,15 @@ function isPairingRequiredError(error: unknown): boolean {
   return message.includes('pairing required') || message.includes('pairing_required');
 }
 
+function attemptAutoApproval(): void {
+  import('./tauri').then(({ approveLatestDevice }) =>
+    approveLatestDevice().then(
+      () => console.log('[TauriWS] Auto-approved device pairing'),
+      (err) => console.warn('[TauriWS] Auto-approve failed:', err),
+    ),
+  ).catch((err) => console.warn('[TauriWS] Auto-approve import failed:', err));
+}
+
 function shouldRetryWithDeviceChallenge(error: unknown): boolean {
   if (isPairingRequiredError(error)) return false;
   const message = toErrorMessage(error).toLowerCase();
@@ -457,7 +466,8 @@ export class TauriOpenClawConnection {
       await this.verifyGatewayScopes();
     } catch (error) {
       if (isPairingRequiredError(error)) {
-        const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal — retrying automatically.';
+        attemptAutoApproval();
+        const reason = 'Device pairing required — approving automatically, retrying. If this persists, run `openclaw devices approve --latest` manually.';
         useDashboardStore.getState().setWsConnectionErrorReason(reason);
         this.forceReconnect(`handshake failed: ${toErrorMessage(error)}`, true);
         throw error;
@@ -473,7 +483,8 @@ export class TauriOpenClawConnection {
         await this.verifyGatewayScopes();
       } catch (fallbackError) {
         if (isPairingRequiredError(fallbackError)) {
-          const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal — retrying automatically.';
+          attemptAutoApproval();
+          const reason = 'Device pairing required — approving automatically, retrying. If this persists, run `openclaw devices approve --latest` manually.';
           useDashboardStore.getState().setWsConnectionErrorReason(reason);
           this.forceReconnect(`handshake failed: ${toErrorMessage(fallbackError)}`, true);
           throw fallbackError;
@@ -493,7 +504,8 @@ export class TauriOpenClawConnection {
             // Recovered with device-auth challenge; continue with normal connected flow.
           } catch (retryError) {
             if (isPairingRequiredError(retryError)) {
-              const reason = 'Device pairing required. Run `openclaw devices approve --latest` in your terminal — retrying automatically.';
+              attemptAutoApproval();
+              const reason = 'Device pairing required — approving automatically, retrying. If this persists, run `openclaw devices approve --latest` manually.';
               useDashboardStore.getState().setWsConnectionErrorReason(reason);
               this.forceReconnect(`handshake failed: ${toErrorMessage(retryError)}`, true);
               throw retryError;

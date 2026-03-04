@@ -1192,6 +1192,16 @@ fn find_openclaw_binary() -> Option<PathBuf> {
     None
 }
 
+#[tauri::command]
+fn approve_latest_device() -> Result<String, String> {
+    let binary = find_openclaw_binary()
+        .ok_or_else(|| "OpenClaw CLI not found — cannot auto-approve device".to_string())?;
+    run_command_with_output(
+        binary.to_str().unwrap_or("openclaw"),
+        &["devices", "approve", "--latest"],
+    )
+}
+
 const KEYRING_SERVICE: &str = "com.clawdbot.clawchestra";
 const KEYRING_BEARER_KEY: &str = "openclaw-bearer-token";
 
@@ -4292,6 +4302,7 @@ pub fn run() {
             pick_folder,
             get_openclaw_gateway_config,
             get_openclaw_ws_device_auth,
+            approve_latest_device,
             openclaw_ping,
             openclaw_chat,
             openclaw_sessions_list,

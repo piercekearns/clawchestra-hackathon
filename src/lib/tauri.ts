@@ -130,6 +130,7 @@ type TauriCommands = {
       nonce: string;
     };
   };
+  approve_latest_device: { args: Record<string, never>; return: string };
   openclaw_ping: { args: Record<string, never>; return: void };
   openclaw_chat: {
     args: {
@@ -565,6 +566,10 @@ export async function getOpenClawWsDeviceAuth(params: {
     scopes: params.scopes,
     token: params.token ?? null,
   });
+}
+
+export async function approveLatestDevice(): Promise<string> {
+  return typedInvoke('approve_latest_device');
 }
 
 export async function checkOpenClawGatewayConnection(): Promise<boolean> {
