@@ -4139,18 +4139,19 @@ export async function sendMessageWithContext(
           ? `User workspace path: ${workspacePath}`
           : `User is viewing: ${context.view}`;
 
-  // Build context message with capabilities + surface identifier + response contract
+  // Build context message: viewLine must be first (chat-normalization.ts strips
+  // everything before "User request:" only when the message starts with a known
+  // context prefix like "User is viewing project:"). Capabilities and surface
+  // contract go between viewLine and the user's text.
   const capabilities = await loadCapabilities();
   const surface = context.surface;
   const responseContract = surface ? SURFACE_RESPONSE_CONTRACTS[surface] : null;
-  const parts: string[] = [];
-  if (capabilities) parts.push(`[Clawchestra App Guide]\n${capabilities}`);
+  const contextParts: string[] = [viewLine];
+  if (capabilities) contextParts.push(`[Clawchestra App Guide]\n${capabilities}`);
   if (responseContract) {
-    parts.push(`[Clawchestra Context]\nSurface: ${surface}\n${viewLine}\n\n[Response Guidelines]\n${responseContract}`);
-  } else {
-    parts.push(viewLine);
+    contextParts.push(`[Surface: ${surface}]\n${responseContract}`);
   }
-  const contextMessage = parts.join('\n\n---\n\n');
+  const contextMessage = contextParts.join('\n\n---\n\n');
 
   if (transport.mode === 'tauri-ws') {
     const userText = latestUserContent(messages);
