@@ -319,7 +319,9 @@ export function SecondaryDrawer({
             const drawerBottom = rect?.bottom ?? 0;
             const newHeight = drawerBottom - event.clientY;
             const minH = chat?.type === 'terminal' ? 300 : MIN_HEIGHT;
-            onHeightChange?.(Math.min(MAX_HEIGHT, Math.max(minH, newHeight)));
+            const parentHeight = drawerRef.current?.parentElement?.clientHeight ?? Infinity;
+            const maxH = Math.min(MAX_HEIGHT, parentHeight - MIN_HEIGHT);
+            onHeightChange?.(Math.min(maxH, Math.max(minH, newHeight)));
           } else {
             const drawerLeft = rect?.left ?? 0;
             const newWidth = event.clientX - drawerLeft;
@@ -357,7 +359,7 @@ export function SecondaryDrawer({
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
-      style={isVertical ? { height, maxHeight: '70%', willChange: 'transform' } : { width, willChange: 'transform' }}
+      style={isVertical ? { height, maxHeight: 'calc(100% - 200px)', willChange: 'transform' } : { width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
         <div className="relative">
