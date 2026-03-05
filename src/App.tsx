@@ -983,8 +983,11 @@ export default function App() {
           const prev = store.terminalActivity[chatId];
 
           if (!prev || !prev.lastCaptureHash) {
-            // First poll for this terminal — seed the hash without flagging active
-            store.updateTerminalActivity(chatId, { lastCaptureHash: hash });
+            // First poll for this terminal — seed the hash without flagging active.
+            // Still check actionRequired so prompts already on-screen are detected
+            // (e.g. terminal showed a permission prompt before polling started).
+            const actionRequired = detectActionRequired(captured);
+            store.updateTerminalActivity(chatId, { lastCaptureHash: hash, actionRequired });
           } else if (prev.lastCaptureHash !== hash) {
             // Output changed since last poll — real activity.
             // Re-evaluate actionRequired from fresh capture each time.
@@ -1003,7 +1006,15 @@ export default function App() {
             // detected output was > 4s ago (2 consecutive unchanged polls).
             const HIDDEN_TAIL_MS = 4000;
             if (Date.now() - prev.lastOutputAt > HIDDEN_TAIL_MS) {
-              store.updateTerminalActivity(chatId, { isActive: false });
+              const actionRequired = detectActionRequired(captured);
+              store.updateTerminalActivity(chatId, { isActive: false, actionRequired });
+            }
+          } else {
+            // Idle terminal, unchanged output — re-check actionRequired
+            // in case it was missed (e.g. prompt appeared between polls).
+            const actionRequired = detectActionRequired(captured);
+            if (actionRequired !== prev.actionRequired) {
+              store.updateTerminalActivity(chatId, { actionRequired });
             }
           }
         } catch {
