@@ -328,14 +328,14 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-[60] flex flex-col ${isVertical ? 'min-h-0 overflow-hidden border-t' : 'shrink-0 overflow-visible border-r'} ${
+      className={`relative z-[60] flex flex-col ${isVertical ? 'shrink-0 overflow-hidden border-t' : 'shrink-0 overflow-visible border-r'} ${
         isResizing
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
       } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
-      style={isVertical ? { flexBasis: height, flexShrink: 1, willChange: 'transform' } : { width, willChange: 'transform' }}
+      style={isVertical ? { height, maxHeight: '70%', willChange: 'transform' } : { width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
         <div className="relative">
