@@ -203,6 +203,15 @@ Rust backend reads `~/.openclaw/openclaw.json` for `gateway.port` and `gateway.a
 - Rust backend reads from settings instead of (or in addition to) `~/.openclaw/openclaw.json`
 - Settings UI (sidebar) allows changing these later
 
+### Deployment topology: what the user should know
+
+Where OpenClaw runs affects what it can do inside Clawchestra. The wizard should surface this clearly after a successful connection test:
+
+- **Local OpenClaw** — full experience. OpenClaw can read project files, analyse codebases, work across projects at source-code depth. AI plans and AI execution live in the same loop: OpenClaw creates roadmap items and specs, the user (or a terminal agent) builds against them, OpenClaw sees the updated state and knows what's next.
+- **Remote OpenClaw (VPS)** — app-aware assistant with project management, but no direct file access. OpenClaw still manages your roadmap, writes specs and plans, and guides workflows — Clawchestra pushes all project metadata into every conversation. Coding work runs through embedded terminal agents (Claude Code, Codex), which are always local. The planning loop still closes, it's just split: OpenClaw plans, terminals execute, the board updates.
+
+This isn't a warning — both experiences are useful. But the user should understand the tradeoff so they can make an informed choice. For the full architectural analysis and future bridge solutions, see `docs/specs/vps-openclaw-file-access-spec.md`.
+
 ### What could go wrong
 - User doesn't know their auth token → clear instructions on how to find it
 - Connection fails silently → need visible error state with actionable message
