@@ -53,6 +53,7 @@ export function SecondaryDrawer({
   const [terminalFocused, setTerminalFocused] = useState(false);
   const [terminalDragActive, setTerminalDragActive] = useState(false);
   const [terminalRestartKey, setTerminalRestartKey] = useState(0);
+  const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   // Track the last active tab per row (keyed by "projectId:itemId") for cycling back
   const lastActiveTabPerRow = useRef(new Map<string, string>());
@@ -185,8 +186,16 @@ export function SecondaryDrawer({
     [hubChats, setHubActiveChatId],
   );
 
-  const handleCloseTab = useCallback(
-    async (tabChatId: string) => {
+  const executeCloseTab = useCallback(
+    async (tabChatId: string, killSession: boolean) => {
+      if (killSession) {
+        const tabChat = hubChats.find((c) => c.id === tabChatId);
+        if (tabChat) {
+          const session = tmuxSessionName(tabChat.projectId, tabChat.id);
+          void tmuxKillSession(session).catch(() => {});
+        }
+      }
+
       await hubChatUpdate(tabChatId, { archived: true });
       await refreshHubChats();
 
@@ -195,13 +204,11 @@ export function SecondaryDrawer({
       if (tabChatId === chatId) {
         const remaining = rowTabs.filter((t) => t.id !== tabChatId);
         if (remaining.length > 0) {
-          // Switch to the most recently active remaining tab
           const best = remaining.reduce((a, b) =>
             a.lastActivity > b.lastActivity ? a : b,
           );
           setHubActiveChatId(best.id);
         } else {
-          // Last tab in this row — try to cycle to an adjacent row (prefer above)
           const adjacentRow = currentRowIndex > 0
             ? threadRows[currentRowIndex - 1]
             : threadRows[currentRowIndex + 1];
@@ -228,6 +235,21 @@ export function SecondaryDrawer({
       }
     },
     [chatId, rowTabs, hubChats, setHubActiveChatId, refreshHubChats, onClose, pushDrawerToast],
+  );
+
+  const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
+
+  const handleCloseTab = useCallback(
+    (tabChatId: string) => {
+      const tabChat = hubChats.find((c) => c.id === tabChatId);
+      const isActiveTerminal = tabChat?.type === 'terminal' && activeTerminals.has(tabChatId);
+      if (isActiveTerminal) {
+        setPendingCloseTabId(tabChatId);
+      } else {
+        void executeCloseTab(tabChatId, false);
+      }
+    },
+    [hubChats, activeTerminals, executeCloseTab],
   );
 
   const handleAddChat = useCallback(async () => {
@@ -393,6 +415,31 @@ export function SecondaryDrawer({
           onAddChat={handleAddChat}
           onAddTerminal={handleAddTerminal}
         />
+        {pendingCloseTabId && (
+          <div className="flex items-center gap-2 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs dark:bg-amber-400/5">
+            <span className="min-w-0 flex-1 text-neutral-700 dark:text-neutral-300">
+              This terminal is running. End session?
+            </span>
+            <button
+              type="button"
+              onClick={() => setPendingCloseTabId(null)}
+              className="shrink-0 rounded-md border border-neutral-200 px-2.5 py-1 font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const id = pendingCloseTabId;
+                setPendingCloseTabId(null);
+                void executeCloseTab(id, true);
+              }}
+              className="shrink-0 rounded-md bg-red-500 px-2.5 py-1 font-medium text-white transition-colors hover:bg-red-600"
+            >
+              End session
+            </button>
+          </div>
+        )}
         <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
           terminalDragActive ? '' : terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
         } ${isVertical ? 'mt-px' : 'mr-px'}`}>
