@@ -571,29 +571,42 @@ The capability map (`CAPABILITIES.md`) is injected once on session start (same a
 
 ## Delivery Phases
 
-This spec spans three natural phases, each gated by a different milestone:
+This spec spans three natural phases, each gated by a different milestone.
 
-### Phase 1: Pre-Distributed AI Surfaces (Deliverable Now)
+**Critical scoping note:** Phase 1 covers the **three AI surfaces that exist today** — no new surfaces are created before first-friend-readiness (FFR). The `distributed-ai-surfaces` roadmap item is deferred to post-FFR and covers future surface expansion (git sync inline chat, project card chat, etc.). Phase 1 is designed to be extensible so future surfaces plug into the same injection formula without rearchitecting.
 
-What can be built with the current architecture — the main chat drawer and existing scoped chats:
+### Phase 1: Existing Surfaces (Deliverable Now — Pre-FFR)
+
+Covers the three AI surfaces that already exist:
+1. **Main chat drawer** — the general-purpose chat bar at the bottom of the app
+2. **Hub drawer scoped chats** — project-scoped and item-scoped conversations in the hub drawer (OpenClaw tabs)
+3. **Quick-add modal** — the roadmap-item-quick-add AI chat embedded in the add-item dialog
+
+Deliverables:
 
 1. **Write `CAPABILITIES.md`** — the capability map describing everything the app can do, written for end users (not developers). This is the single highest-value deliverable.
-2. **Inject `CAPABILITIES.md` on first send** — extend `hub-context.ts` to include it alongside project context. Every OpenClaw conversation inside Clawchestra starts with app awareness.
-3. **Enrich per-message context** — extend `composeContextWrappedUserMessage()` to include surface type and basic response guidelines for the main chat drawer and existing scoped chats.
-4. **Write behavioural guidelines** — the "how to be a good guide" instructions that shape OpenClaw's conversational style within Clawchestra.
+2. **Inject `CAPABILITIES.md` on first send** — extend `hub-context.ts` to include it alongside project context. Every OpenClaw conversation inside Clawchestra starts with app awareness. Applies to all three existing surfaces.
+3. **Enrich per-message context** — extend `composeContextWrappedUserMessage()` to include surface type and basic response guidelines. Each of the three surfaces gets its own surface identifier and response contract:
+   - `main-chat-drawer` → conversational, markdown-rich, may suggest features
+   - `hub-scoped-chat` → project/item-scoped, context-aware, medium depth
+   - `roadmap-quick-add` → brief confirmation only, 1–3 sentences
+4. **Write behavioural guidelines** — the "how to be a good guide" instructions that shape OpenClaw's conversational style within Clawchestra. General guidelines apply to all surfaces; surface-specific response contracts are injected per-message.
 5. **Separate user/developer context** — inject `CAPABILITIES.md` always, inject `AGENTS.md` only for the Clawchestra project itself.
 6. **Terminal context preamble** — lightweight context injection when spawning terminal sessions so Claude Code / other agents know they're inside Clawchestra.
 
-### Phase 2: Post-Distributed AI Surfaces
+**Extensibility by design:** The surface identifier + response contract pattern established here is the same pattern future surfaces will use. When the `distributed-ai-surfaces` roadmap item ships new surfaces (git sync inline chat, project card chat, etc.), each new surface declares its own identifier and response contract — no changes to the injection infrastructure.
 
-Once the `SurfaceContext` interface and reusable `<AiChat>` component exist (from `distributed-ai-surfaces-spec.md`):
+### Phase 2: New Distributed AI Surfaces (Post-FFR)
 
-1. **Per-surface response contracts** — populate `SurfaceContext.responseContract` with surface-specific guidelines (brief for quick-add, conversational for main chat, action-oriented for git sync, etc.)
-2. **Surface-specific behavioural guidelines** — expand Layer 2 with per-surface patterns
+Once FFR is achieved and the `distributed-ai-surfaces` roadmap item begins expanding the number of AI surfaces:
+
+1. **Per-surface response contracts for new surfaces** — each new surface (git sync inline chat, project card chat, item detail chat) gets its own response contract following the same pattern established in Phase 1
+2. **Surface-specific behavioural guidelines** — expand Layer 2 with deeper per-surface patterns as the surface count grows
 3. **Guided workflow patterns** — implement Layer 4 patterns (project creation flow, roadmap progression, stuck user assistance) as structured prompts within surface contexts
 4. **Dynamic state enrichment** — inject richer context per-surface: which tab is open, what action is being performed, etc.
+5. **`SurfaceContext` formalisation** — if the reusable `<AiChat>` component is extracted (from `distributed-ai-surfaces-spec.md`), populate `SurfaceContext.responseContract` with the contract values defined here
 
-### Phase 3: Post-First Friend Readiness
+### Phase 3: Post-First Friend Readiness (Onboarding)
 
 Once onboarding is addressed (via the `first-friend-readiness` roadmap item):
 
@@ -604,11 +617,11 @@ Once onboarding is addressed (via the `first-friend-readiness` roadmap item):
 
 ### What Ships in Each Phase
 
-| Deliverable | Phase 1 | Phase 2 | Phase 3 |
-|-------------|---------|---------|---------|
-| `CAPABILITIES.md` | ✅ Write + inject | Update | Update |
-| Behavioural guidelines | ✅ General | Per-surface | With discovery |
-| Response contracts | Basic (main chat style) | ✅ Per-surface | — |
+| Deliverable | Phase 1 (Now) | Phase 2 (Post-FFR) | Phase 3 (Onboarding) |
+|-------------|---------------|---------------------|----------------------|
+| `CAPABILITIES.md` | ✅ Write + inject | Update per surface | Update |
+| Behavioural guidelines | ✅ General + 3 surface contracts | Per new surface | With discovery |
+| Response contracts | ✅ 3 existing surfaces | New surfaces | — |
 | Dynamic state in context | View + project | ✅ Full surface state | — |
 | Terminal agent context | ✅ Lightweight | — | — |
 | Guided workflows | — | ✅ | — |

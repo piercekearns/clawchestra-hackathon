@@ -2,11 +2,32 @@
 
 > Replace the single chat drawer as the sole AI interaction point with context-aware chat components embedded throughout the app — the UI location IS the instruction.
 
-**Status:** Draft
+**Status:** Draft — deferred to post-FFR
 **Created:** 2026-02-21
+**Last Updated:** 2026-03-05 (scoping clarification: future expansion only)
 **Roadmap Item:** `distributed-ai-surfaces`
-**Depends On:** `architecture-direction` (must be delivered first), `scoped-chat-sessions` (session key foundation)
-**First Consumer:** `roadmap-item-quick-add` (P3 proof-of-concept)
+**Depends On:** `architecture-direction` (must be delivered first), `scoped-chat-sessions` (session key foundation), `first-friend-readiness` (ships before new surfaces)
+**First Consumer:** `roadmap-item-quick-add` (P3 proof-of-concept — already shipped)
+
+---
+
+## Scoping Note
+
+**This roadmap item covers future AI surface expansion — creating NEW surfaces beyond what exists today.** It is deferred until after first-friend-readiness (FFR).
+
+Three AI surfaces already exist and are fully functional:
+1. **Main chat drawer** — the general-purpose chat bar
+2. **Hub drawer scoped chats** — project/item-scoped OpenClaw tabs in the hub drawer
+3. **Quick-add modal** — AI chat embedded in the add-roadmap-item dialog
+
+These existing surfaces are served by `app-aware-ai-context` (Phase 1), which builds the context injection, response contracts, and behavioural guidelines for them NOW. The injection pattern is designed to be extensible — when this spec ships new surfaces post-FFR, each new surface plugs into the same formula (surface identifier + response contract + context payload) without rearchitecting.
+
+**What this spec will deliver (post-FFR):**
+- Git sync inline chat (Phase 3 below)
+- Project card chat, roadmap item detail chat (Phase 4 below)
+- Reusable `<AiChat>` component extraction (Phase 1 below — when a second consumer justifies generalisation)
+- `SurfaceContext` interface formalisation
+- Surface registration/discovery patterns
 
 ---
 
@@ -175,6 +196,8 @@ Instead, what the user gets is a long, unformatted dump that doesn't clearly con
 ### Implication for Build Order
 
 The original phased delivery assumed the reusable `<AiChat>` component extraction (Phase 1) would come first. In practice, we built the quick-add surface directly without extracting a shared component — and the result works. The more urgent need is **response behaviour training** (an `app-aware-ai-context` concern) rather than component abstraction. The component extraction can happen when the second surface ships (git sync inline chat) and we have two consumers to generalize from.
+
+**Current priority:** `app-aware-ai-context` Phase 1 ships first — covering the three existing surfaces with context injection, response contracts, and behavioural guidelines. This spec's deliverables (new surfaces, component extraction) begin post-FFR, building on that foundation.
 
 ## Open Questions
 
