@@ -358,7 +358,9 @@ export function SecondaryDrawer({
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
             : 'border-neutral-200 dark:border-neutral-700'
-      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
+      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'} ${
+        terminalFocused && !terminalDragActive ? 'outline outline-1 -outline-offset-1 outline-revival-accent-400/40' : ''
+      }`}
       style={isVertical ? { height, maxHeight: 'calc(100% - 200px)', willChange: 'transform' } : { width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
@@ -442,9 +444,7 @@ export function SecondaryDrawer({
             </button>
           </div>
         )}
-        <div className={`flex min-h-0 flex-1 flex-col transition-shadow duration-200 ${
-          terminalDragActive ? '' : terminalFocused ? 'ring-1 ring-inset ring-revival-accent-400/40' : ''
-        } ${isVertical ? 'mt-px' : 'mr-px'}`}>
+        <div className={`flex min-h-0 flex-1 flex-col ${isVertical ? 'mt-px' : 'mr-px'}`}>
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
         </div>
       </div>
