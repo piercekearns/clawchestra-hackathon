@@ -47,7 +47,15 @@ export function TypePickerMenu({
       onExternalMenuClose?.();
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 });
+      // Clamp menu within window bounds
+      const menuWidth = 176;
+      const menuHeight = 80; // approximate height of 2 menu items
+      let top = rect.bottom + 4;
+      let left = rect.right - menuWidth;
+      if (top + menuHeight > window.innerHeight) top = rect.top - menuHeight - 4;
+      if (left < 4) left = 4;
+      if (left + menuWidth > window.innerWidth - 4) left = window.innerWidth - menuWidth - 4;
+      setMenuPos({ top, left });
       setOpen(true);
       setTerminalSubmenu(false);
     }
