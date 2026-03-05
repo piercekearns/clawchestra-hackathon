@@ -357,10 +357,10 @@ export function SecondaryDrawer({
           ? 'border-[#9fbf00] dark:border-[#9fbf00]'
           : isHandleHover
             ? 'border-[#8ca800] dark:border-[#8ca800]'
-            : 'border-neutral-200 dark:border-neutral-700'
-      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'} ${
-        terminalFocused && !terminalDragActive ? 'outline outline-1 -outline-offset-1 outline-revival-accent-400/40' : ''
-      }`}
+            : terminalFocused && !terminalDragActive
+              ? 'border-revival-accent-400/40'
+              : 'border-neutral-200 dark:border-neutral-700'
+      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
       style={isVertical ? { height, maxHeight: 'calc(100% - 200px)', willChange: 'transform' } : { width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
@@ -444,7 +444,9 @@ export function SecondaryDrawer({
             </button>
           </div>
         )}
-        <div className={`flex min-h-0 flex-1 flex-col ${isVertical ? 'mt-px' : 'mr-px'}`}>
+        <div className={`flex min-h-0 flex-1 flex-col ${isVertical ? 'mt-px' : 'mr-px'} ${
+          terminalFocused && !terminalDragActive ? 'outline outline-1 -outline-offset-1 outline-revival-accent-400/40' : ''
+        }`}>
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
         </div>
       </div>
