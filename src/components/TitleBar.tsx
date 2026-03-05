@@ -51,18 +51,20 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         <div className="w-[78px] shrink-0" />
 
         {/* Sidebar toggle */}
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          disabled={sidebarLocked}
-          className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${sidebarLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
-          onMouseDown={(e) => e.stopPropagation()}
-          aria-expanded={sidebarOpen}
-          aria-controls="sidebar"
-          aria-label="Toggle sidebar"
-        >
-          <ToggleIcon className="h-4 w-4" />
-        </button>
+        <Tooltip text={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'} position="below">
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            disabled={sidebarLocked}
+            className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${sidebarLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+            onMouseDown={(e) => e.stopPropagation()}
+            aria-expanded={sidebarOpen}
+            aria-controls="sidebar"
+            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          >
+            <ToggleIcon className="h-4 w-4" />
+          </button>
+        </Tooltip>
 
         {/* Orientation toggle */}
         <Tooltip text={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'} position="below">
