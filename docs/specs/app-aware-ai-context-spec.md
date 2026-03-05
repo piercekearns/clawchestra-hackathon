@@ -62,26 +62,40 @@ For now: the capability map is what Clawchestra ships with. It's the starting po
 The capability map tracks not just "what can the user do" but also whether each capability has both a UI surface and an AI surface, and which is primary. See `docs/DESIGN_PRINCIPLES.md` Principle 1 (Dual Surface) and Principle 6 (Capability Parity).
 
 ```
-| Capability                    | UI Surface          | AI Surface              | Primary | Parity |
-|-------------------------------|---------------------|-------------------------|---------|--------|
-| View project kanban           | Kanban board        | "Show me project X"     | UI      | ✅     |
-| View roadmap item detail      | Item detail panel   | "What's the status of Y"| UI      | ✅     |
-| Run lifecycle command         | Action bar buttons  | "Deepen the spec for Y" | Both    | ✅     |
-| Commit git changes            | Git sync dialog     | "Commit my work"        | UI      | ✅     |
-| Add new project               | [not built]         | "Set up a project"      | AI      | ⚠️ UI  |
-| Add new roadmap item          | [not built]         | "Add an item for..."    | AI      | ⚠️ UI  |
-| Edit project metadata         | [not built]         | "Rename project to..."  | UI      | ⚠️ UI  |
-| Edit roadmap item metadata    | [not built]         | "Change priority to 2"  | UI      | ⚠️ UI  |
-| Change colour theme           | [not built]         | "Make it darker"        | UI      | ⚠️ UI  |
-| Reorder roadmap priorities    | [not built]         | "Move X above Y"        | UI      | ⚠️ Both|
-| Branch management             | [not built]         | [not built]             | UI      | ❌     |
-| Project-scoped conversations  | [not built]         | [not built]             | Both    | ❌     |
-| Open coding agent session     | [not built]         | [not built]             | UI      | ❌     |
+| Capability                    | UI Surface                     | AI Surface                    | Primary | Parity |
+|-------------------------------|--------------------------------|-------------------------------|---------|--------|
+| View project kanban           | Kanban board                   | "Show me project X"           | UI      | ✅     |
+| View roadmap item detail      | Item detail panel              | "What's the status of Y"      | UI      | ✅     |
+| Run lifecycle command         | Action bar (Spec/Plan/Review/  | "Deepen the spec for Y"       | Both    | ✅     |
+|                               | Deliver/Build)                 |                               |         |        |
+| Commit / sync git changes     | Sync dialog (stash, cherry-    | "Commit my work"              | UI      | ✅     |
+|                               | pick, conflicts, push/pull)    |                               |         |        |
+| Add new project               | AddProjectDialog (create new   | "Set up a project for X"      | Both    | ✅     |
+|                               | / add existing with compat)    |                               |         |        |
+| Add new roadmap item          | Quick-add modal (AI chat +     | "Add an item for..."          | Both    | ✅     |
+|                               | manual form)                   |                               |         |        |
+| Edit roadmap item metadata    | Item detail panel              | "Change priority to 2"        | UI      | ⚠️ AI  |
+| Change colour theme           | Settings (system/light/dark)   | "Make it darker"              | UI      | ⚠️ AI  |
+| Reorder roadmap priorities    | Drag-and-drop (dnd-kit)        | "Move X above Y"              | UI      | ⚠️ AI  |
+| Reorder columns               | Column drag handles            | [not built]                   | UI      | ⚠️ AI  |
+| Branch management             | BranchPopover (switch branch), | "Switch to branch X"          | UI      | ⚠️ AI  |
+|                               | SyncDialog (push/pull/stash)   |                               |         |        |
+| Project-scoped conversations  | Hub drawer (project + item     | Scoped chats with context     | Both    | ✅     |
+|                               | threads, pinning, archiving)   | injection                     |         |        |
+| Terminal sessions             | TerminalShell (xterm.js +      | "Open a terminal for X"       | UI      | ⚠️ AI  |
+|                               | tmux, agent support)           |                               |         |        |
+| Coding agent sessions         | Terminal UI (Claude Code, etc) | Agent invocation via terminal  | UI      | ✅     |
+| Stop active run               | Stop button (ChatBar)          | chat.abort RPC                | Both    | ✅     |
+| Search projects / items       | SearchModal (Cmd+K, fuzzy)     | [not built]                   | UI      | ⚠️ AI  |
+| Edit project metadata         | [not built]                    | "Rename project to..."        | AI      | ⚠️ UI  |
+| AI chat in AddProjectDialog   | [not built]                    | [not built]                   | Both    | ❌     |
 ```
 
-This is illustrative. The actual matrix would be maintained as a living document that evolves with each release. Items marked `[not built]` are planned — OpenClaw should know they're coming but not suggest them prematurely.
+*Updated 2026-03-05 to reflect current build state.* Items marked `⚠️ AI` have UI but no explicit AI surface — OpenClaw can still achieve them via filesystem tools, but there's no guided prompt or context injection for these actions. Items marked `⚠️ UI` have AI surface but limited/no dedicated UI.
 
-**The parity discipline:** When shipping any feature, update this matrix. Verify both surfaces exist. Identify the primary. If one surface is missing, flag it.
+**Note: AI chat in AddProjectDialog.** The AddRoadmapItemDialog has an embedded AI chat surface that works well — AddProjectDialog would benefit from the same pattern (natural language project setup with context injection). This is a candidate roadmap item.
+
+**The parity discipline:** When shipping any feature, update this matrix and `CAPABILITIES.md`. Verify both surfaces exist. Identify the primary. If one surface is missing, flag it. See AGENTS.md Hard Rule 5.
 
 **The dual-surface question for every feature:** Is it faster/better to do this manually or via AI? The answer determines the primary surface. The other surface still exists.
 
@@ -249,39 +263,49 @@ These patterns should be documented as examples in the behavioural guidelines, n
 
 ## Layer 5: Injection Mechanism
 
-### How It Gets to OpenClaw
+### The Core Principle
 
-The most natural mechanism: a Clawchestra-specific AGENTS.md (or equivalent) that gets loaded into OpenClaw's context whenever it's interacting with a user via Clawchestra.
+Clawchestra **pushes** context to whatever AI is on the other end. The AI doesn't need pre-installed knowledge of Clawchestra — it's told what it needs to know fresh every session. This means:
+
+- A user's OpenClaw doesn't need permanent memory of Clawchestra or its abilities
+- Any AI model (OpenClaw, Claude Code in a terminal, future agents) receives the same context
+- The context is always current — it comes from the shipped `CAPABILITIES.md`, not from AI memory
 
 ### What Gets Injected
 
-1. **Capability map** — "Here's what Clawchestra can do" (Layer 1)
+1. **Capability map** — `CAPABILITIES.md` content: "Here's what Clawchestra can do" (Layer 1)
 2. **Behavioural guidelines** — "Here's how you should help users within Clawchestra" (Layer 2)
-3. **Dynamic state** — "Here's what the user is currently doing" (Layer 3, per-message)
-4. **Project context** — AGENTS.md, ROADMAP.md, etc. for the selected project (already partially done)
+3. **Response contract** — "From this surface, respond like this" (per-surface, per-message)
+4. **Dynamic state** — "Here's what the user is currently doing" (Layer 3, per-message)
+5. **Project context** — CLAWCHESTRA.md, state.json summary, specs/plans for the selected project (already done for scoped chats)
 
 ### When It Gets Injected
 
-- **On session start** — Full context load (capability map, guidelines, current state)
-- **After compaction** — Re-inject the context so OpenClaw doesn't lose awareness of where it is
-- **Per-message** — Dynamic state updates (current view, selected project/item)
+- **On first message** — Full context load: `CAPABILITIES.md` + behavioural guidelines + project context (extends the existing first-send injection in `useScopedChatSession.ts`)
+- **Per-message** — Dynamic state updates: surface type, current view, selected project/item, response contract (extends the existing `composeContextWrappedUserMessage()` wrapper)
+- **After compaction** — Re-inject `CAPABILITIES.md` so the AI doesn't lose app awareness. This requires detecting compaction events from OpenClaw, or defensively re-injecting periodically.
 
-### Possible Implementation: Clawchestra as a Skill
+### Where It Gets Injected: All AI Surfaces
 
-One approach: package the capability map and behavioural guidelines as an OpenClaw skill. When OpenClaw detects it's in a Clawchestra session (via session key prefix or surface metadata), it loads the skill automatically.
+The injection mechanism isn't just for OpenClaw chat. It applies to every AI touchpoint:
 
-This would mean:
-- The skill ships with Clawchestra (or is installed alongside it)
-- It contains the AGENTS.md-style context file with capabilities and guidelines
-- It gets loaded into the system prompt for Clawchestra sessions
-- It survives compaction (skills are re-injected after compaction)
-- It can be versioned alongside the app (capability map updates when features ship)
+| AI Surface | Injection Point | What Gets Injected |
+|------------|-----------------|-------------------|
+| **Main chat drawer** | `sendMessageWithContext()` wrapper | Full: capabilities, guidelines, view state, response contract |
+| **Scoped project/item chats** | First-send context + per-message wrapper | Full: capabilities + project-specific context |
+| **Quick-add modal** | Per-message wrapper | Scoped: schema, column, response contract ("be brief") |
+| **Terminal sessions (Claude Code, etc.)** | Shell environment / preamble on spawn | Lightweight: "You're inside Clawchestra. The user has access to [capabilities]. Project context: [current project]." |
+| **Future: Git sync inline chat** | Per-message wrapper | Scoped: git state, conflict context, response contract |
 
-### Possible Implementation: Enhanced Session Preamble
+For **terminal sessions**, the injection is lighter — a brief context line in the shell environment or a CLAUDE.md-style file in the working directory. Claude Code and other agents don't need the full capability map; they need to know they're inside Clawchestra, what the user is working on, and what the app can do around them.
 
-Alternative: Clawchestra injects a structured preamble into each session that includes everything OpenClaw needs to know. This extends the existing "User is viewing: X" pattern into a richer context payload.
+### Implementation: Enhanced Session Preamble (Chosen Approach)
 
-Both approaches achieve the same thing. The skill approach is more self-contained; the preamble approach is more dynamic.
+Clawchestra injects a structured preamble into each session that includes everything the AI needs to know. This extends the existing "User is viewing: X" pattern into a richer context payload.
+
+**Why preamble over skill:** For third-party users plugging their own OpenClaw into Clawchestra, the preamble approach is more reliable — it doesn't require the user to install a skill into their OpenClaw instance. Clawchestra controls what gets injected, and it works with any AI on the other end.
+
+The skill approach remains viable as an optimisation (skills survive compaction natively), but the preamble is the foundation.
 
 ---
 
@@ -422,13 +446,7 @@ The minimum viable version of this spec's deliverable could be: **per-surface re
 
 ### Updated Dual-Surface Parity Matrix
 
-```
-| Capability                    | UI Surface          | AI Surface              | Primary | Parity |
-|-------------------------------|---------------------|-------------------------|---------|--------|
-| Add new roadmap item          | Quick-add modal     | "Add an item for..."    | Both    | ✅     |
-```
-
-The `Add new roadmap item` row can be updated from `[not built] / ⚠️ UI` to `Both / ✅` — the quick-add modal provides the UI surface, and the AI chat within it provides the AI surface. Both exist and work.
+*The main parity matrix in Layer 1 has been updated to reflect all current capabilities (2026-03-05). The quick-add modal example that originally appeared here is now incorporated there.*
 
 ## Layer 6: Staleness Prevention
 
@@ -551,12 +569,60 @@ The capability map (`CAPABILITIES.md`) is injected once on session start (same a
 
 ---
 
+## Delivery Phases
+
+This spec spans three natural phases, each gated by a different milestone:
+
+### Phase 1: Pre-Distributed AI Surfaces (Deliverable Now)
+
+What can be built with the current architecture — the main chat drawer and existing scoped chats:
+
+1. **Write `CAPABILITIES.md`** — the capability map describing everything the app can do, written for end users (not developers). This is the single highest-value deliverable.
+2. **Inject `CAPABILITIES.md` on first send** — extend `hub-context.ts` to include it alongside project context. Every OpenClaw conversation inside Clawchestra starts with app awareness.
+3. **Enrich per-message context** — extend `composeContextWrappedUserMessage()` to include surface type and basic response guidelines for the main chat drawer and existing scoped chats.
+4. **Write behavioural guidelines** — the "how to be a good guide" instructions that shape OpenClaw's conversational style within Clawchestra.
+5. **Separate user/developer context** — inject `CAPABILITIES.md` always, inject `AGENTS.md` only for the Clawchestra project itself.
+6. **Terminal context preamble** — lightweight context injection when spawning terminal sessions so Claude Code / other agents know they're inside Clawchestra.
+
+### Phase 2: Post-Distributed AI Surfaces
+
+Once the `SurfaceContext` interface and reusable `<AiChat>` component exist (from `distributed-ai-surfaces-spec.md`):
+
+1. **Per-surface response contracts** — populate `SurfaceContext.responseContract` with surface-specific guidelines (brief for quick-add, conversational for main chat, action-oriented for git sync, etc.)
+2. **Surface-specific behavioural guidelines** — expand Layer 2 with per-surface patterns
+3. **Guided workflow patterns** — implement Layer 4 patterns (project creation flow, roadmap progression, stuck user assistance) as structured prompts within surface contexts
+4. **Dynamic state enrichment** — inject richer context per-surface: which tab is open, what action is being performed, etc.
+
+### Phase 3: Post-First Friend Readiness
+
+Once onboarding is addressed (via the `first-friend-readiness` roadmap item):
+
+1. **Discoverability mechanisms** — Layer 2b (first-run hints, loading screen tips, discovery commands, contextual AI hints). These depend on onboarding infrastructure.
+2. **Progressive revelation** — in-chat capability discovery ("By the way, I can also write a spec for that...")
+3. **`/help` and `/?` commands** — conversational capability exploration
+4. **Measure and iterate** — success metrics, user feedback loops, demand discovery
+
+### What Ships in Each Phase
+
+| Deliverable | Phase 1 | Phase 2 | Phase 3 |
+|-------------|---------|---------|---------|
+| `CAPABILITIES.md` | ✅ Write + inject | Update | Update |
+| Behavioural guidelines | ✅ General | Per-surface | With discovery |
+| Response contracts | Basic (main chat style) | ✅ Per-surface | — |
+| Dynamic state in context | View + project | ✅ Full surface state | — |
+| Terminal agent context | ✅ Lightweight | — | — |
+| Guided workflows | — | ✅ | — |
+| Discoverability / onboarding | — | — | ✅ |
+| User/developer separation | ✅ | — | — |
+
+---
+
 ## Open Questions
 
 1. **How prescriptive should the guidelines be?** Too vague and OpenClaw doesn't change behaviour. Too specific and it feels scripted. Where's the sweet spot? *Update: the quick-add experience suggests more prescriptive is better for scoped surfaces. A quick-add chat shouldn't feel conversational — it should feel like a confirmation.*
-2. **Skill vs. preamble?** Which injection mechanism is more maintainable and reliable? *Leaning preamble: for third-party users, Clawchestra injecting everything is more reliable than requiring users to install a skill into their OpenClaw. The preamble approach (extending `composeContextWrappedUserMessage()`) works today and doesn't depend on OpenClaw's skill system.*
-3. **How do we measure success?** How do we know if OpenClaw is actually being a better guide within Clawchestra vs. generic chat? User feedback? Usage patterns? Task completion rates?
-4. **Compaction resilience.** How do we ensure the context survives compaction reliably? Skills are re-injected, but are they re-injected in full? Does the capability map fit within context limits?
-5. **User-modified instances.** If users start modifying their Clawchestra instance via OpenClaw, how does the capability map stay accurate? Does it need to be auto-generated from the codebase? *Deferred — aspirational territory. For now, CAPABILITIES.md is maintained by agent compliance rule (AGENTS.md Hard Rule 5).*
+2. **Skill vs. preamble?** ~~Which injection mechanism is more maintainable and reliable?~~ *Resolved: preamble (Clawchestra pushes context). For third-party users, this is more reliable than requiring them to install a skill into their OpenClaw. See Layer 5.*
+3. **How do we measure success?** How do we know if OpenClaw is actually being a better guide within Clawchestra vs. generic chat? User feedback? Usage patterns? Task completion rates? *Deferred to Phase 3.*
+4. **Compaction resilience.** How do we ensure the context survives compaction reliably? *Partial answer: re-inject `CAPABILITIES.md` on each first-send (already survives session starts). For long conversations, may need periodic re-injection or compaction event detection from OpenClaw. Investigate during Phase 1.*
+5. **User-modified instances.** If users start modifying their Clawchestra instance via OpenClaw, how does the capability map stay accurate? *Deferred — aspirational territory. For now, CAPABILITIES.md is maintained by agent compliance rule (AGENTS.md Hard Rule 5).*
 6. **Per-surface response contracts.** ~~Should response format guidance live in the context injection payload, in a skill, or in the behavioural guidelines?~~ *Resolved: response contracts are per-message, injected alongside the context payload via `composeContextWrappedUserMessage()`. Content is defined here (Layer 2); the structural field (`SurfaceContext.responseContract`) is defined in distributed-ai-surfaces-spec. See Boundary Clarification and Concrete Injection Format sections above.*
-7. **Developer vs. user context.** *Resolved: see Layer 7 above. CAPABILITIES.md (shipped context, all users) vs. AGENTS.md (developer context, instance owner only). Injection mechanism conditionally includes AGENTS.md only when the scoped chat targets the Clawchestra project itself.*
+7. **Developer vs. user context.** *Resolved: see Layer 7. CAPABILITIES.md (shipped context, all users) vs. AGENTS.md (developer context, instance owner only).*
