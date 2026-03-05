@@ -111,6 +111,31 @@ The hybrid approach is likely correct. The `project-conversation-hub` spec shoul
 - Feeds into the `project-conversation-hub` spec for thread management
 - Tests the per-project session key strategy
 
+## Boundary with App-Aware AI Context
+
+This spec and `app-aware-ai-context-spec.md` both identified the same gap — surfaces need response contracts, not just context injection. To avoid duplication, the boundary is:
+
+**This spec owns:** Where surfaces exist in the UI, the `SurfaceContext` interface (session key, context payload structure, `responseContract` field), the `<AiChat>` component, session management, state sync, and surface registration.
+
+**App-Aware AI Context owns:** The *content* of what gets injected (capability map, behavioural guidelines, dynamic state), response contracts (the values that populate `SurfaceContext.responseContract`), guided workflows, discoverability, and staleness prevention.
+
+This spec defines *where chat lives and what shape context takes*. App-Aware AI Context defines *what the content is and how OpenClaw uses it*.
+
+The `SurfaceContext` interface should include a `responseContract` field that app-aware context populates:
+
+```typescript
+interface SurfaceContext {
+  sessionKey: string;
+  contextPayload: Record<string, unknown>;
+  instructionFraming: string;
+  responseContract: string;  // ← populated by app-aware AI context layer
+  capabilityScope: string[];
+  uiForm: 'inline' | 'sidebar' | 'modal' | 'embedded';
+}
+```
+
+---
+
 ## Non-Goals
 
 - Replacing the general chat drawer (it stays as the unscoped, general-purpose surface)
@@ -141,13 +166,11 @@ Instead, what the user gets is a long, unformatted dump that doesn't clearly con
 
 **What this means for the architecture:**
 
-1. **Surfaces need response contracts.** Each surface should define not just what context to inject, but how OpenClaw should format its reply. Quick-add expects a brief confirmation + summary. Git sync inline chat might expect structured resolution options. Project card chat might expect conversational depth.
+1. **Surfaces need response contracts.** Each surface should define not just what context to inject, but how OpenClaw should format its reply. The `SurfaceContext` interface includes a `responseContract` field for this — see Boundary with App-Aware AI Context above.
 
-2. **This is an app-aware AI context problem.** The fix isn't in the UI (the UI now renders markdown, shows proper bubbles, etc.) — it's in how OpenClaw is trained/prompted to understand different surfaces. The `app-aware-ai-context` deliverable needs to include surface-specific behavioural guidelines.
+2. **This is an app-aware AI context problem.** The fix isn't in the UI — it's in how OpenClaw is prompted per-surface. The response contract content is defined by `app-aware-ai-context-spec.md` (Layer 2: Behavioural Guidelines); this spec provides the `responseContract` field in `SurfaceContext` that carries it.
 
-3. **The context injection instruction needs to include response format guidance.** The current instruction says "create the item immediately — do not ask for confirmation." It should also say: "Reply with a brief confirmation including the item title, column, and priority. Keep your response under 3 sentences. Use markdown formatting."
-
-4. **This pattern will repeat for every future surface.** Git sync, project card chat, item detail chat — each will need its own response contract. The distributed AI surfaces architecture should formalize this as part of the `SurfaceContext` interface.
+3. **This pattern will repeat for every future surface.** Git sync, project card chat, item detail chat — each will need its own response contract. The `SurfaceContext` interface formalises this.
 
 ### Implication for Build Order
 
@@ -155,7 +178,7 @@ The original phased delivery assumed the reusable `<AiChat>` component extractio
 
 ## Open Questions
 
-1. **Response format contracts** — Should surfaces define expected response formats (e.g., quick-add expects YAML frontmatter)? Or should the agent decide? *Update: first implementation confirms surfaces need response format guidance. The agent doesn't naturally adapt its reply style to the surface context.*
+1. **Response format contracts** — ~~Should surfaces define expected response formats?~~ *Resolved: yes. The `SurfaceContext.responseContract` field carries per-surface response guidance. The content of response contracts is owned by `app-aware-ai-context-spec.md`; this spec provides the structural field.*
 2. **Surface discovery** — Should surfaces be registered declaratively (a manifest) or composed ad-hoc in components?
 3. **Concurrent surface limits** — How many active AI surfaces can the user have open simultaneously? Performance/UX implications.
 4. **Token cost** — Multiple concurrent sessions each maintain their own context window. Acceptable? Need per-session model routing?

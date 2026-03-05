@@ -4,7 +4,7 @@
 
 **Status:** Draft (directional — ideas and ethos, not a fixed plan)
 **Created:** 2026-02-21
-**Last Updated:** 2026-02-21 (incorporated agent-native principles + design principles doc)
+**Last Updated:** 2026-03-05 (boundary clarification with distributed-ai-surfaces, staleness prevention, user-vs-developer context, concrete injection format)
 **Roadmap Item:** `app-aware-ai-context`
 **Design Principles:** `docs/DESIGN_PRINCIPLES.md` (dual surface, discoverability, stakes/reversibility, parity)
 **Foundational Reading:** [Agent-Native Architectures](https://every.to/guides/agent-native), [Lessons From Four Apps](https://every.to/source-code/how-to-build-agent-native-lessons-from-four-apps)
@@ -310,9 +310,31 @@ This is aspirational territory — significant trust, safety, and responsibility
 ## Relationship to Other Specs
 
 - **`scoped-chat-sessions-spec.md`** — Established session isolation and surface profiles (Phase 4/5). This spec extends surface profiles into a full app-awareness layer.
-- **`distributed-ai-surfaces-spec.md`** — Distributed surfaces provide the UI locations where context is auto-injected. This spec defines *what* gets injected (capability map, guidelines, state) and *how OpenClaw should behave* with that context.
+- **`distributed-ai-surfaces-spec.md`** — Distributed surfaces provide the UI locations where context is auto-injected. This spec defines *what* gets injected (capability map, guidelines, state) and *how OpenClaw should behave* with that context. See Boundary Clarification below.
 - **`roadmap-item-quick-add-spec.md`** — Quick-add is one of the first features where this spec's ideas materialise: OpenClaw knows the user is adding a roadmap item, knows the schema, knows the project, and guides the user through it.
 - **`embedded-agent-terminals-spec.md`** — When coding agent sessions exist, the capability map and guidelines need to cover them (when to suggest opening one, how to help the user set up context, etc.).
+
+### Boundary Clarification: This Spec vs. Distributed AI Surfaces
+
+Both specs converge on the same insight — that context injection alone isn't enough; surfaces need response contracts. To avoid duplication:
+
+**Distributed AI Surfaces owns:**
+- Where surfaces exist in the UI (locations, forms, lifecycle)
+- The `SurfaceContext` interface (session key, context payload structure, `responseContract` field)
+- The reusable `<AiChat>` component pattern
+- Session management (per-project, per-surface, hybrid)
+- State sync (surface creates item → UI updates)
+- Surface registration/discovery
+
+**This spec (App-Aware AI Context) owns:**
+- The **content** of what gets injected into any surface (capability map, behavioural guidelines, dynamic state)
+- **Response contracts** — how OpenClaw should behave per-surface (the values that populate `SurfaceContext.responseContract`)
+- The capability map itself (`CAPABILITIES.md`)
+- Guided workflow patterns and discoverability
+- The staleness prevention mechanism (see below)
+- The user-vs-developer context separation
+
+The boundary: Distributed AI Surfaces defines *where chat lives and what shape context takes*. This spec defines *what the content of that context is and how OpenClaw should use it*.
 
 ## Agent-Native Principles (From Industry Research)
 
@@ -408,11 +430,133 @@ The minimum viable version of this spec's deliverable could be: **per-surface re
 
 The `Add new roadmap item` row can be updated from `[not built] / ⚠️ UI` to `Both / ✅` — the quick-add modal provides the UI surface, and the AI chat within it provides the AI surface. Both exist and work.
 
+## Layer 6: Staleness Prevention
+
+### The Problem
+
+A static `CAPABILITIES.md` rots the moment a feature ships and nobody updates it. Because this file is **runtime context injected into OpenClaw**, staleness isn't just bad documentation — it's wrong behaviour. OpenClaw will suggest features that don't exist, miss features that do, or give guidance that contradicts the current UI.
+
+### The Mechanism: Agent Compliance Rule
+
+AGENTS.md Hard Rule 5 now requires:
+
+> **When shipping a feature that adds, changes, or removes a user-facing capability or AI surface:** Update `CAPABILITIES.md` to reflect the change.
+
+This is enforced the same way `nextAction` sync is enforced — as a compliance rule that agents check after every code change. The Rule Zero checklist in AGENTS.md now includes: *"Does this add, change, or remove a user-facing capability or AI surface?"* If yes → update `CAPABILITIES.md`.
+
+### Why This Works
+
+The pattern is already proven. Agents reliably update `nextAction` in state.json after work because it's a hard rule with a clear trigger. CAPABILITIES.md uses the same trigger ("did I add/change/remove a capability?") and the same enforcement ("update the file before considering the work complete").
+
+### Future: Structural Verification
+
+For additional safety, a CI lint step could verify that PRs touching UI components or context injection also modify CAPABILITIES.md. This is heavier machinery and not needed initially — the compliance rule is sufficient to start.
+
+---
+
+## Layer 7: User Context vs. Developer Context
+
+### The Problem
+
+Clawchestra currently injects `AGENTS.md` into OpenClaw sessions for scoped chats. This file is the **developer's** operations reference — it describes how to edit `state.json`, what the compliance block is, internal schema details, etc. When other users plug their own OpenClaw into their own Clawchestra, their OpenClaw receives instructions intended for the developer, not the user.
+
+### The Separation
+
+Two distinct layers of context, injected independently:
+
+**Shipped context (all users):** `CAPABILITIES.md`
+- What the app can do (features, views, actions, workflows)
+- How OpenClaw should behave in each surface (response contracts)
+- What the user can ask for and how they'll be guided
+- Ships with the app binary; updated when features ship
+
+**Developer context (instance owner only):** `AGENTS.md`
+- How to edit state.json, create projects, manage roadmap items
+- Schema constraints, priority rules, file structure
+- Build commands, compliance rules
+- Only relevant when OpenClaw is operating on the Clawchestra codebase itself
+
+### How This Affects Injection
+
+The context injection mechanism (`hub-context.ts`) should:
+1. **Always inject** `CAPABILITIES.md` — this is what makes OpenClaw app-aware for any user
+2. **Conditionally inject** `AGENTS.md` — only when the scoped chat is for a project that IS Clawchestra (detected by project directory matching the app's own repo)
+3. **Never inject** developer context for non-developer users — their OpenClaw should know what the app does, not how it's built
+
+### What CAPABILITIES.md Contains (vs. AGENTS.md)
+
+| Content | CAPABILITIES.md | AGENTS.md |
+|---------|----------------|-----------|
+| "User can add roadmap items" | ✅ | — |
+| "How to edit state.json to add items" | — | ✅ |
+| "Stop button cancels the active run" | ✅ | — |
+| "Priority values must be unique per column" | — | ✅ |
+| "OpenClaw can help write specs and plans" | ✅ | — |
+| "Spec docs use Title → blockquote → summary format" | — | ✅ |
+| "Terminal sessions can be created from the hub" | ✅ | — |
+
+---
+
+## Concrete Injection Format
+
+### Current State
+
+Every message from Clawchestra currently includes a one-liner:
+```
+User is viewing project: Clawchestra
+
+User request:
+Help me add a roadmap item
+```
+
+### Target Format
+
+For the full app-awareness layer, the injected context should be structured:
+
+```
+[Clawchestra Context]
+Surface: main-chat-drawer
+View: roadmap (project: Clawchestra)
+Selected item: app-aware-ai-context (status: pending)
+
+[Response Guidelines]
+You are inside Clawchestra. From the main chat drawer, respond conversationally
+with markdown formatting. You may suggest app features, guide workflows, and
+reference the capability map.
+
+User request:
+Help me add a roadmap item
+```
+
+For scoped surfaces with tighter contracts:
+```
+[Clawchestra Context]
+Surface: roadmap-quick-add
+Project: Clawchestra
+Target column: pending
+
+[Response Guidelines]
+Brief confirmation only. Include item title, column, and priority.
+Keep response under 3 sentences. Use markdown formatting.
+
+User request:
+Add a dark mode theme system
+```
+
+### Implementation
+
+The `composeContextWrappedUserMessage()` function in `gateway.ts` already builds the context prefix. Extending it to include surface type and response guidelines is a natural evolution — no new architecture needed.
+
+The capability map (`CAPABILITIES.md`) is injected once on session start (same as the current scoped context injection). Response guidelines are per-message (because the surface/view can change).
+
+---
+
 ## Open Questions
 
 1. **How prescriptive should the guidelines be?** Too vague and OpenClaw doesn't change behaviour. Too specific and it feels scripted. Where's the sweet spot? *Update: the quick-add experience suggests more prescriptive is better for scoped surfaces. A quick-add chat shouldn't feel conversational — it should feel like a confirmation.*
-2. **Skill vs. preamble?** Which injection mechanism is more maintainable and reliable?
+2. **Skill vs. preamble?** Which injection mechanism is more maintainable and reliable? *Leaning preamble: for third-party users, Clawchestra injecting everything is more reliable than requiring users to install a skill into their OpenClaw. The preamble approach (extending `composeContextWrappedUserMessage()`) works today and doesn't depend on OpenClaw's skill system.*
 3. **How do we measure success?** How do we know if OpenClaw is actually being a better guide within Clawchestra vs. generic chat? User feedback? Usage patterns? Task completion rates?
 4. **Compaction resilience.** How do we ensure the context survives compaction reliably? Skills are re-injected, but are they re-injected in full? Does the capability map fit within context limits?
-5. **User-modified instances.** If users start modifying their Clawchestra instance via OpenClaw, how does the capability map stay accurate? Does it need to be auto-generated from the codebase?
-6. **Per-surface response contracts.** Should response format guidance live in the context injection payload, in a skill, or in the behavioural guidelines? The quick-add experience suggests it should be close to the surface (injected with context), not global.
+5. **User-modified instances.** If users start modifying their Clawchestra instance via OpenClaw, how does the capability map stay accurate? Does it need to be auto-generated from the codebase? *Deferred — aspirational territory. For now, CAPABILITIES.md is maintained by agent compliance rule (AGENTS.md Hard Rule 5).*
+6. **Per-surface response contracts.** ~~Should response format guidance live in the context injection payload, in a skill, or in the behavioural guidelines?~~ *Resolved: response contracts are per-message, injected alongside the context payload via `composeContextWrappedUserMessage()`. Content is defined here (Layer 2); the structural field (`SurfaceContext.responseContract`) is defined in distributed-ai-surfaces-spec. See Boundary Clarification and Concrete Injection Format sections above.*
+7. **Developer vs. user context.** *Resolved: see Layer 7 above. CAPABILITIES.md (shipped context, all users) vs. AGENTS.md (developer context, instance owner only). Injection mechanism conditionally includes AGENTS.md only when the scoped chat targets the Clawchestra project itself.*

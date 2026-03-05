@@ -31,13 +31,16 @@
 
 4. **Keep `nextAction` in sync.** When you create/update a spec, plan, or code — update the roadmap item's `nextAction` field to reflect current state. Stale `nextAction` = broken UX.
 
-5. **Document format: human-readable first.** No YAML frontmatter in spec/plan docs. Title → one-line blockquote → summary → metadata below the fold.
+5. **Keep `CAPABILITIES.md` in sync.** When shipping a feature that adds, changes, or removes a user-facing capability or AI surface — update `CAPABILITIES.md` to reflect the change. This includes new views, actions, chat surfaces, commands, workflows, or removed features. `CAPABILITIES.md` is runtime context injected into OpenClaw — stale entries mean OpenClaw gives wrong guidance to users.
+
+6. **Document format: human-readable first.** No YAML frontmatter in spec/plan docs. Title → one-line blockquote → summary → metadata below the fold.
 
 ### File Structure
 
 ```
 .clawchestra/state.json       — JSON (source of truth for roadmap, machine-readable)
 CLAWCHESTRA.md                — Human documentation (do not edit programmatically)
+CAPABILITIES.md               — App capability map (injected into OpenClaw context at runtime)
 roadmap/{item-id}.md          — Detail file per roadmap item
 docs/specs/{item-id}-spec.md  — Spec documents (auto-discovered by UI convention)
 docs/plans/{item-id}-plan.md  — Plan documents (auto-discovered by UI convention)
