@@ -447,59 +447,48 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     onDragActiveChange?.(active);
   }, [onDragActiveChange]);
 
-  const onDragEnter = useCallback((e: React.DragEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setDrag(true);
-  }, [setDrag]);
-
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-    setDrag(true);
-  }, [setDrag]);
-
-  const onDragLeave = useCallback((e: React.DragEvent) => {
-    e.stopPropagation();
-    setDrag(false);
-  }, [setDrag]);
-
-  const onDrop = useCallback(async (e: React.DragEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setDrag(false);
-
-    // dragDropEnabled is false in tauri.conf.json, so Tauri's native
-    // onDragDropEvent never fires. Handle file drops via the browser File API:
-    // save image to /tmp, then write the path to the PTY (same as native
-    // terminals like Ghostty where dragging an image pastes its file path).
-    const pty = ptyRef.current;
-    if (!pty) return;
-
-    const files = Array.from(e.dataTransfer?.files ?? []);
-    for (const file of files) {
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (!IMAGE_EXTENSIONS.has(ext)) continue;
-
-      try {
-        const buffer = await file.arrayBuffer();
-        const filePath = `/tmp/clawchestra-drop-${Date.now()}.${ext}`;
-        await writeFile(filePath, new Uint8Array(buffer));
-        pty.write(filePath);
-      } catch (err) {
-        console.error('Failed to save dropped image:', err);
+  // Use capture-phase drag listeners so events are caught before xterm.js
+  // can swallow them — without this, drag-and-drop only works when the
+  // terminal has focus (click-to-activate).
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const enter = (e: DragEvent) => { e.stopPropagation(); e.preventDefault(); setDrag(true); };
+    const over = (e: DragEvent) => { e.stopPropagation(); e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; setDrag(true); };
+    const leave = (e: DragEvent) => { e.stopPropagation(); setDrag(false); };
+    const drop = (e: DragEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setDrag(false);
+      const pty = ptyRef.current;
+      if (!pty) return;
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      for (const file of files) {
+        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+        if (!IMAGE_EXTENSIONS.has(ext)) continue;
+        void file.arrayBuffer().then((buf) => {
+          const filePath = `/tmp/clawchestra-drop-${Date.now()}.${ext}`;
+          void writeFile(filePath, new Uint8Array(buf)).then(() => pty.write(filePath));
+        }).catch((err) => console.error('Failed to save dropped image:', err));
       }
-    }
+    };
+    el.addEventListener('dragenter', enter, true);
+    el.addEventListener('dragover', over, true);
+    el.addEventListener('dragleave', leave, true);
+    el.addEventListener('drop', drop, true);
+    return () => {
+      el.removeEventListener('dragenter', enter, true);
+      el.removeEventListener('dragover', over, true);
+      el.removeEventListener('dragleave', leave, true);
+      el.removeEventListener('drop', drop, true);
+    };
   }, [setDrag]);
 
   return (
     <div
+      ref={wrapperRef}
       className="relative flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6"
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
     >
       {dragActive && (
         <div className="pointer-events-none absolute inset-0 z-10 border-2 border-dashed border-revival-accent-400 bg-revival-accent-200/10 dark:bg-revival-accent-900/20" />
