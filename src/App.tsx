@@ -900,8 +900,10 @@ export default function App() {
           const parsed = parseTmuxSessionName(sessionName);
           if (parsed && hubChatIds.has(parsed.chatId)) {
             activeChatIds.add(parsed.chatId);
-          } else {
-            // Orphaned tmux session — kill it
+          } else if (hubChats.length > 0) {
+            // Orphaned tmux session — kill it (only when hubChats are loaded
+            // from the DB; skip on first poll to avoid race where sessions
+            // look orphaned because the DB hasn't been read yet).
             try { await tmuxKillSession(sessionName); } catch { /* ignore */ }
           }
         }
@@ -926,6 +928,9 @@ export default function App() {
         const agents = await detectAgents();
         useDashboardStore.getState().setDetectedAgents(agents);
       } catch { /* best-effort */ }
+      // Ensure hubChats are loaded before liveness poll so existing
+      // tmux sessions aren't mistakenly killed as orphaned.
+      await useDashboardStore.getState().refreshHubChats();
       await refreshActiveTerminals();
       // One-time migration: rename old "X Terminal" titles to new format
       await migrateTerminalChatTitles();
