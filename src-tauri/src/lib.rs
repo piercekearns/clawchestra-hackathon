@@ -4208,6 +4208,12 @@ pub fn run() {
                 }
             }
 
+            // Persist window size/position before shutdown
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+                let _ = window.app_handle().save_window_state(StateFlags::all());
+            }
+
             // On-close sequence (Phase 6.6): watcher drain → stop sync → flush → final sync
             // Total budget: 4s (1s watcher drain + 3s flush+sync envelope)
             match event {
@@ -4412,6 +4418,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(move |app_handle, event| {
+            // Persist window state before exit
+            if matches!(&event, tauri::RunEvent::ExitRequested { .. }) {
+                use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+                let _ = app_handle.save_window_state(StateFlags::all());
+            }
+
             // Quit guard — intercept ExitRequested (Cmd+Q on macOS) when active sessions exist
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 if !quit_confirmed_for_exit.0.load(std::sync::atomic::Ordering::SeqCst) {
