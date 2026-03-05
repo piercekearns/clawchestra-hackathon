@@ -52,21 +52,98 @@ A structured walkthrough that shows the closed loop in action. This should work 
 - A recorded video for the website
 - Animated/illustrated sequences for the landing page
 
-**Suggested flow:**
+**Concrete demo scenario: "Reading Tracker" from zero to shipped**
 
-1. **Start with the board.** Show projects, columns, cards. "This is everything I'm building, at a glance."
-2. **Talk to OpenClaw.** "I've been thinking about building X." OpenClaw creates a project, writes a spec, adds roadmap items. Board updates live.
-3. **Pick an item, open a terminal.** Launch Claude Code scoped to the project. Show it reading the spec, writing code.
-4. **Board reflects progress.** Item status updates, activity indicators show the terminal is working, unread badges appear when it needs attention.
-5. **Cross-project awareness.** Switch to a different project. OpenClaw already knows the context. "What's the status across all my projects?" — gets a real answer from actual project state.
-6. **The loop closes.** Work done in step 3 is visible in step 4. Planning from step 2 drove execution in step 3. Everything stays in sync because it's the same system.
+This is the actual walkthrough — a complete project lifecycle in ~5 minutes. Every step uses real app functionality. The demo project is deliberately simple so the focus stays on the workflow, not the project itself.
+
+---
+
+**Act 1: The Board (30s)**
+
+Open the app. The board is already populated with real projects (Clawchestra itself, personal site, etc.) across columns. This isn't a blank demo — it's a real workspace.
+
+> "This is Clawchestra. Everything I'm building, across every project, in one place. Each column is a status — pending, up next, in progress, complete. Each card is a deliverable. Let me show you what happens when I start something new."
+
+---
+
+**Act 2: Idea → Project → Roadmap (90s)**
+
+Open the chat drawer. Talk to OpenClaw:
+
+> "I want to build a simple reading tracker — a web app where I can log books I've read and rate them."
+
+OpenClaw responds conversationally — suggests creating a project, asks a few clarifying questions. User agrees. OpenClaw:
+1. Creates the project (card appears on the board in real-time)
+2. Writes a brief spec doc
+3. Creates 3-4 roadmap items: "Data model & API", "Reading log UI", "Rating system", "Deploy to Vercel"
+
+**What to show:** The board updating live as OpenClaw works. Cards appearing. The project going from nothing to structured plan in under a minute. Click into the project — show the kanban with items in the pending column, click a card to see the spec.
+
+**What to say:**
+> "I described an idea. OpenClaw turned it into a project with a spec, a roadmap, and structured deliverables. I didn't fill out a form, I didn't write YAML, I didn't create a Jira ticket. I talked about what I wanted and the board updated."
+
+---
+
+**Act 3: Plan → Execute (90s)**
+
+Click the first roadmap item ("Data model & API"). Open a Claude Code terminal scoped to the project.
+
+> "Now I want to build this first item. I'll open a coding agent — Claude Code — right here, scoped to this project."
+
+The terminal opens alongside the board (side-by-side or stacked layout). Claude Code reads the spec that OpenClaw wrote. It starts working.
+
+**What to show:**
+- The terminal running alongside the planning view — not in a separate app, not in a different window
+- Activity dots animating on the terminal tab while Claude Code works
+- The amber "action required" badge when Claude Code needs a decision
+- Switching back to the board — the terminal keeps running, badges visible
+
+**What to say:**
+> "The coding agent is reading the spec that the planning AI wrote. Same system, same context. I can watch it work, switch to something else, and get notified when it needs me."
+
+---
+
+**Act 4: Complete → Move On (60s)**
+
+Claude Code finishes the work. Review what it built (briefly). Mark the item as complete — hover the card, click the checkmark. Card moves to the complete column.
+
+Open the chat drawer again. Ask OpenClaw:
+
+> "What's next for the reading tracker?"
+
+OpenClaw sees the updated board state — knows the first item is complete, sees the remaining items, suggests the next one. The loop is visible: what the coding agent built is reflected in the planning layer, and the planning AI uses that to guide what comes next.
+
+**What to show:**
+- Completing an item via the UI (hover action)
+- OpenClaw's awareness of the updated state (it knows what just happened)
+- The board reflecting the full lifecycle: some items complete, some pending
+
+**What to say:**
+> "The planning AI told the coding agent what to build. The coding agent built it. I marked it done. The planning AI sees the update and knows what's next. That's the loop — plan, execute, update, repeat. All in one place."
+
+---
+
+**Act 5: Cross-Project (30s)**
+
+Navigate back to the main board. Show multiple projects.
+
+> "This isn't just one project. Everything I'm building lives here. I can ask OpenClaw about any of them — 'what's blocked across my projects?', 'which project has the most items in progress?' — and get real answers because it has the actual state, not my memory of it."
+
+---
 
 **Key moments to highlight:**
-- AI creating structured plans (not just chat responses — actual roadmap items, specs, plans)
+- AI creating structured deliverables (not just chat — actual board items, specs, plans)
 - The board updating in real-time as AI works
-- Terminal agents embedded alongside the planning view
-- Moving between projects seamlessly with context preserved
-- The dual-surface: doing something via UI, then doing the same thing via chat
+- Terminal agents embedded alongside the planning view, not in a separate tool
+- Activity awareness: dots, badges, action-required indicators
+- Completing work and the AI immediately knowing the updated state
+- Multiple projects, one workspace, continuous context
+
+**What NOT to show in the demo:**
+- Setup / onboarding (assume the app is already configured)
+- Git sync (real but not visually compelling for a first demo)
+- Settings / customisation (not the story)
+- Edge cases or error states
 
 ### 3. Visual / Animated Demo Concepts
 
