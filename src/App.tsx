@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { watch } from '@tauri-apps/plugin-fs';
 import { restoreStateCurrent, saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state';
-import { Archive, Check, CircleCheckBig, Clock4, EyeOff, GitBranch, Github, MessageSquare, Plus, RefreshCcw, RotateCcw, Search, Trash2 } from 'lucide-react';
+import { Archive, Check, CircleCheckBig, EyeOff, GitBranch, Github, MessageSquare, Plus, RefreshCcw, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { ValidationBadge } from './components/ValidationBadge';
 import { BranchPopover } from './components/BranchPopover';
 import { Tooltip } from './components/Tooltip';
@@ -3171,7 +3171,6 @@ export default function App() {
                             }}
                           />
                         )}
-                        {project.isStale ? <Clock4 className="h-4 w-4 text-status-danger" /> : null}
                         {project.hasRepo ? (
                           <BranchPopover
                             project={project}
