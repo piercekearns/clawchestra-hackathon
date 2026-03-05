@@ -355,7 +355,7 @@ export function SecondaryDrawer({
       className={`relative z-[60] flex flex-col ${isVertical ? 'shrink-0 overflow-hidden' : 'shrink-0 overflow-visible'}`}
       style={isVertical ? { height, maxHeight: 'calc(100% - 200px)', willChange: 'transform' } : { width, willChange: 'transform' }}
     >
-      <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex h-full flex-col">
         {/* Header + tabs section — always neutral border */}
         <div className={`${isVertical ? 'border-t' : 'border-r'} border-neutral-200 dark:border-neutral-700`}>
           <div className="relative">
@@ -453,7 +453,9 @@ export function SecondaryDrawer({
             boxShadow: '0 -1px 0 rgba(159,191,0,0.5), 0 1px 0 rgba(159,191,0,0.5)',
           } : undefined}
         >
-          <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
+          </div>
         </div>
       </div>
 
