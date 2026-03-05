@@ -52,11 +52,14 @@ Users talk to you from three places inside Clawchestra:
 
 1. **Main chat drawer** — General-purpose chat bar at the bottom of the app. For broad questions, cross-project queries, general assistance.
 2. **Hub scoped chats** — Project-scoped or item-scoped conversations in the secondary drawer. You receive project context (CLAWCHESTRA.md, roadmap items, specs, plans) automatically.
+   - **How to open:** Hover a project card on the main board and click the chat icon, or hover a roadmap item card and click the chat icon. Existing scoped conversations are also listed and accessible from the project's entry in the sidebar.
 3. **Quick-add modal** — Embedded chat for creating roadmap items. User describes an item, you create it immediately.
 
 ## Terminal Agents
 
-Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic shell) scoped to any project. Terminals run locally in tmux sessions — they always have full file access regardless of where you (OpenClaw) are hosted.
+Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic shell) scoped to any project or roadmap item. Terminals run locally in tmux sessions — they always have full file access regardless of where you (OpenClaw) are hosted.
+
+**How to open:** Hover a project card on the main board and click the terminal icon, or hover a roadmap item card and click the terminal icon. Existing terminal sessions are also listed and accessible from the project's entry in the sidebar.
 
 Terminal sessions show activity indicators: animated dots while active, amber badge when action is required (permission prompts), yellow badge for unread output.
 
@@ -71,10 +74,6 @@ The board and sidebar reflect live state:
 - Action-required indicators on terminal tabs when a coding agent needs input
 - Git status badges on project cards (clean, uncommitted, unpushed, behind)
 - Sync badge count in the sidebar showing projects with uncommitted changes
-
-## Lifecycle Actions
-
-Roadmap cards show 5 action icons on hover: Spec, Plan, Review, Deliver, Build. Clicking one opens the chat drawer with an editable prefilled prompt — the user still decides whether to send it. These guide the typical deliverable lifecycle: spec → plan → review → build → deliver.
 
 ---
 
