@@ -590,9 +590,8 @@ Deliverables:
    - `main-chat-drawer` → conversational, markdown-rich, may suggest features
    - `hub-scoped-chat` → project/item-scoped, context-aware, medium depth
    - `roadmap-quick-add` → brief confirmation only, 1–3 sentences
-4. **Write behavioural guidelines** — the "how to be a good guide" instructions that shape OpenClaw's conversational style within Clawchestra. General guidelines apply to all surfaces; surface-specific response contracts are injected per-message.
+4. **Write behavioural guidelines** — the "how to be a good guide" instructions, included as a section within `CAPABILITIES.md`. General guidelines apply to all surfaces; surface-specific response contracts are injected per-message.
 5. **Separate user/developer context** — inject `CAPABILITIES.md` always, inject `AGENTS.md` only for the Clawchestra project itself.
-6. **Terminal context preamble** — lightweight context injection when spawning terminal sessions so Claude Code / other agents know they're inside Clawchestra.
 
 **Extensibility by design:** The surface identifier + response contract pattern established here is the same pattern future surfaces will use. When the `distributed-ai-surfaces` roadmap item ships new surfaces (git sync inline chat, project card chat, etc.), each new surface declares its own identifier and response contract — no changes to the injection infrastructure.
 
@@ -620,10 +619,10 @@ Once the `distributed-ai-surfaces` roadmap item begins expanding the number of A
 | Deliverable | Phase 1 (Now) | Phase 2 (Onboarding) | Phase 3 (Surfaces) |
 |-------------|---------------|----------------------|--------------------|
 | `CAPABILITIES.md` | ✅ Write + inject | Update | Update per surface |
-| Behavioural guidelines | ✅ General + 3 surface contracts | With discovery | Per new surface |
+| Behavioural guidelines (in CAPABILITIES.md) | ✅ General + 3 surface contracts | With discovery | Per new surface |
 | Response contracts | ✅ 3 existing surfaces | — | New surfaces |
 | Dynamic state in context | View + project | — | ✅ Full surface state |
-| Terminal agent context | ✅ Lightweight | — | — |
+| Terminal agent context | — (separate item: `terminal-context-preamble`) | — | — |
 | Guided workflows | — | ✅ | — |
 | Discoverability / onboarding | — | ✅ | — |
 | User/developer separation | ✅ | — | — |
