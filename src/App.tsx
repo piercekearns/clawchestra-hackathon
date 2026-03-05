@@ -2323,6 +2323,7 @@ export default function App() {
           selectedProject: selectedProject?.title,
           openclawWorkspacePath: dashboardSettings?.openclawWorkspacePath,
           openclawContextPolicy: dashboardSettings?.openclawContextPolicy,
+          surface: 'main-chat-drawer',
         },
         {
           attachments,

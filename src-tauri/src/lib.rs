@@ -45,6 +45,7 @@ struct QuitConfirmed(std::sync::atomic::AtomicBool);
 // Embedded at compile time by build.rs
 pub(crate) const BUILD_COMMIT: &str = env!("BUILD_COMMIT");
 pub(crate) const DEFAULT_SESSION_KEY: &str = "agent:main:clawchestra";
+pub(crate) const CAPABILITIES_MD: &str = include_str!("../../CAPABILITIES.md");
 
 #[derive(Serialize)]
 struct OpenClawGatewayConfig {
@@ -1515,6 +1516,11 @@ fn new_idempotency_key() -> String {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     format!("clawchestra-{nanos}")
+}
+
+#[tauri::command]
+fn get_capabilities_md() -> String {
+    CAPABILITIES_MD.to_string()
 }
 
 #[tauri::command]
@@ -4304,6 +4310,7 @@ pub fn run() {
             get_openclaw_ws_device_auth,
             approve_latest_device,
             openclaw_ping,
+            get_capabilities_md,
             openclaw_chat,
             openclaw_sessions_list,
             // Git commands (commands/git.rs)

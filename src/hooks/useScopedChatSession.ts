@@ -250,6 +250,7 @@ export function useScopedChatSession({ chat }: { chat: HubChat }): ScopedChatSes
           {
             view: viewContext.type,
             selectedProject: chat.title,
+            surface: 'hub-scoped-chat',
           },
           {
             sessionKey: chat.sessionKey ?? undefined,

@@ -4075,6 +4075,17 @@ export async function sendMessage(messages: ChatMessage[], options?: GatewayOpti
   };
 }
 
+export type AiSurface = 'main-chat-drawer' | 'hub-scoped-chat' | 'roadmap-quick-add';
+
+const SURFACE_RESPONSE_CONTRACTS: Record<AiSurface, string> = {
+  'main-chat-drawer':
+    'You are inside Clawchestra (main chat drawer). Respond conversationally with markdown formatting. You may suggest app features, guide workflows, and reference capabilities.',
+  'hub-scoped-chat':
+    'You are inside Clawchestra (project/item scoped chat). Respond with project-aware context at medium depth. Reference the project state and docs injected above.',
+  'roadmap-quick-add':
+    'You are inside Clawchestra (roadmap item quick-add). Brief confirmation only. Include item title, column, and priority. Keep response under 3 sentences.',
+};
+
 export async function sendMessageWithContext(
   messages: ChatMessage[],
   context: {
@@ -4082,6 +4093,7 @@ export async function sendMessageWithContext(
     selectedProject?: string;
     openclawWorkspacePath?: string | null;
     openclawContextPolicy?: 'selected-project-first' | 'workspace-default';
+    surface?: AiSurface;
   },
   options?: GatewayOptions,
 ): Promise<SendResult> {
@@ -4100,7 +4112,7 @@ export async function sendMessageWithContext(
   const idempotencyKey = options?.idempotencyKey;
   const policy = context.openclawContextPolicy ?? 'selected-project-first';
   const workspacePath = context.openclawWorkspacePath?.trim();
-  const contextMessage =
+  const viewLine =
     policy === 'workspace-default'
       ? workspacePath
         ? `User workspace path: ${workspacePath}`
@@ -4112,6 +4124,13 @@ export async function sendMessageWithContext(
         : workspacePath
           ? `User workspace path: ${workspacePath}`
           : `User is viewing: ${context.view}`;
+
+  // Build context message with surface identifier + response contract
+  const surface = context.surface;
+  const responseContract = surface ? SURFACE_RESPONSE_CONTRACTS[surface] : null;
+  const contextMessage = responseContract
+    ? `[Clawchestra Context]\nSurface: ${surface}\n${viewLine}\n\n[Response Guidelines]\n${responseContract}`
+    : viewLine;
 
   if (transport.mode === 'tauri-ws') {
     const userText = latestUserContent(messages);

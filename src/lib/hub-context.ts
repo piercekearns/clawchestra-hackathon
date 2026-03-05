@@ -2,16 +2,37 @@
  * hub-context.ts — Scoped context injection for hub chats.
  *
  * Reads project files and assembles a context preamble for scoped chat sessions.
- * Each file is capped at 4000 chars; total injection capped at 12000 chars.
+ * Each file is capped at 4000 chars; total injection capped at 16000 chars.
+ * CAPABILITIES.md is always injected first (app-awareness for all surfaces).
+ * AGENTS.md is only injected for the Clawchestra project itself (developer context).
  */
 
-import { readFile } from './tauri';
+import { readFile, getCapabilitiesMd } from './tauri';
 import { useDashboardStore } from './store';
 import type { HubChat } from './hub-types';
 import type { ProjectViewModel } from './schema';
 
 const PER_FILE_LIMIT = 4000;
-const TOTAL_LIMIT = 12000;
+const TOTAL_LIMIT = 16000;
+
+/** Cache CAPABILITIES.md content so we only call the Tauri command once. */
+let cachedCapabilitiesMd: string | null = null;
+async function loadCapabilitiesMd(): Promise<string> {
+  if (cachedCapabilitiesMd === null) {
+    cachedCapabilitiesMd = await getCapabilitiesMd();
+  }
+  return cachedCapabilitiesMd;
+}
+
+/** Check if a project directory is the Clawchestra app itself. */
+async function isClawchestraProject(dirPath: string): Promise<boolean> {
+  try {
+    const content = await readFile(`${dirPath}/src-tauri/tauri.conf.json`);
+    return content.includes('"clawchestra"');
+  } catch {
+    return false;
+  }
+}
 
 function truncate(content: string, limit: number): string {
   if (content.length <= limit) return content;
@@ -67,6 +88,10 @@ export async function buildScopedContext(chat: HubChat): Promise<string | null> 
   const dir = project.dirPath;
   const files: ContextFile[] = [];
 
+  // 0. CAPABILITIES.md — always first (app-awareness for all users/projects)
+  const capabilitiesMd = await loadCapabilitiesMd();
+  files.push({ label: 'CAPABILITIES.md (Clawchestra App Guide)', content: truncate(capabilitiesMd, PER_FILE_LIMIT) });
+
   // 1. CLAWCHESTRA.md
   const clawchestraMd = await tryReadFile(`${dir}/CLAWCHESTRA.md`);
   if (clawchestraMd) {
@@ -109,10 +134,12 @@ export async function buildScopedContext(chat: HubChat): Promise<string | null> 
     }
   }
 
-  // 6. AGENTS.md
-  const agentsMd = await tryReadFile(`${dir}/AGENTS.md`);
-  if (agentsMd) {
-    files.push({ label: 'AGENTS.md', content: truncate(agentsMd, PER_FILE_LIMIT) });
+  // 6. AGENTS.md — only for the Clawchestra project itself (developer context)
+  if (await isClawchestraProject(dir)) {
+    const agentsMd = await tryReadFile(`${dir}/AGENTS.md`);
+    if (agentsMd) {
+      files.push({ label: 'AGENTS.md (Developer Context)', content: truncate(agentsMd, PER_FILE_LIMIT) });
+    }
   }
 
   if (files.length === 0) return null;

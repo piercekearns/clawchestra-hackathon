@@ -71,5 +71,10 @@ fn main() {
 
     println!("cargo:rustc-env=BUILD_COMMIT={}", commit_hash);
 
+    // Re-run if CAPABILITIES.md changes (embedded at compile time via include_str!)
+    if let Some(root) = &repo_root {
+        println!("cargo:rerun-if-changed={}", root.join("CAPABILITIES.md").display());
+    }
+
     tauri_build::build()
 }

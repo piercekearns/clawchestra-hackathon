@@ -132,6 +132,7 @@ type TauriCommands = {
   };
   approve_latest_device: { args: Record<string, never>; return: string };
   openclaw_ping: { args: Record<string, never>; return: void };
+  get_capabilities_md: { args: Record<string, never>; return: string };
   openclaw_chat: {
     args: {
       message: string;
@@ -570,6 +571,10 @@ export async function getOpenClawWsDeviceAuth(params: {
 
 export async function approveLatestDevice(): Promise<string> {
   return typedInvoke('approve_latest_device');
+}
+
+export async function getCapabilitiesMd(): Promise<string> {
+  return typedInvoke('get_capabilities_md');
 }
 
 export async function checkOpenClawGatewayConnection(): Promise<boolean> {
