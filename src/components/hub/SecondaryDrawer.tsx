@@ -440,7 +440,7 @@ export function SecondaryDrawer({
           )}
         </div>
         <div
-          className={`flex min-h-0 flex-1 flex-col border -ml-px ${
+          className={`flex min-h-0 flex-1 flex-col border ${isVertical ? '' : '-ml-px'} ${
             isResizing
               ? 'border-[#9fbf00] dark:border-[#9fbf00]'
               : isHandleHover
