@@ -352,101 +352,102 @@ export function SecondaryDrawer({
   return (
     <div
       ref={drawerRef}
-      className={`relative z-[60] flex flex-col ${isVertical ? 'shrink-0 overflow-hidden border-t' : 'shrink-0 overflow-visible border-r'} ${
-        isResizing
-          ? 'border-[#9fbf00] dark:border-[#9fbf00]'
-          : isHandleHover
-            ? 'border-[#8ca800] dark:border-[#8ca800]'
-            : terminalFocused && !terminalDragActive
-              ? 'border-revival-accent-400/50'
-              : 'border-neutral-200 dark:border-neutral-700'
-      } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
+      className={`relative z-[60] flex flex-col ${isVertical ? 'shrink-0 overflow-hidden' : 'shrink-0 overflow-visible'}`}
       style={isVertical ? { height, maxHeight: 'calc(100% - 200px)', willChange: 'transform' } : { width, willChange: 'transform' }}
     >
       <div className="flex h-full flex-col overflow-hidden">
-        <div className="relative">
-        <DrawerHeader
-          chat={chat}
-          projectTitle={projectTitle}
-          rowTitle={rowTitle}
-          onClose={onClose}
-          onToast={pushDrawerToast}
-          onOpenLinkedItem={onOpenLinkedItem}
-          onOpenLinkedProject={onOpenLinkedProject}
-          onRestart={chat.type === 'terminal' ? handleRestart : undefined}
-          canCycleUp={canGoUp}
-          canCycleDown={canGoDown}
-          onCycleUp={canGoUp ? () => handleCycleRow('up') : undefined}
-          onCycleDown={canGoDown ? () => handleCycleRow('down') : undefined}
-        />
-        {drawerToasts.length > 0 && (
-          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center px-4">
-            <div className="pointer-events-auto flex flex-col items-center gap-2">
-              {drawerToasts.map((toast) => (
-                <div
-                  key={toast.id}
-                  className={`flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-1.5 text-sm shadow-md ${
-                    toast.kind === 'error'
-                      ? 'border-status-danger/60 bg-red-50 text-status-danger dark:border-red-500/40 dark:bg-[#1f1012] dark:text-red-300'
-                      : 'border-revival-accent-400/40 bg-revival-accent-100 text-neutral-900 dark:bg-[#202210] dark:text-neutral-100'
-                  }`}
-                >
-                  <span>{toast.message}</span>
-                  {toast.action ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toast.action!.onClick();
-                        setDrawerToasts((current) => current.filter((t) => t.id !== toast.id));
-                      }}
-                      className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold text-revival-accent-600 transition-colors hover:bg-revival-accent-400/20 dark:text-revival-accent-300"
-                    >
-                      {toast.action.label}
-                    </button>
-                  ) : null}
-                </div>
-              ))}
+        {/* Header + tabs section — always neutral border */}
+        <div className={`${isVertical ? 'border-t' : 'border-r'} border-neutral-200 dark:border-neutral-700`}>
+          <div className="relative">
+          <DrawerHeader
+            chat={chat}
+            projectTitle={projectTitle}
+            rowTitle={rowTitle}
+            onClose={onClose}
+            onToast={pushDrawerToast}
+            onOpenLinkedItem={onOpenLinkedItem}
+            onOpenLinkedProject={onOpenLinkedProject}
+            onRestart={chat.type === 'terminal' ? handleRestart : undefined}
+            canCycleUp={canGoUp}
+            canCycleDown={canGoDown}
+            onCycleUp={canGoUp ? () => handleCycleRow('up') : undefined}
+            onCycleDown={canGoDown ? () => handleCycleRow('down') : undefined}
+          />
+          {drawerToasts.length > 0 && (
+            <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center px-4">
+              <div className="pointer-events-auto flex flex-col items-center gap-2">
+                {drawerToasts.map((toast) => (
+                  <div
+                    key={toast.id}
+                    className={`flex w-full max-w-md items-center justify-between gap-3 rounded-lg border px-3 py-1.5 text-sm shadow-md ${
+                      toast.kind === 'error'
+                        ? 'border-status-danger/60 bg-red-50 text-status-danger dark:border-red-500/40 dark:bg-[#1f1012] dark:text-red-300'
+                        : 'border-revival-accent-400/40 bg-revival-accent-100 text-neutral-900 dark:bg-[#202210] dark:text-neutral-100'
+                    }`}
+                  >
+                    <span>{toast.message}</span>
+                    {toast.action ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toast.action!.onClick();
+                          setDrawerToasts((current) => current.filter((t) => t.id !== toast.id));
+                        }}
+                        className="shrink-0 rounded px-2 py-0.5 text-xs font-semibold text-revival-accent-600 transition-colors hover:bg-revival-accent-400/20 dark:text-revival-accent-300"
+                      >
+                        {toast.action.label}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
           </div>
-        )}
+          {/* Tab strip — shown when the row has multiple tabs, or always to allow adding tabs */}
+          <TabStrip
+            tabs={rowTabs}
+            activeTabId={chatId}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+            onAddChat={handleAddChat}
+            onAddTerminal={handleAddTerminal}
+          />
+          {pendingCloseTabId && (
+            <div className="flex items-center gap-2 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs dark:bg-amber-400/5">
+              <span className="min-w-0 flex-1 text-neutral-700 dark:text-neutral-300">
+                This terminal is running. End session?
+              </span>
+              <button
+                type="button"
+                onClick={() => setPendingCloseTabId(null)}
+                className="shrink-0 rounded-md border border-neutral-200 px-2.5 py-1 font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = pendingCloseTabId;
+                  setPendingCloseTabId(null);
+                  void executeCloseTab(id, true);
+                }}
+                className="shrink-0 rounded-md bg-red-500 px-2.5 py-1 font-medium text-white transition-colors hover:bg-red-600"
+              >
+                End session
+              </button>
+            </div>
+          )}
         </div>
-        {/* Tab strip — shown when the row has multiple tabs, or always to allow adding tabs */}
-        <TabStrip
-          tabs={rowTabs}
-          activeTabId={chatId}
-          onSelectTab={handleSelectTab}
-          onCloseTab={handleCloseTab}
-          onAddChat={handleAddChat}
-          onAddTerminal={handleAddTerminal}
-        />
-        {pendingCloseTabId && (
-          <div className="flex items-center gap-2 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs dark:bg-amber-400/5">
-            <span className="min-w-0 flex-1 text-neutral-700 dark:text-neutral-300">
-              This terminal is running. End session?
-            </span>
-            <button
-              type="button"
-              onClick={() => setPendingCloseTabId(null)}
-              className="shrink-0 rounded-md border border-neutral-200 px-2.5 py-1 font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const id = pendingCloseTabId;
-                setPendingCloseTabId(null);
-                void executeCloseTab(id, true);
-              }}
-              className="shrink-0 rounded-md bg-red-500 px-2.5 py-1 font-medium text-white transition-colors hover:bg-red-600"
-            >
-              End session
-            </button>
-          </div>
-        )}
-        <div className={`flex min-h-0 flex-1 flex-col ${isVertical ? 'mt-px' : 'mr-px'} ${
-          terminalFocused && !terminalDragActive ? 'ring-1 ring-inset ring-revival-accent-400/50' : ''
-        }`}>
+        <div className={`flex min-h-0 flex-1 flex-col ${isVertical ? '' : 'border-r'} ${
+          isResizing
+            ? 'border-[#9fbf00] dark:border-[#9fbf00]'
+            : isHandleHover
+              ? 'border-[#8ca800] dark:border-[#8ca800]'
+              : terminalFocused && !terminalDragActive
+                ? 'border-revival-accent-400/50'
+                : 'border-neutral-200 dark:border-neutral-700'
+        } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}>
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
         </div>
       </div>
