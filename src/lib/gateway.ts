@@ -7,6 +7,7 @@ import {
   checkOpenClawGatewayConnection,
   getOpenClawSessionsList,
   getOpenClawGatewayConfig,
+  getCapabilitiesMd,
   isTauriRuntime,
   sendOpenClawMessage,
 } from './tauri';
@@ -4075,6 +4076,19 @@ export async function sendMessage(messages: ChatMessage[], options?: GatewayOpti
   };
 }
 
+/** Cache CAPABILITIES.md so we only call the Tauri command once per session. */
+let cachedCapabilities: string | null = null;
+async function loadCapabilities(): Promise<string> {
+  if (cachedCapabilities === null) {
+    try {
+      cachedCapabilities = await getCapabilitiesMd();
+    } catch {
+      cachedCapabilities = '';
+    }
+  }
+  return cachedCapabilities;
+}
+
 export type AiSurface = 'main-chat-drawer' | 'hub-scoped-chat' | 'roadmap-quick-add';
 
 const SURFACE_RESPONSE_CONTRACTS: Record<AiSurface, string> = {
@@ -4125,12 +4139,18 @@ export async function sendMessageWithContext(
           ? `User workspace path: ${workspacePath}`
           : `User is viewing: ${context.view}`;
 
-  // Build context message with surface identifier + response contract
+  // Build context message with capabilities + surface identifier + response contract
+  const capabilities = await loadCapabilities();
   const surface = context.surface;
   const responseContract = surface ? SURFACE_RESPONSE_CONTRACTS[surface] : null;
-  const contextMessage = responseContract
-    ? `[Clawchestra Context]\nSurface: ${surface}\n${viewLine}\n\n[Response Guidelines]\n${responseContract}`
-    : viewLine;
+  const parts: string[] = [];
+  if (capabilities) parts.push(`[Clawchestra App Guide]\n${capabilities}`);
+  if (responseContract) {
+    parts.push(`[Clawchestra Context]\nSurface: ${surface}\n${viewLine}\n\n[Response Guidelines]\n${responseContract}`);
+  } else {
+    parts.push(viewLine);
+  }
+  const contextMessage = parts.join('\n\n---\n\n');
 
   if (transport.mode === 'tauri-ws') {
     const userText = latestUserContent(messages);
