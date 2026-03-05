@@ -596,37 +596,74 @@ Deliverables:
 
 **Extensibility by design:** The surface identifier + response contract pattern established here is the same pattern future surfaces will use. When the `distributed-ai-surfaces` roadmap item ships new surfaces (git sync inline chat, project card chat, etc.), each new surface declares its own identifier and response contract — no changes to the injection infrastructure.
 
-### Phase 2: New Distributed AI Surfaces (Post-FFR)
+### Phase 2: Onboarding & Discoverability (Post-FFR)
 
-Once FFR is achieved and the `distributed-ai-surfaces` roadmap item begins expanding the number of AI surfaces:
+FFR ships before new AI surfaces are added, so onboarding comes next:
+
+1. **Discoverability mechanisms** — Layer 2b (first-run hints, loading screen tips, discovery commands, contextual AI hints). These depend on onboarding infrastructure from the `first-friend-readiness` item.
+2. **Progressive revelation** — in-chat capability discovery ("By the way, I can also write a spec for that...")
+3. **`/help` and `/?` commands** — conversational capability exploration
+4. **Guided workflow patterns** — implement Layer 4 patterns (project creation flow, roadmap progression, stuck user assistance) as structured prompts within surface contexts
+5. **Measure and iterate** — success metrics, user feedback loops, demand discovery
+
+### Phase 3: New Distributed AI Surfaces (Post-Onboarding)
+
+Once the `distributed-ai-surfaces` roadmap item begins expanding the number of AI surfaces:
 
 1. **Per-surface response contracts for new surfaces** — each new surface (git sync inline chat, project card chat, item detail chat) gets its own response contract following the same pattern established in Phase 1
 2. **Surface-specific behavioural guidelines** — expand Layer 2 with deeper per-surface patterns as the surface count grows
-3. **Guided workflow patterns** — implement Layer 4 patterns (project creation flow, roadmap progression, stuck user assistance) as structured prompts within surface contexts
-4. **Dynamic state enrichment** — inject richer context per-surface: which tab is open, what action is being performed, etc.
-5. **`SurfaceContext` formalisation** — if the reusable `<AiChat>` component is extracted (from `distributed-ai-surfaces-spec.md`), populate `SurfaceContext.responseContract` with the contract values defined here
-
-### Phase 3: Post-First Friend Readiness (Onboarding)
-
-Once onboarding is addressed (via the `first-friend-readiness` roadmap item):
-
-1. **Discoverability mechanisms** — Layer 2b (first-run hints, loading screen tips, discovery commands, contextual AI hints). These depend on onboarding infrastructure.
-2. **Progressive revelation** — in-chat capability discovery ("By the way, I can also write a spec for that...")
-3. **`/help` and `/?` commands** — conversational capability exploration
-4. **Measure and iterate** — success metrics, user feedback loops, demand discovery
+3. **Dynamic state enrichment** — inject richer context per-surface: which tab is open, what action is being performed, etc.
+4. **`SurfaceContext` formalisation** — if the reusable `<AiChat>` component is extracted (from `distributed-ai-surfaces-spec.md`), populate `SurfaceContext.responseContract` with the contract values defined here
 
 ### What Ships in Each Phase
 
-| Deliverable | Phase 1 (Now) | Phase 2 (Post-FFR) | Phase 3 (Onboarding) |
-|-------------|---------------|---------------------|----------------------|
-| `CAPABILITIES.md` | ✅ Write + inject | Update per surface | Update |
-| Behavioural guidelines | ✅ General + 3 surface contracts | Per new surface | With discovery |
-| Response contracts | ✅ 3 existing surfaces | New surfaces | — |
-| Dynamic state in context | View + project | ✅ Full surface state | — |
+| Deliverable | Phase 1 (Now) | Phase 2 (Onboarding) | Phase 3 (Surfaces) |
+|-------------|---------------|----------------------|--------------------|
+| `CAPABILITIES.md` | ✅ Write + inject | Update | Update per surface |
+| Behavioural guidelines | ✅ General + 3 surface contracts | With discovery | Per new surface |
+| Response contracts | ✅ 3 existing surfaces | — | New surfaces |
+| Dynamic state in context | View + project | — | ✅ Full surface state |
 | Terminal agent context | ✅ Lightweight | — | — |
 | Guided workflows | — | ✅ | — |
-| Discoverability / onboarding | — | — | ✅ |
+| Discoverability / onboarding | — | ✅ | — |
 | User/developer separation | ✅ | — | — |
+
+---
+
+## Layer 8: Deployment Topology (Local vs. VPS OpenClaw)
+
+### The Problem
+
+Clawchestra is always a local desktop app. OpenClaw may run locally (same machine) or on a remote VPS. This creates a material experience gap:
+
+| Capability | Local OpenClaw | VPS OpenClaw |
+|------------|---------------|--------------|
+| **App-aware assistant** (via pushed context) | ✅ Full | ✅ Full |
+| **Project metadata** (state.json, CLAWCHESTRA.md) | ✅ Full | ✅ Full (pushed by Clawchestra) |
+| **Specs, plans, roadmap docs** | ✅ Full | ✅ Partial (pushed, subject to 12k char limit) |
+| **Arbitrary file read** (source code, configs) | ✅ Direct filesystem access | ❌ Not available without extra setup |
+| **Cross-project code analysis** | ✅ Full | ❌ Limited to pushed context |
+| **Code writing / file modification** | ✅ Direct | ❌ Not available |
+| **Terminal agents (Claude Code, Codex)** | ✅ Always local (tmux on user's machine) | ✅ Always local (tmux on user's machine) |
+
+### Key Insight
+
+Clawchestra is a UI app, not a powered agent — it can't mediate file access on OpenClaw's behalf. It renders UI, sends messages, and injects context. The intelligence comes from OpenClaw or terminal agents.
+
+Terminal agents (Claude Code, Codex) always run locally in Clawchestra's tmux sessions, so they always have full file access regardless of where OpenClaw lives. This partially compensates: VPS users can use OpenClaw for guidance/planning and terminal agents for file work.
+
+### What This Means for This Spec
+
+**Phase 1 is deployment-agnostic.** Everything in Phase 1 — `CAPABILITIES.md`, per-message context, response contracts, behavioural guidelines — works regardless of where OpenClaw lives because Clawchestra pushes the context in messages.
+
+**The file access gap is a separate concern** tracked in the `vps-openclaw-file-access` roadmap item. Solutions range from lightweight (documenting the tradeoff, recommending local OpenClaw) to architectural (MCP filesystem bridge, GitHub API integration, tunnelling). See that item's spec for options.
+
+### User Communication
+
+If the experience differs materially between local and VPS deployments:
+- **On setup/onboarding**: Recommend local OpenClaw for the full experience; note VPS tradeoffs
+- **At runtime**: Clawchestra knows the transport type (localhost WS vs remote URL) — it could surface deployment-aware hints or adjust available functionality
+- **In `CAPABILITIES.md`**: Response guidelines could be transport-aware — "If you don't have file access, suggest the user use their terminal agents or check locally"
 
 ---
 
@@ -635,7 +672,7 @@ Once onboarding is addressed (via the `first-friend-readiness` roadmap item):
 1. **How prescriptive should the guidelines be?** Too vague and OpenClaw doesn't change behaviour. Too specific and it feels scripted. Where's the sweet spot? *Update: the quick-add experience suggests more prescriptive is better for scoped surfaces. A quick-add chat shouldn't feel conversational — it should feel like a confirmation.*
 2. **Skill vs. preamble?** ~~Which injection mechanism is more maintainable and reliable?~~ *Resolved: preamble (Clawchestra pushes context). For third-party users, this is more reliable than requiring them to install a skill into their OpenClaw. See Layer 5.*
 3. **How do we measure success?** How do we know if OpenClaw is actually being a better guide within Clawchestra vs. generic chat? User feedback? Usage patterns? Task completion rates? *Deferred to Phase 3.*
-4. **Compaction resilience.** How do we ensure the context survives compaction reliably? *Partial answer: re-inject `CAPABILITIES.md` on each first-send (already survives session starts). For long conversations, may need periodic re-injection or compaction event detection from OpenClaw. Investigate during Phase 1.*
+4. **Compaction resilience.** ~~How do we ensure the context survives compaction reliably?~~ *Resolved (2026-03-05): OpenClaw PR #18049 (merged 2026-02-16) now preserves workflow rules in compaction summaries — project context files injected at session startup survive compaction rather than being silently discarded. The original issue (#17727) was closed as fixed. First-send injection of `CAPABILITIES.md` is therefore sufficient; no periodic re-injection needed. Per-message lightweight context (surface type + response contract) provides additional resilience for the most critical behavioural guidance.*
 5. **User-modified instances.** If users start modifying their Clawchestra instance via OpenClaw, how does the capability map stay accurate? *Deferred — aspirational territory. For now, CAPABILITIES.md is maintained by agent compliance rule (AGENTS.md Hard Rule 5).*
 6. **Per-surface response contracts.** ~~Should response format guidance live in the context injection payload, in a skill, or in the behavioural guidelines?~~ *Resolved: response contracts are per-message, injected alongside the context payload via `composeContextWrappedUserMessage()`. Content is defined here (Layer 2); the structural field (`SurfaceContext.responseContract`) is defined in distributed-ai-surfaces-spec. See Boundary Clarification and Concrete Injection Format sections above.*
 7. **Developer vs. user context.** *Resolved: see Layer 7. CAPABILITIES.md (shipped context, all users) vs. AGENTS.md (developer context, instance owner only).*
