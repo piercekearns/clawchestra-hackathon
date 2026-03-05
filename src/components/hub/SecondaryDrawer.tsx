@@ -440,17 +440,17 @@ export function SecondaryDrawer({
           )}
         </div>
         <div
-          className={`flex min-h-0 flex-1 flex-col ${isVertical ? '' : 'border-r'} ${
+          className={`flex min-h-0 flex-1 flex-col ${isVertical ? '' : 'border-r'} border-l ${
             isResizing
               ? 'border-[#9fbf00] dark:border-[#9fbf00]'
               : isHandleHover
                 ? 'border-[#8ca800] dark:border-[#8ca800]'
                 : terminalFocused && !terminalDragActive
-                  ? 'border-revival-accent-400/50'
-                  : 'border-neutral-200 dark:border-neutral-700'
+                  ? 'border-revival-accent-400/50 -ml-px'
+                  : 'border-l-transparent border-neutral-200 dark:border-l-transparent dark:border-neutral-700'
           } ${isResizing ? '' : 'transition-[border-color] duration-200 ease-out'}`}
           style={terminalFocused && !terminalDragActive ? {
-            boxShadow: '-1px 0 0 rgba(159,191,0,0.5), 0 -1px 0 rgba(159,191,0,0.5), 0 1px 0 rgba(159,191,0,0.5)',
+            boxShadow: '0 -1px 0 rgba(159,191,0,0.5), 0 1px 0 rgba(159,191,0,0.5)',
           } : undefined}
         >
           <ScopedChatShell chat={chat} onTerminalFocusChange={setTerminalFocused} onTerminalDragActiveChange={setTerminalDragActive} terminalRestartKey={terminalRestartKey} />
