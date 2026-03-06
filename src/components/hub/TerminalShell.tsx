@@ -415,8 +415,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     let lastUserInputAt = 0;
     let lastWindowCheck = 0;
     let bytesSinceLastWindow = 0;
-    let isCurrentlyActive = false;
-    let lastSignificantAt = 0;         // when we last saw real output
+    // Seed from store — if the background poll had this terminal as active,
+    // carry that forward so the dots don't pause during the startup grace period.
+    const prevActivity = useDashboardStore.getState().terminalActivity[chat.id];
+    let isCurrentlyActive = !!prevActivity?.isActive;
+    let lastSignificantAt = isCurrentlyActive ? Date.now() : 0;
     const significantHistory: boolean[] = [];
 
     const STARTUP_GRACE_MS = 3_000;   // scrollback restore + tmux reattach; 10s was too long — short agent responses were missed entirely

@@ -1042,12 +1042,11 @@ export const useDashboardStore = create<DashboardState>()(
                 // Don't clear actionRequired — it should persist until the user
                 // actually resolves the prompt and the PTY detects resumed output.
                 actionRequired: wasActionRequired,
-                // Always clear isActive — once the user is viewing the terminal,
-                // TerminalShell's onData handler takes over activity management.
-                // Stale isActive from the background poll would otherwise persist
-                // because TerminalShell's local tracker starts fresh on mount and
-                // the deactivation interval never fires for it.
-                isActive: false,
+                // Preserve isActive — TerminalShell seeds its local tracker from
+                // the store on mount, so clearing here would cause the dots to
+                // pause during the startup grace period until the PTY handler
+                // re-detects activity.
+                isActive: prev?.isActive ?? false,
               },
             },
           };
