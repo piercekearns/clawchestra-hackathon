@@ -275,6 +275,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     // data events. This avoids relying on silence timers that get reset
     // by prompt renders, cursor reports, and other periodic terminal noise.
     const deactivateInterval = setInterval(() => {
+      // Don't deactivate during startup grace — the data handler ignores all
+      // output during this window, so lastSignificantAt won't be refreshed.
+      // Without this guard, seeded isCurrentlyActive gets cleared ~1.5s in,
+      // causing a brief false "unread" flash before data starts flowing.
+      if (Date.now() - spawnTime < STARTUP_GRACE_MS) return;
       if (isCurrentlyActive && lastSignificantAt > 0 && Date.now() - lastSignificantAt > DEACTIVATE_MS) {
         deactivate();
       }
