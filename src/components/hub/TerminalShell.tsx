@@ -67,6 +67,7 @@ function buildTmuxShellCommand(tmux: string, sessionName: string, agentCommand: 
     `new-session -A -s '${sessionName}'`,
     `\\; set status off`,
     '\\; set history-limit 50000',
+    '\\; set remain-on-exit on',
     "\\; set -ga terminal-overrides ',xterm-256color:smcup@:rmcup@'",
   ].join(' ');
 
