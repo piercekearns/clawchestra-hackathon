@@ -1,0 +1,362 @@
+/**
+ * Clawchestra Schema
+ * 
+ * IMPORTANT: Keep docs/AGENTS.md and docs/SCHEMA.md in sync with this file.
+ * 
+ * If you change:
+ * - Status values (ProjectStatus) → update AGENTS.md status definitions
+ * - Required fields → update AGENTS.md field requirements table
+ * - Validation rules → update AGENTS.md accordingly
+ * - New fields → add to SCHEMA.md and AGENTS.md if agent-relevant
+ */
+
+import { differenceInDays, parseISO } from 'date-fns';
+import { PROJECT_STATUSES as VALID_STATUSES, type ProjectStatus, type RoadmapItemStatus as RoadmapStatus } from './constants';
+
+export type { ProjectStatus } from './constants';
+
+export type ProjectType = 'project' | 'sub-project' | 'idea';
+
+export type ProjectColor =
+  | 'blue'
+  | 'green'
+  | 'yellow'
+  | 'red'
+  | 'purple'
+  | 'gray';
+
+export type ThemePreference = 'system' | 'light' | 'dark';
+
+export interface BoardItem {
+  id: string;
+  title: string;
+  status: string;
+  priority?: number;
+  icon?: string;
+  nextAction?: string;
+  blockedBy?: string;
+  tags?: string[];
+}
+
+export interface ColumnDefinition {
+  id: string;
+  label: string;
+  color?: string;
+}
+
+export interface ProjectFrontmatter {
+  id?: string;
+  title: string;
+  status?: ProjectStatus;
+  type: ProjectType;
+  priority?: number;
+  repo?: string;
+  parent?: string;
+  lastActivity?: string;
+  lastReviewed?: string;
+  tags?: string[];
+  icon?: string;
+  color?: ProjectColor;
+  blockedBy?: string;
+  nextAction?: string;
+  specDoc?: string;
+  planDoc?: string;
+}
+
+export type GitStatusState = 'clean' | 'uncommitted' | 'unpushed' | 'behind' | 'unknown';
+
+export type DirtyFileCategory = 'metadata' | 'documents' | 'code';
+
+export type DirtyFileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'copied';
+
+export interface DirtyFileEntry {
+  path: string;
+  /** Git status: modified, added, deleted, renamed, untracked, copied */
+  status: DirtyFileStatus;
+}
+
+export interface DirtyFileCategories {
+  metadata: DirtyFileEntry[];
+  documents: DirtyFileEntry[];
+  code: DirtyFileEntry[];
+}
+
+export interface GitStatus {
+  state: GitStatusState;
+  branch?: string;
+  details?: string;
+  /** Origin remote URL (auto-detected from git config) */
+  remote?: string;
+  lastCommitDate?: string;
+  lastCommitMessage?: string;
+  lastCommitAuthor?: string;
+  commitsThisWeek?: number;
+  latestTag?: string;
+  stashCount: number;
+  aheadCount?: number;
+  behindCount?: number;
+  /** True when any files in the repo have uncommitted changes */
+  hasDirtyFiles?: boolean;
+  /** All dirty files categorized into metadata/documents/code */
+  allDirtyFiles?: DirtyFileCategories;
+}
+
+export interface GitBranchState {
+  name: string;
+  isCurrent: boolean;
+  hasUpstream: boolean;
+  aheadCount: number;
+  behindCount: number;
+  diverged: boolean;
+  localOnly: boolean;
+}
+
+export interface GitStashResult {
+  stashed: boolean;
+  stashRef?: string;
+  summary: string;
+}
+
+export type GitCherryPickStatus = 'applied' | 'conflict' | 'failed';
+
+export interface GitCherryPickResult {
+  status: GitCherryPickStatus;
+  message: string;
+  conflictingFiles: string[];
+}
+
+export interface GitConflictFileContext {
+  path: string;
+  currentContent: string;
+  oursContent: string;
+  theirsContent: string;
+}
+
+export interface GitConflictResolutionInput {
+  path: string;
+  content: string;
+}
+
+export type GitConflictApplyStatus = 'applied' | 'conflict' | 'failed';
+
+export interface GitConflictApplyResult {
+  status: GitConflictApplyStatus;
+  message: string;
+  conflictingFiles: string[];
+  hash?: string;
+}
+
+export interface GitResumeValidation {
+  valid: boolean;
+  reasons: string[];
+  currentBranch?: string;
+  missingTargets: string[];
+  cherryPickInProgress: boolean;
+  unresolvedConflicts: boolean;
+}
+
+export interface ProjectViewModel extends BoardItem {
+  id: string;
+  /** Absolute path to the CLAWCHESTRA.md file (or legacy PROJECT.md) */
+  filePath: string;
+  /** Absolute path to the project directory (parent of CLAWCHESTRA.md) */
+  dirPath: string;
+  frontmatter: ProjectFrontmatter;
+  content: string;
+  hasRoadmap: boolean;
+  hasGit: boolean;
+  gitStatus?: GitStatus;
+  children: ProjectViewModel[];
+  isStale: boolean;
+  needsReview: boolean;
+  /** True if frontmatter.repo is set (GitHub-linked) */
+  hasRepo: boolean;
+  /** True after ROADMAP.md→state.json migration completes (Phase 5). */
+  stateJsonMigrated: boolean;
+}
+
+export type { RoadmapStatus };
+
+export interface RoadmapItem extends BoardItem {
+  id: string;
+  status: RoadmapStatus;
+  /** Optional path to item-specific spec doc (relative to project dir) */
+  specDoc?: string;
+  /** Optional path to item-specific plan doc (relative to project dir) */
+  planDoc?: string;
+}
+
+export interface RoadmapDocument {
+  filePath: string;
+  items: RoadmapItem[];
+  notes: string;
+}
+
+export interface RoadmapItemDocs {
+  spec?: string;
+  plan?: string;
+}
+
+export interface RoadmapItemWithDocs extends RoadmapItem {
+  docs: RoadmapItemDocs;
+}
+
+export interface ChangelogEntry {
+  id: string;
+  title: string;
+  completedAt: string;
+  summary?: string;
+}
+
+export interface ChangelogDocument {
+  filePath: string;
+  entries: ChangelogEntry[];
+}
+
+export const PROJECT_COLUMNS: ColumnDefinition[] = [
+  { id: 'in-progress', label: 'In Progress' },
+  { id: 'up-next', label: 'Up Next' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'dormant', label: 'Dormant' },
+];
+
+
+export const ROADMAP_COLUMNS: ColumnDefinition[] = [
+  { id: 'in-progress', label: 'In Progress' },
+  { id: 'up-next', label: 'Up Next' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'complete', label: 'Complete' },
+];
+
+export { VALID_STATUSES };
+
+export const VALID_TYPES = [
+  'project',
+  'sub-project',
+  'idea',
+] as const satisfies readonly ProjectType[];
+
+export const VALID_COLORS = [
+  'blue',
+  'green',
+  'yellow',
+  'red',
+  'purple',
+  'gray',
+] as const satisfies readonly ProjectColor[];
+
+export type ValidationResult =
+  | { valid: true; data: ProjectFrontmatter }
+  | { valid: false; errors: string[] };
+
+export function isProjectStatus(value: unknown): value is ProjectStatus {
+  return typeof value === 'string' && VALID_STATUSES.includes(value as ProjectStatus);
+}
+
+export function validateProject(data: unknown): ValidationResult {
+  const errors: string[] = [];
+
+  if (typeof data !== 'object' || data === null) {
+    return { valid: false, errors: ['frontmatter is not an object'] };
+  }
+
+  const record = data as Record<string, unknown>;
+
+  if (typeof record.title !== 'string' || !record.title.trim()) {
+    errors.push('title is required');
+  }
+  if (typeof record.type !== 'string' || !record.type.trim()) {
+    errors.push('type is required');
+  }
+  if (typeof record.status !== 'string' || !record.status.trim()) {
+    errors.push('status is required');
+  }
+
+  // Coerce invalid statuses to 'pending' instead of rejecting the project.
+  // This prevents cards from vanishing when the repo is on the wrong branch
+  // (e.g. stuck mid-cherry-pick) and PROJECT.md has a non-schema status.
+  if (typeof record.status === 'string' && !VALID_STATUSES.includes(record.status as ProjectStatus)) {
+    console.warn(`[schema] Coercing invalid status "${record.status}" to "pending"`);
+    record.status = 'pending';
+  }
+
+  if (record.status === 'in-progress' && typeof record.priority !== 'number') {
+    errors.push('priority is required for in-progress projects');
+  }
+
+  if (record.type === 'sub-project' && typeof record.parent !== 'string') {
+    errors.push('parent is required for sub-projects');
+  }
+
+  if (typeof record.type === 'string' && !VALID_TYPES.includes(record.type as ProjectType)) {
+    errors.push(`invalid type: ${record.type}`);
+  }
+
+  if (record.color !== undefined) {
+    if (typeof record.color !== 'string' || !VALID_COLORS.includes(record.color as ProjectColor)) {
+      errors.push(`invalid color: ${String(record.color)}`);
+    }
+  }
+
+  if (record.icon !== undefined && typeof record.icon !== 'string') {
+    errors.push('icon must be a string');
+  }
+
+  if (record.tags !== undefined) {
+    if (!Array.isArray(record.tags) || !record.tags.every((tag) => typeof tag === 'string')) {
+      errors.push('tags must be an array of strings');
+    }
+  }
+
+  if (
+    record.priority !== undefined &&
+    (typeof record.priority !== 'number' || !Number.isFinite(record.priority))
+  ) {
+    errors.push('priority must be a finite number');
+  }
+
+  if (record.blockedBy !== undefined && typeof record.blockedBy !== 'string') {
+    errors.push('blockedBy must be a string');
+  }
+
+  if (record.nextAction !== undefined && typeof record.nextAction !== 'string') {
+    errors.push('nextAction must be a string');
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    data: record as unknown as ProjectFrontmatter,
+  };
+}
+
+export function isStale(lastActivity: string | Date | undefined): boolean {
+  if (!lastActivity) return true;
+
+  try {
+    // gray-matter can parse YAML dates as Date objects or strings
+    const activityDate = lastActivity instanceof Date 
+      ? lastActivity 
+      : parseISO(lastActivity);
+    return differenceInDays(new Date(), activityDate) > 14;
+  } catch {
+    return true;
+  }
+}
+
+export function needsReview(lastReviewed: string | Date | undefined): boolean {
+  if (!lastReviewed) return true;
+
+  try {
+    // gray-matter can parse YAML dates as Date objects or strings
+    const reviewDate = lastReviewed instanceof Date 
+      ? lastReviewed 
+      : parseISO(lastReviewed);
+    return differenceInDays(new Date(), reviewDate) > 7;
+  } catch {
+    return true;
+  }
+}

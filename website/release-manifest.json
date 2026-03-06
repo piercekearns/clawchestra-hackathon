@@ -1,0 +1,30 @@
+{
+  "tag_name": "app-v0.1.0-alpha.2",
+  "name": "Clawchestra alpha app-v0.1.0-alpha.2",
+  "prerelease": true,
+  "published_at": "2026-03-06T01:39:39Z",
+  "html_url": "https://github.com/piercekearns/clawchestra-hackathon/releases/tag/app-v0.1.0-alpha.2",
+  "body": "Public-alpha release for Clawchestra.\n\nNotes:\n- macOS builds are unsigned in Phase 1 and require manual trust steps.\n- Windows and Linux artifacts are early friend-testing builds.\n- Source-build remains the developer path; native installers are the end-user path.",
+  "assets": [
+    {
+      "name": "Clawchestra_0.1.0_aarch64.dmg",
+      "browser_download_url": "https://github.com/piercekearns/clawchestra-hackathon/releases/download/untagged-bf2ec1528cd5531b1693/Clawchestra_0.1.0_aarch64.dmg"
+    },
+    {
+      "name": "Clawchestra_aarch64.app.tar.gz",
+      "browser_download_url": "https://github.com/piercekearns/clawchestra-hackathon/releases/download/untagged-bf2ec1528cd5531b1693/Clawchestra_aarch64.app.tar.gz"
+    },
+    {
+      "name": "Clawchestra_0.1.0_x64_en-US.msi",
+      "browser_download_url": "https://github.com/piercekearns/clawchestra-hackathon/releases/download/untagged-bf2ec1528cd5531b1693/Clawchestra_0.1.0_x64_en-US.msi"
+    },
+    {
+      "name": "Clawchestra_0.1.0_amd64.AppImage",
+      "browser_download_url": "https://github.com/piercekearns/clawchestra-hackathon/releases/download/untagged-bf2ec1528cd5531b1693/Clawchestra_0.1.0_amd64.AppImage"
+    },
+    {
+      "name": "Clawchestra_0.1.0_amd64.deb",
+      "browser_download_url": "https://github.com/piercekearns/clawchestra-hackathon/releases/download/untagged-bf2ec1528cd5531b1693/Clawchestra_0.1.0_amd64.deb"
+    }
+  ]
+}

@@ -1,0 +1,477 @@
+:root {
+  --ink: #0a0d08;
+  --panel: rgba(16, 20, 14, 0.9);
+  --panel-soft: rgba(21, 27, 19, 0.72);
+  --line: rgba(223, 255, 0, 0.18);
+  --line-strong: rgba(223, 255, 0, 0.5);
+  --text: #f3f7ea;
+  --muted: #a3ad97;
+  --signal: #dfff00;
+  --signal-deep: #b7d300;
+  --warning: #ffd36a;
+  --danger: #ff7f50;
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Chakra Petch', sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(223, 255, 0, 0.14), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 211, 106, 0.08), transparent 28%),
+    linear-gradient(180deg, #11170f 0%, #090b08 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(223, 255, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(223, 255, 0, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.8), transparent 90%);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.6) 0.5px, transparent 0.5px);
+  background-size: 8px 8px;
+  mix-blend-mode: soft-light;
+}
+
+.shell {
+  position: relative;
+  width: min(1200px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(223, 255, 0, 0.18), rgba(223, 255, 0, 0.03));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.brand-wordmark {
+  display: grid;
+  gap: 2px;
+}
+
+.brand-wordmark strong,
+.hero-copy h1,
+.panel h2,
+.install-card h2 {
+  font-family: 'Oswald', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.brand-wordmark span,
+.meta-line,
+.panel kbd,
+.asset-platform,
+.install-card small,
+.install-button small,
+.notes-header span,
+.pill,
+.status-pill {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.link-pill,
+.install-button,
+.text-link {
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.link-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.link-pill:hover,
+.install-button:hover,
+.text-link:hover {
+  transform: translateY(-1px);
+  border-color: var(--line-strong);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.hero-copy,
+.install-card,
+.panel {
+  position: relative;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(16, 20, 14, 0.96), rgba(12, 16, 11, 0.92));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.hero-copy,
+.panel {
+  padding: 28px;
+  border-radius: 28px;
+}
+
+.install-card {
+  padding: 24px;
+  border-radius: 28px;
+}
+
+.hero-copy::before,
+.install-card::before,
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(140deg, rgba(223, 255, 0, 0.08), transparent 45%);
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(223, 255, 0, 0.08);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.hero-copy h1 {
+  margin: 0;
+  font-size: clamp(3.1rem, 7vw, 6rem);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.hero-copy p {
+  max-width: 56ch;
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.65;
+}
+
+.hero-emphasis {
+  color: var(--signal);
+}
+
+.status-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 24px 0;
+}
+
+.status-pill,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+}
+
+.status-pill strong,
+.pill strong {
+  color: var(--text);
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+
+.install-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px 18px;
+  min-width: 250px;
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(135deg, var(--signal), var(--signal-deep));
+  color: #0b0d08;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.install-button small {
+  font-size: 0.78rem;
+  opacity: 0.82;
+}
+
+.install-button.button-disabled {
+  background: linear-gradient(135deg, rgba(223, 255, 0, 0.24), rgba(223, 255, 0, 0.12));
+  color: var(--text);
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.install-card-header,
+.notes-header,
+.panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.install-card h2,
+.panel h2 {
+  margin: 0;
+  font-size: 1.8rem;
+  text-transform: uppercase;
+}
+
+.install-card p,
+.panel p,
+.asset-list li,
+.notes-body {
+  color: var(--muted);
+}
+
+.install-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.install-slot {
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.install-slot strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.86rem;
+}
+
+.install-slot code {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--signal);
+  font-size: 0.86rem;
+}
+
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.panel-wide {
+  grid-column: span 3;
+}
+
+.asset-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.asset-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--signal);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+}
+
+.asset-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.asset-list li a,
+.asset-list li.asset-empty {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-decoration: none;
+}
+
+.asset-list li a span:last-child {
+  color: var(--signal);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.notes-body {
+  line-height: 1.65;
+}
+
+.notes-body p {
+  margin: 0 0 14px;
+}
+
+.notes-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.state-only {
+  display: none;
+}
+
+html[data-state='loading'] .state-loading,
+html[data-state='error'] .state-error,
+html[data-state='ready'] .state-ready {
+  display: block;
+}
+
+.error-banner {
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 127, 80, 0.45);
+  background: rgba(255, 127, 80, 0.12);
+  border-radius: 18px;
+  color: #ffd7cb;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding: 20px 4px 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.footer a {
+  color: var(--text);
+}
+
+@media (max-width: 1080px) {
+  .hero,
+  .site-grid,
+  .asset-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(100vw - 18px, 100%);
+    padding-top: 18px;
+  }
+
+  .topbar,
+  .hero-actions,
+  .footer {
+    flex-direction: column;
+  }
+
+  .hero-copy,
+  .install-card,
+  .panel {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .hero-copy h1 {
+    font-size: 2.5rem;
+  }
+}

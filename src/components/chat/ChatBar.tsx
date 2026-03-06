@@ -1,0 +1,423 @@
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowUp, ChevronDown, ChevronUp, X, Clock, RotateCcw, Square } from 'lucide-react';
+import { ActivityIndicator } from './ActivityIndicator';
+import { CommandDropdown } from './CommandDropdown';
+import { StatusBadge } from './StatusBadge';
+import type { ChatAttachment, ChatConnectionState, QueuedMessage } from './types';
+
+const MIN_INPUT_HEIGHT = 40;
+const MAX_INPUT_HEIGHT = 210;
+
+// Check if input shows a partial slash command (no space yet = still selecting)
+function shouldShowCommandDropdown(input: string): boolean {
+  if (!input.startsWith('/')) return false;
+  // Hide dropdown once a space appears (command was selected)
+  return !input.slice(1).includes(' ');
+}
+
+function hasFilePayload(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) return false;
+  return Array.from(dataTransfer.types ?? []).includes('Files');
+}
+
+function formatUsageNumber(value: number): string {
+  return Math.round(value).toLocaleString();
+}
+
+interface ChatBarProps {
+  connectionState: ChatConnectionState;
+  activityLabel: string | null;
+  isCompacting?: boolean;
+  activeModelLabel?: string | null;
+  activeModelTooltip?: string | null;
+  activeModelUsage?: { used: number; max: number; percent: number } | null;
+  drawerOpen: boolean;
+  variant?: 'floating' | 'embedded';
+  showToggle?: boolean;
+  input: string;
+  sending: boolean;
+  dragActive: boolean;
+  images: ChatAttachment[];
+  gatewayConnected: boolean;
+  queue: QueuedMessage[];
+  attachmentNotice?: string | null;
+  onInputChange: (value: string) => void;
+  onToggleDrawer: () => void;
+  onSubmit: () => void;
+  onRemoveImage: (index: number) => void;
+  onRemoveFromQueue: (id: string) => void;
+  onRetryQueuedMessage: (id: string) => void;
+  onPasteFiles: (files: File[]) => Promise<void>;
+  onDropFiles: (files: File[]) => Promise<void>;
+  onDragStateChange: (active: boolean) => void;
+  onComposerHeightChange?: (heightDelta: number) => void;
+  onStop?: () => void;
+}
+
+export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function ChatBar(
+  {
+    connectionState,
+    activityLabel,
+    isCompacting,
+    activeModelLabel,
+    activeModelUsage,
+    drawerOpen,
+    variant = 'floating',
+    showToggle = true,
+    input,
+    sending,
+    dragActive,
+    images,
+    gatewayConnected,
+    queue,
+    attachmentNotice,
+    onInputChange,
+    onToggleDrawer,
+    onSubmit,
+    onRemoveImage,
+    onRemoveFromQueue,
+    onRetryQueuedMessage,
+    onPasteFiles,
+    onDropFiles,
+    onDragStateChange,
+    onComposerHeightChange,
+    onStop,
+  },
+  forwardedRef,
+) {
+  const [composerHeight, setComposerHeight] = useState(MIN_INPUT_HEIGHT);
+  const [dropdownDismissed, setDropdownDismissed] = useState(false);
+  const [toggleRight, setToggleRight] = useState(false);
+  const prevInputRef = useRef(input);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const headerRef = useRef<HTMLButtonElement>(null);
+  const leftContentRef = useRef<HTMLDivElement>(null);
+  const showDropdown = shouldShowCommandDropdown(input) && !dropdownDismissed;
+  const statusLabelOverride =
+    connectionState === 'connected' ? activeModelLabel ?? null : null;
+  
+  // Reset dismissed state only when input actually changes
+  useEffect(() => {
+    const prevInput = prevInputRef.current;
+    prevInputRef.current = input;
+    
+    if (!dropdownDismissed) return;
+    
+    // Reset if they cleared the slash
+    if (!input.startsWith('/')) {
+      setDropdownDismissed(false);
+      return;
+    }
+    
+    // Reset if they typed a NEW slash (input went from non-slash to slash)
+    if (!prevInput.startsWith('/') && input.startsWith('/')) {
+      setDropdownDismissed(false);
+      return;
+    }
+    
+    // Reset if they're typing more after the slash (actively filtering)
+    if (input.length > prevInput.length && input.startsWith('/')) {
+      setDropdownDismissed(false);
+    }
+  }, [input, dropdownDismissed]);
+
+  // useLayoutEffect runs BEFORE the browser paints, preventing the
+  // visible flash where the textarea momentarily shows text at the wrong
+  // height (which caused phantom line-break flickers).
+  useLayoutEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+
+    // Reset to min height to measure true content height
+    node.style.height = `${MIN_INPUT_HEIGHT}px`;
+    const scrollHeight = node.scrollHeight;
+    const nextHeight = Math.max(MIN_INPUT_HEIGHT, Math.min(scrollHeight, MAX_INPUT_HEIGHT));
+    node.style.height = `${nextHeight}px`;
+    node.style.maxHeight = `${MAX_INPUT_HEIGHT}px`;
+    node.style.overflowY = scrollHeight > MAX_INPUT_HEIGHT ? 'auto' : 'hidden';
+    setComposerHeight((prev) => {
+      const delta = nextHeight - prev;
+      if (delta !== 0 && onComposerHeightChange) {
+        onComposerHeightChange(delta);
+      }
+      return nextHeight;
+    });
+  }, [input, onComposerHeightChange]);
+
+  // Measure whether centering the toggle would overlap the left content.
+  // If so, pin it to the right instead.
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (!headerRef.current || !leftContentRef.current) return;
+      const totalWidth = headerRef.current.offsetWidth;
+      const leftWidth = leftContentRef.current.offsetWidth;
+      // Toggle hover area is ~28px wide; centred means its left edge is at (50% - 14px)
+      const TOGGLE_HALF = 14;
+      const GAP = 12; // minimum clearance between left content and toggle
+      const centreLeft = totalWidth / 2 - TOGGLE_HALF;
+      setToggleRight(leftWidth + GAP >= centreLeft);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (headerRef.current) ro.observe(headerRef.current);
+    return () => ro.disconnect();
+  }, [activityLabel]);
+
+  const expanded = composerHeight > 72;
+  const isFloating = variant === 'floating';
+  const hasContent = input.trim() || images.length > 0;
+  const showDualButtons = sending && !!onStop && !!hasContent;
+  const usagePercent =
+    connectionState === 'connected' && activeModelUsage ? activeModelUsage.percent : null;
+  const usageTooltip =
+    connectionState === 'connected' && activeModelUsage
+      ? (
+        <span className="flex flex-col gap-0.5">
+          <span>Context window: {Math.round(activeModelUsage.percent)}% full</span>
+          <span>
+            {formatUsageNumber(activeModelUsage.used)} / {formatUsageNumber(activeModelUsage.max)} tokens used
+          </span>
+        </span>
+        )
+      : null;
+
+  return (
+    <div
+      className={`relative flex w-full flex-col [--input-min:40px] [--input-line:20px] [--input-pad:calc((var(--input-min)-var(--input-line))/2)] [--input-offset:2px] ${
+        isFloating
+          ? `max-h-[50vh] ${drawerOpen ? 'rounded-b-xl' : 'rounded-xl'} border bg-neutral-0/95 backdrop-blur transition-all focus-within:ring-1 focus-within:ring-revival-accent-400/40 ${
+              sending ? 'border-revival-accent/50' : 'border-neutral-300 dark:border-neutral-600'
+            } dark:bg-neutral-900/95 ${
+              expanded ? 'shadow-[0_-20px_42px_rgba(0,0,0,0.46)]' : 'shadow-2xl'
+            }`
+          : `bg-neutral-0 dark:bg-neutral-900`
+      } ${dragActive ? 'ring-2 ring-revival-accent-400/40' : ''}`}
+      onDragOver={(event) => {
+        if (!hasFilePayload(event.dataTransfer)) return;
+        event.preventDefault();
+        onDragStateChange(true);
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      }}
+      onDragLeave={(event) => {
+        if (!hasFilePayload(event.dataTransfer)) return;
+        event.preventDefault();
+        onDragStateChange(false);
+      }}
+      onDrop={async (event) => {
+        if (!hasFilePayload(event.dataTransfer)) return;
+        event.preventDefault();
+        onDragStateChange(false);
+        await onDropFiles(Array.from(event.dataTransfer.files ?? []));
+      }}
+    >
+      {dragActive ? (
+        <div
+          className={`pointer-events-none absolute inset-0 z-10 border-2 border-dashed border-revival-accent-400 bg-revival-accent-200/10 dark:bg-revival-accent-900/20 ${
+            isFloating ? (drawerOpen ? 'rounded-b-xl' : 'rounded-xl') : 'rounded-none'
+          }`}
+        />
+      ) : null}
+
+      {isFloating ? (
+        <button
+          ref={headerRef}
+          type="button"
+          className="relative flex w-full flex-shrink-0 items-center gap-2 border-b border-neutral-300/80 px-3 py-2 text-left dark:border-neutral-700/80"
+          onClick={onToggleDrawer}
+          aria-expanded={drawerOpen}
+          aria-label={drawerOpen ? 'Collapse chat drawer' : 'Open chat drawer'}
+        >
+          {/* Left content — measured to determine toggle placement */}
+          <div ref={leftContentRef} className="flex items-center gap-2">
+            <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
+              OpenClaw
+            </span>
+            <div
+              className="cursor-default"
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              <StatusBadge
+                state={connectionState}
+                labelOverride={statusLabelOverride}
+                usagePercent={usagePercent}
+                usageTooltip={usageTooltip}
+              />
+            </div>
+            {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
+          </div>
+          {/* Toggle — centred by default, right-pinned only when left content would collide */}
+          {showToggle ? (
+            <span
+              className={`absolute flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-200/80 dark:text-neutral-300 dark:hover:bg-neutral-700/80 ${
+                toggleRight
+                  ? 'right-[13px] top-1/2 -translate-y-1/2'
+                  : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
+              }`}
+              aria-hidden
+            >
+              {drawerOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            </span>
+          ) : null}
+        </button>
+      ) : (
+        <div className="flex w-full flex-shrink-0 items-center gap-2 border-b border-neutral-300/80 px-3 py-2 dark:border-neutral-700/80">
+          <span className="font-semibold uppercase tracking-[0.06em] text-[11px] text-neutral-600 dark:text-neutral-300">
+            OpenClaw
+          </span>
+          <div className="cursor-default">
+            <StatusBadge
+              state={connectionState}
+              labelOverride={statusLabelOverride}
+              usagePercent={usagePercent}
+              usageTooltip={usageTooltip}
+            />
+          </div>
+          {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}
+        </div>
+      )}
+
+      {/* Queued messages UI */}
+      {queue.length > 0 && (
+        <div className="border-b border-neutral-300/50 dark:border-neutral-700/50 px-2 py-1.5 space-y-1 bg-neutral-50/50 dark:bg-neutral-800/30">
+          <div className="text-[10px] text-neutral-500 dark:text-neutral-400 px-1">
+            Queued messages (will send when agent finishes)
+          </div>
+          {queue.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-2 rounded-md border border-dashed border-neutral-400/50 dark:border-neutral-600 bg-neutral-100/80 dark:bg-neutral-800/50 px-2 py-1.5 text-sm"
+            >
+              <Clock className="h-3 w-3 text-[#DFFF00] flex-shrink-0" />
+              <span className="flex-1 truncate text-neutral-700 dark:text-neutral-300 text-xs">
+                {item.text || `[${item.attachments.length} image${item.attachments.length === 1 ? '' : 's'}]`}
+                {item.status === 'queued' && item.attemptCount > 0 ? ' (retrying...)' : ''}
+                {item.status === 'failed' ? ' (failed)' : ''}
+              </span>
+              {item.status === 'failed' ? (
+                <button
+                  type="button"
+                  onClick={() => onRetryQueuedMessage(item.id)}
+                  className="text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200 p-0.5"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onRemoveFromQueue(item.id)}
+                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="relative min-h-0">
+        {/* Slash command dropdown */}
+        {showDropdown && (
+          <CommandDropdown
+            input={input}
+            onSelect={(cmd) => onInputChange(cmd)}
+            onClose={() => {
+              setDropdownDismissed(true);
+            }}
+          />
+        )}
+        <textarea
+          ref={(node) => {
+            textareaRef.current = node;
+            if (typeof forwardedRef === 'function') {
+              forwardedRef(node);
+            } else if (forwardedRef) {
+              forwardedRef.current = node;
+            }
+          }}
+          value={input}
+          onChange={(event) => onInputChange(event.target.value)}
+          onPaste={async (event) => {
+            const files = Array.from(event.clipboardData.files ?? []);
+            if (files.length === 0) return;
+            await onPasteFiles(files);
+          }}
+          onKeyDown={(event) => {
+            // Don't submit if command dropdown is open (let dropdown handle Enter)
+            if (event.key === 'Enter' && !event.shiftKey && !showDropdown) {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
+          placeholder={
+            sending
+              ? 'Type to queue message...'
+              : gatewayConnected
+                ? 'Message OpenClaw'
+                : 'Gateway offline. You can still draft here.'
+          }
+          className={`max-h-[210px] min-h-[var(--input-min)] w-full resize-none border-0 bg-transparent box-border px-3 pb-[calc(var(--input-pad)-var(--input-offset))] pt-[calc(var(--input-pad)+var(--input-offset))] text-sm leading-[var(--input-line)] text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-400 ${showDualButtons ? 'pr-[4.75rem]' : 'pr-12'}`}
+        />
+
+        {/* Stop button — replaces send when agent is working and onStop is provided */}
+        {sending && onStop ? (
+          <>
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label="Stop active run"
+              className="absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]"
+            >
+              <Square className="h-3.5 w-3.5" fill="currentColor" />
+            </button>
+            {hasContent ? (
+              <button
+                type="button"
+                onClick={onSubmit}
+                aria-label="Queue message"
+                className="absolute bottom-[var(--input-pad)] right-[calc(var(--input-pad)+1.75rem+0.375rem)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90"
+              >
+                <Clock className="h-4 w-4 text-[#DFFF00]" />
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={!hasContent}
+            onClick={onSubmit}
+            aria-label={sending ? 'Queue message' : 'Send message'}
+            className={`absolute bottom-[var(--input-pad)] right-[var(--input-pad)] inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors disabled:opacity-50 ${
+              sending
+                ? 'bg-revival-accent/70 text-[#DFFF00] hover:bg-revival-accent/90'
+                : 'bg-[#DFFF00] text-neutral-900 hover:bg-[#c8e600]'
+            }`}
+          >
+            {sending ? <Clock className="h-4 w-4 text-[#DFFF00]" /> : <ArrowUp className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
+
+      {images.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 border-t border-neutral-300/50 px-3 py-2 dark:border-neutral-700/50">
+          {images.map((image, index) => (
+            <button
+              type="button"
+              key={image.id}
+              className="inline-flex items-center gap-1 rounded-md border border-neutral-300 bg-neutral-0 px-2 py-1 text-[11px] text-neutral-700 hover:border-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-500"
+              onClick={() => onRemoveImage(index)}
+              title={`Remove ${image.name}`}
+            >
+              <span className="max-w-[14rem] truncate">{image.name}</span>
+              <X className="h-3 w-3" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {attachmentNotice ? (
+        <div className="px-3 pb-2 text-[11px] text-status-danger">{attachmentNotice}</div>
+      ) : null}
+    </div>
+  );
+});

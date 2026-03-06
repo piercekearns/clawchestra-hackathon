@@ -1,0 +1,2510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clawchestra — Orchestrate your AI agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --yellow: #DFFF00;
+    --yellow-dim: #c8e600;
+    --bg: #0c0c0c;
+    --bg-card: #141414;
+    --bg-card-hover: #1a1a1a;
+    --text: #e8e8e3;
+    --muted: #777;
+    --faint: #666;
+    --rule: rgba(255,255,255,0.08);
+    --sans: 'Inter', -apple-system, sans-serif;
+    --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+    --max-w: 1260px;
+    --pad: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* DFFF00 Spotlight Background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120%;
+    height: 60%;
+    background: radial-gradient(ellipse at center, rgba(223, 255, 0, 0.10) 0%, rgba(223, 255, 0, 0) 55%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+
+  .container {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding-left: var(--pad);
+    padding-right: var(--pad);
+  }
+
+  /* ========== NAV ========== */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 1.15rem 0;
+    background: transparent;
+    border-bottom: 1px solid var(--rule);
+    transition: background 0.3s, backdrop-filter 0.3s, -webkit-backdrop-filter 0.3s;
+  }
+
+  nav.scrolled {
+    background: rgba(12, 12, 12, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  nav .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: -0.02em;
+  }
+
+  .nav-logo img {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .nav-links a {
+    font-size: 0.84rem;
+    font-weight: 450;
+    color: var(--muted);
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover {
+    color: var(--text);
+  }
+
+  .btn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.3rem;
+    border-radius: 100px;
+    font-family: var(--sans);
+    font-size: 0.84rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, background 0.2s, opacity 0.2s;
+    text-decoration: none;
+  }
+
+  .btn-pill:hover {
+    transform: translateY(-1px);
+  }
+
+  a.btn-yellow,
+  button.btn-yellow,
+  .btn-yellow {
+    background: var(--yellow);
+    color: #000 !important;
+  }
+
+  a.btn-yellow:hover,
+  button.btn-yellow:hover,
+  .btn-yellow:hover {
+    background: #e9ff4d;
+    color: #000 !important;
+    box-shadow: 0 4px 24px rgba(223, 255, 0, 0.35), 0 0 48px rgba(223, 255, 0, 0.15);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .btn-ghost:hover {
+    color: var(--text);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  /* ========== HERO ========== */
+  .hero {
+    min-height: 70vh;
+    padding-top: 6rem;
+    padding-bottom: 0;
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-bg-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: clamp(500px, 60vw, 850px);
+    height: auto;
+    opacity: 0.035;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .hero-label {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    animation: fadeUp 0.7s ease both;
+    animation-delay: 0.05s;
+  }
+
+  .hero h1 {
+    font-size: clamp(3.5rem, 7.5vw, 6.5rem);
+    line-height: 1;
+    letter-spacing: -0.045em;
+    margin-bottom: 2.25rem;
+  }
+
+  .hero h1 .line {
+    display: block;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .hero h1 .line:nth-child(1) { animation-delay: 0.1s; }
+  .hero h1 .line:nth-child(2) { animation-delay: 0.22s; }
+  .hero h1 .line:nth-child(3) { animation-delay: 0.34s; }
+
+  .hero h1 .line-1 { font-weight: 800; }
+  .hero h1 .hero-claws { font-style: italic; }
+  .hero h1 .hero-the { font-weight: 200; color: rgba(232, 232, 227, 0.45); }
+  .hero h1 .dot { color: var(--yellow); text-shadow: 0 0 40px rgba(223,255,0,0.35), 0 0 80px rgba(223,255,0,0.1); }
+
+  .hero-sub {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #a3a3a3;
+    max-width: 520px;
+    margin-bottom: 2.5rem;
+    font-weight: 400;
+    animation: fadeUp 0.7s ease both;
+    animation-delay: 0.45s;
+  }
+
+  .hero-sub strong {
+    color: #e8e8e3;
+    font-weight: 600;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    animation: fadeUp 0.7s ease both;
+    animation-delay: 0.55s;
+  }
+
+  /* ========== EDITORIAL RULES ========== */
+  hr.editorial {
+    border: none;
+    height: 1px;
+    background: var(--rule);
+    margin: 0;
+  }
+
+  /* ========== SECTION LABEL ========== */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  /* ========== HERO SCREENSHOT ========== */
+  .window-frame { border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  .window-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #1a1a1a; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .window-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .window-bar .dot-red { background: #ff5f57; }
+  .window-bar .dot-yellow { background: #febc2e; }
+  .window-bar .dot-green { background: #28c840; }
+  .window-bar .window-title { flex: 1; text-align: center; font-family: var(--mono); font-size: 0.7rem; color: #777; margin-right: 54px; }
+  .window-body { background: #111; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #777; font-family: var(--mono); font-size: 0.8rem; }
+  .window-body .placeholder-icon { font-size: 2rem; opacity: 0.3; margin-bottom: 4px; }
+  .hero-screenshot { max-width: 100%; margin: 60px 0; }
+  .hero-screenshot .window-body { aspect-ratio: 16/9; }
+
+  /* ========== KANBAN FEATURES SECTION ========== */
+  .kanban-features {
+    padding: 6rem 0 2rem;
+  }
+
+  .kanban-features .section-header {
+    margin-bottom: 3rem;
+  }
+
+  .kanban-features .section-header h2 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    margin-top: 0.5rem;
+  }
+
+  /* Kanban board wrapper */
+  .kanban-board-wrap {
+    position: relative;
+    margin: 0 calc(-1 * var(--pad));
+    padding: 0 var(--pad);
+  }
+
+  /* Scroll fade hints */
+  .kanban-board-wrap::before,
+  .kanban-board-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 60px;
+    z-index: 5;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .kanban-board-wrap::before {
+    left: 0;
+    background: linear-gradient(to right, var(--bg), transparent);
+    opacity: 0;
+  }
+
+  .kanban-board-wrap::after {
+    right: 0;
+    background: linear-gradient(to left, var(--bg), transparent);
+  }
+
+  .kanban-board-wrap.scrolled-start::before { opacity: 1; }
+  .kanban-board-wrap.scrolled-end::after { opacity: 0; }
+
+  .kanban-board {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 8px 4px 24px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
+    cursor: grab;
+  }
+
+  .kanban-board:active {
+    cursor: grabbing;
+  }
+
+  .kanban-board::-webkit-scrollbar { height: 6px; }
+  .kanban-board::-webkit-scrollbar-track { background: transparent; }
+  .kanban-board::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  .kanban-board::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+  /* Scroll hint indicator */
+  .scroll-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--faint);
+    margin-top: 1rem;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+    letter-spacing: 0.04em;
+  }
+
+  .scroll-hint svg {
+    width: 16px;
+    height: 16px;
+    opacity: 0.5;
+    animation: scrollHintPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes scrollHintPulse {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(4px); }
+  }
+
+  /* ========== APP-STYLE KANBAN COLUMN ========== */
+  .kanban-col {
+    flex: 0 0 360px;
+    min-width: 360px;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    border: 1px solid #404040;
+    background: transparent;
+    padding: 12px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .kanban-col.drag-over {
+    border-color: rgba(223, 255, 0, 0.65);
+    background: rgba(223, 255, 0, 0.03);
+  }
+
+  .kanban-col-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 12px;
+    background: #262626;
+    transition: background 0.2s;
+    margin-bottom: 8px;
+  }
+
+  .kanban-col-header:hover {
+    background: rgba(64, 64, 64, 0.8);
+  }
+
+  .kanban-col-chevron {
+    width: 14px;
+    height: 14px;
+    color: #a3a3a3;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+  }
+
+  .kanban-col.collapsed .kanban-col-chevron {
+    transform: rotate(-90deg);
+  }
+
+  .kanban-col-title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #e5e5e5;
+    white-space: nowrap;
+  }
+
+  .kanban-col-count {
+    background: #404040;
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: #e5e5e5;
+    min-width: 20px;
+    text-align: center;
+  }
+
+  .kanban-col-spacer {
+    flex: 1;
+  }
+
+  .kanban-col-grip {
+    width: 14px;
+    height: 14px;
+    color: #a3a3a3;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .kanban-col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: visible;
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    max-height: 800px;
+    opacity: 1;
+  }
+
+  .kanban-col.collapsed .kanban-col-body {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+  }
+
+  /* ========== APP-STYLE KANBAN CARD ========== */
+  .kanban-card {
+    border-radius: 12px;
+    border: 1px solid #404040;
+    background: #262626;
+    padding: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    cursor: grab;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s, opacity 0.2s;
+    position: relative;
+    overflow: visible;
+  }
+
+  .kanban-card:hover {
+    border-color: #DFFF00;
+    background: #404040;
+  }
+
+  .kanban-card:active {
+    cursor: grabbing;
+  }
+
+  .kanban-card.dragging {
+    opacity: 0.6;
+  }
+
+  .kanban-card-title {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #f5f5f5;
+  }
+
+  .kanban-card-desc {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: #a3a3a3;
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+
+  .kanban-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .priority-badge {
+    border: 1px solid #525252;
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: #e5e5e5;
+  }
+
+
+  /* Git branch badge */
+  .git-branch-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    border: 1px solid #404040;
+    background: #1a1a1a;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--yellow);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-top: 8px;
+    user-select: none;
+  }
+
+  .git-branch-badge:hover {
+    border-color: var(--yellow);
+    background: rgba(223,255,0,0.05);
+  }
+
+  .git-branch-badge svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  .git-branch-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--faint);
+    margin-left: 2px;
+  }
+
+  /* Card notification badge */
+  .card-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #262626;
+    z-index: 2;
+  }
+
+  .card-badge.green {
+    background: #28c840;
+    box-shadow: 0 0 6px rgba(40, 200, 64, 0.5);
+  }
+
+  .card-badge.orange {
+    background: #ff9f0a;
+    box-shadow: 0 0 6px rgba(255, 159, 10, 0.5);
+  }
+
+  /* Activity dots animation — matches app dotBounce */
+  .activity-dots {
+    display: inline-flex;
+    gap: 3px;
+    margin-left: 8px;
+    vertical-align: middle;
+    position: relative;
+    top: 1px;
+  }
+
+  .activity-dots span {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--yellow);
+    animation: dotBounce 0.8s ease-in-out infinite;
+  }
+
+  .activity-dots span:nth-child(1) { animation-delay: 0ms; }
+  .activity-dots span:nth-child(2) { animation-delay: 150ms; }
+  .activity-dots span:nth-child(3) { animation-delay: 300ms; }
+
+  @keyframes dotBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+
+  /* ========== DEMO KANBAN (split-view right panel) ========== */
+  .demo-kanban {
+    display: flex;
+    gap: 10px;
+    height: 100%;
+  }
+
+  .demo-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .demo-col-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #262626;
+    margin-bottom: 6px;
+  }
+
+  .demo-col-chevron {
+    width: 12px;
+    height: 12px;
+    color: #737373;
+    flex-shrink: 0;
+  }
+
+  .demo-col-title {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #a3a3a3;
+  }
+
+  .demo-col-count {
+    background: #404040;
+    border-radius: 9999px;
+    padding: 1px 6px;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    color: #e5e5e5;
+    min-width: 16px;
+    text-align: center;
+  }
+
+  .demo-col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .demo-card {
+    border-radius: 8px;
+    border: 1px solid #404040;
+    background: #262626;
+    padding: 8px 10px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    color: #e5e5e5;
+    line-height: 1.3;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .demo-card-title {
+    font-weight: 600;
+    font-size: 11px;
+    color: #f5f5f5;
+  }
+
+  .demo-card-desc {
+    font-size: 10px;
+    font-weight: 400;
+    color: #737373;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  .demo-card.done {
+    opacity: 0.6;
+  }
+
+  .demo-card.done .demo-card-title {
+    color: #737373;
+    text-decoration: line-through;
+    text-decoration-color: #525252;
+  }
+
+  .demo-card.highlight {
+    border-color: var(--yellow);
+    box-shadow: 0 0 8px rgba(223,255,0,0.15);
+  }
+
+  .demo-card.flash-in {
+    animation: cardFlashIn 0.5s ease both;
+  }
+
+  @keyframes cardFlashIn {
+    0% { opacity: 0; transform: translateY(-8px); border-color: var(--yellow); }
+    60% { border-color: var(--yellow); }
+    100% { opacity: 1; transform: translateY(0); border-color: #404040; }
+  }
+
+  .demo-card.terminal-active {
+    border-color: var(--yellow);
+    background: rgba(223,255,0,0.04);
+  }
+
+  .demo-card.terminal-active::after {
+    content: '';
+    display: block;
+    margin-top: 6px;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--yellow) var(--progress, 0%), #404040 var(--progress, 0%));
+    transition: --progress 0.3s;
+  }
+
+  /* Demo breadcrumb */
+  .demo-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--sans);
+    font-size: 11px;
+    margin-top: 6px;
+    margin-bottom: 16px;
+  }
+
+  .demo-breadcrumb-link {
+    color: #737373;
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: #525252;
+  }
+
+  .demo-breadcrumb-sep {
+    color: #525252;
+  }
+
+  .demo-breadcrumb-current {
+    color: #f5f5f5;
+    font-weight: 600;
+  }
+
+  /* Quick add card */
+  .quick-add {
+    border: 1px dashed #525252;
+    border-radius: 12px;
+    padding: 10px;
+    text-align: center;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: #737373;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+    user-select: none;
+  }
+
+  .quick-add:hover {
+    border-color: #737373;
+    background: rgba(64,64,64,0.4);
+    color: #e5e5e5;
+  }
+
+  /* ========== SECONDARY DRAWER MOCKUP ========== */
+  .split-view-wrap {
+    margin-top: 4rem;
+    margin-bottom: 4rem;
+    width: 100%;
+    max-width: var(--max-w);
+    aspect-ratio: 1140 / 820;
+    position: relative;
+  }
+
+  .split-view {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1140px;
+    height: 820px;
+    transform-origin: top left;
+    display: grid;
+    grid-template-columns: 44px 380px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: var(--bg-card);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.4);
+  }
+
+  .split-titlebar {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    height: 46px;
+    padding: 0 16px;
+    background: #1a1a1a;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .split-titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .split-titlebar-center {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--sans);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #f5f5f5;
+    user-select: none;
+  }
+
+  .split-titlebar-center img {
+    height: 20px;
+    width: auto;
+  }
+
+  .split-titlebar-right {
+    /* empty spacer for centering */
+  }
+
+  .titlebar-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: #737373;
+    cursor: default;
+  }
+
+  .titlebar-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .split-panel-label {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #737373;
+    padding-bottom: 10px;
+  }
+
+  /* Fade-mask so messages blur-hide under the Conversations label */
+  .drawer-body {
+    position: relative;
+  }
+
+  .drawer-body::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    background: linear-gradient(to bottom, #0f0f0f 60%, transparent);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .drawer-body > .split-panel-label {
+    position: relative;
+    z-index: 3;
+    flex-shrink: 0;
+  }
+
+  .split-left {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .split-left-body {
+    flex: 1;
+    background: #0f0f0f;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  /* Mini kanban inside split left */
+  .mini-kanban {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .mini-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .mini-col-header {
+    font-family: var(--sans);
+    font-size: 0.55rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--faint);
+    padding: 4px 6px;
+  }
+
+  .mini-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 6px;
+    padding: 8px;
+    font-family: var(--mono);
+    font-size: 0.55rem;
+    color: var(--faint);
+    line-height: 1.3;
+  }
+
+  .mini-card.active {
+    border-color: rgba(223,255,0,0.2);
+    background: rgba(223,255,0,0.03);
+    color: var(--muted);
+  }
+
+
+  /* ========== THIN SIDEBAR ========== */
+  .demo-thin-sidebar {
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    width: 44px;
+    background: #141414;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    padding: 12px 0;
+  }
+
+  .demo-thin-sidebar-top,
+  .demo-thin-sidebar-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .demo-thin-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: #737373;
+    cursor: default;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .demo-thin-icon:hover {
+    background: rgba(255,255,255,0.06);
+    color: #d4d4d4;
+  }
+
+  .demo-thin-icon.active {
+    color: #d4d4d4;
+  }
+
+  .demo-thin-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .demo-thin-badge {
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    background: var(--yellow);
+    color: #0c0c0c;
+    font-size: 8px;
+    font-weight: 600;
+    padding: 0 2px;
+    line-height: 1;
+  }
+
+  .drawer-body {
+    flex: 1;
+    background: #0f0f0f;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .chat-messages {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    min-height: 0;
+  }
+
+  /* Chat messages in drawer */
+  .chat-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chat-msg.user {
+    align-items: flex-end;
+  }
+
+  .chat-bubble {
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    max-width: 85%;
+    border: 1px solid;
+  }
+
+  .chat-bubble code {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    background: rgba(255,255,255,0.05);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--text);
+  }
+
+  /* User messages — right-aligned, chartreuse tint */
+  .chat-msg.user .chat-bubble {
+    background: rgba(223,255,0,0.08);
+    border-color: rgba(223,255,0,0.25);
+    color: #f5f5f5;
+  }
+
+  /* AI messages — left-aligned, neutral */
+  .chat-msg.ai .chat-bubble {
+    background: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.08);
+    color: var(--muted);
+  }
+
+  .chat-msg-label {
+    font-size: 10px;
+    color: #737373;
+    margin-top: 4px;
+    padding: 0 2px;
+  }
+
+  .chat-input-wrap {
+    margin-top: auto;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    padding: 6px 6px 6px 12px;
+    transition: border-color 0.2s;
+  }
+
+  .chat-input-wrap.active {
+    border-color: rgba(223,255,0,0.3);
+  }
+
+  .chat-input {
+    flex: 1;
+    padding: 4px 0;
+    border: none;
+    background: transparent;
+    color: var(--faint);
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    outline: none;
+    resize: none;
+    line-height: 1.5;
+  }
+
+  .chat-send {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(223,255,0,0.1);
+    border: none;
+    color: var(--yellow);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  /* Terminal output in drawer */
+  .drawer-panel { display: none; flex-direction: column; flex: 1; gap: 12px; }
+  .drawer-panel.active { display: flex; }
+
+  .terminal-output {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .terminal-line {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    line-height: 1.6;
+    color: var(--faint);
+  }
+
+  .terminal-line .prompt {
+    color: var(--yellow);
+    opacity: 0.6;
+  }
+
+  .terminal-line .cmd {
+    color: var(--text);
+  }
+
+  .terminal-line .output {
+    color: var(--muted);
+  }
+
+  .terminal-line .success {
+    color: #28c840;
+  }
+
+  .terminal-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    background: var(--yellow);
+    opacity: 0.7;
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 0; }
+  }
+
+  /* ========== INSTALL ========== */
+  .install {
+    padding: 1.5rem 0 5rem;
+  }
+
+  .install-inner {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .install-inner h2 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    margin-bottom: 2.5rem;
+  }
+
+  .install-tabs {
+    display: inline-flex;
+    gap: 0.35rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.04);
+    border-radius: 100px;
+    padding: 0.25rem;
+    border: 1px solid var(--rule);
+  }
+
+  .install-tab {
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.45rem 1.15rem;
+    border-radius: 100px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .install-tab:hover {
+    color: var(--text);
+  }
+
+  .install-tab.active {
+    background: var(--yellow);
+    color: #0c0c0c;
+  }
+
+  .install-cmd-box {
+    display: flex;
+    align-items: center;
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 1rem 1.25rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .install-cmd-box code {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text);
+    text-align: left;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+
+  .install-copy-btn {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .install-copy-btn:hover {
+    color: var(--text);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  .install-alt {
+    font-size: 0.84rem;
+    color: var(--faint);
+  }
+
+  .install-alt a {
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.2s;
+  }
+
+  .install-alt a:hover {
+    color: var(--text);
+  }
+
+  /* ========== DEMO VIDEO ========== */
+  .demo-video-section {
+    padding: 5rem 0;
+  }
+
+  .demo-video-frame {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: var(--bg-card);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.4);
+    margin-top: 2rem;
+  }
+
+  .demo-video-body {
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0f0f0f;
+  }
+
+  .demo-video-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: var(--faint);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* ========== TECH STACK ========== */
+  .tech-stack {
+    padding: 3.5rem 0;
+    text-align: center;
+  }
+
+  .tech-stack-inner {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--faint);
+    letter-spacing: 0.04em;
+  }
+
+  .tech-stack-inner span {
+    margin: 0 0.6rem;
+    color: rgba(255,255,255,0.12);
+  }
+
+  /* ========== CTA ========== */
+  .cta-banner {
+    padding: 5rem 0;
+  }
+
+  .cta-card {
+    position: relative;
+    background: var(--bg-card);
+    border-top: 2px solid var(--yellow);
+    border-radius: 16px;
+    padding: clamp(3.5rem, 6vw, 5.5rem) clamp(2rem, 4vw, 4rem);
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .cta-card::before {
+    content: '';
+    position: absolute;
+    top: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 120px;
+    background: radial-gradient(ellipse, rgba(223,255,0,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .cta-card h2 {
+    font-size: clamp(2.2rem, 4.5vw, 3.5rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+    margin-bottom: 1.25rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-card p {
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 2.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    z-index: 1;
+    line-height: 1.6;
+  }
+
+  .cta-form {
+    display: flex;
+    gap: 0.65rem;
+    max-width: 420px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-form input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .cta-form input::placeholder {
+    color: var(--faint);
+  }
+
+  .cta-form input:focus {
+    border-color: var(--yellow);
+  }
+
+  /* ========== FOOTER ========== */
+  footer {
+    padding: 3rem 0;
+  }
+
+  footer .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .footer-left {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--faint);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .footer-links a {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--faint);
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover {
+    color: var(--text);
+  }
+
+  /* ========== POWERED BY PILL ========== */
+  .powered-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.85rem 0.35rem 0.65rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    margin-bottom: 2.25rem;
+    animation: fadeUp 0.7s ease both;
+    transition: border-color 0.2s, color 0.2s;
+  }
+
+  .powered-pill:hover {
+    border-color: rgba(223,255,0,0.25);
+    color: var(--text);
+  }
+
+  .powered-pill .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--yellow);
+    box-shadow: 0 0 6px rgba(223,255,0,0.4);
+    flex-shrink: 0;
+  }
+
+  .powered-pill strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* ========== ANIMATIONS ========== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 900px) {
+    .hero {
+      min-height: auto;
+    }
+
+    .kanban-col {
+      flex: 0 0 320px;
+      min-width: 320px;
+    }
+
+
+    .hero-actions {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .cta-form {
+      flex-direction: column;
+    }
+
+    footer .container {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .nav-links a.hide-mobile {
+      display: none;
+    }
+
+    .install-cmd-box {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .hero {
+      padding-top: 5rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 10vw, 3.8rem);
+    }
+
+    .hero-sub {
+      font-size: 0.95rem;
+    }
+
+    .kanban-col {
+      flex: 0 0 280px;
+      min-width: 280px;
+    }
+
+
+    .section-header h2,
+    .install-inner h2 {
+      font-size: clamp(1.8rem, 6vw, 2.8rem);
+    }
+
+    .nav-logo span {
+      font-size: 0.85rem;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="container">
+    <a href="#" class="nav-logo">
+      <img src="./assets/clawchestra-app-icon-dithered.png" alt="">
+      <span>Clawchestra</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features" class="hide-mobile">Features</a>
+      <a href="#demo" class="hide-mobile">Demo</a>
+      <a href="#install" class="hide-mobile">Install</a>
+      <a href="https://github.com/piercekearns/clawchestra-hackathon" target="_blank">GitHub</a>
+      <a href="#cta" class="btn-pill btn-yellow">Get Access</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <img src="./assets/clawchestra-logo-chartreuse.png" alt="" class="hero-bg-icon">
+  <div class="container">
+    <a href="https://openclaw.ai" target="_blank" class="powered-pill">
+      <span class="status-dot"></span>
+      Powered by <strong>OpenClaw</strong>
+    </a>
+    <p class="hero-label">private alpha</p>
+    <h1>
+      <span class="line line-1"><span class="hero-claws">Claws</span> <span class="hero-the">the</span> loop<span class="dot">.</span></span>
+    </h1>
+    <p class="hero-sub">
+      Plan, see, deploy, ship - <strong>one surface.</strong><br>
+      OpenClaw keeps every project in sync between your board and your agents, so planning and building are <strong>never</strong> out of step.<br>
+      <strong>Any</strong> agent, <strong>any</strong> project, from <strong>anywhere.</strong>
+    </p>
+    <div class="hero-actions">
+      <a href="#cta" class="btn-pill btn-yellow">Request Early Access</a>
+      <a href="https://github.com/piercekearns/clawchestra-hackathon" target="_blank" class="btn-pill btn-ghost">GitHub &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- HERO APP DEMO -->
+<div class="container">
+    <!-- CHAT → BOARD LIVE INTERACTION MOCKUP -->
+    <div class="split-view-wrap">
+    <div class="split-view reveal" id="splitView">
+      <!-- Title bar — app chrome -->
+      <div class="split-titlebar">
+        <div class="split-titlebar-left">
+          <div style="width:12px;height:12px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#28c840;"></div>
+          <div style="width:16px"></div>
+          <div class="titlebar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          </div>
+        </div>
+        <div class="split-titlebar-center">
+          <img src="./assets/clawchestra-logo-chartreuse.png" alt="">
+          <span>Clawchestra</span>
+        </div>
+        <div class="split-titlebar-right"></div>
+      </div>
+
+      <!-- Thin sidebar -->
+      <div class="demo-thin-sidebar">
+        <div class="demo-thin-sidebar-top">
+          <div class="demo-thin-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <div class="demo-thin-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <div class="demo-thin-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/></svg>
+          </div>
+          <div class="demo-thin-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
+          </div>
+          <div class="demo-thin-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.04-.24-.3-.39-.65-.39-1.04 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.96-4.03-8.92-10-8.92z"/></svg>
+          </div>
+          <div class="demo-thin-icon active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          </div>
+        </div>
+        <div class="demo-thin-sidebar-bottom">
+          <div class="demo-thin-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Left: OpenClaw chat -->
+      <div class="split-left" style="border-right: 1px solid rgba(255,255,255,0.06);">
+        <div class="drawer-body" id="demoChat">
+          <div class="split-panel-label">Conversations</div>
+          <div class="chat-messages">
+          <div class="chat-msg user" data-step="1">
+            <div class="chat-bubble">I want to add a new feature to the roadmap — we need a dark mode toggle for the settings page</div>
+            <div class="chat-msg-label">You</div>
+          </div>
+          <div class="chat-msg ai" data-step="2">
+            <div class="chat-bubble">Created "Dark mode toggle" in Up Next with a draft spec. I've outlined the theme switching logic and the settings UI changes needed.</div>
+            <div class="chat-msg-label">OpenClaw</div>
+          </div>
+          <div class="chat-msg user" data-step="3">
+            <div class="chat-bubble">The onboarding flow is done, can you mark it as complete?</div>
+            <div class="chat-msg-label">You</div>
+          </div>
+          <div class="chat-msg ai" data-step="4">
+            <div class="chat-bubble">Done — moved "Onboarding flow" to Complete. Nice work on that one.</div>
+            <div class="chat-msg-label">OpenClaw</div>
+          </div>
+          <div class="chat-msg user" data-step="5">
+            <div class="chat-bubble">Can you get Claude Code to start working on the dashboard redesign?</div>
+            <div class="chat-msg-label">You</div>
+          </div>
+          <div class="chat-msg ai" data-step="6">
+            <div class="chat-bubble">On it. I've opened a Claude Code session scoped to the dashboard components. It's reading the spec and starting on the layout changes now.</div>
+            <div class="chat-msg-label">OpenClaw</div>
+          </div>
+          <div class="chat-msg user" data-step="7">
+            <div class="chat-bubble">Move the search feature to in progress — I'm picking that up today</div>
+            <div class="chat-msg-label">You</div>
+          </div>
+          <div class="chat-msg ai" data-step="8">
+            <div class="chat-bubble">Moved "Search &amp; filters" to In Progress. Good luck — the spec has some edge cases worth reading first.</div>
+            <div class="chat-msg-label">OpenClaw</div>
+          </div>
+          </div>
+          <div class="chat-input-wrap">
+            <textarea class="chat-input" rows="2" placeholder="Ask OpenClaw..." disabled></textarea>
+            <button class="chat-send" disabled>&#8593;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: live kanban board -->
+      <div class="split-right" style="flex:1;display:flex;flex-direction:column;">
+        <div style="flex:1;overflow:hidden;background:#0f0f0f;padding:16px;">
+          <div class="split-panel-label">Dashboard</div>
+          <div class="demo-breadcrumb">
+            <span class="demo-breadcrumb-link">Projects</span>
+            <span class="demo-breadcrumb-sep">/</span>
+            <span class="demo-breadcrumb-current">Demo</span>
+          </div>
+          <div class="demo-kanban" id="demoKanban">
+            <div class="demo-col">
+              <div class="demo-col-header">
+                <svg class="demo-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+                <span class="demo-col-title">Up Next</span>
+                <span class="demo-col-count" id="demoUpNextCount">2</span>
+              </div>
+              <div class="demo-col-body" id="demoUpNext">
+                <div class="demo-card">
+                  <div class="demo-card-title">Dashboard redesign</div>
+                  <div class="demo-card-desc">New layout with collapsible sidebar and updated card styles</div>
+                </div>
+                <div class="demo-card">
+                  <div class="demo-card-title">Search &amp; filters</div>
+                  <div class="demo-card-desc">Full-text search across roadmap items with status and tag filters</div>
+                </div>
+              </div>
+            </div>
+            <div class="demo-col">
+              <div class="demo-col-header">
+                <svg class="demo-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+                <span class="demo-col-title">In Progress</span>
+                <span class="demo-col-count" id="demoInProgressCount">1</span>
+              </div>
+              <div class="demo-col-body" id="demoInProgress">
+                <div class="demo-card">
+                  <div class="demo-card-title">Onboarding flow</div>
+                  <div class="demo-card-desc">First-run wizard for connecting repos and setting up projects</div>
+                </div>
+              </div>
+            </div>
+            <div class="demo-col">
+              <div class="demo-col-header">
+                <svg class="demo-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+                <span class="demo-col-title">Complete</span>
+                <span class="demo-col-count" id="demoCompleteCount">2</span>
+              </div>
+              <div class="demo-col-body" id="demoComplete">
+                <div class="demo-card done">
+                  <div class="demo-card-title">User settings</div>
+                  <div class="demo-card-desc">Preferences panel with theme and provider config</div>
+                </div>
+                <div class="demo-card done">
+                  <div class="demo-card-title">Notifications</div>
+                  <div class="demo-card-desc">In-app alerts for agent activity and status changes</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+</div>
+
+<!-- FEATURES — APP-STYLE KANBAN BOARD -->
+<section class="kanban-features" id="features">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Capabilities</p>
+      <h2>Everything in one board</h2>
+    </div>
+
+    <hr class="editorial" style="margin-bottom: 2rem;">
+
+    <div class="kanban-board-wrap reveal">
+      <div class="kanban-board" id="kanbanBoard">
+
+        <!-- Column 1: Projects -->
+        <div class="kanban-col" data-col="projects">
+          <div class="kanban-col-header" onclick="toggleColumn(this)">
+            <svg class="kanban-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+            <span class="kanban-col-title">Projects</span>
+            <span class="kanban-col-count">3</span>
+            <span class="kanban-col-spacer"></span>
+          </div>
+          <div class="kanban-col-body">
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Create new or track existing</div>
+              <div class="kanban-card-desc">Start a fresh project inside Clawchestra, or pull in an existing repo. Tracking syncs your codebase with the board so the visual layer and the source of truth stay aligned.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Multi-project workspace</div>
+              <div class="kanban-card-desc">Track all your repos in one board. Each project gets its own roadmap, terminals, and chat.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Git-aware state sync</div>
+              <div class="kanban-card-desc">Project state auto-refreshes from your repo. Push a commit, see the board update.</div>
+              <div class="git-branch-badge" id="gitBranchBadge" onclick="toggleGitBranch(event)">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="4" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="8" r="1.5"/><line x1="5" y1="5.5" x2="5" y2="10.5"/><path d="M5 6 C5 8, 11 6, 11 6.5"/></svg>
+                <span id="gitBranchName">main</span>
+                <span class="git-branch-meta" id="gitBranchMeta">up to date</span>
+              </div>
+            </div>
+            <div class="quick-add">+ Add item</div>
+          </div>
+        </div>
+
+        <!-- Column 2: Roadmap -->
+        <div class="kanban-col" data-col="roadmap">
+          <div class="kanban-col-header" onclick="toggleColumn(this)">
+            <svg class="kanban-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+            <span class="kanban-col-title">Roadmap</span>
+            <span class="kanban-col-count">4</span>
+            <span class="kanban-col-spacer"></span>
+          </div>
+          <div class="kanban-col-body">
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Drag-and-drop prioritisation</div>
+              <div class="kanban-card-desc">Reorder items by dragging. Priority updates automatically based on card position in the column.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Status columns you control</div>
+              <div class="kanban-card-desc">Pending, Up Next, In Progress, Complete. Drag cards between columns to update status instantly.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Create items with AI</div>
+              <div class="kanban-card-desc">Describe what you need in natural language. OpenClaw creates the roadmap item, writes the spec, and slots it into the board.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Open a scoped chat from any card</div>
+              <div class="kanban-card-desc">Click a roadmap item to open a pre-scoped OpenClaw chat with its spec, plan, and codebase context already loaded.</div>
+            </div>
+            <div class="quick-add">+ Add item</div>
+          </div>
+        </div>
+
+        <!-- Column 3: OpenClaw -->
+        <div class="kanban-col" data-col="openclaw">
+          <div class="kanban-col-header" onclick="toggleColumn(this)">
+            <svg class="kanban-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+            <span class="kanban-col-title">OpenClaw</span>
+            <span class="kanban-col-count">4</span>
+            <span class="kanban-col-spacer"></span>
+          </div>
+          <div class="kanban-col-body">
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Scoped conversations</div>
+              <div class="kanban-card-desc">Each chat inherits project context &mdash; roadmap items, specs, plans, and codebase structure.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Provider failover</div>
+              <div class="kanban-card-desc">Route between Claude, GPT, Gemini. If one provider fails, conversation continues seamlessly.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">App-aware AI context</div>
+              <div class="kanban-card-desc">OpenClaw knows where you're talking to it from, which project you're in, and what's on screen. Distributed AI surfaces that share context across the board, drawer, and chat.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Multi-device support</div>
+              <div class="kanban-card-desc">Sync anywhere. OpenClaw is your personal cloud &mdash; roadmap items, specs, and plans stay up to date regardless of where you code from.</div>
+            </div>
+            <div class="quick-add">+ Add item</div>
+          </div>
+        </div>
+
+        <!-- Column 4: Terminals -->
+        <div class="kanban-col" data-col="terminals">
+          <div class="kanban-col-header" onclick="toggleColumn(this)">
+            <svg class="kanban-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+            <span class="kanban-col-title">Terminals</span>
+            <span class="kanban-col-count">3</span>
+            <span class="kanban-col-spacer"></span>
+          </div>
+          <div class="kanban-col-body">
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Embedded AI agents</div>
+              <div class="kanban-card-desc">Run Claude Code, Codex, or any CLI agent in managed tmux sessions. Side by side.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Activity detection<span class="activity-dots"><span></span><span></span><span></span></span></div>
+              <div class="kanban-card-desc">Real-time tracking of agent output. Action-required notifications when an agent needs your input.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <div class="kanban-card-title">Session management</div>
+              <div class="kanban-card-desc">Persistent sessions that survive app restarts. Pick up where you left off.</div>
+            </div>
+            <div class="quick-add">+ Add item</div>
+          </div>
+        </div>
+
+        <!-- Column 5: Activity (collapsed by default) -->
+        <div class="kanban-col" data-col="activity">
+          <div class="kanban-col-header" onclick="toggleColumn(this)">
+            <svg class="kanban-col-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+            <span class="kanban-col-title">Activity</span>
+            <span class="kanban-col-count">2</span>
+            <span class="kanban-col-spacer"></span>
+          </div>
+          <div class="kanban-col-body">
+            <div class="kanban-card" draggable="true">
+              <span class="card-badge green"></span>
+              <div class="kanban-card-title">Real-time notifications</div>
+              <div class="kanban-card-desc">Unread badges, tab indicators, and sidebar activity pulses.</div>
+            </div>
+            <div class="kanban-card" draggable="true">
+              <span class="card-badge orange"></span>
+              <div class="kanban-card-title">Action-required alerts</div>
+              <div class="kanban-card-desc">Know instantly when an agent is waiting for your approval.</div>
+            </div>
+            <div class="quick-add">+ Add item</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Scroll hint -->
+      <div class="scroll-hint" id="scrollHint">
+        <span>Scroll to explore</span>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 4 10 8 6 12"></polyline></svg>
+      </div>
+    </div>
+
+    <hr class="editorial" style="margin-top: 4rem;">
+  </div>
+</section>
+
+<!-- APP DEMO VIDEO -->
+<section class="demo-video-section" id="demo">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Demo</p>
+      <h2>See it in action</h2>
+    </div>
+    <div class="demo-video-frame reveal">
+      <div class="window-bar">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="window-title">Clawchestra</span>
+      </div>
+      <div class="demo-video-body">
+        <div class="demo-video-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;opacity:0.3"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Demo video coming soon</span>
+        </div>
+      </div>
+    </div>
+    <hr class="editorial" style="margin-top: 5rem;">
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="install" id="install">
+  <div class="container">
+    <div class="install-inner reveal">
+      <p class="section-label">Install</p>
+      <h2>Get started in one line</h2>
+      <div class="install-tabs">
+        <button class="install-tab active" data-platform="mac">macOS</button>
+        <button class="install-tab" data-platform="win">Windows</button>
+        <button class="install-tab" data-platform="linux">Linux</button>
+      </div>
+      <div class="install-cmd-box">
+        <code id="install-cmd">brew install --cask clawchestra</code>
+        <button class="install-copy-btn" id="install-copy">Copy</button>
+      </div>
+      <p class="install-alt" id="install-alt">or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.dmg</a> directly from GitHub Releases</p>
+    </div>
+    <hr class="editorial" style="margin-top: 5rem;">
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-banner" id="cta">
+  <div class="container">
+    <div class="cta-card reveal">
+      <h2>Ready to orchestrate?</h2>
+      <p>Join the private alpha. We'll send you access when your slot opens.</p>
+      <form class="cta-form" onsubmit="event.preventDefault();">
+        <input type="email" placeholder="you@email.com" required>
+        <button type="submit" class="btn-pill btn-yellow">Request Access</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <hr class="editorial" style="margin-bottom: 3rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1.5rem;">
+      <div class="footer-left">&copy; 2026 Clawchestra</div>
+      <div class="footer-links">
+        <a href="https://github.com/piercekearns/clawchestra-hackathon" target="_blank">GitHub</a>
+        <a href="#">Private Alpha</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ========== Nav scroll background ==========
+  const nav = document.querySelector('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 10);
+  }, { passive: true });
+
+  // ========== IntersectionObserver reveal animations ==========
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -30px 0px' });
+
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    el.style.transitionDelay = `${i * 0.06}s`;
+    observer.observe(el);
+  });
+
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.reveal').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        el.classList.add('visible');
+      }
+    });
+  });
+
+  // ========== Kanban column toggle (vertical show/hide) ==========
+  function toggleColumn(header) {
+    const col = header.closest('.kanban-col');
+    col.classList.toggle('collapsed');
+  }
+
+  // ========== Git branch toggle ==========
+  const gitBranches = [
+    { name: 'main', meta: 'up to date', color: '#DFFF00' },
+    { name: 'staging', meta: '2 commits ahead', color: '#ff9f0a' },
+    { name: 'feat/kanban-dnd', meta: '5 commits ahead', color: '#a78bfa' },
+  ];
+  let gitBranchIdx = 0;
+
+  function toggleGitBranch(e) {
+    e.stopPropagation();
+    gitBranchIdx = (gitBranchIdx + 1) % gitBranches.length;
+    const b = gitBranches[gitBranchIdx];
+    document.getElementById('gitBranchName').textContent = b.name;
+    document.getElementById('gitBranchMeta').textContent = b.meta;
+    document.getElementById('gitBranchBadge').style.color = b.color;
+
+    // Update the card description to match branch state
+    const card = document.getElementById('gitBranchBadge').closest('.kanban-card');
+    const desc = card.querySelector('.kanban-card-desc');
+    if (b.name === 'main') {
+      desc.textContent = 'Project state auto-refreshes from your repo. Push a commit, see the board update.';
+    } else if (b.name === 'staging') {
+      desc.textContent = 'Staging is 2 commits ahead of main. Board reflects the latest pre-release state.';
+    } else {
+      desc.textContent = 'Feature branch with active kanban DnD work. 5 files changed across 3 sessions.';
+    }
+  }
+
+  // ========== Scale animated demo on narrow viewports ==========
+  (function() {
+    const sv = document.getElementById('splitView');
+    const wrap = sv && sv.closest('.split-view-wrap');
+    if (!sv || !wrap) return;
+    const BASE_W = 1140;
+    function scaleSplitView() {
+      const s = Math.min(1, wrap.clientWidth / BASE_W);
+      sv.style.transform = 'scale(' + s + ')';
+    }
+    scaleSplitView();
+    window.addEventListener('resize', scaleSplitView, { passive: true });
+  })();
+
+  // ========== Kanban scroll hint & edge fades ==========
+  const board = document.getElementById('kanbanBoard');
+  const wrap = board.closest('.kanban-board-wrap');
+  const scrollHint = document.getElementById('scrollHint');
+
+  function updateScrollState() {
+    const scrollLeft = board.scrollLeft;
+    const maxScroll = board.scrollWidth - board.clientWidth;
+
+    if (scrollLeft > 20) {
+      wrap.classList.add('scrolled-start');
+    } else {
+      wrap.classList.remove('scrolled-start');
+    }
+
+    if (scrollLeft >= maxScroll - 20) {
+      wrap.classList.add('scrolled-end');
+    } else {
+      wrap.classList.remove('scrolled-end');
+    }
+
+    // Hide scroll hint once user has scrolled
+    if (scrollLeft > 40) {
+      scrollHint.style.opacity = '0';
+    } else {
+      scrollHint.style.opacity = '';
+    }
+  }
+
+  board.addEventListener('scroll', updateScrollState, { passive: true });
+
+  // Drag-to-scroll on kanban board
+  let isDragging = false, startX, scrollStart;
+  board.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    startX = e.pageX;
+    scrollStart = board.scrollLeft;
+    board.style.cursor = 'grabbing';
+    board.style.userSelect = 'none';
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    board.scrollLeft = scrollStart - (e.pageX - startX);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    board.style.cursor = '';
+    board.style.userSelect = '';
+  });
+  updateScrollState();
+
+  // Hide scroll hint if board fits without scrolling
+  if (board.scrollWidth <= board.clientWidth + 10) {
+    scrollHint.style.display = 'none';
+    wrap.classList.add('scrolled-end');
+  }
+
+  // ========== Install section: tab switching & copy ==========
+  (() => {
+    const platforms = {
+      mac: {
+        cmd: 'brew install --cask clawchestra',
+        alt: 'or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.dmg</a> directly from GitHub Releases'
+      },
+      win: {
+        cmd: 'winget install Clawchestra.Clawchestra',
+        alt: 'or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.msi</a> directly from GitHub Releases'
+      },
+      linux: {
+        cmd: 'curl -fsSL https://clawchestra.ai/install.sh | sh',
+        alt: 'or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.AppImage</a> directly from GitHub Releases'
+      }
+    };
+
+    const tabs = document.querySelectorAll('.install-tab');
+    const cmdEl = document.getElementById('install-cmd');
+    const altEl = document.getElementById('install-alt');
+    const copyBtn = document.getElementById('install-copy');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const p = platforms[tab.dataset.platform];
+        cmdEl.textContent = p.cmd;
+        altEl.innerHTML = p.alt;
+        copyBtn.textContent = 'Copy';
+      });
+    });
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(cmdEl.textContent).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+      });
+    });
+  })();
+
+  // ========== Demo chat → board animation (loops) ==========
+  (() => {
+    const splitView = document.getElementById('splitView');
+    if (!splitView) return;
+
+    const upNext = document.getElementById('demoUpNext');
+    const inProgress = document.getElementById('demoInProgress');
+    const complete = document.getElementById('demoComplete');
+    const upNextCount = document.getElementById('demoUpNextCount');
+    const inProgressCount = document.getElementById('demoInProgressCount');
+    const completeCount = document.getElementById('demoCompleteCount');
+    const chatBody = document.getElementById('demoChat');
+
+    // Snapshot initial board HTML for reset
+    const initialUpNext = upNext.innerHTML;
+    const initialInProgress = inProgress.innerHTML;
+    const initialComplete = complete.innerHTML;
+
+    function hideAllMsgs() {
+      splitView.querySelectorAll('.chat-msg').forEach(m => {
+        m.style.display = 'none';
+        m.style.opacity = '0';
+        m.style.transform = 'translateY(8px)';
+        m.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+      });
+    }
+
+    function showMsg(step) {
+      const m = splitView.querySelector(`[data-step="${step}"]`);
+      if (!m) return;
+      m.style.display = 'flex';
+      // Force reflow so transition plays
+      void m.offsetHeight;
+      m.style.opacity = '1';
+      m.style.transform = 'translateY(0)';
+      if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    function createCard(title, desc, cls) {
+      const card = document.createElement('div');
+      card.className = 'demo-card ' + (cls || '');
+      card.innerHTML = `<div class="demo-card-title">${title}</div><div class="demo-card-desc">${desc}</div>`;
+      return card;
+    }
+
+    function updateCounts() {
+      upNextCount.textContent = upNext.children.length;
+      inProgressCount.textContent = inProgress.children.length;
+      completeCount.textContent = complete.children.length;
+    }
+
+    function resetBoard() {
+      upNext.innerHTML = initialUpNext;
+      inProgress.innerHTML = initialInProgress;
+      complete.innerHTML = initialComplete;
+      updateCounts();
+    }
+
+    const t = (ms) => new Promise(r => setTimeout(r, ms));
+    const chatInput = chatBody.querySelector('.chat-input');
+    const sendBtn = chatBody.querySelector('.chat-send');
+    const inputWrap = chatBody.querySelector('.chat-input-wrap');
+
+    // Type text into the input field character by character
+    async function typeText(text) {
+      chatInput.value = '';
+      chatInput.style.color = 'var(--text)';
+      inputWrap.classList.add('active');
+      sendBtn.style.background = 'var(--yellow)';
+      sendBtn.style.color = '#0c0c0c';
+      const charDelay = Math.min(35, 1400 / text.length);
+      for (let i = 0; i < text.length; i++) {
+        chatInput.value = text.slice(0, i + 1);
+        if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+        await t(charDelay);
+      }
+      await t(400);
+      // "Send" — clear input, dim send button
+      chatInput.value = '';
+      chatInput.style.color = '';
+      inputWrap.classList.remove('active');
+      sendBtn.style.background = '';
+      sendBtn.style.color = '';
+    }
+
+    // Get user message text from a step
+    function getMsgText(step) {
+      const m = splitView.querySelector(`[data-step="${step}"] .chat-bubble`);
+      return m ? m.textContent : '';
+    }
+
+    async function playSequence() {
+      hideAllMsgs();
+      resetBoard();
+      if (chatBody) chatBody.scrollTop = 0;
+      chatInput.value = '';
+      await t(1000);
+
+      // 1. Type + send: add dark mode toggle
+      await typeText(getMsgText(1));
+      showMsg(1);
+      await t(1800);
+      showMsg(2);
+      await t(400);
+      const darkModeCard = createCard('Dark mode toggle', 'Theme switching for the settings page', 'flash-in');
+      upNext.appendChild(darkModeCard);
+      updateCounts();
+      await t(2500);
+
+      // 2. Type + send: mark onboarding complete
+      await typeText(getMsgText(3));
+      showMsg(3);
+      await t(1800);
+      showMsg(4);
+      await t(400);
+      const onboardingCard = inProgress.querySelector('.demo-card');
+      if (onboardingCard) {
+        onboardingCard.style.opacity = '0';
+        onboardingCard.style.transform = 'translateY(-6px)';
+        onboardingCard.style.transition = 'all 0.3s ease';
+        await t(350);
+        onboardingCard.remove();
+        const doneCard = createCard('Onboarding flow', 'First-run wizard for connecting repos and setting up projects', 'done flash-in');
+        complete.appendChild(doneCard);
+        updateCounts();
+      }
+      await t(2500);
+
+      // 3. Type + send: start Claude Code on dashboard
+      await typeText(getMsgText(5));
+      showMsg(5);
+      await t(1800);
+      showMsg(6);
+      await t(400);
+      const dashCard = upNext.querySelector('.demo-card');
+      if (dashCard) {
+        dashCard.classList.add('terminal-active');
+        const titleEl = dashCard.querySelector('.demo-card-title');
+        if (titleEl) titleEl.innerHTML = 'Dashboard redesign<span class="activity-dots"><span></span><span></span><span></span></span>';
+      }
+      await t(2500);
+
+      // 4. Type + send: move search to in progress
+      await typeText(getMsgText(7));
+      showMsg(7);
+      await t(1800);
+      showMsg(8);
+      await t(400);
+      const searchCard = upNext.querySelectorAll('.demo-card')[1];
+      if (searchCard) {
+        searchCard.style.opacity = '0';
+        searchCard.style.transform = 'translateY(-6px)';
+        searchCard.style.transition = 'all 0.3s ease';
+        await t(350);
+        searchCard.remove();
+        const movedCard = createCard('Search &amp; filters', 'Full-text search across roadmap items with status and tag filters', 'flash-in');
+        inProgress.appendChild(movedCard);
+        updateCounts();
+      }
+
+      // Hold final state, then fade out and loop
+      await t(4500);
+
+      // Fade everything out
+      splitView.querySelectorAll('.chat-msg').forEach(m => {
+        m.style.opacity = '0';
+        m.style.transform = 'translateY(-4px)';
+      });
+      await t(600);
+
+      // Loop
+      playSequence();
+    }
+
+    // Start when the chat input bar scrolls into view
+    const chatInputBar = chatBody.querySelector('.chat-input-wrap');
+    const demoObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          demoObserver.disconnect();
+          playSequence();
+        }
+      });
+    }, { threshold: 0.5 });
+
+    hideAllMsgs();
+    demoObserver.observe(chatInputBar);
+  })();
+
+  // ========== Live-reorder drag and drop (mirrors @dnd-kit SortableContext) ==========
+  (() => {
+    let draggedCard = null;
+    let sourceColBody = null;
+
+    // Find the card nearest to the cursor — returns the card we should insert *before*
+    function getInsertBefore(colBody, y) {
+      const cards = [...colBody.querySelectorAll('.kanban-card:not(.dragging)')];
+      for (const card of cards) {
+        const box = card.getBoundingClientRect();
+        if (y < box.top + box.height / 2) return card;
+      }
+      return null; // insert at end
+    }
+
+    // Move the dragged card in the DOM so the user sees a live preview
+    function moveCardToPosition(colBody, y) {
+      if (!draggedCard) return;
+      const insertBefore = getInsertBefore(colBody, y);
+      const quickAdd = colBody.querySelector('.quick-add');
+
+      if (insertBefore) {
+        if (insertBefore !== draggedCard.nextElementSibling) {
+          colBody.insertBefore(draggedCard, insertBefore);
+        }
+      } else {
+        // Place before quick-add button, or at end
+        const anchor = quickAdd || null;
+        if (draggedCard.nextElementSibling !== anchor) {
+          colBody.insertBefore(draggedCard, anchor);
+        }
+      }
+    }
+
+    function updateAllCounts() {
+      document.querySelectorAll('.kanban-col').forEach(c => {
+        const count = c.querySelectorAll('.kanban-card').length;
+        const badge = c.querySelector('.kanban-col-count');
+        if (badge) badge.textContent = count;
+      });
+    }
+
+    // Card drag events
+    document.querySelectorAll('.kanban-card[draggable]').forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        draggedCard = card;
+        sourceColBody = card.closest('.kanban-col-body');
+        e.dataTransfer.effectAllowed = 'move';
+        // Let the browser capture the drag image first, then dim the source
+        requestAnimationFrame(() => {
+          card.classList.add('dragging');
+        });
+      });
+
+      card.addEventListener('dragend', () => {
+        if (draggedCard) draggedCard.classList.remove('dragging');
+        draggedCard = null;
+        sourceColBody = null;
+        document.querySelectorAll('.kanban-col').forEach(col => col.classList.remove('drag-over'));
+        updateAllCounts();
+      });
+    });
+
+    // Column-level events — live reorder on dragover
+    document.querySelectorAll('.kanban-col-body').forEach(colBody => {
+      colBody.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        colBody.closest('.kanban-col').classList.add('drag-over');
+        moveCardToPosition(colBody, e.clientY);
+      });
+
+      colBody.addEventListener('dragleave', (e) => {
+        if (!colBody.contains(e.relatedTarget)) {
+          colBody.closest('.kanban-col').classList.remove('drag-over');
+        }
+      });
+
+      colBody.addEventListener('drop', (e) => {
+        e.preventDefault();
+        colBody.closest('.kanban-col').classList.remove('drag-over');
+        // Card is already in position from dragover — nothing else to do
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

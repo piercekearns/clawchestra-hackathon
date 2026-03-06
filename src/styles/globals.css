@@ -1,0 +1,248 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 9%;
+    --primary: 72 100% 50%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 72 100% 50%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 98%;
+    --primary: 72 100% 50%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 23%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 23%;
+    --muted-foreground: 0 0% 64%;
+    --border: 0 0% 28%;
+    --input: 0 0% 28%;
+    --ring: 72 100% 50%;
+  }
+
+  * {
+    @apply border-neutral-200 dark:border-neutral-700;
+  }
+
+  body {
+    font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
+    overflow: hidden;
+    background-image: radial-gradient(
+        circle at 50% -28%,
+        rgba(223, 255, 0, 0.12),
+        rgba(223, 255, 0, 0) 45%
+      ),
+      linear-gradient(180deg, #fafafa 0%, #f2f2f2 100%);
+    @apply bg-neutral-0 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+  }
+
+  .dark body {
+    background-image: radial-gradient(
+        circle at 50% -24%,
+        rgba(223, 255, 0, 0.13),
+        rgba(223, 255, 0, 0) 48%
+      ),
+      linear-gradient(180deg, #0a0a0a 0%, #101010 100%);
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+}
+
+@layer components {
+  .bg-page {
+    background-color: transparent;
+  }
+
+  .kanban-scroll {
+    -ms-overflow-style: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+  }
+
+  .kanban-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.6);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  .hover-scrollbar {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+  }
+
+  .hover-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .hover-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .hover-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.6);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+
+  /* Animated dots for loading states */
+  .loading-dots span {
+    animation: dot-blink 1.4s infinite both;
+  }
+  .loading-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .loading-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
+@keyframes dot-blink {
+  0%, 80%, 100% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes reading-dot {
+  0%, 100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* Scroll-reveal text animation for hub thread names */
+@keyframes scroll-reveal {
+  0%, 10% {
+    transform: translateX(0);
+  }
+  80%, 100% {
+    transform: translateX(var(--overflow-distance, 0));
+  }
+}
+
+.scroll-reveal-text {
+  transform: translateX(0);
+}
+
+*:hover > .scroll-reveal-text[style] {
+  animation: scroll-reveal var(--scroll-duration, 2s) ease-in-out 300ms forwards;
+}
+
+/* xterm.js terminal overrides — transparent bg, hide scrollbar */
+.terminal-shell .xterm-viewport,
+.terminal-shell .xterm-screen {
+  background-color: transparent !important;
+}
+
+/* Hide scrollbar — old viewport (5.x) */
+.terminal-shell .xterm-viewport {
+  scrollbar-width: none;
+}
+
+.terminal-shell .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* Hide scrollbar — new VS Code ScrollableElement (6.x)
+   Use opacity + pointer-events instead of display:none to keep
+   scroll event handling intact. */
+.terminal-shell .xterm-scrollable-element > .xterm-scrollbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Brand checkbox — chartreuse fill with dark tick */
+@layer utilities {
+  .checkbox-brand {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid rgb(163 163 163);
+    border-radius: 3px;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.1s, border-color 0.1s;
+  }
+  .checkbox-brand:checked {
+    background-color: #DFFF00;
+    border-color: #DFFF00;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23111827' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3 8.5l3 3L13 4.5'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 80%;
+  }
+  .checkbox-brand:focus-visible {
+    outline: 2px solid #DFFF00;
+    outline-offset: 1px;
+  }
+}
