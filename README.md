@@ -30,6 +30,16 @@ Most project tools track work. Most agent tools run agents. Clawchestra puts bot
 | AI | OpenClaw (local or remote) with multi-provider routing |
 | State | JSON-based project state with file-system watcher + atomic writes |
 
+### State as synced JSON
+
+All project and roadmap state lives as plain JSON files (`.clawchestra/state.json` per project). OpenClaw syncs these files across every device you're signed into — it becomes your personal cloud. Because the state is just files:
+
+- **Every agent can read and write it** — Claude Code, Codex, or any tool that can read JSON has full access to your roadmap, specs, and plans.
+- **Every project gets it for free** — drop a `.clawchestra/` directory into any repo and it's a Clawchestra project.
+- **Every device stays in sync** — edit on your laptop, see it on your desktop. An agent running on a VPS pushes changes that appear on your local board instantly.
+
+There's no database, no proprietary API, no vendor lock-in. Your project state is portable, version-controllable, and readable by humans and machines alike.
+
 ### Agent-native by design
 
 Clawchestra is built around the idea that AI isn't a sidebar — it's a first-class participant. Every feature has both a UI surface and an AI surface:
