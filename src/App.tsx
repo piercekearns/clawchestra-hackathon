@@ -25,7 +25,6 @@ import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from
 import { ChatShell, createQueueId } from './components/chat';
 import { SearchModal } from './components/search';
 import { QuitGuardDialog } from './components/QuitGuardDialog';
-import { useConfetti } from './lib/confetti';
 import type { SearchableRoadmapItem } from './components/search';
 import type {
   ChatConnectionState,
@@ -263,7 +262,6 @@ interface SendChatOptions {
 }
 
 export default function App() {
-  const confetti = useConfetti();
   const projects = useDashboardStore((state) => state.projects);
   const errors = useDashboardStore((state) => state.errors);
   const chatMessages = useDashboardStore((state) => state.chatMessages);
@@ -2073,17 +2071,6 @@ export default function App() {
 
     const previousItems = roadmapItems;
 
-    // Detect items newly moved to complete (drag-to-complete)
-    const prevStatusMap = new Map(previousItems.map((i) => [i.id, i.status]));
-    for (const item of orderedByColumn) {
-      if (item.status === 'complete' && prevStatusMap.get(item.id) !== 'complete') {
-        const el = document.querySelector(`[data-confetti-item="${item.id}"]`);
-        const rect = el?.getBoundingClientRect();
-        confetti.trigger(rect
-          ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-          : { x: window.innerWidth / 2, y: window.innerHeight / 2 });
-      }
-    }
     setRoadmapItems(orderedByColumn);
 
     try {
@@ -3012,11 +2999,10 @@ export default function App() {
                 const nonArchivedItems = roadmapItems.filter((i) => i.status !== 'archived');
                 const archivedItems = roadmapItems.filter((i) => i.status === 'archived');
 
-                const handleComplete = (item: RoadmapItemWithDocs, origin?: { x: number; y: number }) => {
+                const handleComplete = (item: RoadmapItemWithDocs) => {
                   const previousStatus = item.status;
                   const previousPriority = item.priority;
                   const completedAt = new Date().toISOString().split('T')[0];
-                  if (origin) confetti.trigger(origin);
                   setRoadmapItems((prev) =>
                     prev.map((i) => (i.id === item.id ? { ...i, status: 'complete', completedAt } : i)),
                   );
@@ -3203,7 +3189,7 @@ export default function App() {
                               type="button"
                               className={actionBtnClass}
                               onPointerDown={stopDrag}
-                              onClick={(e) => { stopClick(e); const rect = (e.currentTarget as HTMLElement).closest('article')?.getBoundingClientRect(); handleComplete(item, rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : { x: e.clientX, y: e.clientY }); }}
+                              onClick={(e) => { stopClick(e); handleComplete(item); }}
                               aria-label="Complete"
                             >
                               <CircleCheckBig className="h-[15px] w-[15px]" />
