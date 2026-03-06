@@ -498,17 +498,35 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     onDragActiveChange?.(active);
   }, [onDragActiveChange]);
 
-  // Use capture-phase drag listeners so events are caught before xterm.js
-  // can swallow them — without this, drag-and-drop only works when the
-  // terminal has focus (click-to-activate).
+  // Drag-and-drop: listen at the DOCUMENT level in capture phase.
+  // xterm.js's canvas can swallow element-level drag events on macOS WKWebView,
+  // so we intercept at the top and use hit-testing against wrapperRef bounds.
   const wrapperRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const enter = (e: DragEvent) => { e.stopPropagation(); e.preventDefault(); setDrag(true); };
-    const over = (e: DragEvent) => { e.stopPropagation(); e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; setDrag(true); };
-    const leave = (e: DragEvent) => { e.stopPropagation(); setDrag(false); };
+    const isOverTerminal = (e: DragEvent) => {
+      const el = wrapperRef.current;
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      return e.clientX >= rect.left && e.clientX <= rect.right
+          && e.clientY >= rect.top && e.clientY <= rect.bottom;
+    };
+
+    const enter = (e: DragEvent) => {
+      if (!isOverTerminal(e)) return;
+      e.stopPropagation(); e.preventDefault(); setDrag(true);
+    };
+    const over = (e: DragEvent) => {
+      if (!isOverTerminal(e)) return;
+      e.stopPropagation(); e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      setDrag(true);
+    };
+    const leave = (e: DragEvent) => {
+      if (!isOverTerminal(e)) { setDrag(false); return; }
+      e.stopPropagation(); setDrag(false);
+    };
     const drop = (e: DragEvent) => {
+      if (!isOverTerminal(e)) return;
       e.stopPropagation();
       e.preventDefault();
       setDrag(false);
@@ -526,15 +544,15 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         }).catch((err) => console.error('Failed to save dropped image:', err));
       }
     };
-    el.addEventListener('dragenter', enter, true);
-    el.addEventListener('dragover', over, true);
-    el.addEventListener('dragleave', leave, true);
-    el.addEventListener('drop', drop, true);
+    document.addEventListener('dragenter', enter, true);
+    document.addEventListener('dragover', over, true);
+    document.addEventListener('dragleave', leave, true);
+    document.addEventListener('drop', drop, true);
     return () => {
-      el.removeEventListener('dragenter', enter, true);
-      el.removeEventListener('dragover', over, true);
-      el.removeEventListener('dragleave', leave, true);
-      el.removeEventListener('drop', drop, true);
+      document.removeEventListener('dragenter', enter, true);
+      document.removeEventListener('dragover', over, true);
+      document.removeEventListener('dragleave', leave, true);
+      document.removeEventListener('drop', drop, true);
     };
   }, [setDrag]);
 
