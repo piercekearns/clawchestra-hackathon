@@ -4,7 +4,7 @@
 
 ## Summary
 
-This report closes the local engineering portion of Phase 1 as far as it can be completed from the current machine. The release scaffold exists, the app now builds locally with `npx tauri build --no-bundle`, tmux fallback/remediation is in place, and macOS-only window chrome has been split out of the cross-platform base config.
+This report closes the local engineering portion of Phase 1 as far as it can be completed from the current machine. The release scaffold exists, the app now builds locally with `npx tauri build --no-bundle`, tmux fallback/remediation is in place, macOS-only window chrome has been split out of the cross-platform base config, and the repository is now pushed to GitHub.
 
 Phase 1 is complete enough to start Phase 2. The remaining work is no longer local implementation cleanup. It is release-execution and real-machine validation follow-through: a live GitHub prerelease run and real Windows/Linux artifact testing once testers are available.
 
@@ -55,14 +55,13 @@ That issue is now resolved by moving to `ai.clawchestra.desktop`.
 These are the only remaining known follow-up items from Phase 1:
 
 1. **Push the repo and run a real draft prerelease**
-   - GitHub Actions cannot be exercised from this machine until the repo is pushed and workflows exist on GitHub.
+   - The repo is now pushed to GitHub, so the remaining step is to cut the first real draft prerelease from a live workflow run.
 2. **Validate the first draft release on real Windows and Linux machines**
    - The current environment cannot prove real non-macOS launch behavior.
    - Friend-testing remains necessary, but it no longer blocks beginning Phase 2 work.
 
 ## Recommended Next Move
 
-1. Push the repository to `piercekearns/clawchestra`.
-2. Cut the first `app-v...` draft prerelease.
-3. Test the resulting Windows and Linux artifacts on real machines when testers are available.
-4. Start Phase 2 in parallel.
+1. Cut the first `app-v...` draft prerelease.
+2. Test the resulting Windows and Linux artifacts on real machines when testers are available.
+3. Start Phase 2 in parallel.
