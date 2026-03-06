@@ -649,7 +649,7 @@ function mapOpenClawConnectionError(error: unknown): Error {
 
   if (lower.includes('unauthorized') || lower.includes('invalid token')) {
     return new Error(
-      'OpenClaw authentication failed. Verify `~/.openclaw/openclaw.json` gateway token and restart the gateway.',
+      'OpenClaw authentication failed. Verify the configured chat transport token in Settings > Chat Transport and restart or reconnect the gateway if needed.',
     );
   }
 
@@ -673,13 +673,13 @@ function mapSendAckError(error: unknown): Error {
 
   if (lower.includes('missing scope')) {
     return new Error(
-      'OpenClaw websocket scopes are insufficient (require operator.read/operator.write). Repair local device pairing or gateway auth scopes, then retry.',
+      'OpenClaw websocket scopes are insufficient (require operator.read/operator.write). Repair device pairing or gateway auth scopes, then retry.',
     );
   }
 
   if (lower.includes('unauthorized') || lower.includes('invalid token')) {
     return new Error(
-      'OpenClaw websocket authentication failed. Verify `~/.openclaw/openclaw.json` gateway token and restart the gateway.',
+      'OpenClaw websocket authentication failed. Verify the configured chat transport token in Settings > Chat Transport and reconnect the gateway.',
     );
   }
 
@@ -2283,6 +2283,10 @@ async function resolveTransport(explicit?: GatewayTransport): Promise<GatewayTra
 
   const openclaw = await getDefaultOpenClawTransport();
   if (openclaw) return openclaw;
+
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    throw new Error('OpenClaw chat transport is not configured. Update Settings > Chat Transport.');
+  }
 
   return { mode: 'http-openai', baseUrl: DEFAULT_HTTP_GATEWAY_URL };
 }
@@ -4266,6 +4270,15 @@ export function retryGatewayConnection(): void {
     } else {
       void checkGatewayConnection();
     }
+  });
+}
+
+export function refreshGatewayTransportConfig(): void {
+  cachedOpenClawTransportPromise = null;
+  import('./tauri-websocket').then(({ closeTauriOpenClawConnection }) => {
+    closeTauriOpenClawConnection();
+  }).catch((error) => {
+    console.warn('[Gateway] Failed to refresh transport config:', error);
   });
 }
 

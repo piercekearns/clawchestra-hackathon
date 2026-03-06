@@ -69,6 +69,18 @@ Terminal sessions show activity indicators: animated dots while active, amber ba
 
 Projects with git repos can commit, push, pull, and manage branches through Clawchestra's Git Sync dialog. Dirty files are grouped by category (metadata, documents, code). Multi-branch cherry-pick with conflict resolution is supported.
 
+## OpenClaw Setup
+
+Clawchestra separates **chat transport** from **sync transport** in Settings.
+
+- **Chat transport** can be `Local`, `Remote`, or `Disabled`.
+- `Local` chat resolves websocket details from the local OpenClaw runtime.
+- `Remote` chat uses an explicit websocket URL, optional session key override, and a chat token stored in the OS keychain.
+- **Sync transport** can be `Local`, `Remote`, or `Disabled`.
+- `Remote` sync uses an HTTP base URL and a bearer token stored in the OS keychain.
+- Settings includes **Test chat connection** and **Test sync connection** actions that validate the current form values.
+- Settings also shows OpenClaw support status for local troubleshooting: CLI detected/missing, OpenClaw root, Clawchestra data directory, and `system-context.md`.
+
 ## Activity Awareness
 
 The board and sidebar reflect live state:

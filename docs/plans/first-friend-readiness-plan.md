@@ -201,6 +201,8 @@ This order matters because the website and onboarding should sit on top of real 
 1. Separate chat transport settings from sync settings in both runtime behavior and UI copy.
 2. Make local and remote OpenClaw setups first-class and testable.
 
+**Status note (2026-03-06):** Built and validated locally. See `docs/reports/2026-03-06-first-friend-readiness-phase-2-closeout.md`.
+
 ### Work
 
 1. Add explicit chat transport settings:

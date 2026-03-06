@@ -3,6 +3,7 @@ export type UpdateMode = 'none' | 'source-rebuild';
 export type OpenClawContextPolicy = 'selected-project-first' | 'workspace-default';
 
 export type SyncMode = 'Local' | 'Remote' | 'Disabled' | 'Unknown';
+export type OpenClawChatTransportMode = 'Local' | 'Remote' | 'Disabled' | 'Unknown';
 
 export interface DashboardSettings {
   settingsVersion: number;
@@ -14,6 +15,14 @@ export interface DashboardSettings {
   openclawContextPolicy: OpenClawContextPolicy;
   /** Unique client identifier (UUID v4), generated on first launch */
   clientUuid: string | null;
+  /** How Clawchestra reaches the OpenClaw chat gateway */
+  openclawChatTransportMode: OpenClawChatTransportMode;
+  /** Explicit remote websocket URL when chat transport mode is Remote */
+  openclawChatWsUrl: string | null;
+  /** Optional explicit session key override for chat transport */
+  openclawChatSessionKey: string | null;
+  /** Chat transport token, stored in the OS keychain */
+  openclawChatToken: string | null;
   /** How Clawchestra syncs with OpenClaw */
   openclawSyncMode: SyncMode;
   /** URL of the remote OpenClaw instance (when sync_mode is Remote) */

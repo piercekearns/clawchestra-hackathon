@@ -29,6 +29,16 @@ export type SyncResult = {
   fieldsFromLocal: number;
 };
 
+export type OpenClawSupportStatus = {
+  openclawRootPath: string;
+  openclawRootExists: boolean;
+  clawchestraDataPath: string;
+  clawchestraDataExists: boolean;
+  systemContextPath: string;
+  systemContextExists: boolean;
+  openclawCliDetected: boolean;
+};
+
 type UpdateStatus = {
   update_available: boolean;
   build_commit: string;
@@ -111,7 +121,28 @@ type TauriCommands = {
   scan_projects: { args: { scanPaths: string[] }; return: ScanResult };
   get_openclaw_gateway_config: {
     args: Record<string, never>;
-    return: { ws_url: string; token?: string; session_key: string };
+    return: {
+      ws_url: string;
+      token?: string;
+      session_key: string;
+      mode: string;
+      source: string;
+    };
+  };
+  resolve_openclaw_gateway_config_preview: {
+    args: {
+      mode: string;
+      wsUrl?: string | null;
+      sessionKey?: string | null;
+      token?: string | null;
+    };
+    return: {
+      ws_url: string;
+      token?: string;
+      session_key: string;
+      mode: string;
+      source: string;
+    };
   };
   get_openclaw_ws_device_auth: {
     args: {
@@ -398,6 +429,7 @@ type TauriCommands = {
   // Phase 6 sync commands
   install_openclaw_extension: { args: { openclawPath: string }; return: void };
   get_extension_content: { args: Record<string, never>; return: string };
+  get_openclaw_support_status: { args: Record<string, never>; return: OpenClawSupportStatus };
   sync_local_launch: { args: Record<string, never>; return: SyncResult };
   sync_merge_remote: { args: { remoteDbJson: string }; return: [string, SyncResult] };
   sync_local_close: { args: Record<string, never>; return: SyncResult };
@@ -408,8 +440,12 @@ type TauriCommands = {
     return: void;
   };
   get_openclaw_bearer_token: { args: Record<string, never>; return: string };
+  peek_openclaw_bearer_token: { args: Record<string, never>; return: string | null };
   set_openclaw_bearer_token: { args: { token: string }; return: void };
   clear_openclaw_bearer_token: { args: Record<string, never>; return: void };
+  get_openclaw_chat_token: { args: Record<string, never>; return: string | null };
+  set_openclaw_chat_token: { args: { token: string }; return: void };
+  clear_openclaw_chat_token: { args: Record<string, never>; return: void };
   get_openclaw_auth_cooldowns: { args: Record<string, never>; return: AuthProfileCooldown[] };
   reset_openclaw_auth_cooldown: { args: { profileId: string }; return: void };
   // Phase 2/5 data commands
@@ -548,12 +584,44 @@ export async function getOpenClawGatewayConfig(): Promise<{
   wsUrl: string;
   token?: string;
   sessionKey: string;
+  mode: string;
+  source: string;
 }> {
   const result = await typedInvoke('get_openclaw_gateway_config');
   return {
     wsUrl: result.ws_url,
     token: result.token,
     sessionKey: result.session_key,
+    mode: result.mode,
+    source: result.source,
+  };
+}
+
+export async function resolveOpenClawGatewayConfigPreview(params: {
+  mode: string;
+  wsUrl?: string | null;
+  sessionKey?: string | null;
+  token?: string | null;
+}): Promise<{
+  wsUrl: string;
+  token?: string;
+  sessionKey: string;
+  mode: string;
+  source: string;
+}> {
+  const result = await typedInvoke('resolve_openclaw_gateway_config_preview', {
+    mode: params.mode,
+    wsUrl: params.wsUrl ?? null,
+    sessionKey: params.sessionKey ?? null,
+    token: params.token ?? null,
+  });
+
+  return {
+    wsUrl: result.ws_url,
+    token: result.token,
+    sessionKey: result.session_key,
+    mode: result.mode,
+    source: result.source,
   };
 }
 
@@ -971,6 +1039,10 @@ export async function getExtensionContent(): Promise<string> {
   return typedInvoke('get_extension_content');
 }
 
+export async function getOpenClawSupportStatus(): Promise<OpenClawSupportStatus> {
+  return typedInvoke('get_openclaw_support_status');
+}
+
 export async function syncLocalLaunch(): Promise<SyncResult> {
   return typedInvoke('sync_local_launch');
 }
@@ -1003,12 +1075,28 @@ export async function getOpenclawBearerToken(): Promise<string> {
   return typedInvoke('get_openclaw_bearer_token');
 }
 
+export async function peekOpenclawBearerToken(): Promise<string | null> {
+  return typedInvoke('peek_openclaw_bearer_token');
+}
+
 export async function setOpenclawBearerToken(token: string): Promise<void> {
   return typedInvoke('set_openclaw_bearer_token', { token });
 }
 
 export async function clearOpenclawBearerToken(): Promise<void> {
   return typedInvoke('clear_openclaw_bearer_token');
+}
+
+export async function getOpenclawChatToken(): Promise<string | null> {
+  return typedInvoke('get_openclaw_chat_token');
+}
+
+export async function setOpenclawChatToken(token: string): Promise<void> {
+  return typedInvoke('set_openclaw_chat_token', { token });
+}
+
+export async function clearOpenclawChatToken(): Promise<void> {
+  return typedInvoke('clear_openclaw_chat_token');
 }
 
 // Phase 2/5 data commands

@@ -78,12 +78,12 @@ import { useDashboardStore } from './lib/store';
 import {
   batchReorderItems,
   chatRecoveryCursorAdvance,
-  getOpenclawBearerToken,
   detectAgents,
   getAppUpdateLockState,
   getDashboardSettings,
   getValidationHistory,
   isTauriRuntime,
+  peekOpenclawBearerToken,
   tmuxListClawchestraSessions,
   tmuxKillSession,
   tmuxCapturePane,
@@ -1177,7 +1177,7 @@ export default function App() {
       let bearerToken: string | null = null;
       if (dashboardSettings.openclawSyncMode === 'Remote') {
         try {
-          bearerToken = await getOpenclawBearerToken();
+          bearerToken = await peekOpenclawBearerToken();
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to read bearer token';
           if (!cancelled) {
@@ -1229,7 +1229,7 @@ export default function App() {
       let bearerToken: string | null = null;
       if (dashboardSettings.openclawSyncMode === 'Remote') {
         try {
-          bearerToken = await getOpenclawBearerToken();
+          bearerToken = await peekOpenclawBearerToken();
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to read bearer token';
           setLastSyncError(message);

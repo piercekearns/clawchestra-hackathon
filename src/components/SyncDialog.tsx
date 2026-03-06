@@ -30,8 +30,8 @@ import {
   gitSyncLockAcquire,
   gitSyncLockRelease,
   gitValidateBranchSyncResume,
-  sendOpenClawMessage,
 } from '../lib/tauri';
+import { sendMessage } from '../lib/gateway';
 import { cn } from '../lib/utils';
 import { ModalDragZone } from './ui/ModalDragZone';
 import {
@@ -1195,10 +1195,8 @@ export function SyncDialog({
           ),
         ].join('\n');
 
-        const raw = await sendOpenClawMessage({
-          message: prompt,
-          attachments: [],
-        });
+        const { lastContent } = await sendMessage([{ role: 'user', content: prompt, timestamp: Date.now() }]);
+        const raw = lastContent;
 
         const parsed = JSON.parse(stripCodeFence(raw)) as {
           files?: Array<{

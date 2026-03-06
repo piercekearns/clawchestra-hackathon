@@ -88,6 +88,8 @@ import {
   syncLocalClose,
   getDbJsonForSync,
   isTauriRuntime,
+  pathExists,
+  resolvePath,
 } from './tauri';
 
 /** Timeout for remote sync on close (milliseconds). */
@@ -95,7 +97,13 @@ const CLOSE_SYNC_TIMEOUT_MS = 3_000;
 
 /** Timeout for remote sync on launch (milliseconds). */
 const LAUNCH_SYNC_TIMEOUT_MS = 10_000;
+const SYNC_TEST_TIMEOUT_MS = 10_000;
 const CLOCK_DIFFERENCE_WARNING_PREFIX = 'Clock difference detected between devices (';
+
+export type TransportCheckResult = {
+  success: boolean;
+  message: string;
+};
 
 function sanitizeSyncWarnings(warnings: string[]): string[] {
   return warnings.filter((warning) => !warning.startsWith(CLOCK_DIFFERENCE_WARNING_PREFIX));
@@ -243,6 +251,86 @@ async function performRemoteSyncOnLaunch(
   result.warnings = [...warnings, ...result.warnings];
 
   return withSanitizedWarnings(result);
+}
+
+export async function testSyncConnection(
+  syncMode: SyncMode,
+  remoteUrl?: string | null,
+  bearerToken?: string | null,
+): Promise<TransportCheckResult> {
+  if (!isTauriRuntime()) {
+    return { success: true, message: 'Sync checks are only available in the Tauri app.' };
+  }
+
+  if (syncMode === 'Disabled') {
+    return { success: true, message: 'Sync is disabled.' };
+  }
+
+  if (syncMode === 'Unknown') {
+    return { success: false, message: 'Sync mode is unknown. Re-save settings.' };
+  }
+
+  if (syncMode === 'Local') {
+    const dataDir = await resolvePath('~/.openclaw').catch(() => '~/.openclaw');
+    const dbExists = await pathExists('~/.openclaw/clawchestra/db.json').catch(() => false);
+    return {
+      success: true,
+      message: dbExists
+        ? `Local sync is available at ${dataDir}.`
+        : `Local sync is configured. ${dataDir}/clawchestra/db.json will be created on first sync.`,
+    };
+  }
+
+  const normalizedUrl = remoteUrl?.trim();
+  if (!normalizedUrl) {
+    return { success: false, message: 'Remote sync requires an HTTP base URL.' };
+  }
+
+  const baseUrl = normalizedUrl.replace(/\/+$/, '');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (bearerToken?.trim()) {
+    headers.Authorization = `Bearer ${bearerToken.trim()}`;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SYNC_TEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${baseUrl}/clawchestra/data/db.json?fields=index`, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
+
+    if (response.ok || response.status === 404) {
+      return {
+        success: true,
+        message:
+          response.status === 404
+            ? 'Remote sync endpoint is reachable. No remote db.json exists yet.'
+            : 'Remote sync endpoint is reachable.',
+      };
+    }
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        message: 'Remote sync endpoint rejected the bearer token (401 Unauthorized).',
+      };
+    }
+
+    return {
+      success: false,
+      message: `Remote sync endpoint responded with HTTP ${response.status}.`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Remote sync connection failed.',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**

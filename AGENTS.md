@@ -210,7 +210,7 @@ The merge engine processes the deletions and removes the items from db.json. The
 |-----------|-------------------|
 | **Trigger refresh** | Tell user to click Refresh (or file change triggers watcher) |
 | **Open settings** | User clicks Settings in sidebar → board becomes Settings page; use Back to return |
-| **Update paths** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings` |
+| **Update paths / OpenClaw transport settings** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings`. Settings now separates chat transport (`Local` / `Remote` / `Disabled`) from sync transport (`Local` / `Remote` / `Disabled`) and exposes in-app connection tests for both. |
 | **Trigger update** | Commit code changes; user clicks Update button |
 | **Run multi-branch Git Sync** | Use Sync dialog: select file categories, optional `Pull first` when behind, optional `Also sync to` branches, then commit on source and cherry-pick to targets. Push/pull controls are hidden for `(local)` branches without upstream. On conflicts, generate/edit an AI proposal in-dialog, explicitly approve apply, then continue sync; manual fallback prompts remain available. |
 | **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`CLAWCHESTRA.md` / `.clawchestra/state.json`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
@@ -428,6 +428,12 @@ The app integrates with OpenClaw Gateway via Tauri commands:
 - Messages support image attachments (base64 encoded)
 - Attachment guardrails (chat UI): max 4 images, ~300KB combined encoded image budget per message (to stay under gateway WebSocket payload limits)
 - On context-overflow / `413 failed to parse request`, the chat bridge auto-rotates to a fresh session key and retries once; avoid hardcoding the default session key in new chat logic.
+
+OpenClaw connection setup is settings-backed:
+- **Chat transport** is distinct from sync and can be `Local`, `Remote`, or `Disabled`.
+- **Local chat** resolves from the local OpenClaw runtime config.
+- **Remote chat** uses explicit websocket settings plus a keychain token.
+- **Sync transport** is configured separately and can also be `Local`, `Remote`, or `Disabled`.
 
 Current chat UX is drawer-based:
 - Collapsed bottom `ChatBar` for status + input

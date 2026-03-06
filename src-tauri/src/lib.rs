@@ -53,6 +53,20 @@ struct OpenClawGatewayConfig {
     ws_url: String,
     token: Option<String>,
     session_key: String,
+    mode: String,
+    source: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenClawSupportStatus {
+    openclaw_root_path: String,
+    openclaw_root_exists: bool,
+    clawchestra_data_path: String,
+    clawchestra_data_exists: bool,
+    system_context_path: String,
+    system_context_exists: bool,
+    openclaw_cli_detected: bool,
 }
 
 #[derive(Deserialize)]
@@ -88,6 +102,21 @@ pub(crate) enum SyncMode {
     Unknown,
 }
 
+/// OpenClaw chat transport mode — how Clawchestra reaches the chat gateway.
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
+pub(crate) enum ChatTransportMode {
+    /// Resolve chat transport from the local ~/.openclaw/openclaw.json runtime config.
+    #[default]
+    Local,
+    /// Use an explicitly configured websocket URL and optional token.
+    Remote,
+    /// Disable chat transport entirely.
+    Disabled,
+    /// Catch-all for future variants — prevents deserialization crash on downgrade
+    #[serde(other)]
+    Unknown,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DashboardSettings {
@@ -108,6 +137,15 @@ struct DashboardSettings {
     /// Unique client identifier (UUID v4), generated on first launch
     #[serde(default)]
     client_uuid: Option<String>,
+    /// How Clawchestra reaches the OpenClaw chat gateway (Local, Remote, Disabled)
+    #[serde(default)]
+    openclaw_chat_transport_mode: ChatTransportMode,
+    /// Explicit remote websocket URL (when chat transport mode is Remote)
+    #[serde(default)]
+    openclaw_chat_ws_url: Option<String>,
+    /// Optional explicit session key override for chat transport
+    #[serde(default)]
+    openclaw_chat_session_key: Option<String>,
     /// How Clawchestra syncs with OpenClaw (Local, Remote, Disabled)
     #[serde(default)]
     openclaw_sync_mode: SyncMode,
@@ -122,6 +160,11 @@ struct DashboardSettings {
     #[serde(default, skip_serializing)]
     #[allow(dead_code)]
     openclaw_bearer_token: Option<String>,
+    /// Chat transport token for remote websocket mode.
+    /// Stored in OS keychain; kept in struct for backwards-compat deserialization only.
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    openclaw_chat_token: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -181,6 +224,10 @@ fn default_update_mode() -> String {
 
 fn default_openclaw_context_policy() -> String {
     "selected-project-first".to_string()
+}
+
+fn default_openclaw_chat_transport_mode() -> ChatTransportMode {
+    ChatTransportMode::Local
 }
 
 fn default_openclaw_sync_interval_ms() -> u64 {
@@ -315,6 +362,17 @@ fn normalize_optional_path(path: Option<String>) -> Result<Option<String>, Strin
     }
 }
 
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSettings, String> {
     settings.settings_version = 1;
     if settings.migration_version > 1 {
@@ -353,6 +411,14 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
     {
         settings.openclaw_context_policy = default_openclaw_context_policy();
     }
+    if settings.openclaw_chat_transport_mode == ChatTransportMode::Unknown {
+        settings.openclaw_chat_transport_mode = default_openclaw_chat_transport_mode();
+    }
+
+    settings.openclaw_chat_ws_url = normalize_optional_text(settings.openclaw_chat_ws_url.clone());
+    settings.openclaw_chat_session_key =
+        normalize_optional_text(settings.openclaw_chat_session_key.clone());
+    settings.openclaw_remote_url = normalize_optional_text(settings.openclaw_remote_url.clone());
 
     // Keep continuous sync intervals in a safe and predictable range.
     settings.openclaw_sync_interval_ms = settings
@@ -372,10 +438,14 @@ pub(crate) fn default_settings() -> DashboardSettings {
         update_mode: default_update_mode(),
         openclaw_context_policy: default_openclaw_context_policy(),
         client_uuid: None,
+        openclaw_chat_transport_mode: default_openclaw_chat_transport_mode(),
+        openclaw_chat_ws_url: None,
+        openclaw_chat_session_key: None,
         openclaw_sync_mode: SyncMode::default(),
         openclaw_remote_url: None,
         openclaw_sync_interval_ms: default_openclaw_sync_interval_ms(),
         openclaw_bearer_token: None,
+        openclaw_chat_token: None,
     };
 
     sanitize_settings(settings).unwrap_or_else(|_| DashboardSettings {
@@ -387,10 +457,14 @@ pub(crate) fn default_settings() -> DashboardSettings {
         update_mode: default_update_mode(),
         openclaw_context_policy: default_openclaw_context_policy(),
         client_uuid: None,
+        openclaw_chat_transport_mode: default_openclaw_chat_transport_mode(),
+        openclaw_chat_ws_url: None,
+        openclaw_chat_session_key: None,
         openclaw_sync_mode: SyncMode::default(),
         openclaw_remote_url: None,
         openclaw_sync_interval_ms: default_openclaw_sync_interval_ms(),
         openclaw_bearer_token: None,
+        openclaw_chat_token: None,
     })
 }
 
@@ -1065,14 +1139,95 @@ fn pick_folder(initial_path: Option<String>) -> Result<Option<String>, String> {
 
 #[tauri::command]
 fn get_openclaw_gateway_config() -> Result<OpenClawGatewayConfig, String> {
-    let config_path = openclaw_root_dir()?.join("openclaw.json");
+    let settings = load_dashboard_settings()?;
+    resolve_openclaw_gateway_config(&settings)
+}
 
+#[tauri::command]
+fn resolve_openclaw_gateway_config_preview(
+    mode: ChatTransportMode,
+    ws_url: Option<String>,
+    session_key: Option<String>,
+    token: Option<String>,
+) -> Result<OpenClawGatewayConfig, String> {
+    let settings = load_dashboard_settings()?;
+    resolve_openclaw_gateway_config_preview_impl(
+        &settings,
+        mode,
+        ws_url,
+        session_key,
+        token,
+        "settings-preview",
+    )
+}
+
+fn resolve_openclaw_gateway_config(
+    settings: &DashboardSettings,
+) -> Result<OpenClawGatewayConfig, String> {
+    resolve_openclaw_gateway_config_preview_impl(
+        settings,
+        settings.openclaw_chat_transport_mode.clone(),
+        settings.openclaw_chat_ws_url.clone(),
+        settings.openclaw_chat_session_key.clone(),
+        None,
+        "settings",
+    )
+}
+
+fn resolve_openclaw_gateway_config_preview_impl(
+    _settings: &DashboardSettings,
+    mode: ChatTransportMode,
+    ws_url: Option<String>,
+    session_key: Option<String>,
+    token_override: Option<String>,
+    source_label: &str,
+) -> Result<OpenClawGatewayConfig, String> {
+    let normalized_session_key = normalize_session_key(session_key);
+
+    match mode {
+        ChatTransportMode::Disabled => Err(
+            "OpenClaw chat transport is disabled in Clawchestra settings.".to_string(),
+        ),
+        ChatTransportMode::Unknown => Err(
+            "OpenClaw chat transport mode is unknown. Re-save Clawchestra settings.".to_string(),
+        ),
+        ChatTransportMode::Remote => {
+            let ws_url = normalize_optional_text(ws_url)
+                .ok_or_else(|| "Remote chat transport requires a websocket URL.".to_string())?;
+            let token = match normalize_optional_text(token_override) {
+                Some(token) => Some(token),
+                None => load_optional_keyring_secret(KEYRING_CHAT_TOKEN_KEY)?,
+            };
+            Ok(OpenClawGatewayConfig {
+                ws_url,
+                token,
+                session_key: normalized_session_key,
+                mode: "Remote".to_string(),
+                source: source_label.to_string(),
+            })
+        }
+        ChatTransportMode::Local => resolve_local_openclaw_gateway_config(normalized_session_key),
+    }
+}
+
+fn resolve_local_openclaw_gateway_config(
+    session_key: String,
+) -> Result<OpenClawGatewayConfig, String> {
+    let config_path = openclaw_root_dir()?.join("openclaw.json");
+    let mut host = "127.0.0.1".to_string();
     let mut port: u16 = 18789;
     let mut token: Option<String> = None;
 
-    if let Ok(raw) = fs::read_to_string(config_path) {
+    if let Ok(raw) = fs::read_to_string(&config_path) {
         if let Ok(json) = serde_json::from_str::<Value>(&raw) {
             if let Some(gateway) = json.get("gateway") {
+                if let Some(parsed_host) = gateway.get("host").and_then(|value| value.as_str()) {
+                    let trimmed = parsed_host.trim();
+                    if !trimmed.is_empty() {
+                        host = trimmed.to_string();
+                    }
+                }
+
                 if let Some(parsed_port) = gateway.get("port").and_then(|value| value.as_u64()) {
                     if parsed_port <= u16::MAX as u64 {
                         port = parsed_port as u16;
@@ -1089,9 +1244,11 @@ fn get_openclaw_gateway_config() -> Result<OpenClawGatewayConfig, String> {
     }
 
     Ok(OpenClawGatewayConfig {
-        ws_url: format!("ws://127.0.0.1:{port}"),
+        ws_url: format!("ws://{host}:{port}"),
         token,
-        session_key: DEFAULT_SESSION_KEY.to_string(),
+        session_key,
+        mode: "Local".to_string(),
+        source: "openclaw.json".to_string(),
     })
 }
 
@@ -1245,6 +1402,7 @@ fn approve_latest_device() -> Result<String, String> {
 
 const KEYRING_SERVICE: &str = "com.clawdbot.clawchestra";
 const KEYRING_BEARER_KEY: &str = "openclaw-bearer-token";
+const KEYRING_CHAT_TOKEN_KEY: &str = "openclaw-chat-token";
 
 fn get_or_create_bearer_token() -> Result<String, String> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_BEARER_KEY)
@@ -1261,34 +1419,71 @@ fn get_or_create_bearer_token() -> Result<String, String> {
     }
 }
 
+fn load_optional_keyring_secret(key: &str) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, key)
+        .map_err(|e| format!("Keyring init error: {e}"))?;
+    match entry.get_password() {
+        Ok(secret) if !secret.trim().is_empty() => Ok(Some(secret)),
+        Ok(_) | Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("Keyring read error: {e}")),
+    }
+}
+
+fn store_keyring_secret(key: &str, value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("Secret cannot be empty".to_string());
+    }
+
+    let entry = keyring::Entry::new(KEYRING_SERVICE, key)
+        .map_err(|e| format!("Keyring init error: {e}"))?;
+    entry
+        .set_password(trimmed)
+        .map_err(|e| format!("Keyring store error: {e}"))
+}
+
+fn clear_keyring_secret(key: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, key)
+        .map_err(|e| format!("Keyring init error: {e}"))?;
+    match entry.delete_password() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("Keyring clear error: {e}")),
+    }
+}
+
 #[tauri::command]
 fn get_openclaw_bearer_token() -> Result<String, String> {
     get_or_create_bearer_token()
 }
 
 #[tauri::command]
-fn set_openclaw_bearer_token(token: String) -> Result<(), String> {
-    let trimmed = token.trim();
-    if trimmed.is_empty() {
-        return Err("Bearer token cannot be empty".to_string());
-    }
+fn peek_openclaw_bearer_token() -> Result<Option<String>, String> {
+    load_optional_keyring_secret(KEYRING_BEARER_KEY)
+}
 
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_BEARER_KEY)
-        .map_err(|e| format!("Keyring init error: {e}"))?;
-    entry
-        .set_password(trimmed)
-        .map_err(|e| format!("Keyring store error: {e}"))?;
-    Ok(())
+#[tauri::command]
+fn set_openclaw_bearer_token(token: String) -> Result<(), String> {
+    store_keyring_secret(KEYRING_BEARER_KEY, &token)
 }
 
 #[tauri::command]
 fn clear_openclaw_bearer_token() -> Result<(), String> {
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_BEARER_KEY)
-        .map_err(|e| format!("Keyring init error: {e}"))?;
-    match entry.delete_password() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("Keyring clear error: {e}")),
-    }
+    clear_keyring_secret(KEYRING_BEARER_KEY)
+}
+
+#[tauri::command]
+fn get_openclaw_chat_token() -> Result<Option<String>, String> {
+    load_optional_keyring_secret(KEYRING_CHAT_TOKEN_KEY)
+}
+
+#[tauri::command]
+fn set_openclaw_chat_token(token: String) -> Result<(), String> {
+    store_keyring_secret(KEYRING_CHAT_TOKEN_KEY, &token)
+}
+
+#[tauri::command]
+fn clear_openclaw_chat_token() -> Result<(), String> {
+    clear_keyring_secret(KEYRING_CHAT_TOKEN_KEY)
 }
 
 // ── Auth-profile cooldown commands ──────────────────────────────────
@@ -3513,6 +3708,23 @@ fn get_extension_content() -> String {
     sync::generate_extension_content()
 }
 
+#[tauri::command]
+fn get_openclaw_support_status() -> Result<OpenClawSupportStatus, String> {
+    let openclaw_root = openclaw_root_dir()?;
+    let clawchestra_data = openclaw_root.join("clawchestra");
+    let system_context = clawchestra_data.join("system-context.md");
+
+    Ok(OpenClawSupportStatus {
+        openclaw_root_path: openclaw_root.to_string_lossy().to_string(),
+        openclaw_root_exists: openclaw_root.exists(),
+        clawchestra_data_path: clawchestra_data.to_string_lossy().to_string(),
+        clawchestra_data_exists: clawchestra_data.exists(),
+        system_context_path: system_context.to_string_lossy().to_string(),
+        system_context_exists: system_context.exists(),
+        openclaw_cli_detected: find_openclaw_binary().is_some(),
+    })
+}
+
 /// Perform local sync on launch. Returns the SyncResult.
 /// Updates the in-memory AppState with the merged DB.
 #[tauri::command]
@@ -4393,6 +4605,7 @@ pub fn run() {
             create_directory,
             pick_folder,
             get_openclaw_gateway_config,
+            resolve_openclaw_gateway_config_preview,
             get_openclaw_ws_device_auth,
             approve_latest_device,
             openclaw_ping,
@@ -4472,6 +4685,7 @@ pub fn run() {
             // Phase 6 sync commands
             install_openclaw_extension,
             get_extension_content,
+            get_openclaw_support_status,
             sync_local_launch,
             sync_merge_remote,
             sync_local_close,
@@ -4479,8 +4693,12 @@ pub fn run() {
             ensure_sync_identity,
             write_openclaw_system_context,
             get_openclaw_bearer_token,
+            peek_openclaw_bearer_token,
             set_openclaw_bearer_token,
             clear_openclaw_bearer_token,
+            get_openclaw_chat_token,
+            set_openclaw_chat_token,
+            clear_openclaw_chat_token,
             get_openclaw_auth_cooldowns,
             reset_openclaw_auth_cooldown,
             // Terminal commands (commands/terminal.rs)

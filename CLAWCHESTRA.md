@@ -9,7 +9,7 @@ tags:
   - core
 icon: "\U0001F4CA"
 lastActivity: '2026-03-06'
-nextAction: 'first-friend-readiness: the first GitHub draft prerelease now exists; start Phase 2 while remaining release assets finish publishing and Windows/Linux install testing is deferred to FFR verification'
+nextAction: 'first-friend-readiness: Phase 2 built and validated locally; review the new transport/sync setup and then start Phase 3 onboarding shell work'
 ---
 
 # Clawchestra

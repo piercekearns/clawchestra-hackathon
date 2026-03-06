@@ -5,15 +5,25 @@ import { BrandedSelect } from './ui/branded-select';
 import { Input } from './ui/input';
 import type {
   DashboardSettings,
+  OpenClawChatTransportMode,
   OpenClawContextPolicy,
   SyncMode,
   UpdateMode,
 } from '../lib/settings';
+import { checkGatewayConnection, refreshGatewayTransportConfig } from '../lib/gateway';
+import { testSyncConnection, type TransportCheckResult } from '../lib/sync';
 import {
   clearOpenclawBearerToken,
+  clearOpenclawChatToken,
   exportDebugInfo,
+  getExtensionContent,
+  getOpenClawSupportStatus,
   isTauriRuntime,
+  type OpenClawSupportStatus,
+  peekOpenclawBearerToken,
+  resolveOpenClawGatewayConfigPreview,
   setOpenclawBearerToken,
+  setOpenclawChatToken,
 } from '../lib/tauri';
 
 interface SettingsFormProps {
@@ -25,6 +35,33 @@ interface SettingsFormProps {
   onDirtyChange?: (dirty: boolean) => void;
   saveNudge?: boolean;
   onNotify?: (kind: 'success' | 'error', message: string) => void;
+}
+
+type CheckState =
+  | { kind: 'idle'; message: string }
+  | { kind: 'working'; message: string }
+  | { kind: 'success'; message: string }
+  | { kind: 'error'; message: string };
+
+const IDLE_CHECK_STATE: CheckState = { kind: 'idle', message: '' };
+
+function toCheckState(result: TransportCheckResult): CheckState {
+  return result.success
+    ? { kind: 'success', message: result.message }
+    : { kind: 'error', message: result.message };
+}
+
+function CheckStatus({ state }: { state: CheckState }) {
+  if (state.kind === 'idle' || !state.message) return null;
+
+  const colorClass =
+    state.kind === 'success'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+      : state.kind === 'error'
+        ? 'border-status-danger/40 bg-status-danger/10 text-status-danger'
+        : 'border-neutral-300 bg-neutral-100 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200';
+
+  return <div className={`rounded-lg border px-3 py-2 text-xs ${colorClass}`}>{state.message}</div>;
 }
 
 export function SettingsForm({
@@ -47,6 +84,11 @@ export function SettingsForm({
   );
   const [openclawContextPolicy, setOpenclawContextPolicy] =
     useState<OpenClawContextPolicy>('selected-project-first');
+  const [chatTransportMode, setChatTransportMode] = useState<OpenClawChatTransportMode>('Local');
+  const [chatWsUrl, setChatWsUrl] = useState('');
+  const [chatSessionKey, setChatSessionKey] = useState('');
+  const [chatToken, setChatToken] = useState('');
+  const [clearChatToken, setClearChatToken] = useState(false);
   const [syncMode, setSyncMode] = useState<SyncMode>('Local');
   const [remoteUrl, setRemoteUrl] = useState('');
   const [syncIntervalMs, setSyncIntervalMs] = useState(2000);
@@ -54,14 +96,23 @@ export function SettingsForm({
   const [clearRemoteToken, setClearRemoteToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [extensionCopied, setExtensionCopied] = useState(false);
   const [debugCopied, setDebugCopied] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [chatCheck, setChatCheck] = useState<CheckState>(IDLE_CHECK_STATE);
+  const [syncCheck, setSyncCheck] = useState<CheckState>(IDLE_CHECK_STATE);
+  const [openclawSupportStatus, setOpenclawSupportStatus] = useState<OpenClawSupportStatus | null>(null);
   const baselineRef = useRef<{
     scanPaths: string[];
     openclawWorkspacePath: string;
     appSourcePath: string;
     updateMode: UpdateMode;
     openclawContextPolicy: OpenClawContextPolicy;
+    chatTransportMode: OpenClawChatTransportMode;
+    chatWsUrl: string;
+    chatSessionKey: string;
+    chatToken: string;
+    clearChatToken: boolean;
     syncMode: SyncMode;
     remoteUrl: string;
     syncIntervalMs: number;
@@ -113,6 +164,11 @@ export function SettingsForm({
       appSourcePath: string;
       updateMode: UpdateMode;
       openclawContextPolicy: OpenClawContextPolicy;
+      chatTransportMode: OpenClawChatTransportMode;
+      chatWsUrl: string;
+      chatSessionKey: string;
+      chatToken: string;
+      clearChatToken: boolean;
       syncMode: SyncMode;
       remoteUrl: string;
       syncIntervalMs: number;
@@ -124,6 +180,11 @@ export function SettingsForm({
       appSourcePath: values.appSourcePath.trim(),
       updateMode: values.updateMode,
       openclawContextPolicy: values.openclawContextPolicy,
+      chatTransportMode: values.chatTransportMode,
+      chatWsUrl: values.chatWsUrl.trim(),
+      chatSessionKey: values.chatSessionKey.trim(),
+      chatToken: values.chatToken.trim(),
+      clearChatToken: values.clearChatToken,
       syncMode: values.syncMode,
       remoteUrl: values.remoteUrl.trim(),
       syncIntervalMs: Math.min(60_000, Math.max(1_000, Math.trunc(values.syncIntervalMs))),
@@ -140,15 +201,29 @@ export function SettingsForm({
       setAppSourcePath('');
       setUpdateMode(supportsSourceRebuildUpdate ? 'source-rebuild' : 'none');
       setOpenclawContextPolicy('selected-project-first');
+      setChatTransportMode('Local');
+      setChatWsUrl('');
+      setChatSessionKey('');
+      setChatToken('');
+      setClearChatToken(false);
       setSyncMode('Local');
       setRemoteUrl('');
       setSyncIntervalMs(2000);
+      setRemoteBearerToken('');
+      setClearRemoteToken(false);
+      setChatCheck(IDLE_CHECK_STATE);
+      setSyncCheck(IDLE_CHECK_STATE);
       baselineRef.current = buildSnapshot({
         scanPaths: [''],
         openclawWorkspacePath: '',
         appSourcePath: '',
         updateMode: supportsSourceRebuildUpdate ? 'source-rebuild' : 'none',
         openclawContextPolicy: 'selected-project-first',
+        chatTransportMode: 'Local',
+        chatWsUrl: '',
+        chatSessionKey: '',
+        chatToken: '',
+        clearChatToken: false,
         syncMode: 'Local',
         remoteUrl: '',
         syncIntervalMs: 2000,
@@ -166,17 +241,29 @@ export function SettingsForm({
     setAppSourcePath(settings.appSourcePath ?? '');
     setUpdateMode(settings.updateMode);
     setOpenclawContextPolicy(settings.openclawContextPolicy);
+    setChatTransportMode(settings.openclawChatTransportMode);
+    setChatWsUrl(settings.openclawChatWsUrl ?? '');
+    setChatSessionKey(settings.openclawChatSessionKey ?? '');
+    setChatToken('');
+    setClearChatToken(false);
     setSyncMode(settings.openclawSyncMode);
     setRemoteUrl(settings.openclawRemoteUrl ?? '');
     setSyncIntervalMs(settings.openclawSyncIntervalMs);
     setRemoteBearerToken('');
     setClearRemoteToken(false);
+    setChatCheck(IDLE_CHECK_STATE);
+    setSyncCheck(IDLE_CHECK_STATE);
     baselineRef.current = buildSnapshot({
       scanPaths: nextScanPaths,
       openclawWorkspacePath: settings.openclawWorkspacePath ?? '',
       appSourcePath: settings.appSourcePath ?? '',
       updateMode: settings.updateMode,
       openclawContextPolicy: settings.openclawContextPolicy,
+      chatTransportMode: settings.openclawChatTransportMode,
+      chatWsUrl: settings.openclawChatWsUrl ?? '',
+      chatSessionKey: settings.openclawChatSessionKey ?? '',
+      chatToken: '',
+      clearChatToken: false,
       syncMode: settings.openclawSyncMode,
       remoteUrl: settings.openclawRemoteUrl ?? '',
       syncIntervalMs: settings.openclawSyncIntervalMs,
@@ -197,6 +284,11 @@ export function SettingsForm({
       appSourcePath,
       updateMode,
       openclawContextPolicy,
+      chatTransportMode,
+      chatWsUrl,
+      chatSessionKey,
+      chatToken,
+      clearChatToken,
       syncMode,
       remoteUrl,
       syncIntervalMs,
@@ -212,13 +304,18 @@ export function SettingsForm({
     active,
     appSourcePath,
     buildSnapshot,
+    chatSessionKey,
+    chatToken,
+    chatTransportMode,
+    chatWsUrl,
+    clearChatToken,
+    clearRemoteToken,
     isDirty,
     onDirtyChange,
     openclawContextPolicy,
     openclawWorkspacePath,
-    clearRemoteToken,
-    remoteUrl,
     remoteBearerToken,
+    remoteUrl,
     scanPaths,
     syncIntervalMs,
     syncMode,
@@ -232,7 +329,83 @@ export function SettingsForm({
     }
   }, [isDirty, saveNudge]);
 
+  useEffect(() => {
+    if (!active || !isTauriRuntime()) return;
+
+    let cancelled = false;
+    void getOpenClawSupportStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setOpenclawSupportStatus(status);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOpenclawSupportStatus(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, settings]);
+
   const validScanPaths = scanPaths.map((p) => p.trim()).filter(Boolean);
+
+  const runChatConnectionTest = async () => {
+    if (chatTransportMode === 'Disabled') {
+      setChatCheck({ kind: 'success', message: 'Chat transport is disabled.' });
+      return;
+    }
+
+    setChatCheck({ kind: 'working', message: 'Testing chat transport...' });
+    try {
+      const preview = await resolveOpenClawGatewayConfigPreview({
+        mode: chatTransportMode,
+        wsUrl: chatWsUrl.trim() || null,
+        sessionKey: chatSessionKey.trim() || null,
+        token: chatToken.trim() || null,
+      });
+      const success = await checkGatewayConnection({
+        transport: {
+          mode: 'tauri-ws',
+          wsUrl: preview.wsUrl,
+          token: preview.token,
+          sessionKey: preview.sessionKey,
+        },
+      });
+
+      setChatCheck(
+        success
+          ? {
+              kind: 'success',
+              message: `Chat transport connected via ${preview.source}.`,
+            }
+          : {
+              kind: 'error',
+              message: 'Chat transport could not connect. Check the gateway URL, token, and OpenClaw runtime.',
+            },
+      );
+    } catch (error) {
+      setChatCheck({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Chat transport test failed.',
+      });
+    }
+  };
+
+  const runSyncConnectionTest = async () => {
+    setSyncCheck({ kind: 'working', message: 'Testing sync transport...' });
+    try {
+      const token = remoteBearerToken.trim() || (await peekOpenclawBearerToken()) || null;
+      setSyncCheck(toCheckState(await testSyncConnection(syncMode, remoteUrl, token)));
+    } catch (error) {
+      setSyncCheck({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Sync transport test failed.',
+      });
+    }
+  };
 
   return (
     <>
@@ -292,7 +465,7 @@ export function SettingsForm({
               placeholder="~/openclaw-workspace"
             />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              Used for chat context injection. Gateway session routing still follows OpenClaw runtime config.
+              Used for prompt context injection only. It does not choose the chat transport or sync endpoint.
             </span>
           </label>
 
@@ -341,95 +514,223 @@ export function SettingsForm({
         </div>
       </div>
 
-      {/* Sync Configuration (Phase 6.7) */}
+      <div className={`mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-700 ${!settings ? 'opacity-60' : ''}`}>
+        <h3 className="mb-3 text-sm font-medium">Chat Transport</h3>
+        <div className="grid gap-3">
+          <label className="grid gap-1 text-sm">
+            <span>Transport Mode</span>
+            <BrandedSelect
+              value={chatTransportMode}
+              onChange={(value) => {
+                setChatTransportMode(value as OpenClawChatTransportMode);
+                setChatCheck(IDLE_CHECK_STATE);
+              }}
+              options={[
+                { value: 'Local', label: 'Local' },
+                { value: 'Remote', label: 'Remote' },
+                { value: 'Disabled', label: 'Disabled' },
+              ]}
+            />
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Local: resolve from this machine&apos;s OpenClaw runtime. Remote: use an explicit websocket endpoint.
+            </span>
+          </label>
+
+          {chatTransportMode === 'Remote' && (
+            <>
+              <label className="grid gap-1 text-sm">
+                <span>WebSocket URL</span>
+                <Input
+                  value={chatWsUrl}
+                  onChange={(event) => setChatWsUrl(event.target.value)}
+                  placeholder="ws://192.168.1.x:18789"
+                />
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span>Session Key (optional)</span>
+                <Input
+                  value={chatSessionKey}
+                  onChange={(event) => setChatSessionKey(event.target.value)}
+                  placeholder="agent:main:clawchestra"
+                />
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Leave blank to use Clawchestra&apos;s default session key.
+                </span>
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span>Chat Token (keychain)</span>
+                <Input
+                  type="password"
+                  value={chatToken}
+                  onChange={(event) => {
+                    setChatToken(event.target.value);
+                    if (event.target.value.trim().length > 0) {
+                      setClearChatToken(false);
+                    }
+                  }}
+                  placeholder="Leave blank to keep existing token"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Stored in the OS keychain. Enter a new token to replace the saved value.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => {
+                      setChatToken('');
+                      setClearChatToken(true);
+                    }}
+                  >
+                    Clear token
+                  </Button>
+                </div>
+              </label>
+            </>
+          )}
+
+          {chatTransportMode === 'Local' && (
+            <label className="grid gap-1 text-sm">
+              <span>Session Key (optional)</span>
+              <Input
+                value={chatSessionKey}
+                onChange={(event) => setChatSessionKey(event.target.value)}
+                placeholder="agent:main:clawchestra"
+              />
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Local mode still lets you override the session key while the websocket URL/token come from <code>~/.openclaw/openclaw.json</code>.
+              </span>
+            </label>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!settings || saving || chatCheck.kind === 'working'}
+              onClick={() => void runChatConnectionTest()}
+            >
+              {chatCheck.kind === 'working' ? 'Testing chat...' : 'Test chat connection'}
+            </Button>
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Tests the current form values, not just the last saved settings.
+            </span>
+          </div>
+
+          <CheckStatus state={chatCheck} />
+        </div>
+      </div>
+
       <div className={`mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-700 ${!settings ? 'opacity-60' : ''}`}>
         <h3 className="mb-3 text-sm font-medium">Sync</h3>
         <div className="grid gap-3">
-          <div className="grid gap-3">
-            <label className="grid gap-1 text-sm">
-              <span>Sync Mode</span>
-              <BrandedSelect
-                value={syncMode}
-                onChange={(value) => setSyncMode(value as SyncMode)}
-                options={[
-                  { value: 'Local', label: 'Local' },
-                  { value: 'Remote', label: 'Remote' },
-                  { value: 'Disabled', label: 'Disabled' },
-                ]}
-              />
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Local: same machine. Remote: sync via HTTP endpoint.
-              </span>
-            </label>
+          <label className="grid gap-1 text-sm">
+            <span>Sync Mode</span>
+            <BrandedSelect
+              value={syncMode}
+              onChange={(value) => {
+                setSyncMode(value as SyncMode);
+                setSyncCheck(IDLE_CHECK_STATE);
+              }}
+              options={[
+                { value: 'Local', label: 'Local' },
+                { value: 'Remote', label: 'Remote' },
+                { value: 'Disabled', label: 'Disabled' },
+              ]}
+            />
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Local: same-machine file sync. Remote: HTTP sync against an OpenClaw endpoint.
+            </span>
+          </label>
 
-            {syncMode === 'Remote' && (
-              <>
-                <label className="grid gap-1 text-sm">
-                  <span>Remote URL</span>
-                  <Input
-                    value={remoteUrl}
-                    onChange={(event) => setRemoteUrl(event.target.value)}
-                    placeholder="http://192.168.1.x:18789"
-                  />
-                </label>
-                <label className="grid gap-1 text-sm">
-                  <span>Bearer Token (keychain)</span>
-                  <Input
-                    type="password"
-                    value={remoteBearerToken}
-                    onChange={(event) => {
-                      setRemoteBearerToken(event.target.value);
-                      if (event.target.value.trim().length > 0) {
-                        setClearRemoteToken(false);
-                      }
+          {syncMode === 'Remote' && (
+            <>
+              <label className="grid gap-1 text-sm">
+                <span>Remote URL</span>
+                <Input
+                  value={remoteUrl}
+                  onChange={(event) => setRemoteUrl(event.target.value)}
+                  placeholder="http://192.168.1.x:18789"
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span>Bearer Token (keychain)</span>
+                <Input
+                  type="password"
+                  value={remoteBearerToken}
+                  onChange={(event) => {
+                    setRemoteBearerToken(event.target.value);
+                    if (event.target.value.trim().length > 0) {
+                      setClearRemoteToken(false);
+                    }
+                  }}
+                  placeholder="Leave blank to keep existing token"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Stored in OS keychain. Enter a new token to replace.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => {
+                      setRemoteBearerToken('');
+                      setClearRemoteToken(true);
                     }}
-                    placeholder="Leave blank to keep existing token"
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                      Stored in OS keychain. Enter a new token to replace.
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-2"
-                      onClick={() => {
-                        setRemoteBearerToken('');
-                        setClearRemoteToken(true);
-                      }}
-                    >
-                      Clear token
-                    </Button>
-                  </div>
-                </label>
-              </>
-            )}
+                  >
+                    Clear token
+                  </Button>
+                </div>
+              </label>
+            </>
+          )}
 
-            <label className="grid gap-1 text-sm">
-              <span>Sync Interval (ms)</span>
-              <Input
-                type="number"
-                min={1000}
-                max={60000}
-                step={500}
-                value={String(syncIntervalMs)}
-                onChange={(event) => {
-                  const parsed = Number.parseInt(event.target.value, 10);
-                  if (Number.isNaN(parsed)) {
-                    setSyncIntervalMs(2000);
-                  } else {
-                    setSyncIntervalMs(parsed);
-                  }
-                }}
-              />
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Applies to local continuous sync polling. Allowed range: 1000-60000ms.
-              </span>
-            </label>
+          <label className="grid gap-1 text-sm">
+            <span>Sync Interval (ms)</span>
+            <Input
+              type="number"
+              min={1000}
+              max={60000}
+              step={500}
+              value={String(syncIntervalMs)}
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                if (Number.isNaN(parsed)) {
+                  setSyncIntervalMs(2000);
+                } else {
+                  setSyncIntervalMs(parsed);
+                }
+              }}
+            />
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Applies to local continuous sync polling. Allowed range: 1000-60000ms.
+            </span>
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!settings || saving || syncCheck.kind === 'working'}
+              onClick={() => void runSyncConnectionTest()}
+            >
+              {syncCheck.kind === 'working' ? 'Testing sync...' : 'Test sync connection'}
+            </Button>
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Remote mode checks the HTTP endpoint. Local mode confirms the canonical same-machine path.
+            </span>
           </div>
 
-          {/* Advanced section */}
+          <CheckStatus state={syncCheck} />
+
           {settings?.clientUuid && (
             <div className="grid gap-1 text-sm">
               <span className="text-neutral-500 dark:text-neutral-400">Client UUID</span>
@@ -461,7 +762,51 @@ export function SettingsForm({
 
           <div className="grid gap-1 text-sm">
             <span className="text-neutral-500 dark:text-neutral-400">Extension</span>
-            <span className="text-xs">Always installed on launch (auto-updated)</span>
+            <div className="grid gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+              <span>
+                Clawchestra can generate the OpenClaw sync extension content, but the extension is not auto-installed yet.
+              </span>
+              {openclawSupportStatus && (
+                <div className="grid gap-1 rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700">
+                  <span>
+                    OpenClaw CLI: {openclawSupportStatus.openclawCliDetected ? 'detected' : 'not detected'}
+                  </span>
+                  <span>
+                    OpenClaw root: {openclawSupportStatus.openclawRootExists ? 'present' : 'missing'} ({openclawSupportStatus.openclawRootPath})
+                  </span>
+                  <span>
+                    Clawchestra data dir: {openclawSupportStatus.clawchestraDataExists ? 'present' : 'not created yet'} ({openclawSupportStatus.clawchestraDataPath})
+                  </span>
+                  <span>
+                    System context: {openclawSupportStatus.systemContextExists ? 'present' : 'missing'} ({openclawSupportStatus.systemContextPath})
+                  </span>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={async () => {
+                  try {
+                    const content = await getExtensionContent();
+                    const copiedOk = await copyText(content);
+                    if (!copiedOk) {
+                      throw new Error('Clipboard write failed');
+                    }
+                    setExtensionCopied(true);
+                    onNotify?.('success', 'Extension content copied');
+                    setTimeout(() => setExtensionCopied(false), 1500);
+                  } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Failed to copy extension content';
+                    onNotify?.('error', message);
+                  }
+                }}
+              >
+                <ClipboardCopy className="mr-1 h-3 w-3" />
+                {extensionCopied ? 'Copied' : 'Copy extension content'}
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-1 text-sm">
@@ -523,33 +868,50 @@ export function SettingsForm({
                   appSourcePath: appSourcePath.trim() || null,
                   updateMode,
                   openclawContextPolicy,
+                  openclawChatTransportMode: chatTransportMode,
+                  openclawChatWsUrl: chatWsUrl.trim() || null,
+                  openclawChatSessionKey: chatSessionKey.trim() || null,
                   openclawSyncMode: syncMode,
                   openclawRemoteUrl: remoteUrl.trim() || null,
                   openclawSyncIntervalMs: syncIntervalMs,
                 });
 
-                if (syncMode === 'Remote') {
-                  if (clearRemoteToken) {
-                    await clearOpenclawBearerToken();
-                  } else if (remoteBearerToken.trim().length > 0) {
-                    await setOpenclawBearerToken(remoteBearerToken.trim());
-                  }
+                if (clearChatToken) {
+                  await clearOpenclawChatToken();
+                } else if (chatToken.trim().length > 0) {
+                  await setOpenclawChatToken(chatToken.trim());
                 }
 
+                if (clearRemoteToken) {
+                  await clearOpenclawBearerToken();
+                } else if (remoteBearerToken.trim().length > 0) {
+                  await setOpenclawBearerToken(remoteBearerToken.trim());
+                }
+
+                refreshGatewayTransportConfig();
                 baselineRef.current = buildSnapshot({
                   scanPaths: validScanPaths,
                   openclawWorkspacePath,
                   appSourcePath,
                   updateMode,
                   openclawContextPolicy,
+                  chatTransportMode,
+                  chatWsUrl,
+                  chatSessionKey,
+                  chatToken: '',
+                  clearChatToken: false,
                   syncMode,
                   remoteUrl,
                   syncIntervalMs,
                   remoteBearerToken: '',
                   clearRemoteToken: false,
                 });
+                setChatToken('');
+                setClearChatToken(false);
                 setRemoteBearerToken('');
                 setClearRemoteToken(false);
+                setChatCheck(IDLE_CHECK_STATE);
+                setSyncCheck(IDLE_CHECK_STATE);
                 setIsDirty(false);
                 onDirtyChange?.(false);
                 onSaved?.();

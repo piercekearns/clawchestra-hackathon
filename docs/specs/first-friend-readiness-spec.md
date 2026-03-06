@@ -406,6 +406,8 @@ FFR also requires a **whole-codebase cross-platform review**, not just fixes for
 
 ### Phase 2: OpenClaw Transport And Sync Productization
 
+Status note (2026-03-06): built and validated locally; closeout captured in `docs/reports/2026-03-06-first-friend-readiness-phase-2-closeout.md`.
+
 1. Separate chat transport settings from sync settings in product copy and runtime behavior.
 2. Add explicit chat connection settings and health test.
 3. Integrate extension/system-context status into setup flow.
