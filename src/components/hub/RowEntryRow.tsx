@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Home, MessageSquare, MoreHorizontal, Pin } from 'lucide-react';
 import type { HubChat, HubRow } from '../../lib/hub-types';
@@ -60,12 +60,18 @@ export function RowEntryRow({
   onMarkReadRow,
   onDeleteRow,
 }: RowEntryRowProps) {
-  const terminalActivity = useDashboardStore((s) => s.terminalActivity);
-  const busyChatIds = useDashboardStore((s) => s.hubBusyChatIds);
+  // Compute row activity inside the selector so the component only re-renders
+  // when the derived value changes, not when any unrelated terminal updates.
+  const tabIds = row.tabs;
+  const selectRawActivity = useCallback(
+    (s: { terminalActivity: Record<string, TerminalActivityEntry>; hubBusyChatIds: Set<string> }) =>
+      getRowActivity(tabIds, s.terminalActivity, s.hubBusyChatIds),
+    [tabIds],
+  );
+  const rawActivity = useDashboardStore(selectRawActivity);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
-  const rawActivity = getRowActivity(row.tabs, terminalActivity, busyChatIds);
   const isRawActive = rawActivity === 3;
 
   // Debounced active dots — same timing as TabItem: 200ms enter, 500ms exit, 3s cooldown.
