@@ -1457,6 +1457,81 @@
     border-color: var(--yellow);
   }
 
+  /* ========== FAQ ========== */
+  .faq-section {
+    padding: 4rem 0 5rem;
+  }
+
+  .faq-inner {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .faq-inner h2 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    margin-top: 0.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .faq-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .faq-item {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .faq-item:first-child {
+    border-top: 1px solid var(--rule);
+  }
+
+  .faq-q {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    transition: color 0.2s;
+  }
+
+  .faq-q::-webkit-details-marker { display: none; }
+  .faq-q::marker { display: none; }
+
+  .faq-item[open] > .faq-q {
+    color: var(--yellow);
+  }
+
+  .faq-chevron {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--muted);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s;
+  }
+
+  .faq-item[open] > .faq-q .faq-chevron {
+    transform: rotate(180deg);
+    color: var(--yellow);
+  }
+
+  .faq-a {
+    padding: 0 2rem 1.5rem 0;
+    color: #a3a3a3;
+    font-size: 0.95rem;
+    line-height: 1.75;
+    max-width: 600px;
+  }
+
   /* ========== FOOTER ========== */
   footer {
     padding: 3rem 0;
@@ -1626,6 +1701,7 @@
       <a href="#features" class="hide-mobile">Features</a>
       <a href="#demo" class="hide-mobile">Demo</a>
       <a href="#install" class="hide-mobile">Install</a>
+      <a href="#faq" class="hide-mobile">FAQ</a>
       <a href="https://github.com/piercekearns/clawchestra" target="_blank">GitHub</a>
       <a href="#cta" class="btn-pill btn-yellow">Get Access</a>
     </div>
@@ -2020,6 +2096,80 @@
         <button class="install-copy-btn" id="install-copy">Copy</button>
       </div>
       <p class="install-alt" id="install-alt">or download the <a href="https://github.com/piercekearns/clawchestra/releases" target="_blank">.dmg</a> directly from GitHub Releases</p>
+    </div>
+    <hr class="editorial" style="margin-top: 5rem;">
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq-section" id="faq">
+  <div class="container">
+    <div class="faq-inner reveal">
+      <p class="section-label">FAQ</p>
+      <h2>Common questions</h2>
+      <div class="faq-list">
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            <span>What is Clawchestra?</span>
+            <svg class="faq-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+          </summary>
+          <div class="faq-a">
+            <p>A desktop project command centre combining a kanban board, AI planning assistant, and coding agent integration. Built for developers who want to plan and ship without context-switching.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            <span>How is it different from Notion or Linear?</span>
+            <svg class="faq-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+          </summary>
+          <div class="faq-a">
+            <p>Runs entirely on your machine — no cloud sync, no accounts, no subscription. Your projects are local files. The AI reads your specs and plans and knows your actual project state.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            <span>How does the AI work?</span>
+            <svg class="faq-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+          </summary>
+          <div class="faq-a">
+            <p>Connects to Claude via OpenClaw, a local AI gateway. Chat scoped to a project gives the AI full context — specs, roadmap, and current status. Nothing leaves your machine except the inference call itself.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            <span>Can I use my own coding agent?</span>
+            <svg class="faq-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+          </summary>
+          <div class="faq-a">
+            <p>Yes. Supports Claude Code, Codex, OpenCode, and any generic shell. Terminals open scoped to a project or roadmap item so your agent always has the right context loaded.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            <span>Does my data leave my machine?</span>
+            <svg class="faq-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+          </summary>
+          <div class="faq-a">
+            <p>Only AI inference calls leave the machine. Project files, roadmap items, specs, and plans all stay on disk. OpenClaw runs locally by default.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            <span>What platforms does it support?</span>
+            <svg class="faq-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"></polyline></svg>
+          </summary>
+          <div class="faq-a">
+            <p>macOS (Apple Silicon + Intel), Windows, and Linux. Download installers from GitHub Releases or use the platform commands in the Install section above.</p>
+          </div>
+        </details>
+
+      </div>
     </div>
     <hr class="editorial" style="margin-top: 5rem;">
   </div>
