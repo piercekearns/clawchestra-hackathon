@@ -6,7 +6,7 @@
 
 This report closes the local engineering portion of Phase 1 as far as it can be completed from the current machine. The release scaffold exists, the app now builds locally with `npx tauri build --no-bundle`, tmux fallback/remediation is in place, macOS-only window chrome has been split out of the cross-platform base config, and the repository is now pushed to GitHub.
 
-Phase 1 is complete enough to start Phase 2. The remaining work is no longer local implementation cleanup. It is release-execution and real-machine validation follow-through: a live GitHub prerelease run and real Windows/Linux artifact testing once testers are available.
+Phase 1 is complete enough to start Phase 2. The remaining work is no longer local implementation cleanup. It is release-execution and real-machine validation follow-through: the first live GitHub draft prerelease now exists, and real Windows/Linux artifact testing is deferred to the FFR verification pass once testers are available.
 
 ---
 
@@ -41,8 +41,7 @@ Phase 1 is complete enough to start Phase 2. The remaining work is no longer loc
 
 1. Real Windows launch, title bar, and shell behavior.
 2. Real Linux launch, title bar, and shell behavior.
-3. Real GitHub Actions release creation, because the local repo currently has no configured remote and no pushed live workflow to execute.
-4. Real end-user installer behavior for `.msi`, `.AppImage`, and `.deb` artifacts.
+3. Real end-user installer behavior for `.msi`, `.AppImage`, and `.deb` artifacts.
 
 ## Identifier Resolution
 
@@ -54,14 +53,15 @@ That issue is now resolved by moving to `ai.clawchestra.desktop`.
 
 These are the only remaining known follow-up items from Phase 1:
 
-1. **Push the repo and run a real draft prerelease**
-   - The repo is now pushed to GitHub, so the remaining step is to cut the first real draft prerelease from a live workflow run.
+1. **Monitor the first real draft prerelease**
+   - The repo is now pushed to GitHub and the first real draft prerelease has been created from GitHub Actions.
+   - Remaining Windows/Linux asset completion is release follow-through, not a Phase 2 blocker.
 2. **Validate the first draft release on real Windows and Linux machines**
    - The current environment cannot prove real non-macOS launch behavior.
-   - Friend-testing remains necessary, but it no longer blocks beginning Phase 2 work.
+   - Friend-testing remains necessary and is explicitly deferred to FFR verification rather than treated as a pre-Phase-2 gate.
 
 ## Recommended Next Move
 
-1. Cut the first `app-v...` draft prerelease.
-2. Test the resulting Windows and Linux artifacts on real machines when testers are available.
+1. Let the first `app-v...` draft prerelease finish publishing its remaining assets.
+2. Test the resulting Windows and Linux artifacts on real machines during FFR verification when testers are available.
 3. Start Phase 2 in parallel.

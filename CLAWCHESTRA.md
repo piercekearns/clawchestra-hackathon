@@ -9,7 +9,7 @@ tags:
   - core
 icon: "\U0001F4CA"
 lastActivity: '2026-03-06'
-nextAction: 'first-friend-readiness: repo-side Phase 1 hardening is done and the repo is pushed; start Phase 2 while the first draft prerelease and Windows/Linux artifact testing run in parallel'
+nextAction: 'first-friend-readiness: the first GitHub draft prerelease now exists; start Phase 2 while remaining release assets finish publishing and Windows/Linux install testing is deferred to FFR verification'
 ---
 
 # Clawchestra

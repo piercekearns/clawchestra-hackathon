@@ -192,6 +192,7 @@ This order matters because the website and onboarding should sit on top of real 
 4. Source-build remains available as an advanced/developer option.
 5. Windows/Linux packaged installs are not being treated as valid until the core runtime UX behaves correctly, not just until artifacts exist.
 6. A whole-codebase cross-platform audit has been completed and recorded before first friend builds are handed off for non-macOS testing.
+7. Real Windows/Linux installer validation is deferred to FFR verification/friend-testing and does not block the start of Phase 2 once the first draft prerelease exists.
 
 ## Phase 2 - OpenClaw Transport And Sync Alignment
 

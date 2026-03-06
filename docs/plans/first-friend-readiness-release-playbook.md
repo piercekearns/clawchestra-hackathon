@@ -84,9 +84,8 @@ Before the first real release run, verify:
 
 As of 2026-03-06, the remaining follow-up steps for the public-alpha workflow are:
 
-1. push the repo to GitHub and confirm the remote/workflows exist on the live repository
-2. run the first draft prerelease from a real `app-v*` tag or manual dispatch
-3. validate the produced artifacts on real Windows and Linux machines after the first draft prerelease exists
+1. let the current draft prerelease finish publishing its remaining Windows/Linux assets
+2. validate the produced artifacts on real Windows and Linux machines during FFR verification/friend-testing
 
 ## Not Yet In Scope
 
