@@ -24,11 +24,12 @@ const ACTION_REQUIRED_PATTERNS = [
   /\(y\/n\)/i,
   /\(yes\/no\)/i,
   /yes\s*\/\s*no/i,
-  /press enter to continue/i,
+  /press enter to (?:continue|confirm)/i,
   /waiting for (?:input|response|approval)/i,
   /do you want to run/i,
   /allow this action/i,
   /would you like to (?:proceed|continue)/i,
+  /esc(?:ape)? to cancel/i,
 ];
 
 /** Grace period for newly spawned terminals — protects from liveness poll removal. */
