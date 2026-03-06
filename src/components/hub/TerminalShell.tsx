@@ -6,7 +6,8 @@ import '@xterm/xterm/css/xterm.css';
 import { Loader2 } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
-import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
+import { buildTerminalLaunchPlan, type RuntimeMode, type RuntimeNotice } from '../../lib/terminal-launch';
+import { getAgentLaunchSpec, tmuxSessionName } from '../../lib/terminal-utils';
 import { detectActionRequired } from '../../lib/terminal-activity';
 import { Button } from '../ui/button';
 import {
@@ -17,187 +18,6 @@ import {
 } from '../../lib/tauri';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
-
-type RuntimeMode = 'tmux' | 'direct' | 'install';
-
-type RuntimeNotice = {
-  tone: 'info' | 'warning';
-  title: string;
-  body: string;
-  allowInstall: boolean;
-};
-
-type LaunchPlan = {
-  mode: RuntimeMode;
-  persistent: boolean;
-  command: string | null;
-  args: string[];
-  notice: RuntimeNotice | null;
-  writeLines: string[];
-};
-
-function escapePosixShell(value: string): string {
-  return value.replace(/'/g, "'\\''");
-}
-
-function formatPosixAgentCommand(command: string): string {
-  if (command.endsWith(' tui')) {
-    const binary = command.slice(0, -4).trim();
-    return `exec '${escapePosixShell(binary)}' tui`;
-  }
-
-  return `exec '${escapePosixShell(command.trim())}'`;
-}
-
-function formatWindowsAgentCommand(command: string): string {
-  if (command.endsWith(' tui')) {
-    const binary = command.slice(0, -4).trim().replace(/"/g, '`"');
-    return `& "${binary}" tui`;
-  }
-
-  return `& "${command.trim().replace(/"/g, '`"')}"`;
-}
-
-function buildTmuxShellCommand(tmux: string, sessionName: string, agentCommand: string | null): string {
-  const tmuxSessionSanitized = sessionName.replace(/:/g, '_');
-  const captureCmd = `${tmux} -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
-  const hasSessionCheck = `${tmux} -L clawchestra has-session -t '${tmuxSessionSanitized}' 2>/dev/null && IS_REATTACH=1 || IS_REATTACH=0`;
-  const tmuxBase = [
-    `${tmux} -u -f /dev/null -L clawchestra`,
-    `new-session -A -s '${sessionName}'`,
-    `\\; set status off`,
-    '\\; set history-limit 50000',
-    '\\; set remain-on-exit on',
-    "\\; set -ga terminal-overrides ',xterm-256color:smcup@:rmcup@'",
-  ].join(' ');
-
-  if (agentCommand) {
-    const escapedCmd = escapePosixShell(agentCommand);
-    return [
-      captureCmd,
-      hasSessionCheck,
-      `if [ "$IS_REATTACH" = "0" ]; then exec ${tmuxBase} \\; send-keys '${escapedCmd}' Enter; else exec ${tmuxBase}; fi`,
-    ].join('; ');
-  }
-
-  return `${captureCmd}; exec ${tmuxBase}`;
-}
-
-function buildTerminalLaunchPlan(args: {
-  platform: string;
-  sessionName: string;
-  agentCommand: string | null;
-  tmuxPath: string | null;
-  projectDirPath: string | undefined;
-  dependencyStatus: TerminalDependencyStatus | null;
-  modeOverride: 'auto' | 'install-tmux';
-}): LaunchPlan {
-  const {
-    platform,
-    sessionName,
-    agentCommand,
-    tmuxPath,
-    projectDirPath,
-    dependencyStatus,
-    modeOverride,
-  } = args;
-
-  if (modeOverride === 'install-tmux') {
-    if (!dependencyStatus?.installerCommand) {
-      return {
-        mode: 'install',
-        persistent: false,
-        command: null,
-        args: [],
-        notice: {
-          tone: 'warning',
-          title: 'Automatic tmux install unavailable',
-          body: dependencyStatus?.installerNote
-            ?? 'Clawchestra could not find a supported package manager for a one-click tmux install.',
-          allowInstall: false,
-        },
-        writeLines: ['[Terminal remediation] No automatic tmux install path is available on this platform.'],
-      };
-    }
-
-    const installCommand = `${dependencyStatus.installerCommand}; status=$?; printf '\\n[Clawchestra] tmux install exited with code %s.\\n' "$status"; exit $status`;
-    return {
-      mode: 'install',
-      persistent: false,
-      command: 'sh',
-      args: ['-lc', installCommand],
-      notice: {
-        tone: 'info',
-        title: dependencyStatus.installerLabel ?? 'Installing tmux',
-        body: 'This runs inside a temporary shell. If your package manager prompts for confirmation or a password, respond here.',
-        allowInstall: false,
-      },
-      writeLines: [],
-    };
-  }
-
-  if (!projectDirPath) {
-    return {
-      mode: 'direct',
-      persistent: false,
-      command: null,
-      args: [],
-      notice: {
-        tone: 'warning',
-        title: 'Project path missing',
-        body: 'Clawchestra cannot open this terminal in the correct working directory until the project path is restored.',
-        allowInstall: false,
-      },
-      writeLines: ['[Terminal unavailable] Project path is missing, so Clawchestra cannot open the shell in the correct working directory.'],
-    };
-  }
-
-  if (platform === 'windows') {
-    const powershell = 'powershell.exe';
-  return {
-    mode: 'direct',
-    persistent: false,
-    command: powershell,
-    args: agentCommand
-        ? ['-NoLogo', '-NoExit', '-Command', formatWindowsAgentCommand(agentCommand)]
-        : ['-NoLogo'],
-      notice: {
-        tone: 'info',
-        title: 'Temporary Windows terminal',
-        body: 'Windows currently runs direct PowerShell sessions. They work for friend testing, but they do not persist when you close the drawer or relaunch the app yet.',
-        allowInstall: false,
-      },
-      writeLines: [],
-    };
-  }
-
-  if (tmuxPath) {
-    return {
-      mode: 'tmux',
-      persistent: true,
-      command: 'sh',
-      args: ['-c', buildTmuxShellCommand(tmuxPath, sessionName, agentCommand)],
-      notice: null,
-      writeLines: [],
-    };
-  }
-
-  return {
-    mode: 'direct',
-    persistent: false,
-    command: agentCommand ? 'sh' : 'sh',
-    args: agentCommand
-      ? ['-lc', formatPosixAgentCommand(agentCommand)]
-      : [],
-    notice: {
-      tone: 'warning',
-      title: 'tmux missing: running a temporary session',
-      body: `${dependencyStatus?.installerNote ?? 'tmux is required for persistent embedded terminals.'} This session will stop when you close the drawer or switch away.`,
-      allowInstall: Boolean(dependencyStatus?.installerCommand),
-    },
-    writeLines: [],
-  };
-}
 
 interface TerminalShellProps {
   chat: HubChat;
@@ -327,14 +147,16 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     fitAddonRef.current = fitAddon;
 
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
-    const agentCommand = getAgentCommand(chat.agentType, detectedAgents);
+    const agentLaunch = getAgentLaunchSpec(chat.agentType, detectedAgents);
     const tmux = dependencyStatus?.tmuxPath
       ?? detectedAgents.find((a) => a.agentType === 'tmux' && a.available)?.path
       ?? null;
     const launchPlan = buildTerminalLaunchPlan({
       platform,
       sessionName,
-      agentCommand,
+      agentCommand: agentLaunch.command,
+      agentPrefersShell: agentLaunch.prefersShell,
+      agentShellPath: agentLaunch.shellPath,
       tmuxPath: tmux,
       projectDirPath,
       dependencyStatus,

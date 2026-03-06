@@ -1,15 +1,23 @@
 import type { HubAgentType } from './hub-types';
 import type { DetectedAgent } from './tauri';
 
+export type AgentLaunchSpec = {
+  command: string | null;
+  prefersShell: boolean;
+  shellPath: string | null;
+};
+
 /** Map agent type to the CLI command that launches it.
- *  When `detectedAgents` is provided, returns the resolved absolute path
- *  (e.g. `/opt/homebrew/bin/claude`) so the command works regardless of
- *  the tmux session's PATH. Falls back to the bare command name. */
-export function getAgentCommand(
+ *  When `detectedAgents` is provided, prefers the resolved absolute path
+ *  (e.g. `/opt/homebrew/bin/claude`) unless the command is shell-defined and
+ *  should be invoked through the user's shell to honor aliases/functions. */
+export function getAgentLaunchSpec(
   agentType: HubAgentType | null,
   detectedAgents?: DetectedAgent[],
-): string | null {
-  if (!agentType || agentType === 'generic' || agentType === 'cursor') return null;
+): AgentLaunchSpec {
+  if (!agentType || agentType === 'generic' || agentType === 'cursor') {
+    return { command: null, prefersShell: false, shellPath: null };
+  }
 
   // Subcommands appended after the resolved binary path
   const subcommands: Partial<Record<HubAgentType, string>> = {
@@ -20,9 +28,25 @@ export function getAgentCommand(
   if (detectedAgents) {
     // openclaw-tui detects via the 'openclaw-tui' agent type entry
     const agent = detectedAgents.find((a) => a.agentType === agentType && a.available);
+    if (agent) {
+      const base = agent.prefersShell ? agent.command : agent.path;
+      if (base) {
+        const sub = subcommands[agentType];
+        return {
+          command: sub ? `${base} ${sub}` : base,
+          prefersShell: agent.prefersShell,
+          shellPath: agent.shellPath,
+        };
+      }
+    }
+
     if (agent?.path) {
       const sub = subcommands[agentType];
-      return sub ? `${agent.path} ${sub}` : agent.path;
+      return {
+        command: sub ? `${agent.path} ${sub}` : agent.path,
+        prefersShell: false,
+        shellPath: agent.shellPath,
+      };
     }
   }
 
@@ -30,15 +54,19 @@ export function getAgentCommand(
   const sub = subcommands[agentType];
   switch (agentType) {
     case 'claude-code':
-      return 'claude';
+      return { command: 'claude', prefersShell: false, shellPath: null };
     case 'codex':
-      return 'codex';
+      return { command: 'codex', prefersShell: false, shellPath: null };
     case 'opencode':
-      return 'opencode';
+      return { command: 'opencode', prefersShell: false, shellPath: null };
     case 'openclaw-tui':
-      return sub ? `openclaw ${sub}` : 'openclaw';
+      return {
+        command: sub ? `openclaw ${sub}` : 'openclaw',
+        prefersShell: false,
+        shellPath: null,
+      };
     default:
-      return null;
+      return { command: null, prefersShell: false, shellPath: null };
   }
 }
 

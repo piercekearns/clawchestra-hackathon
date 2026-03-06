@@ -1,5 +1,8 @@
 use crate::util::lookup_command;
+#[cfg(target_os = "windows")]
+use serde::Deserialize;
 use serde::Serialize;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 #[derive(Serialize, Debug, Clone)]
@@ -9,6 +12,8 @@ pub(crate) struct DetectedAgent {
     pub command: String,
     pub path: Option<String>,
     pub available: bool,
+    pub prefers_shell: bool,
+    pub shell_path: Option<String>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -17,9 +22,36 @@ pub(crate) struct TerminalDependencyStatus {
     pub platform: String,
     pub tmux_available: bool,
     pub tmux_path: Option<String>,
+    pub shell_path: Option<String>,
     pub installer_label: Option<String>,
     pub installer_command: Option<String>,
     pub installer_note: String,
+}
+
+#[derive(Debug, Clone)]
+struct CommandResolution {
+    path: Option<String>,
+    available: bool,
+    prefers_shell: bool,
+    shell_path: Option<String>,
+}
+
+impl CommandResolution {
+    fn missing(shell_path: Option<String>) -> Self {
+        Self {
+            path: None,
+            available: false,
+            prefers_shell: false,
+            shell_path,
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Deserialize)]
+struct PowerShellCommandInfo {
+    kind: String,
+    path: Option<String>,
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -32,6 +64,77 @@ fn user_shell() -> String {
             "/bin/sh".to_string()
         }
     })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_name(shell_path: &str) -> String {
+    Path::new(shell_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_command_args(shell_path: &str, script: &str) -> Vec<String> {
+    let shell = shell_name(shell_path);
+    if matches!(shell.as_str(), "sh" | "dash") {
+        vec!["-i".to_string(), "-c".to_string(), script.to_string()]
+    } else {
+        vec![
+            "-i".to_string(),
+            "-l".to_string(),
+            "-c".to_string(),
+            script.to_string(),
+        ]
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_shell_command(shell_path: &str, script: &str) -> Option<String> {
+    let output = Command::new(shell_path)
+        .args(shell_command_args(shell_path, script))
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_command_resolution(cmd: &str) -> CommandResolution {
+    let shell_path = user_shell();
+    let script = format!("command -v -- {} 2>/dev/null", shell_quote(cmd));
+
+    match run_shell_command(&shell_path, &script) {
+        Some(value) if value.starts_with('/') => CommandResolution {
+            path: Some(value),
+            available: true,
+            prefers_shell: false,
+            shell_path: Some(shell_path),
+        },
+        Some(value) if !value.is_empty() => CommandResolution {
+            path: None,
+            available: true,
+            prefers_shell: true,
+            shell_path: Some(shell_path),
+        },
+        _ => CommandResolution::missing(Some(shell_path)),
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -51,6 +154,89 @@ fn login_which(cmd: &str) -> Option<String> {
         .map(str::trim)
         .find(|line| !line.is_empty())
         .map(|line| line.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn powershell_candidates() -> Vec<String> {
+    let mut candidates = Vec::new();
+    for cmd in ["powershell.exe", "powershell", "pwsh.exe", "pwsh"] {
+        if let Some(path) = lookup_command(cmd) {
+            let value = path.to_string_lossy().to_string();
+            if !candidates.contains(&value) {
+                candidates.push(value);
+            }
+        }
+    }
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn preferred_windows_shell() -> Option<String> {
+    powershell_candidates().into_iter().next()
+}
+
+#[cfg(target_os = "windows")]
+fn inspect_powershell_command(shell_path: &str, cmd: &str) -> Option<PowerShellCommandInfo> {
+    let escaped = cmd.replace('\'', "''");
+    let script = format!(
+        "$command = Get-Command -Name '{escaped}' -ErrorAction SilentlyContinue | Select-Object -First 1 CommandType, Path; \
+if ($null -eq $command) {{ exit 1 }}; \
+$kind = if ($command.CommandType -in @('Alias', 'Function', 'Filter', 'Configuration')) {{ 'shell' }} elseif ($command.Path) {{ 'path' }} else {{ 'shell' }}; \
+[PSCustomObject]@{{ kind = $kind; path = $command.Path }} | ConvertTo-Json -Compress"
+    );
+
+    let output = Command::new(shell_path)
+        .args(["-NoLogo", "-Command", &script])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().rev().map(str::trim).find(|line| !line.is_empty())?;
+    serde_json::from_str(line).ok()
+}
+
+#[cfg(target_os = "windows")]
+fn detect_command_resolution(cmd: &str) -> CommandResolution {
+    let default_shell = preferred_windows_shell();
+    let direct_path = login_which(cmd);
+
+    for shell_path in powershell_candidates() {
+        if let Some(info) = inspect_powershell_command(&shell_path, cmd) {
+            if info.kind == "shell" {
+                return CommandResolution {
+                    path: None,
+                    available: true,
+                    prefers_shell: true,
+                    shell_path: Some(shell_path),
+                };
+            }
+
+            if let Some(path) = info.path {
+                return CommandResolution {
+                    path: Some(path),
+                    available: true,
+                    prefers_shell: false,
+                    shell_path: default_shell,
+                };
+            }
+        }
+    }
+
+    if let Some(path) = direct_path {
+        return CommandResolution {
+            path: Some(path),
+            available: true,
+            prefers_shell: false,
+            shell_path: default_shell,
+        };
+    }
+
+    CommandResolution::missing(default_shell)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -120,19 +306,26 @@ pub(crate) fn detect_agents() -> Vec<DetectedAgent> {
     agents
         .iter()
         .map(|(agent_type, cmd)| {
-            match login_which(cmd) {
-                Some(path) => DetectedAgent {
-                    agent_type: agent_type.to_string(),
-                    command: cmd.to_string(),
-                    path: Some(path),
-                    available: true,
-                },
-                None => DetectedAgent {
-                    agent_type: agent_type.to_string(),
-                    command: cmd.to_string(),
-                    path: None,
-                    available: false,
-                },
+            let resolution = if *cmd == "tmux" {
+                match login_which(cmd) {
+                    Some(path) => CommandResolution {
+                        path: Some(path),
+                        available: true,
+                        prefers_shell: false,
+                        shell_path: None,
+                    },
+                    None => CommandResolution::missing(None),
+                }
+            } else {
+                detect_command_resolution(cmd)
+            };
+            DetectedAgent {
+                agent_type: agent_type.to_string(),
+                command: cmd.to_string(),
+                path: resolution.path,
+                available: resolution.available,
+                prefers_shell: resolution.prefers_shell,
+                shell_path: resolution.shell_path,
             }
         })
         .collect()
@@ -143,6 +336,10 @@ pub(crate) fn terminal_dependency_status() -> TerminalDependencyStatus {
     let platform = std::env::consts::OS.to_string();
     let tmux_path = login_which("tmux");
     let tmux_available = tmux_path.is_some();
+    #[cfg(target_os = "windows")]
+    let shell_path = preferred_windows_shell();
+    #[cfg(not(target_os = "windows"))]
+    let shell_path = Some(user_shell());
 
     let (installer_label, installer_command, installer_note) = match platform.as_str() {
         "macos" => {
@@ -235,6 +432,7 @@ pub(crate) fn terminal_dependency_status() -> TerminalDependencyStatus {
         platform,
         tmux_available,
         tmux_path,
+        shell_path,
         installer_label,
         installer_command,
         installer_note,

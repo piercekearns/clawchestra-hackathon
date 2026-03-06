@@ -61,7 +61,7 @@ Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic
 
 **How to open:** Hover a project card on the main board and click the terminal icon, or hover a roadmap item card and click the terminal icon. Existing terminal sessions are also listed and accessible from the project's entry in the sidebar.
 
-If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals currently run as temporary PowerShell sessions and do not persist across drawer close or app relaunch yet.
+If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals currently run as temporary PowerShell sessions and do not persist across drawer close or app relaunch yet. When a coding-agent command is shell-defined (for example via an alias or shell function), Clawchestra launches it through the matching shell; otherwise it launches the resolved executable path directly.
 
 Terminal sessions show activity indicators: animated dots while active, amber badge when action is required (permission prompts), yellow badge for unread output.
 

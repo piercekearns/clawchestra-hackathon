@@ -480,7 +480,14 @@ type TauriCommands = {
   // Terminal commands (commands/terminal.rs)
   detect_agents: {
     args: Record<string, never>;
-    return: Array<{ agentType: string; command: string; path: string | null; available: boolean }>;
+    return: Array<{
+      agentType: string;
+      command: string;
+      path: string | null;
+      available: boolean;
+      prefersShell: boolean;
+      shellPath: string | null;
+    }>;
   };
   tmux_list_clawchestra_sessions: {
     args: Record<string, never>;
@@ -1173,12 +1180,15 @@ export interface DetectedAgent {
   command: string;
   path: string | null;
   available: boolean;
+  prefersShell: boolean;
+  shellPath: string | null;
 }
 
 export interface TerminalDependencyStatus {
   platform: string;
   tmuxAvailable: boolean;
   tmuxPath: string | null;
+  shellPath: string | null;
   installerLabel: string | null;
   installerCommand: string | null;
   installerNote: string;
