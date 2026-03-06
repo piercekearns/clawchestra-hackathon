@@ -80,7 +80,7 @@ Before the first real release run, verify:
 4. release drafts are visible to the owner account
 5. the local repository has a remote for `piercekearns/clawchestra`
 
-## Current Known External Gates
+## Deferred Verification
 
 As of 2026-03-06, the remaining follow-up steps for the public-alpha workflow are:
 
