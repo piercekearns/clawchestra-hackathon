@@ -585,10 +585,10 @@ export function ChatShell({
             aria-label="Close chat drawer backdrop"
           />
 
-          <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:px-6 md:pb-6">
+          <div className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center px-4 pb-4 md:px-6 md:pb-6">
             <section
               className="relative flex w-full flex-col overflow-hidden rounded-xl border border-neutral-300/80 bg-neutral-0/95 shadow-2xl backdrop-blur dark:border-neutral-600 dark:bg-neutral-900/95"
-              style={{ height: `${drawerHeightPx}px` }}
+              style={{ height: `${drawerHeightPx}px`, maxHeight: '100%' }}
               aria-label="Chat drawer"
             >
               {/* Drawer header - resize handle area (invisible) with centered toggle */}
