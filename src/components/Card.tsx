@@ -43,6 +43,7 @@ export function Card<T extends BoardItem>({
       style={style}
       {...attributes}
       {...listeners}
+      data-confetti-item={item.id}
       onClick={() => onClick(item)}
       className={`group relative cursor-grab rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 shadow-sm outline-none transition hover:border-revival-accent-400 hover:bg-neutral-100 focus:outline-none focus-visible:outline-none active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700 ${hasBody ? 'p-3' : 'px-3 py-2'}`}
     >
