@@ -234,15 +234,32 @@ function TabItem({
   // For openclaw chats, busy = dots
   const isOpenclawBusy = chat.type === 'openclaw' && busyChatIds.has(chat.id);
 
+  // Notification state for tab background tint
+  const hasActionRequired = isTerminalActionRequired;
+  const hasUnread = isTerminalUnread || chat.unread;
+
+  // Build background class based on active + notification state
+  let tabBg: string;
+  if (isActive && hasActionRequired) {
+    // Active tab with unresolved prompt — warm amber tint over active background
+    tabBg = 'bg-amber-400/20 text-neutral-900 shadow-sm dark:bg-amber-400/15 dark:text-neutral-100';
+  } else if (isActive) {
+    tabBg = 'bg-neutral-50 text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100';
+  } else if (hasActionRequired) {
+    // Inactive tab with unresolved prompt — amber tint
+    tabBg = 'bg-amber-400/15 text-neutral-700 dark:bg-amber-400/10 dark:text-neutral-300';
+  } else if (hasUnread) {
+    // Inactive tab with unread output — subtle lime tint
+    tabBg = 'bg-[#DFFF00]/10 text-neutral-700 dark:bg-[#DFFF00]/8 dark:text-neutral-300';
+  } else {
+    tabBg = 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200';
+  }
+
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`group/tab relative flex w-full min-w-0 items-center gap-1.5 rounded-md px-2.5 py-[6px] text-xs transition-colors ${
-        isActive
-          ? 'bg-neutral-50 text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
-          : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
-      }`}
+      className={`group/tab relative flex w-full min-w-0 items-center gap-1.5 rounded-md px-2.5 py-[6px] text-xs transition-colors ${tabBg}`}
     >
       {/* Tab icon — matches ChatEntryRow activity logic exactly */}
       <TabIcon
