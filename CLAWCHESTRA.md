@@ -9,7 +9,7 @@ tags:
   - core
 icon: "\U0001F4CA"
 lastActivity: '2026-03-06'
-nextAction: 'first-friend-readiness: Phase 5 built locally — awaiting verification; next close FFR with the final Windows parity and real-machine verification phase'
+nextAction: 'first-friend-readiness: Detached-host Windows persistence is built locally; next run real Windows/Linux friend-testing, triage findings, and close out FFR honestly'
 ---
 
 # Clawchestra

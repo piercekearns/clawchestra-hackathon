@@ -11,9 +11,14 @@ import { getAgentLaunchSpec, tmuxSessionName } from '../../lib/terminal-utils';
 import { detectActionRequired } from '../../lib/terminal-activity';
 import { Button } from '../ui/button';
 import {
+  attachPersistentTerminalSession,
+  drainPersistentTerminalSession,
   detectAgents,
+  ensurePersistentTerminalSession,
   getTerminalDependencyStatus,
+  resizePersistentTerminalSession,
   type TerminalDependencyStatus,
+  writePersistentTerminalSession,
   writeTempFile,
 } from '../../lib/tauri';
 
@@ -184,34 +189,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       };
     }
 
-    let pty: IPty;
-    try {
-      pty = spawn(launchPlan.command, launchPlan.args, {
-        name: 'xterm-256color',
-        cols: term.cols,
-        rows: term.rows,
-        cwd: projectDirPath ?? undefined,
-        env: { TERM: 'xterm-256color', COLORTERM: 'truecolor' },
-      });
-    } catch (e) {
-      term.writeln(`\r\n[Error] Failed to spawn terminal: ${e}`);
-      return () => {
-        mountedRef.current = false;
-        term.dispose();
-        termRef.current = null;
-        fitAddonRef.current = null;
-      };
-    }
-
-    ptyRef.current = pty;
-
-    // Mark session as active immediately on spawn
-    {
+    const markSessionActive = () => {
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.add(chat.id);
       store.setActiveTerminalChatIds(updated);
-    }
+    };
 
     // Wire PTY output → terminal display
     // The pane is VISIBLE (mounted) here — the user can see everything. So:
@@ -309,8 +292,8 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       }
     }, STARTUP_GRACE_MS + 500);
 
-    const dataDisposable = pty.onData((data: Uint8Array) => {
-      term.write(data);
+    const handleVisibleOutput = (chunk: string | Uint8Array) => {
+      term.write(chunk);
 
       const now = Date.now();
 
@@ -321,7 +304,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // activating dots.
       if (now - lastUserInputAt < USER_INPUT_SUPPRESS_MS) return;
 
-      bytesSinceLastWindow += data.length;
+      bytesSinceLastWindow += typeof chunk === 'string' ? chunk.length : chunk.length;
 
       if (now - lastWindowCheck >= WINDOW_MS) {
         const isSignificant = bytesSinceLastWindow >= BYTE_THRESHOLD;
@@ -356,29 +339,20 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
           });
         }
       }
-    });
+    };
 
-    // Wire terminal input → PTY
-    const inputDisposable = term.onData((data: string) => {
-      lastUserInputAt = Date.now();
-      pty.write(data);
-    });
-
-    // Wire terminal resize → PTY resize
-    const resizeDisposable = term.onResize(({ cols, rows }) => {
-      try {
-        pty.resize(cols, rows);
-      } catch {
-        // PTY may have already exited
-      }
-    });
-
-    // PTY exit — immediately mark as dead (no need to wait for next poll)
-    const exitDisposable = pty.onExit(({ exitCode }) => {
-      term.writeln(`\r\n[Session ended with code ${exitCode}]`);
+    let sessionEnded = false;
+    const handleSessionExit = (exitCode: number | null | undefined) => {
+      if (sessionEnded) return;
+      sessionEnded = true;
+      term.writeln(`\r\n[Session ended with code ${exitCode ?? 0}]`);
       isCurrentlyActive = false;
       significantHistory.length = 0;
       clearInterval(deactivateInterval);
+      if (persistentDrainInterval) {
+        clearInterval(persistentDrainInterval);
+        persistentDrainInterval = null;
+      }
       const store = useDashboardStore.getState();
       const updated = new Set(store.activeTerminalChatIds);
       updated.delete(chat.id);
@@ -397,6 +371,113 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         setModeOverride('auto');
         setLaunchNonce((current) => current + 1);
       }
+    };
+
+    let pty: IPty | null = null;
+    let persistentDrainInterval: ReturnType<typeof setInterval> | null = null;
+    let disposed = false;
+    let dataDisposable: { dispose: () => void } = { dispose: () => {} };
+    let exitDisposable: { dispose: () => void } = { dispose: () => {} };
+
+    if (launchPlan.mode === 'persistent-direct') {
+      void ensurePersistentTerminalSession({
+        chatId: chat.id,
+        file: launchPlan.command,
+        args: launchPlan.args,
+        cwd: projectDirPath ?? null,
+        env: { TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+        cols: term.cols,
+        rows: term.rows,
+      })
+        .then(async () => {
+          if (disposed) return;
+          markSessionActive();
+          const snapshot = await attachPersistentTerminalSession(chat.id, 4000);
+          if (disposed) return;
+          if (snapshot.data) {
+            handleVisibleOutput(snapshot.data);
+          }
+          if (snapshot.exited) {
+            handleSessionExit(snapshot.exitCode);
+            return;
+          }
+          persistentDrainInterval = setInterval(() => {
+            void drainPersistentTerminalSession(chat.id)
+              .then((next) => {
+                if (disposed) return;
+                if (next.data) {
+                  handleVisibleOutput(next.data);
+                }
+                if (next.exited) {
+                  handleSessionExit(next.exitCode);
+                }
+              })
+              .catch(() => {});
+          }, 120);
+        })
+        .catch((error) => {
+          term.writeln(`\r\n[Error] Failed to start persistent terminal: ${error}`);
+        });
+    } else {
+      try {
+        pty = spawn(launchPlan.command, launchPlan.args, {
+          name: 'xterm-256color',
+          cols: term.cols,
+          rows: term.rows,
+          cwd: projectDirPath ?? undefined,
+          env: { TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+        });
+      } catch (e) {
+        term.writeln(`\r\n[Error] Failed to spawn terminal: ${e}`);
+        return () => {
+          mountedRef.current = false;
+          term.dispose();
+          termRef.current = null;
+          fitAddonRef.current = null;
+        };
+      }
+
+      ptyRef.current = pty;
+      markSessionActive();
+
+      dataDisposable = pty.onData((data: Uint8Array) => {
+        handleVisibleOutput(data);
+      });
+
+      exitDisposable = pty.onExit(({ exitCode }) => {
+        handleSessionExit(exitCode);
+      });
+    }
+
+    const writeSessionInput = (data: string) => {
+      if (runtimeModeRef.current === 'persistent-direct') {
+        void writePersistentTerminalSession(chat.id, data).catch(() => {});
+        return;
+      }
+      pty?.write(data);
+    };
+
+    const resizeSession = (cols: number, rows: number) => {
+      if (runtimeModeRef.current === 'persistent-direct') {
+        void resizePersistentTerminalSession(chat.id, cols, rows).catch(() => {});
+        return;
+      }
+      try {
+        pty?.resize(cols, rows);
+      } catch {
+        // PTY may have already exited
+      }
+    };
+
+    // Wire terminal input → PTY
+    const inputDisposable = term.onData((data: string) => {
+      lastUserInputAt = Date.now();
+      writeSessionInput(data);
+    });
+
+    // Wire terminal resize → PTY resize
+    const resizeDisposable = term.onResize(({ cols, rows }) => {
+      resizeSession(cols, rows);
     });
 
     // Pass through app keyboard shortcuts while terminal has focus
@@ -409,7 +490,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       // avoids the overhead of bracketed paste mode for snappier response.
       if (event.shiftKey && event.key === 'Enter') {
         if (event.type === 'keydown') {
-          pty.write('\x16\n');
+          writeSessionInput('\x16\n');
         }
         return false;
       }
@@ -444,10 +525,14 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     term.focus();
 
     return () => {
+      disposed = true;
       mountedRef.current = false;
       clearTimeout(resizeTimeout);
       clearTimeout(postGraceCheck);
       clearInterval(deactivateInterval);
+      if (persistentDrainInterval) {
+        clearInterval(persistentDrainInterval);
+      }
       resizeObserver.disconnect();
       textarea?.removeEventListener('focus', onFocus);
       textarea?.removeEventListener('blur', onBlur);
@@ -471,11 +556,11 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
       // Kill PTY attachment only — tmux session keeps running
       try {
-        pty.kill();
+        pty?.kill();
       } catch {
         // Already dead
       }
-      if (runtimeModeRef.current !== 'tmux') {
+      if (runtimeModeRef.current !== 'tmux' && runtimeModeRef.current !== 'persistent-direct') {
         const store = useDashboardStore.getState();
         const updated = new Set(store.activeTerminalChatIds);
         updated.delete(chat.id);
@@ -531,7 +616,6 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       e.preventDefault();
       setDrag(false);
       const pty = ptyRef.current;
-      if (!pty) return;
       const files = Array.from(e.dataTransfer?.files ?? []);
       for (const file of files) {
         const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -539,7 +623,16 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         void file.arrayBuffer().then((buf) => {
           const bytes = Array.from(new Uint8Array(buf));
           void writeTempFile(file.name || `clawchestra-drop-${Date.now()}.${ext}`, bytes)
-            .then((filePath) => pty.write(filePath))
+            .then((filePath) => {
+              if (pty) {
+                pty.write(filePath);
+                return;
+              }
+              if (runtimeModeRef.current === 'persistent-direct') {
+                return writePersistentTerminalSession(chat.id, filePath);
+              }
+              return undefined;
+            })
             .catch((err) => console.error('Failed to save dropped image:', err));
         }).catch((err) => console.error('Failed to save dropped image:', err));
       }

@@ -157,7 +157,7 @@ export function TypePickerMenu({
                     {!tmuxAvailable ? (
                       <div className="px-3 py-1.5 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
                         {dependencyStatus?.platform === 'windows'
-                          ? 'Windows uses a temporary PowerShell fallback for now. Persistence is still being productized.'
+                          ? 'Windows terminals use a local background host so they can persist across drawer close and app relaunch.'
                           : dependencyStatus?.installerCommand
                             ? 'tmux is missing. Clawchestra will open a temporary terminal and offer in-app remediation.'
                             : 'tmux is missing. Clawchestra will open a temporary terminal; automatic remediation is not available on this platform yet.'}

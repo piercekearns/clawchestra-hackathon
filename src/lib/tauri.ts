@@ -541,6 +541,46 @@ type TauriCommands = {
     args: { sessionName: string; lines: number };
     return: string;
   };
+  persistent_terminal_session_ensure: {
+    args: {
+      chatId: string;
+      file: string;
+      args: string[];
+      cwd?: string | null;
+      env: Record<string, string>;
+      cols: number;
+      rows: number;
+    };
+    return: void;
+  };
+  persistent_terminal_session_attach: {
+    args: { chatId: string; lines?: number | null };
+    return: PersistentTerminalSnapshot;
+  };
+  persistent_terminal_session_drain: {
+    args: { chatId: string };
+    return: PersistentTerminalSnapshot;
+  };
+  persistent_terminal_session_capture: {
+    args: { chatId: string; lines?: number | null };
+    return: string;
+  };
+  persistent_terminal_session_write: {
+    args: { chatId: string; data: string };
+    return: void;
+  };
+  persistent_terminal_session_resize: {
+    args: { chatId: string; cols: number; rows: number };
+    return: void;
+  };
+  persistent_terminal_session_kill: {
+    args: { chatId: string };
+    return: void;
+  };
+  persistent_terminal_session_ids: {
+    args: Record<string, never>;
+    return: string[];
+  };
   terminal_dependency_status: {
     args: Record<string, never>;
     return: TerminalDependencyStatus;
@@ -1282,6 +1322,12 @@ export interface TerminalDependencyStatus {
   installerNote: string;
 }
 
+export interface PersistentTerminalSnapshot {
+  data: string;
+  exited: boolean;
+  exitCode: number | null;
+}
+
 export async function detectAgents(): Promise<DetectedAgent[]> {
   return typedInvoke('detect_agents');
 }
@@ -1300,6 +1346,57 @@ export async function tmuxKillAllClawchestraSessions(): Promise<void> {
 
 export async function tmuxCapturePane(sessionName: string, lines: number = 50): Promise<string> {
   return typedInvoke('tmux_capture_pane', { sessionName, lines });
+}
+
+export async function ensurePersistentTerminalSession(args: {
+  chatId: string;
+  file: string;
+  args: string[];
+  cwd?: string | null;
+  env?: Record<string, string>;
+  cols: number;
+  rows: number;
+}): Promise<void> {
+  return typedInvoke('persistent_terminal_session_ensure', {
+    chatId: args.chatId,
+    file: args.file,
+    args: args.args,
+    cwd: args.cwd ?? null,
+    env: args.env ?? {},
+    cols: args.cols,
+    rows: args.rows,
+  });
+}
+
+export async function attachPersistentTerminalSession(
+  chatId: string,
+  lines: number = 4000,
+): Promise<PersistentTerminalSnapshot> {
+  return typedInvoke('persistent_terminal_session_attach', { chatId, lines });
+}
+
+export async function drainPersistentTerminalSession(chatId: string): Promise<PersistentTerminalSnapshot> {
+  return typedInvoke('persistent_terminal_session_drain', { chatId });
+}
+
+export async function capturePersistentTerminalSession(chatId: string, lines: number = 50): Promise<string> {
+  return typedInvoke('persistent_terminal_session_capture', { chatId, lines });
+}
+
+export async function writePersistentTerminalSession(chatId: string, data: string): Promise<void> {
+  return typedInvoke('persistent_terminal_session_write', { chatId, data });
+}
+
+export async function resizePersistentTerminalSession(chatId: string, cols: number, rows: number): Promise<void> {
+  return typedInvoke('persistent_terminal_session_resize', { chatId, cols, rows });
+}
+
+export async function killPersistentTerminalSession(chatId: string): Promise<void> {
+  return typedInvoke('persistent_terminal_session_kill', { chatId });
+}
+
+export async function listPersistentTerminalSessionIds(): Promise<string[]> {
+  return typedInvoke('persistent_terminal_session_ids');
 }
 
 export async function getTerminalDependencyStatus(): Promise<TerminalDependencyStatus> {

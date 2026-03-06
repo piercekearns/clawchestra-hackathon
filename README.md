@@ -48,8 +48,14 @@ Embedded terminal posture in the current alpha:
 
 1. macOS and Linux terminals prefer persistent tmux-backed sessions
 2. if `tmux` is missing, Clawchestra now offers in-app remediation from the terminal surface and can still fall back to a temporary direct shell
-3. Windows terminals currently run as temporary PowerShell sessions while tmux-backed persistence remains under Phase 1 hardening
+3. Windows terminals now use a local background host so sessions can survive drawer close and app relaunch
 4. the terminal picker now shows detected coding-agent CLIs explicitly and falls back to a generic shell when none are installed
+
+Phase 6 is still not ready to call complete from this machine alone:
+
+1. the detached-host Windows persistence path is built locally
+2. real Windows/Linux machine validation still needs to run with friend testers
+3. any bugs surfaced by that testing still need triage and fixes
 
 Remote OpenClaw posture in the current alpha:
 

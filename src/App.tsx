@@ -84,7 +84,10 @@ import {
   getDashboardSettings,
   getValidationHistory,
   isTauriRuntime,
+  killPersistentTerminalSession,
+  listPersistentTerminalSessionIds,
   peekOpenclawBearerToken,
+  capturePersistentTerminalSession,
   tmuxListClawchestraSessions,
   tmuxKillSession,
   tmuxCapturePane,
@@ -893,25 +896,41 @@ export default function App() {
   // Detect coding agents + discover tmux sessions on startup + 30s poll
   useEffect(() => {
     if (!isTauriRuntime()) return;
+    const isWindowsPlatform = (() => {
+      if (typeof navigator === 'undefined') return false;
+      const raw = `${navigator.platform} ${navigator.userAgent}`.toLowerCase();
+      return raw.includes('win');
+    })();
 
-    /** Refresh activeTerminalChatIds from tmux — reused for startup + poll. */
+    /** Refresh activeTerminalChatIds from the active terminal backend — reused for startup + poll. */
     const refreshActiveTerminals = async () => {
       try {
-        const sessions = await tmuxListClawchestraSessions();
         const store = useDashboardStore.getState();
         const hubChats = store.hubChats;
         const hubChatIds = new Set(hubChats.map((c) => c.id));
         const activeChatIds = new Set<string>();
 
-        for (const sessionName of sessions) {
-          const parsed = parseTmuxSessionName(sessionName);
-          if (parsed && hubChatIds.has(parsed.chatId)) {
-            activeChatIds.add(parsed.chatId);
-          } else if (hubChats.length > 0) {
-            // Orphaned tmux session — kill it (only when hubChats are loaded
-            // from the DB; skip on first poll to avoid race where sessions
-            // look orphaned because the DB hasn't been read yet).
-            try { await tmuxKillSession(sessionName); } catch { /* ignore */ }
+        if (isWindowsPlatform) {
+          const sessionIds = await listPersistentTerminalSessionIds();
+          for (const chatId of sessionIds) {
+            if (hubChatIds.has(chatId)) {
+              activeChatIds.add(chatId);
+            } else if (hubChats.length > 0) {
+              try { await killPersistentTerminalSession(chatId); } catch { /* ignore */ }
+            }
+          }
+        } else {
+          const sessions = await tmuxListClawchestraSessions();
+          for (const sessionName of sessions) {
+            const parsed = parseTmuxSessionName(sessionName);
+            if (parsed && hubChatIds.has(parsed.chatId)) {
+              activeChatIds.add(parsed.chatId);
+            } else if (hubChats.length > 0) {
+              // Orphaned tmux session — kill it (only when hubChats are loaded
+              // from the DB; skip on first poll to avoid race where sessions
+              // look orphaned because the DB hasn't been read yet).
+              try { await tmuxKillSession(sessionName); } catch { /* ignore */ }
+            }
           }
         }
 
@@ -968,6 +987,11 @@ export default function App() {
   // Terminal activity awareness — poll tmux capture-pane every 2s for hidden terminals
   useEffect(() => {
     if (!isTauriRuntime()) return;
+    const isWindowsPlatform = (() => {
+      if (typeof navigator === 'undefined') return false;
+      const raw = `${navigator.platform} ${navigator.userAgent}`.toLowerCase();
+      return raw.includes('win');
+    })();
 
     const poll = async () => {
       const store = useDashboardStore.getState();
@@ -985,9 +1009,10 @@ export default function App() {
         const chat = store.hubChats.find((c) => c.id === chatId);
         if (!chat || chat.type !== 'terminal') continue;
 
-        const sessionName = tmuxSessionName(chat.projectId, chat.id);
         try {
-          const captured = await tmuxCapturePane(sessionName, 50);
+          const captured = isWindowsPlatform
+            ? await capturePersistentTerminalSession(chat.id, 50)
+            : await tmuxCapturePane(tmuxSessionName(chat.projectId, chat.id), 50);
 
           // Re-check visibility AFTER the async capture — user may have navigated
           // to this terminal while capture was in flight. Without this, the poll

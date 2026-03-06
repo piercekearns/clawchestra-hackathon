@@ -184,7 +184,7 @@ export function OnboardingShell({
         value: terminalStatus?.tmuxAvailable
           ? 'Persistent tmux-backed terminals available'
           : terminalStatus?.platform === 'windows'
-            ? 'Temporary PowerShell fallback until Windows persistence exists'
+            ? 'Persistent Windows terminal host available'
             : 'Clawchestra will offer tmux remediation when you create a terminal',
       },
     ],
@@ -401,9 +401,9 @@ export function OnboardingShell({
 
                 <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
                   <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">What happens later</h3>
-                  <div className="mt-3 grid gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                    <p>On macOS and Linux, missing tmux no longer hard-blocks the feature. Clawchestra offers an in-app remediation path when you create a terminal.</p>
-                    <p>On Windows, terminal sessions currently use direct PowerShell fallback instead of tmux-backed persistence.</p>
+                    <div className="mt-3 grid gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                      <p>On macOS and Linux, missing tmux no longer hard-blocks the feature. Clawchestra offers an in-app remediation path when you create a terminal.</p>
+                    <p>On Windows, terminal sessions now use a local background host so they can survive drawer close and Clawchestra relaunch.</p>
                     <p>This step is informational. You do not need to install tmux here to finish onboarding.</p>
                   </div>
                 </div>

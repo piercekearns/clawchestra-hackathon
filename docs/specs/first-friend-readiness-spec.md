@@ -464,10 +464,13 @@ Status note (2026-03-06): built and validated locally; closeout captured in `doc
 
 ### Phase 6: Windows Parity And Final Verification
 
+Status note (2026-03-06): research passes 1 and 2 are complete, implementation pass 1 is built locally, and the detached-host relaunch persistence path is now built locally as implementation pass 2. Windows terminals are now intended to survive drawer close and full Clawchestra relaunch on Windows. What remains is real-machine Windows/Linux validation plus any fixes that testing surfaces. See `docs/reports/2026-03-06-first-friend-readiness-phase-6-research-pass-1.md`, `docs/reports/2026-03-06-first-friend-readiness-phase-6-research-pass-2-ecosystem-survey.md`, `docs/reports/2026-03-06-first-friend-readiness-phase-6-implementation-pass-1.md`, `docs/reports/2026-03-06-first-friend-readiness-phase-6-implementation-pass-2.md`, `docs/specs/windows-terminal-persistence-spec.md`, and `docs/plans/first-friend-readiness-phase-6-friend-testing-checklist.md`.
+
 1. Treat true Windows terminal persistence as a remaining FFR gap for honest Windows support.
-2. Use the supporting research brief at `docs/specs/windows-terminal-persistence-spec.md` to choose the architecture before implementation.
+2. Keep the pass-1 backend session manager as the new baseline, because it removes the drawer-close session-loss gap on Windows.
 3. Run real Windows/Linux friend-testing before FFR is called complete.
-4. Only call FFR complete once the remaining platform-parity and testing gaps are resolved or explicitly narrowed.
+4. Fix any platform-specific issues that testing surfaces.
+5. Only call FFR complete once the remaining validation gaps are resolved or the support claim is explicitly narrowed.
 
 ## 10. Out Of Scope
 

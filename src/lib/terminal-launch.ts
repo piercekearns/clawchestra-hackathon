@@ -1,6 +1,6 @@
 import type { TerminalDependencyStatus } from './tauri';
 
-export type RuntimeMode = 'tmux' | 'direct' | 'install';
+export type RuntimeMode = 'tmux' | 'direct' | 'install' | 'persistent-direct';
 
 export type RuntimeNotice = {
   tone: 'info' | 'warning';
@@ -175,16 +175,16 @@ export function buildTerminalLaunchPlan(args: BuildTerminalLaunchPlanArgs): Laun
   if (platform === 'windows') {
     const shellPath = preferredShellPath ?? 'powershell.exe';
     return {
-      mode: 'direct',
-      persistent: false,
+      mode: 'persistent-direct',
+      persistent: true,
       command: shellPath,
       args: agentCommand
         ? ['-NoLogo', '-NoExit', '-Command', agentPrefersShell ? agentCommand : formatWindowsAgentCommand(agentCommand)]
         : ['-NoLogo'],
       notice: {
         tone: 'info',
-        title: 'Temporary Windows terminal',
-        body: 'Windows currently runs direct PowerShell sessions. They work for friend testing, but they do not persist when you close the drawer or relaunch the app yet.',
+        title: 'Persistent Windows terminal',
+        body: 'Windows terminals now use a local background host so sessions can survive drawer close and Clawchestra relaunch.',
         allowInstall: false,
       },
       writeLines: [],

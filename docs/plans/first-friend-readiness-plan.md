@@ -363,6 +363,8 @@ These two items should dovetail, not duplicate.
 
 ## Phase 6 - Windows Parity And Final FFR Verification
 
+**Status note (2026-03-06):** Research passes 1 and 2 are complete, the implementation plan is written, implementation pass 1 is built locally, and the detached-host relaunch path is now built locally as implementation pass 2. The remaining Phase 6 gaps are real-machine Windows/Linux validation, findings triage, and any fixes that validation surfaces. See `docs/reports/2026-03-06-first-friend-readiness-phase-6-research-pass-1.md`, `docs/reports/2026-03-06-first-friend-readiness-phase-6-research-pass-2-ecosystem-survey.md`, `docs/reports/2026-03-06-first-friend-readiness-phase-6-implementation-pass-1.md`, `docs/reports/2026-03-06-first-friend-readiness-phase-6-implementation-pass-2.md`, `docs/specs/windows-terminal-persistence-spec.md`, `docs/plans/first-friend-readiness-phase-6-windows-persistence-plan.md`, and `docs/plans/first-friend-readiness-phase-6-friend-testing-checklist.md`.
+
 ### Goals
 
 1. Close the remaining gap between "usable on Windows" and "honestly ready on Windows."
@@ -372,10 +374,11 @@ These two items should dovetail, not duplicate.
 
 1. Research Windows terminal persistence from primary sources and the supporting brief at `docs/specs/windows-terminal-persistence-spec.md`.
 2. Choose the Windows persistence architecture and write the implementation plan inside FFR.
-3. Implement the chosen Windows persistence approach.
-4. Run real-machine friend-testing for Windows and Linux installs, onboarding, chat, sync, and terminals.
-5. Fix any blockers surfaced by that testing.
-6. Do the final FFR completion pass only after those platform findings are resolved or explicitly narrowed in scope.
+3. Keep the Phase 6 pass-1 backend session manager in place so Windows terminals survive drawer close/reopen inside the running app.
+4. Keep the detached-host Windows persistence path as the new baseline for honest parity claims.
+5. Run real-machine friend-testing for Windows and Linux installs, onboarding, chat, sync, and terminals.
+6. Fix any blockers surfaced by that testing.
+7. Do the final FFR completion pass only after those platform findings are resolved or explicitly narrowed in scope.
 
 ### Exit Criteria
 

@@ -656,6 +656,7 @@ dependencies = [
  "keyring",
  "notify",
  "once_cell",
+ "portable-pty",
  "regex",
  "rfd",
  "rusqlite",

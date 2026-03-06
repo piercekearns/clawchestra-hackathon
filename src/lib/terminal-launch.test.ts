@@ -81,11 +81,13 @@ describe('buildTerminalLaunchPlan', () => {
         shellPath: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
         installerLabel: null,
         installerCommand: null,
-        installerNote: 'Windows terminals currently fall back to direct PowerShell sessions.',
+        installerNote: 'Windows terminals now stay alive while the app remains open.',
       },
       modeOverride: 'auto',
     });
 
+    expect(plan.mode).toBe('persistent-direct');
+    expect(plan.persistent).toBe(true);
     expect(plan.command).toBe('C:\\Program Files\\PowerShell\\7\\pwsh.exe');
     expect(plan.args).toEqual(['-NoLogo', '-NoExit', '-Command', 'codex']);
   });

@@ -57,11 +57,11 @@ Users talk to you from three places inside Clawchestra:
 
 ## Terminal Agents
 
-Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic shell) scoped to any project or roadmap item. Terminals prefer local tmux-backed persistence, but Clawchestra now falls back to temporary direct sessions when tmux is missing or when the user is on Windows.
+Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic shell) scoped to any project or roadmap item. Terminals prefer local tmux-backed persistence, and on Windows Clawchestra now uses a local background host so persistent sessions can survive drawer close and app relaunch.
 
 **How to open:** Hover a project card on the main board and click the terminal icon, or hover a roadmap item card and click the terminal icon. Existing terminal sessions are also listed and accessible from the project's entry in the sidebar.
 
-If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals currently run as temporary PowerShell sessions and do not persist across drawer close or app relaunch yet. The terminal picker now shows available and missing coding-agent CLIs explicitly, recommends the only detected agent when there is just one, and falls back cleanly to a generic shell when no dedicated coding agent is installed. When a coding-agent command is shell-defined (for example via an alias or shell function), Clawchestra launches it through the matching shell; otherwise it launches the resolved executable path directly.
+If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals now use that background host for reattach across drawer close and app relaunch. The terminal picker now shows available and missing coding-agent CLIs explicitly, recommends the only detected agent when there is just one, and falls back cleanly to a generic shell when no dedicated coding agent is installed. When a coding-agent command is shell-defined (for example via an alias or shell function), Clawchestra launches it through the matching shell; otherwise it launches the resolved executable path directly.
 
 Terminal sessions show activity indicators: animated dots while active, amber badge when action is required (permission prompts), yellow badge for unread output.
 

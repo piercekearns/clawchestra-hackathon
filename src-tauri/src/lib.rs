@@ -4054,6 +4054,7 @@ fn confirm_quit(
     let _ = Command::new(commands::terminal::tmux_bin())
         .args(["-L", "clawchestra", "kill-server"])
         .output();
+    commands::terminal::persistent_terminal_kill_all_sessions();
 
     // Set flag so close/exit handlers proceed
     quit_confirmed.0.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -4233,6 +4234,10 @@ async fn mark_rejection_resolved(
 }
 
 // =============================================================================
+
+pub fn maybe_run_windows_terminal_host_from_args() -> bool {
+    commands::terminal::maybe_run_windows_terminal_host_from_args()
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -4479,14 +4484,18 @@ pub fn run() {
                 app.on_menu_event(move |app_handle, event| {
                     if event.id().0.as_str() == "quit-guarded" {
                         let sessions = commands::terminal::tmux_list_clawchestra_sessions();
-                        if sessions.is_empty() {
+                        let persistent_count = commands::terminal::persistent_terminal_active_session_count();
+                        if sessions.is_empty() && persistent_count == 0 {
                             // No active sessions — close window (triggers flush/sync/exit)
                             if let Some(window) = app_handle.get_webview_window("main") {
                                 let _ = window.close();
                             }
                         } else {
                             // Active sessions — show quit guard dialog
-                            let _ = app_handle.emit("quit-guard-needed", sessions.len());
+                            let _ = app_handle.emit(
+                                "quit-guard-needed",
+                                sessions.len() + persistent_count,
+                            );
                         }
                     }
                 });
@@ -4499,9 +4508,13 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if !quit_confirmed_for_events.0.load(std::sync::atomic::Ordering::SeqCst) {
                     let sessions = commands::terminal::tmux_list_clawchestra_sessions();
-                    if !sessions.is_empty() {
+                    let persistent_count = commands::terminal::persistent_terminal_active_session_count();
+                    if !sessions.is_empty() || persistent_count > 0 {
                         api.prevent_close();
-                        let _ = window.emit("quit-guard-needed", sessions.len());
+                        let _ = window.emit(
+                            "quit-guard-needed",
+                            sessions.len() + persistent_count,
+                        );
                         return;
                     }
                 }
@@ -4595,6 +4608,8 @@ pub fn run() {
                     } else {
                         tracing::warn!("Sync-on-close failed: {}", sync_result.message);
                     }
+
+                    commands::terminal::persistent_terminal_shutdown_if_idle();
                 }
                 _ => {}
             }
@@ -4716,6 +4731,14 @@ pub fn run() {
             commands::terminal::tmux_kill_session,
             commands::terminal::tmux_kill_all_clawchestra_sessions,
             commands::terminal::tmux_capture_pane,
+            commands::terminal::persistent_terminal_session_ensure,
+            commands::terminal::persistent_terminal_session_attach,
+            commands::terminal::persistent_terminal_session_drain,
+            commands::terminal::persistent_terminal_session_capture,
+            commands::terminal::persistent_terminal_session_write,
+            commands::terminal::persistent_terminal_session_resize,
+            commands::terminal::persistent_terminal_session_kill,
+            commands::terminal::persistent_terminal_session_ids,
             confirm_quit,
             // Phase 7 logging & debug commands
             export_debug_info,
@@ -4735,9 +4758,13 @@ pub fn run() {
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 if !quit_confirmed_for_exit.0.load(std::sync::atomic::Ordering::SeqCst) {
                     let sessions = commands::terminal::tmux_list_clawchestra_sessions();
-                    if !sessions.is_empty() {
+                    let persistent_count = commands::terminal::persistent_terminal_active_session_count();
+                    if !sessions.is_empty() || persistent_count > 0 {
                         api.prevent_exit();
-                        let _ = app_handle.emit("quit-guard-needed", sessions.len());
+                        let _ = app_handle.emit(
+                            "quit-guard-needed",
+                            sessions.len() + persistent_count,
+                        );
                     }
                     // else: no active sessions (or discovery failed during shutdown).
                     // Do NOT kill-server here — on update restarts (SIGTERM via killall),
