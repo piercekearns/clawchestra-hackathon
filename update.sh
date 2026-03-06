@@ -163,11 +163,17 @@ rm -rf "$STAGED_PATH"
 cp -R "$BUNDLE_PATH" "$STAGED_PATH"
 
 echo "🔁 Applying update and restarting app..."
+# Send SIGTERM first to allow graceful window-state save (0.5s window).
+# Then SIGKILL to guarantee the process dies — the Tauri quit guard calls
+# prevent_exit() when tmux sessions are active, so SIGTERM alone leaves
+# the old process alive. Two concurrent instances cause race conditions
+# in the 30s terminal-liveness poll that can kill one tmux session.
 killall "clawchestra" 2>/dev/null || true
-# Wait for the process to fully exit and for macOS to release window resources
-# before opening the new binary. 0.5s was too short — displays aren't always
-# re-enumerated by the time restoreStateCurrent fires, causing fallback to min size.
-sleep 1.5
+sleep 0.5
+killall -9 "clawchestra" 2>/dev/null || true
+# Wait for macOS to release window resources before opening the new binary.
+# 1s is enough now that SIGKILL guarantees immediate exit.
+sleep 1
 rm -rf "$INSTALL_PATH"
 mv "$STAGED_PATH" "$INSTALL_PATH"
 open "$INSTALL_PATH"

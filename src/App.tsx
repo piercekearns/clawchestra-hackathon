@@ -903,6 +903,13 @@ export default function App() {
       return raw.includes('win');
     })();
 
+    // Skip orphan cleanup for the first few polls after startup. After an
+    // update restart the old process may still be alive briefly (quit guard
+    // prevents SIGTERM exit), and killing "orphaned" sessions during that
+    // window can destroy a session that actually belongs to a valid hub chat.
+    const startedAt = Date.now();
+    const ORPHAN_CLEANUP_GRACE_MS = 60_000; // 60s — covers the 30s poll + update overlap
+
     /** Refresh activeTerminalChatIds from the active terminal backend — reused for startup + poll. */
     const refreshActiveTerminals = async () => {
       try {
@@ -910,13 +917,14 @@ export default function App() {
         const hubChats = store.hubChats;
         const hubChatIds = new Set(hubChats.map((c) => c.id));
         const activeChatIds = new Set<string>();
+        const allowOrphanCleanup = hubChats.length > 0 && Date.now() - startedAt > ORPHAN_CLEANUP_GRACE_MS;
 
         if (isWindowsPlatform) {
           const sessionIds = await listPersistentTerminalSessionIds();
           for (const chatId of sessionIds) {
             if (hubChatIds.has(chatId)) {
               activeChatIds.add(chatId);
-            } else if (hubChats.length > 0) {
+            } else if (allowOrphanCleanup) {
               try { await killPersistentTerminalSession(chatId); } catch { /* ignore */ }
             }
           }
@@ -926,10 +934,9 @@ export default function App() {
             const parsed = parseTmuxSessionName(sessionName);
             if (parsed && hubChatIds.has(parsed.chatId)) {
               activeChatIds.add(parsed.chatId);
-            } else if (hubChats.length > 0) {
-              // Orphaned tmux session — kill it (only when hubChats are loaded
-              // from the DB; skip on first poll to avoid race where sessions
-              // look orphaned because the DB hasn't been read yet).
+            } else if (allowOrphanCleanup) {
+              // Orphaned tmux session — kill it. Skipped during the startup
+              // grace window to avoid races with update restarts or slow DB loads.
               try { await tmuxKillSession(sessionName); } catch { /* ignore */ }
             }
           }
