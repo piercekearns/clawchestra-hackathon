@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clawchestra — Orchestrate Your AI Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   VARIANT A — DARK POSTER
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink: #0a0d08;
+  --surface: #0d100a;
+  --panel: rgba(16, 20, 14, 0.92);
+  --line: rgba(223, 255, 0, 0.14);
+  --line-strong: rgba(223, 255, 0, 0.45);
+  --text: #f3f7ea;
+  --text-dim: #a3ad97;
+  --text-faint: #5e6658;
+  --signal: #DFFF00;
+  --signal-deep: #b7d300;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'Space Grotesk', sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--ink);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- DOT GRAIN OVERLAY (halftone texture) ---- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.07;
+  background-image: radial-gradient(rgba(255,255,255,0.8) 0.6px, transparent 0.6px);
+  background-size: 5px 5px;
+  mix-blend-mode: overlay;
+}
+
+/* ---- GRID LINES OVERLAY ---- */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  background-image:
+    linear-gradient(rgba(223,255,0,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(223,255,0,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 70%);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 70%);
+}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  border-top: 2px solid var(--signal);
+  background: rgba(10, 13, 8, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.nav-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 32px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}
+
+.nav-brand .claw-emoji {
+  font-size: 1.4rem;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.nav-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  transition: color 200ms;
+}
+
+.nav-link:hover { color: var(--text); }
+
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  background: var(--signal);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.btn-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(223, 255, 0, 0.25);
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 0.88rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.btn-outline:hover {
+  transform: translateY(-2px);
+  border-color: var(--signal);
+  background: rgba(223, 255, 0, 0.06);
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 32px 80px;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Radial glow behind the claw */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  width: 900px;
+  height: 900px;
+  background: radial-gradient(circle, rgba(223,255,0,0.14) 0%, rgba(223,255,0,0.05) 30%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-image {
+  position: relative;
+  z-index: 1;
+  width: 420px;
+  height: 420px;
+  margin-bottom: 32px;
+  animation: heroFloat 6s ease-in-out infinite;
+  filter: drop-shadow(0 0 80px rgba(223,255,0,0.22)) drop-shadow(0 0 160px rgba(223,255,0,0.08));
+}
+
+.hero-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 64px;
+}
+
+@keyframes heroFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 860px;
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  margin-bottom: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(223,255,0,0.05);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.kicker-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+  animation: kickerPulse 2s ease-in-out infinite;
+}
+
+@keyframes kickerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.hero h1 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(3.2rem, 7vw, 6.5rem);
+  line-height: 0.95;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  margin-bottom: 28px;
+}
+
+.hero h1 .accent {
+  color: var(--signal);
+}
+
+.hero-sub {
+  max-width: 600px;
+  margin: 0 auto 36px;
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.hero-sub strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   SECTION SHARED
+   ============================================================ */
+section {
+  position: relative;
+  z-index: 1;
+}
+
+.section-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.section-title {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 2.4rem;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+  display: inline-block;
+  position: relative;
+}
+
+.section-title::after {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 3px;
+  background: var(--signal);
+  margin-top: 12px;
+  border-radius: 2px;
+}
+
+.section-subtitle {
+  color: var(--text-dim);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 540px;
+}
+
+/* ============================================================
+   FEATURES
+   ============================================================ */
+.features {
+  padding: 100px 0;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 56px;
+}
+
+.feature-card {
+  padding: 36px 32px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(20, 24, 16, 0.9), rgba(12, 15, 10, 0.85));
+  transition: border-color 300ms, transform 300ms;
+}
+
+.feature-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-4px);
+}
+
+.feature-card {
+  border-top: 2px solid var(--signal);
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(223,255,0,0.08);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  margin-bottom: 24px;
+}
+
+.feature-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--signal);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.feature-card h3 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 12px;
+  color: var(--signal);
+}
+
+.feature-card p {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+/* ============================================================
+   HOW IT WORKS
+   ============================================================ */
+.how-it-works {
+  padding: 80px 0 100px;
+  border-top: 1px solid var(--line);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin-top: 56px;
+}
+
+.step {
+  position: relative;
+  text-align: center;
+  padding: 36px 24px 32px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(16, 20, 14, 0.7), rgba(10, 13, 8, 0.5));
+}
+
+.step-number {
+  font-family: var(--mono);
+  font-size: 5rem;
+  font-weight: 500;
+  line-height: 1;
+  margin-bottom: 20px;
+  -webkit-text-stroke: 1.5px var(--signal);
+  color: transparent;
+}
+
+.step h3 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 10px;
+}
+
+.step p {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+/* Connector arrows between steps */
+.step:not(:last-child)::after {
+  content: '>';
+  position: absolute;
+  top: 50%;
+  right: -22px;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  color: var(--signal);
+  opacity: 0.5;
+  z-index: 2;
+}
+
+/* ============================================================
+   BUILT WITH
+   ============================================================ */
+.built-with {
+  padding: 72px 0;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.built-with-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-faint);
+  margin-bottom: 32px;
+}
+
+.tech-badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tech-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  background: rgba(255,255,255,0.02);
+}
+
+.tech-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+  opacity: 0.7;
+}
+
+/* ============================================================
+   CTA SECTION
+   ============================================================ */
+.cta-section {
+  padding: 120px 0;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-section::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(ellipse, rgba(223,255,0,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.cta-section h2 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.cta-section h2 .accent { color: var(--signal); }
+
+.cta-section p {
+  color: var(--text-dim);
+  font-size: 1.05rem;
+  margin-bottom: 40px;
+  position: relative;
+}
+
+.waitlist-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  overflow: hidden;
+  transition: border-color 300ms, box-shadow 300ms;
+}
+
+.waitlist-form:focus-within {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px rgba(223,255,0,0.08), 0 8px 40px rgba(223,255,0,0.06);
+}
+
+.waitlist-form input[type="email"] {
+  flex: 1;
+  min-width: 200px;
+  padding: 16px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.waitlist-form input[type="email"]::placeholder {
+  color: var(--text-faint);
+}
+
+.waitlist-form .btn-cta {
+  border-radius: 0 10px 10px 0;
+  padding: 16px 24px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer {
+  position: relative;
+  z-index: 1;
+  padding: 32px 32px 40px;
+  text-align: center;
+  border-top: 1px solid var(--line);
+}
+
+footer p {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+footer a {
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 200ms;
+}
+
+footer a:hover { color: var(--signal); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  .features-grid,
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .step:not(:last-child)::after { display: none; }
+
+  .hero h1 { font-size: clamp(2.4rem, 10vw, 4rem); }
+  .hero-image { width: 240px; height: 240px; }
+}
+
+@media (max-width: 640px) {
+  .nav-inner { padding: 0 18px; }
+  .nav-link { display: none; }
+  .hero { padding: 100px 18px 60px; }
+  .section-inner { padding: 0 18px; }
+  .hero-image { width: 200px; height: 200px; margin-bottom: 32px; }
+
+  .hero-actions { flex-direction: column; }
+  .btn-cta, .btn-outline { width: 100%; justify-content: center; }
+
+  .waitlist-form {
+    flex-direction: column;
+    border-radius: 12px;
+    gap: 0;
+  }
+  .waitlist-form input[type="email"] { width: 100%; min-width: 0; }
+  .waitlist-form .btn-cta {
+    width: 100%;
+    justify-content: center;
+    border-radius: 0 0 10px 10px;
+  }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ==================== NAV ==================== -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">
+      <span class="claw-emoji">&#129438;</span>
+      <span>Clawchestra</span>
+    </a>
+    <div class="nav-links">
+      <a href="https://github.com" class="nav-link">GitHub</a>
+      <a href="#waitlist" class="btn-cta">Get Access</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <div class="hero-image">
+    <img src="../assets/clawchestra-app-icon-dithered.png" alt="Clawchestra — lobster claw icon with halftone dither texture">
+  </div>
+  <div class="hero-content">
+    <div class="hero-kicker"><span class="kicker-dot"></span> Private Alpha &mdash; macOS</div>
+    <h1>Orchestrate<br>your <span class="accent">AI agents.</span></h1>
+    <p class="hero-sub">One desktop app to manage <strong>Claude Code</strong>, <strong>Codex</strong>, and every terminal-based AI agent &mdash; with real-time activity tracking, a kanban board, and <strong>OpenClaw</strong> chat integration.</p>
+    <div class="hero-actions">
+      <a href="#waitlist" class="btn-cta">Request Early Access</a>
+      <a href="https://github.com" class="btn-outline">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FEATURES ==================== -->
+<section class="features">
+  <div class="section-inner">
+    <div class="section-title">What's inside</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="3"/><path d="M7 8l4 4-4 4"/><line x1="13" y1="16" x2="17" y2="16"/></svg></div>
+        <h3>Embedded AI Terminals</h3>
+        <p>Run Claude Code and Codex side by side in managed tmux sessions with activity detection and action-required notifications.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/></svg></div>
+        <h3>Kanban Orchestration</h3>
+        <p>Track roadmap items across projects with drag-and-drop columns, specs, plans, and real-time git sync.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></div>
+        <h3>OpenClaw Integration</h3>
+        <p>Chat with your projects through scoped AI conversations with context injection and provider failover.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== HOW IT WORKS ==================== -->
+<section class="how-it-works">
+  <div class="section-inner">
+    <div class="section-title">How it works</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">01</div>
+        <h3>Add your projects</h3>
+        <p>Point Clawchestra at any local repository with a simple config.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">02</div>
+        <h3>Launch AI agents</h3>
+        <p>Spin up Claude Code, Codex, or any terminal AI inside managed sessions.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">03</div>
+        <h3>Orchestrate from one view</h3>
+        <p>Monitor activity, manage tasks, and chat &mdash; all from a single desktop window.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== BUILT WITH ==================== -->
+<section class="built-with">
+  <div class="section-inner">
+    <div class="built-with-label">Built with</div>
+    <div class="tech-badges">
+      <span class="tech-badge"><span class="dot"></span> Tauri</span>
+      <span class="tech-badge"><span class="dot"></span> React</span>
+      <span class="tech-badge"><span class="dot"></span> TypeScript</span>
+      <span class="tech-badge"><span class="dot"></span> tmux</span>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== CTA ==================== -->
+<section class="cta-section" id="waitlist">
+  <div class="section-inner">
+    <h2>Ready to <span class="accent">orchestrate?</span></h2>
+    <p>Join the private alpha waitlist. We'll send your invite when your slot opens.</p>
+    <form class="waitlist-form" onsubmit="event.preventDefault();">
+      <input type="email" placeholder="you@email.com" required>
+      <button type="submit" class="btn-cta">Join Waitlist</button>
+    </form>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer>
+  <p>&copy; 2026 Clawchestra &middot; <a href="https://github.com">GitHub</a> &middot; Private Alpha</p>
+</footer>
+
+</body>
+</html>

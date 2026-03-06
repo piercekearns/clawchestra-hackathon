@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clawchestra — Orchestrate Your AI Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0b0b0b;
+  --surface: rgba(255,255,255,0.03);
+  --border: rgba(255,255,255,0.08);
+  --text: #e8e8e3;
+  --muted: #888;
+  --accent: #DFFF00;
+  --accent-dim: rgba(223,255,0,0.08);
+  --sans: 'Inter', -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 0 48px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(11,11,11,0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-logo {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.nav-link {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.nav-link:hover { color: var(--text); }
+
+.btn-cta {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0b0b0b;
+  background: var(--accent);
+  border: none;
+  padding: 8px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.btn-cta:hover { opacity: 0.88; }
+
+/* ============================================================
+   HERO — SPLIT LAYOUT
+   ============================================================ */
+.hero {
+  min-height: 90vh;
+  display: flex;
+  align-items: center;
+  padding: 0 48px;
+  padding-top: 64px;
+  max-width: 1280px;
+  margin: 0 auto;
+  gap: 64px;
+}
+
+.hero-left {
+  flex: 1.15;
+  max-width: 580px;
+}
+
+.hero-label {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 24px;
+  letter-spacing: 0.02em;
+}
+
+.hero-headline {
+  font-size: 3.8rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  margin-bottom: 28px;
+}
+
+.hero-sub {
+  font-size: 1.05rem;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 480px;
+  margin-bottom: 44px;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-primary {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0b0b0b;
+  background: var(--accent);
+  border: none;
+  padding: 14px 32px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.btn-primary:hover { opacity: 0.88; }
+
+.btn-ghost {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 13px 28px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-ghost:hover { border-color: rgba(255,255,255,0.2); }
+
+/* RIGHT: Product card */
+.hero-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.hero-glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(223,255,0,0.12) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.product-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.4s ease, border-color 0.4s ease;
+}
+.product-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.product-card img {
+  width: 320px;
+  height: 320px;
+  object-fit: contain;
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* ============================================================
+   TRUST BAR
+   ============================================================ */
+.trust-bar {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 24px 48px;
+  text-align: center;
+}
+
+.trust-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.trust-label {
+  color: rgba(255,255,255,0.35);
+}
+
+.trust-sep {
+  color: rgba(255,255,255,0.15);
+}
+
+/* ============================================================
+   FEATURES
+   ============================================================ */
+.features {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 120px 48px;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 56px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 36px 32px;
+  transition: border-top-color 0.3s;
+}
+.feature-card:hover {
+  border-top-color: rgba(223,255,0,0.3);
+}
+
+.feature-tag {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 16px;
+}
+
+.feature-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.feature-desc {
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   HOW IT WORKS
+   ============================================================ */
+.how-it-works {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 80px 48px 120px;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px;
+  margin-top: 56px;
+}
+
+.step-number {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--accent);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.step-number::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.step-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+}
+
+.step-desc {
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   CTA
+   ============================================================ */
+.cta-section {
+  padding: 100px 48px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  background: radial-gradient(ellipse 600px 300px at 50% 60%, rgba(223,255,0,0.04) 0%, transparent 100%);
+}
+
+.cta-inner {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.cta-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 16px;
+}
+
+.cta-sub {
+  font-size: 1rem;
+  color: var(--muted);
+  margin-bottom: 40px;
+}
+
+.cta-form {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.cta-input {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 20px;
+  border-radius: 999px;
+  width: 280px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.cta-input::placeholder { color: rgba(255,255,255,0.25); }
+.cta-input:focus { border-color: rgba(223,255,0,0.3); }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer {
+  padding: 32px 48px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.footer-text {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.3);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes fadeInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-left {
+  animation: fadeInLeft 0.8s ease-out both;
+}
+.hero-right {
+  animation: fadeInRight 0.8s 0.15s ease-out both;
+}
+.trust-bar {
+  animation: fadeInUp 0.6s 0.4s ease-out both;
+}
+
+@media (max-width: 900px) {
+  nav { padding: 0 24px; }
+  .hero {
+    flex-direction: column;
+    padding: 120px 24px 64px;
+    gap: 48px;
+    min-height: auto;
+  }
+  .hero-left { max-width: 100%; }
+  .hero-headline { font-size: 2.4rem; }
+  .product-card img { width: 260px; height: 260px; }
+  .features { padding: 80px 24px; }
+  .features-grid { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; gap: 32px; }
+  .how-it-works { padding: 60px 24px 80px; }
+  .cta-section { padding: 80px 24px; }
+  .cta-form { flex-direction: column; align-items: center; }
+  .cta-input { width: 100%; max-width: 320px; }
+  .trust-bar { padding: 20px 24px; }
+  .trust-inner { flex-wrap: wrap; gap: 16px; }
+}
+
+@media (max-width: 480px) {
+  .hero-headline { font-size: 2rem; }
+  .hero-actions { flex-direction: column; width: 100%; }
+  .btn-primary, .btn-ghost { width: 100%; text-align: center; }
+}
+
+/* ============================================================
+   WINDOW FRAMES & SCREENSHOTS
+   ============================================================ */
+.window-frame { border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.window-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #1a1a1a; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.window-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+.window-bar .dot-red { background: #ff5f57; }
+.window-bar .dot-yellow { background: #febc2e; }
+.window-bar .dot-green { background: #28c840; }
+.window-bar .window-title { flex: 1; text-align: center; font-family: var(--mono); font-size: 0.7rem; color: var(--muted); margin-right: 54px; }
+.window-body { background: #111; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+.window-body .placeholder-icon { font-size: 2rem; opacity: 0.3; margin-bottom: 4px; }
+.hero-screenshot { margin: 60px auto; }
+.hero-screenshot .window-body { aspect-ratio: 16/9; }
+.feature-screenshot { margin-top: 16px; }
+.feature-screenshot .window-bar { padding: 7px 10px; }
+.feature-screenshot .window-bar .dot { width: 7px; height: 7px; }
+.feature-screenshot .window-body { aspect-ratio: 16/10; font-size: 0.72rem; }
+.demo-section { text-align: center; padding: 100px 0; }
+.demo-section .mono-label { font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 12px; }
+.demo-section h2 { font-family: var(--sans); font-weight: 700; font-size: 2.2rem; letter-spacing: -0.03em; color: var(--text); margin-bottom: 40px; }
+.demo-screenshot .window-body { aspect-ratio: 16/9; }
+.demo-caption { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">Clawchestra</a>
+  <div class="nav-right">
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#how" class="nav-link">How it works</a>
+    <a href="https://github.com" class="nav-link">GitHub</a>
+    <a href="#cta" class="btn-cta">Request access</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <p class="hero-label">private alpha &middot; desktop app</p>
+    <h1 class="hero-headline">Orchestrate your AI agents.</h1>
+    <p class="hero-sub">One desktop app to manage multiple Claude Code sessions, coordinate terminal workflows, and keep your AI agents working in harmony.</p>
+    <div class="hero-actions">
+      <a href="#cta" class="btn-primary">Request early access</a>
+      <a href="#features" class="btn-ghost">Learn more</a>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="hero-glow"></div>
+    <div class="product-card">
+      <img src="../assets/clawchestra-app-icon-dithered.png" alt="Clawchestra — a dithered lobster claw">
+    </div>
+  </div>
+</section>
+
+<!-- HERO SCREENSHOT -->
+<div class="hero-screenshot" style="max-width: 1280px; padding: 0 48px; margin-left: auto; margin-right: auto;">
+  <div class="window-frame">
+    <div class="window-bar">
+      <span class="dot dot-red"></span>
+      <span class="dot dot-yellow"></span>
+      <span class="dot dot-green"></span>
+      <span class="window-title">Clawchestra</span>
+    </div>
+    <div class="window-body">
+      <span class="placeholder-icon">🖥</span>
+      App screenshot placeholder
+    </div>
+  </div>
+</div>
+
+<!-- TRUST BAR -->
+<section class="trust-bar">
+  <div class="trust-inner">
+    <span class="trust-label">Built with</span>
+    <span class="trust-sep">&middot;</span>
+    <span>Tauri</span>
+    <span class="trust-sep">&middot;</span>
+    <span>React</span>
+    <span class="trust-sep">&middot;</span>
+    <span>TypeScript</span>
+    <span class="trust-sep">&middot;</span>
+    <span>tmux</span>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <p class="section-label">Features</p>
+  <h2 class="section-title">Everything you need to coordinate AI.</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <p class="feature-tag">Sessions</p>
+      <h3 class="feature-title">Multi-agent terminals</h3>
+      <p class="feature-desc">Run multiple Claude Code instances side by side. Each gets its own tmux session with full context isolation.</p>
+      <div class="feature-screenshot window-frame">
+        <div class="window-bar">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+        </div>
+        <div class="window-body">
+          <span class="placeholder-icon">⬛</span>
+          Terminal sessions with live activity tracking
+        </div>
+      </div>
+    </div>
+    <div class="feature-card">
+      <p class="feature-tag">Roadmap</p>
+      <h3 class="feature-title">Visual project board</h3>
+      <p class="feature-desc">Kanban-style board for managing what your agents work on. Drag tasks between columns, track progress in real time.</p>
+      <div class="feature-screenshot window-frame">
+        <div class="window-bar">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+        </div>
+        <div class="window-body">
+          <span class="placeholder-icon">⬛</span>
+          Kanban board with drag-and-drop columns
+        </div>
+      </div>
+    </div>
+    <div class="feature-card">
+      <p class="feature-tag">Orchestration</p>
+      <h3 class="feature-title">Coordinated workflows</h3>
+      <p class="feature-desc">Keep agents from stepping on each other. Shared state, sequential handoffs, and unified context across sessions.</p>
+      <div class="feature-screenshot window-frame">
+        <div class="window-bar">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+        </div>
+        <div class="window-body">
+          <span class="placeholder-icon">⬛</span>
+          OpenClaw chat with context injection
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO -->
+<section class="demo-section">
+  <div style="max-width: 1280px; margin: 0 auto; padding: 0 48px;">
+    <p class="mono-label">SEE IT IN ACTION</p>
+    <h2>One view for everything</h2>
+    <div class="demo-screenshot window-frame">
+      <div class="window-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="window-title">Clawchestra</span>
+      </div>
+      <div class="window-body">
+        <span class="placeholder-icon">▶</span>
+        Full app demo video placeholder
+      </div>
+    </div>
+    <p class="demo-caption">Drag to explore · Click to play demo</p>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-it-works" id="how">
+  <p class="section-label">How it works</p>
+  <h2 class="section-title">Three steps to orchestration.</h2>
+  <div class="steps">
+    <div class="step">
+      <p class="step-number">01</p>
+      <h3 class="step-title">Define your roadmap</h3>
+      <p class="step-desc">Add tasks to your project board. Set priorities, write specs, and plan what gets built.</p>
+    </div>
+    <div class="step">
+      <p class="step-number">02</p>
+      <h3 class="step-title">Launch agents</h3>
+      <p class="step-desc">Spin up Claude Code terminals. Each agent picks up a task and starts working autonomously.</p>
+    </div>
+    <div class="step">
+      <p class="step-number">03</p>
+      <h3 class="step-title">Orchestrate and ship</h3>
+      <p class="step-desc">Monitor progress, resolve conflicts, and merge results. Ship faster than you thought possible.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="cta">
+  <div class="cta-inner">
+    <h2 class="cta-title">Ready to orchestrate?</h2>
+    <p class="cta-sub">Clawchestra is in private alpha. Drop your email and we'll let you know when it's ready.</p>
+    <form class="cta-form" onsubmit="return false;">
+      <input type="email" class="cta-input" placeholder="you@example.com">
+      <button type="submit" class="btn-primary">Get access</button>
+    </form>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p class="footer-text">Clawchestra &copy; 2026. Built for people who build with AI.</p>
+</footer>
+
+</body>
+</html>

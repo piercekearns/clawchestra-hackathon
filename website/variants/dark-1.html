@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clawchestra — Orchestrate Your AI Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DARK-1 — CONDUCTOR CLEAN
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0a;
+  --text: #e8e8e3;
+  --muted: #888883;
+  --accent: #DFFF00;
+  --accent-dim: rgba(223, 255, 0, 0.15);
+  --surface: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.08);
+  --sans: 'Inter', -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ---- Layout ---- */
+
+.container {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* ---- Nav ---- */
+
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 22px 0;
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+nav .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.nav-brand span {
+  font-size: 1.3rem;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.nav-link {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: var(--text);
+}
+
+.nav-pill {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 7px 18px;
+  background: var(--accent);
+  color: #0a0a0a;
+  border-radius: 100px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.nav-pill:hover {
+  opacity: 0.85;
+}
+
+/* ---- Hero ---- */
+
+.hero {
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 80px;
+}
+
+.hero-label {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 32px;
+}
+
+.hero h1 {
+  font-size: clamp(2.8rem, 5.5vw, 4.8rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin-bottom: 28px;
+}
+
+.hero-sub {
+  max-width: 580px;
+  color: var(--muted);
+  font-size: 1.12rem;
+  line-height: 1.7;
+  margin-bottom: 48px;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 72px;
+}
+
+.btn-primary {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 13px 30px;
+  background: var(--accent);
+  color: #0a0a0a;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
+
+.btn-ghost {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  font-weight: 500;
+  padding: 13px 30px;
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.btn-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.hero-image-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-image-glow {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(223, 255, 0, 0.1) 0%, rgba(223, 255, 0, 0.04) 40%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hero-image {
+  width: 260px;
+  height: 260px;
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Features ---- */
+
+.features {
+  padding: 80px 0 100px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.feature-card {
+  padding: 40px 36px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.feature-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.feature-label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 16px;
+}
+
+.feature-card h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.feature-card p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+/* ---- How it works ---- */
+
+.how {
+  padding: 80px 0 100px;
+  border-top: 1px solid var(--border);
+}
+
+.how-title {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 56px;
+}
+
+.how-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.how-step {
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.how-step-divider {
+  width: 64px;
+  height: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 24px;
+}
+
+.step-num {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--accent);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.step-text {
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Built with ---- */
+
+.built-with {
+  padding: 60px 0;
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+.built-with p {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+/* ---- CTA ---- */
+
+.cta {
+  padding: 100px 0 120px;
+  text-align: center;
+}
+
+.cta h2 {
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 36px;
+}
+
+.cta-form {
+  display: flex;
+  gap: 12px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.cta-form input {
+  flex: 1;
+  padding: 13px 18px;
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cta-form input::placeholder {
+  color: var(--muted);
+}
+
+.cta-form input:focus {
+  border-color: rgba(223, 255, 0, 0.3);
+  box-shadow: 0 0 0 3px rgba(223, 255, 0, 0.06);
+}
+
+.cta-form button {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 13px 26px;
+  background: var(--accent);
+  color: #0a0a0a;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.cta-form button:hover {
+  opacity: 0.85;
+}
+
+/* ---- Footer ---- */
+
+footer {
+  padding: 48px 0;
+  border-top: 1px solid var(--border);
+}
+
+footer .container {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+footer a {
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+footer a:hover {
+  color: var(--text);
+}
+
+/* ---- Responsive ---- */
+
+/* ---- Entrance animation ---- */
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-label,
+.hero h1,
+.hero-sub,
+.hero-buttons,
+.hero-image-wrap {
+  opacity: 0;
+  animation: fadeUp 0.7s ease-out forwards;
+}
+
+.hero-label { animation-delay: 0.1s; }
+.hero h1 { animation-delay: 0.2s; }
+.hero-sub { animation-delay: 0.3s; }
+.hero-buttons { animation-delay: 0.4s; }
+.hero-image-wrap { animation-delay: 0.55s; }
+
+@media (max-width: 768px) {
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .how-steps {
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .how-step-divider {
+    width: 32px;
+    margin: 0 auto;
+  }
+
+  .hero-buttons {
+    flex-direction: column;
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .cta-form {
+    flex-direction: column;
+  }
+
+  .hero {
+    min-height: auto;
+    padding-top: 140px;
+    padding-bottom: 80px;
+  }
+
+  .container {
+    padding: 0 20px;
+  }
+}
+
+/* ---- Window chrome / screenshots ---- */
+.window-frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.window-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #1a1a1a; border-bottom: 1px solid var(--border); }
+.window-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+.window-bar .dot-red { background: #ff5f57; }
+.window-bar .dot-yellow { background: #febc2e; }
+.window-bar .dot-green { background: #28c840; }
+.window-bar .window-title { flex: 1; text-align: center; font-family: var(--mono); font-size: 0.7rem; color: var(--muted); margin-right: 54px; }
+.window-body { background: #111; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+.window-body .placeholder-icon { font-size: 2rem; opacity: 0.3; margin-bottom: 4px; }
+.hero-screenshot { max-width: 960px; margin: 60px auto 0; }
+.hero-screenshot .window-body { aspect-ratio: 16/9; }
+.feature-screenshot { margin-top: 16px; }
+.feature-screenshot .window-bar { padding: 7px 10px; }
+.feature-screenshot .window-bar .dot { width: 7px; height: 7px; }
+.feature-screenshot .window-body { aspect-ratio: 16/10; font-size: 0.72rem; }
+.demo-section { text-align: center; padding: 100px 0; }
+.demo-section .mono-label { font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 12px; }
+.demo-section h2 { font-family: var(--sans); font-weight: 700; font-size: 2.2rem; letter-spacing: -0.03em; color: var(--text); margin-bottom: 40px; }
+.demo-screenshot { max-width: 1040px; margin: 0 auto; }
+.demo-screenshot .window-body { aspect-ratio: 16/9; }
+.demo-caption { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="container">
+    <a href="#" class="nav-brand">
+      <span>&#129438;</span> Clawchestra
+    </a>
+    <div class="nav-right">
+      <a href="https://github.com" class="nav-link">GitHub</a>
+      <button class="nav-pill">Get Access</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <p class="hero-label">private alpha &middot; v0.1.0</p>
+    <h1>Orchestrate your AI agents.</h1>
+    <p class="hero-sub">One app to run Claude Code, Codex, and every terminal AI agent &mdash; with live activity tracking, kanban boards, and OpenClaw chat.</p>
+    <div class="hero-buttons">
+      <button class="btn-primary">Request Early Access</button>
+      <a href="https://github.com" class="btn-ghost">GitHub &rarr;</a>
+    </div>
+    <div class="hero-image-wrap">
+      <div class="hero-image-glow"></div>
+      <img src="../assets/clawchestra-app-icon-dithered.png" alt="Clawchestra" class="hero-image">
+    </div>
+    <!-- Hero App Screenshot -->
+    <div class="window-frame hero-screenshot">
+      <div class="window-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="window-title">Clawchestra</span>
+      </div>
+      <div class="window-body">
+        <span class="placeholder-icon">🖥</span>
+        <span>App screenshot placeholder</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features">
+  <div class="container">
+    <div class="features-grid">
+      <div class="feature-card">
+        <p class="feature-label">Terminals</p>
+        <h3>Embedded AI Terminals</h3>
+        <p>Run multiple AI agents side-by-side in managed tmux sessions with live output streaming.</p>
+        <div class="window-frame feature-screenshot">
+          <div class="window-bar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="window-title">Clawchestra</span>
+          </div>
+          <div class="window-body">
+            <span class="placeholder-icon">🖥</span>
+            <span>Terminal sessions with live activity tracking</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-card">
+        <p class="feature-label">Orchestration</p>
+        <h3>Kanban Orchestration</h3>
+        <p>Track every project and task across agents with a drag-and-drop kanban board.</p>
+        <div class="window-frame feature-screenshot">
+          <div class="window-bar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="window-title">Clawchestra</span>
+          </div>
+          <div class="window-body">
+            <span class="placeholder-icon">🖥</span>
+            <span>Kanban board with drag-and-drop columns</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-card">
+        <p class="feature-label">Chat</p>
+        <h3>OpenClaw Integration</h3>
+        <p>Chat with an AI that understands your entire workspace, roadmap, and running agents.</p>
+        <div class="window-frame feature-screenshot">
+          <div class="window-bar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="window-title">Clawchestra</span>
+          </div>
+          <div class="window-body">
+            <span class="placeholder-icon">🖥</span>
+            <span>OpenClaw chat with context injection</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Demo Section -->
+<section class="demo-section">
+  <div class="container">
+    <p class="mono-label">SEE IT IN ACTION</p>
+    <h2>One view for everything</h2>
+    <div class="window-frame demo-screenshot">
+      <div class="window-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="window-title">Clawchestra</span>
+      </div>
+      <div class="window-body">
+        <span class="placeholder-icon">🖥</span>
+        <span>Full app demo video placeholder</span>
+      </div>
+    </div>
+    <p class="demo-caption">Drag to explore · Click to play demo</p>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how">
+  <div class="container">
+    <p class="how-title">How it works</p>
+    <div class="how-steps">
+      <div class="how-step">
+        <p class="step-num">01</p>
+        <p class="step-text">Add your projects</p>
+      </div>
+      <div class="how-step-divider"></div>
+      <div class="how-step">
+        <p class="step-num">02</p>
+        <p class="step-text">Launch AI agents</p>
+      </div>
+      <div class="how-step-divider"></div>
+      <div class="how-step">
+        <p class="step-num">03</p>
+        <p class="step-text">Orchestrate from one view</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Built with -->
+<section class="built-with">
+  <div class="container">
+    <p>Built with Tauri &middot; React &middot; TypeScript &middot; tmux</p>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="container">
+    <h2>Ready to orchestrate?</h2>
+    <form class="cta-form" onsubmit="event.preventDefault()">
+      <input type="email" placeholder="you@company.com" required>
+      <button type="submit">Request Access</button>
+    </form>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <span>&copy; 2026 Clawchestra</span>
+    <a href="https://github.com">GitHub</a>
+    <span>Private Alpha</span>
+  </div>
+</footer>
+
+</body>
+</html>

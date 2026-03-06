@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clawchestra — Orchestrate Your AI Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DARK-5 — TERMINAL NATIVE
+   Iteration 5 / 5
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0a;
+  --bg-elevated: #111111;
+  --text: #d4d4d4;
+  --muted: #666;
+  --accent: #DFFF00;
+  --accent-dim: rgba(223, 255, 0, 0.10);
+  --green: #5af78e;
+  --green-dim: rgba(90, 247, 142, 0.06);
+  --surface: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-dashed: rgba(255, 255, 255, 0.06);
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'Inter', -apple-system, sans-serif;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.65;
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* ---- Fade-in on scroll ---- */
+
+.fade-up {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.fade-up.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---- Layout ---- */
+
+.container {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+.container--wide {
+  max-width: 960px;
+}
+
+/* ---- Nav ---- */
+
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 14px 0;
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+
+nav .container {
+  max-width: 960px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.nav-lobster {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  background: var(--surface);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  list-style: none;
+}
+
+.nav-links a {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+.nav-links a:hover {
+  color: var(--text);
+}
+
+.nav-cta {
+  font-family: var(--mono) !important;
+  font-size: 0.8125rem !important;
+  color: var(--bg) !important;
+  background: var(--accent);
+  padding: 7px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.nav-cta:hover {
+  opacity: 0.85;
+}
+
+/* ---- Hero ---- */
+
+.hero {
+  min-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 80px;
+  padding-bottom: 40px;
+  position: relative;
+}
+
+/* Subtle radial glow behind hero */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(223, 255, 0, 0.03) 0%,
+    rgba(90, 247, 142, 0.015) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-prompt {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  color: var(--green);
+  margin-bottom: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 20px;
+  background: var(--green-dim);
+  border: 1px solid rgba(90, 247, 142, 0.1);
+  border-radius: 6px;
+}
+
+.hero-prompt .dollar {
+  color: var(--muted);
+  margin-right: 8px;
+  user-select: none;
+}
+
+.cursor-blink {
+  display: inline-block;
+  width: 7px;
+  height: 1.15em;
+  background: var(--green);
+  margin-left: 2px;
+  animation: blink 1.1s step-end infinite;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.hero h1 {
+  font-family: var(--mono);
+  font-size: 2.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #fff;
+  margin-bottom: 22px;
+  max-width: 620px;
+}
+
+.hero h1 .accent {
+  color: var(--accent);
+}
+
+.hero-sub {
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 460px;
+  margin-bottom: 40px;
+}
+
+.hero-ctas {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 56px;
+}
+
+.btn-primary {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  padding: 12px 28px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  text-decoration: none;
+  display: inline-block;
+  letter-spacing: 0.01em;
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  padding: 12px 28px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-secondary:hover {
+  border-color: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+.hero-lobster {
+  position: relative;
+  width: 220px;
+  height: 220px;
+}
+
+.hero-lobster img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: relative;
+  z-index: 2;
+}
+
+/* Scan-line overlay */
+.hero-lobster::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 3;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.04) 3px,
+    rgba(0, 0, 0, 0.04) 6px
+  );
+  pointer-events: none;
+}
+
+/* Faint glow under the lobster */
+.hero-lobster::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(223,255,0,0.04) 0%, transparent 70%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ---- Section shared ---- */
+
+section {
+  padding: 100px 0;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 48px;
+}
+
+/* ---- Features ---- */
+
+.features {
+  border-top: 1px solid var(--border);
+}
+
+.feature {
+  padding: 32px 0;
+  padding-left: 20px;
+  border-bottom: 1px dashed var(--border-dashed);
+  border-left: 2px solid transparent;
+  transition: border-left-color 0.25s, background 0.25s;
+}
+
+.feature:hover {
+  border-left-color: var(--accent);
+  background: linear-gradient(90deg, var(--accent-dim) 0%, transparent 50%);
+}
+
+.feature:last-child {
+  border-bottom: none;
+}
+
+.feature-cmd {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+.feature-cmd span {
+  color: var(--muted);
+  margin-right: 6px;
+  font-weight: 400;
+}
+
+.feature-title {
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.feature p {
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 540px;
+}
+
+/* ---- How it works ---- */
+
+.how-it-works {
+  border-top: 1px solid var(--border);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 24px 0;
+  border-bottom: 1px dashed var(--border-dashed);
+}
+
+.step:last-child {
+  border-bottom: none;
+}
+
+.step-num {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  color: var(--accent);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.step-text {
+  font-family: var(--mono);
+  font-size: 1rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.step-desc {
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+/* ---- Stack ---- */
+
+.stack {
+  border-top: 1px solid var(--border);
+}
+
+.stack-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px 32px;
+  max-width: 400px;
+}
+
+.stack-manifest {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  line-height: 2.1;
+}
+
+.stack-key {
+  color: var(--green);
+  opacity: 0.7;
+}
+
+.stack-val {
+  color: var(--text);
+}
+
+.stack-comment {
+  color: rgba(255,255,255,0.18);
+  font-style: italic;
+}
+
+/* ---- CTA / Subscribe ---- */
+
+.subscribe {
+  border-top: 1px solid var(--border);
+  padding: 100px 0 88px;
+}
+
+.subscribe-prompt {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  color: var(--green);
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+.subscribe-heading {
+  font-family: var(--mono);
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.subscribe-sub {
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  color: var(--muted);
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+.subscribe-form {
+  display: flex;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.subscribe-input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.subscribe-input::placeholder {
+  color: rgba(255,255,255,0.18);
+}
+
+.subscribe-input:focus {
+  border-color: rgba(223, 255, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(223, 255, 0, 0.06);
+}
+
+.subscribe-btn {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 12px 22px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.subscribe-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+/* ---- Footer ---- */
+
+footer {
+  padding: 28px 0;
+  border-top: 1px solid var(--border);
+}
+
+footer .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-copy {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: rgba(255,255,255,0.18);
+}
+
+.footer-links {
+  display: flex;
+  gap: 20px;
+  list-style: none;
+}
+
+.footer-links a {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+.footer-links a:hover { color: var(--text); }
+
+/* ---- Responsive ---- */
+
+@media (max-width: 640px) {
+  .hero h1 {
+    font-size: 1.75rem;
+    max-width: 340px;
+  }
+
+  .hero-sub {
+    font-size: 0.9375rem;
+    max-width: 320px;
+  }
+
+  .hero-prompt {
+    font-size: 0.75rem;
+    padding: 6px 14px;
+  }
+
+  .hero-ctas {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .hero-lobster {
+    width: 160px;
+    height: 160px;
+  }
+
+  .nav-links .nav-link-hide {
+    display: none;
+  }
+
+  .feature {
+    padding-left: 14px;
+  }
+
+  .subscribe-form {
+    flex-direction: column;
+  }
+
+  footer .container {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  section {
+    padding: 72px 0;
+  }
+
+  .stack-block {
+    padding: 20px 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .container {
+    padding: 0 20px;
+  }
+}
+
+/* ---- Window frame / screenshot placeholders ---- */
+.window-frame { border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.window-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #141414; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.window-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+.window-bar .dot-red { background: #ff5f57; }
+.window-bar .dot-yellow { background: #febc2e; }
+.window-bar .dot-green { background: #28c840; }
+.window-bar .window-title { flex: 1; text-align: center; font-family: var(--mono); font-size: 0.7rem; color: rgba(90,247,142,0.7); margin-right: 54px; }
+.window-body { background: #0e0e0e; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #666; font-family: var(--mono); font-size: 0.8rem; }
+.window-body .placeholder-icon { font-size: 2rem; opacity: 0.3; margin-bottom: 4px; }
+.hero-screenshot { max-width: 900px; margin: 60px auto; }
+.hero-screenshot .window-body { aspect-ratio: 16/9; }
+.feature-screenshot { margin-top: 16px; }
+.feature-screenshot .window-bar { padding: 7px 10px; }
+.feature-screenshot .window-bar .dot { width: 7px; height: 7px; }
+.feature-screenshot .window-body { aspect-ratio: 16/10; font-size: 0.72rem; }
+.demo-section { text-align: center; padding: 80px 0; border-top: 1px dashed rgba(255,255,255,0.08); }
+.demo-section h2 { font-family: var(--mono); font-weight: 700; font-size: 1.6rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 40px; }
+.demo-screenshot .window-body { aspect-ratio: 16/9; }
+.demo-caption { font-family: var(--mono); font-size: 0.68rem; color: #666; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="container container--wide">
+    <a href="#" class="nav-brand">
+      <span class="nav-lobster">&#129438;</span>
+      clawchestra
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features" class="nav-link-hide">features</a></li>
+      <li><a href="#how" class="nav-link-hide">how it works</a></li>
+      <li><a href="#subscribe" class="nav-cta">get early access</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-prompt">
+    <span class="dollar">$</span> clawchestra --orchestrate<span class="cursor-blink"></span>
+  </div>
+  <h1>Orchestrate your <span class="accent">AI agents</span></h1>
+  <p class="hero-sub">
+    One Mac-native app to run, watch, and manage your coding agents.
+    Real terminal sessions. Kanban boards. Built-in AI copilot.
+  </p>
+  <div class="hero-ctas">
+    <a href="#subscribe" class="btn-primary">Get early access</a>
+    <a href="#features" class="btn-secondary">Learn more</a>
+  </div>
+  <div class="hero-lobster">
+    <img src="../assets/clawchestra-app-icon-dithered.png" alt="Clawchestra">
+  </div>
+
+  <!-- Hero Screenshot -->
+  <div class="hero-screenshot fade-up">
+    <div class="window-frame">
+      <div class="window-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="window-title">clawchestra@local ~ $</span>
+      </div>
+      <div class="window-body">
+        <div class="placeholder-icon">&#128247;</div>
+        App screenshot placeholder
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-label fade-up">// features</div>
+
+    <div class="feature fade-up">
+      <div class="feature-cmd"><span>&gt;</span> terminals</div>
+      <div class="feature-title">Embedded terminal sessions</div>
+      <p>Each AI agent runs in its own real terminal -- not a sandboxed preview. Full tmux sessions with scrollback, copy-paste, and drag-and-drop file support.</p>
+      <div class="feature-screenshot">
+        <div class="window-frame">
+          <div class="window-bar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="window-title">clawchestra@local ~ $</span>
+          </div>
+          <div class="window-body">
+            <div class="placeholder-icon">&#128247;</div>
+            Terminal sessions with live activity tracking
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature fade-up">
+      <div class="feature-cmd"><span>&gt;</span> kanban</div>
+      <div class="feature-title">Visual project orchestration</div>
+      <p>Kanban boards wired directly to your agents. Drag tasks between columns, track status, and see which agent is working on what -- all in one view.</p>
+      <div class="feature-screenshot">
+        <div class="window-frame">
+          <div class="window-bar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="window-title">clawchestra@local ~ $</span>
+          </div>
+          <div class="window-body">
+            <div class="placeholder-icon">&#128247;</div>
+            Kanban board with drag-and-drop columns
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature fade-up">
+      <div class="feature-cmd"><span>&gt;</span> openclaw</div>
+      <div class="feature-title">Built-in AI copilot</div>
+      <p>OpenClaw lives inside the app and understands your entire project context. Ask questions, generate specs, plan work, or kick off agents from a single conversation.</p>
+      <div class="feature-screenshot">
+        <div class="window-frame">
+          <div class="window-bar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="window-title">clawchestra@local ~ $</span>
+          </div>
+          <div class="window-body">
+            <div class="placeholder-icon">&#128247;</div>
+            OpenClaw chat with context injection
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature fade-up">
+      <div class="feature-cmd"><span>&gt;</span> multi-project</div>
+      <div class="feature-title">All your repos, one window</div>
+      <p>Switch between projects without context-switching. Each project gets its own terminal tabs, kanban board, and agent history.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Demo -->
+<section class="demo-section" id="demo">
+  <div class="container container--wide">
+    <div class="section-label fade-up">&gt; see-it-in-action</div>
+    <h2 class="fade-up">One view for everything</h2>
+    <div class="demo-screenshot hero-screenshot fade-up" style="margin-top: 0;">
+      <div class="window-frame">
+        <div class="window-bar">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+          <span class="window-title">clawchestra@local ~ $</span>
+        </div>
+        <div class="window-body">
+          <div class="placeholder-icon">&#9654;</div>
+          Full app demo video placeholder
+        </div>
+      </div>
+    </div>
+    <div class="demo-caption fade-up">// drag to explore · click to play demo</div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how-it-works" id="how">
+  <div class="container">
+    <div class="section-label fade-up">// how it works</div>
+
+    <div class="steps fade-up">
+      <div class="step">
+        <span class="step-num">[1]</span>
+        <div>
+          <div class="step-text">Add your projects</div>
+          <div class="step-desc">Point Clawchestra at any local repo. It detects your stack and configures itself.</div>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">[2]</span>
+        <div>
+          <div class="step-text">Launch AI agents</div>
+          <div class="step-desc">Spin up Claude, Cursor, or any CLI-based agent in dedicated terminal sessions.</div>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">[3]</span>
+        <div>
+          <div class="step-text">Orchestrate from one view</div>
+          <div class="step-desc">Monitor output, manage tasks, and steer your agents -- without juggling windows.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stack -->
+<section class="stack">
+  <div class="container">
+    <div class="section-label fade-up">// dependencies</div>
+    <div class="stack-block fade-up">
+      <div class="stack-manifest">
+        <span class="stack-comment"># built with</span><br>
+        <span class="stack-key">runtime:</span> <span class="stack-val">tauri v2</span><br>
+        <span class="stack-key">frontend:</span> <span class="stack-val">react + typescript</span><br>
+        <span class="stack-key">terminals:</span> <span class="stack-val">tmux + xterm.js</span><br>
+        <span class="stack-key">platform:</span> <span class="stack-val">macos native</span><br>
+        <span class="stack-key">ai:</span> <span class="stack-val">claude, openai, local models</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Subscribe -->
+<section class="subscribe" id="subscribe">
+  <div class="container">
+    <div class="subscribe-prompt fade-up">&gt; subscribe</div>
+    <div class="subscribe-heading fade-up">Get early access</div>
+    <p class="subscribe-sub fade-up">Be the first to know when Clawchestra ships. No spam, just launch updates.</p>
+    <form class="subscribe-form fade-up" onsubmit="return false;">
+      <input type="email" class="subscribe-input" placeholder="you@email.com_">
+      <button type="submit" class="subscribe-btn">submit</button>
+    </form>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container container--wide">
+    <span class="footer-copy">// &copy; 2026 clawchestra</span>
+    <ul class="footer-links">
+      <li><a href="#">github</a></li>
+      <li><a href="#">twitter</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+// Intersection Observer for fade-in animations
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, {
+  threshold: 0.15,
+  rootMargin: '0px 0px -40px 0px'
+});
+
+document.querySelectorAll('.fade-up').forEach((el) => {
+  observer.observe(el);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clawchestra — Orchestrate your AI agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --yellow: #DFFF00;
+    --yellow-dim: #c8e600;
+    --bg: #0c0c0c;
+    --bg-card: #141414;
+    --text: #e8e8e3;
+    --muted: #777;
+    --faint: #444;
+    --rule: rgba(255,255,255,0.08);
+    --sans: 'Inter', -apple-system, sans-serif;
+    --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+    --max-w: 1200px;
+    --pad: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120%;
+    height: 60%;
+    background: radial-gradient(ellipse at center, rgba(223, 255, 0, 0.10) 0%, rgba(223, 255, 0, 0) 55%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+
+  .container {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding-left: var(--pad);
+    padding-right: var(--pad);
+  }
+
+  /* ========== NAV ========== */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 1.15rem 0;
+    background: rgba(12, 12, 12, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  nav .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: -0.02em;
+  }
+
+  .nav-logo img {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .nav-links a {
+    font-size: 0.84rem;
+    font-weight: 450;
+    color: var(--muted);
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover {
+    color: var(--text);
+  }
+
+  .btn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.3rem;
+    border-radius: 100px;
+    font-family: var(--sans);
+    font-size: 0.84rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, background 0.2s, opacity 0.2s;
+    text-decoration: none;
+  }
+
+  .btn-pill:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-yellow {
+    background: var(--yellow);
+    color: #0c0c0c;
+  }
+
+  .btn-yellow:hover {
+    background: var(--yellow-dim);
+    box-shadow: 0 4px 24px rgba(223, 255, 0, 0.2);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .btn-ghost:hover {
+    color: var(--text);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  /* ========== HERO ========== */
+  .hero {
+    min-height: 90vh;
+    padding-top: 7rem;
+    padding-bottom: 4rem;
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-bg-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: clamp(500px, 60vw, 850px);
+    height: auto;
+    opacity: 0.035;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .hero-label {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    animation: fadeUp 0.7s ease both;
+    animation-delay: 0.05s;
+  }
+
+  .hero h1 {
+    font-size: clamp(3.5rem, 7.5vw, 6.5rem);
+    line-height: 1;
+    letter-spacing: -0.045em;
+    margin-bottom: 2.25rem;
+  }
+
+  .hero h1 .line {
+    display: block;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .hero h1 .line:nth-child(1) { animation-delay: 0.1s; }
+  .hero h1 .line:nth-child(2) { animation-delay: 0.22s; }
+  .hero h1 .line:nth-child(3) { animation-delay: 0.34s; }
+
+  .hero h1 .line-1 {
+    font-weight: 800;
+  }
+
+  .hero h1 .line-2 {
+    font-weight: 200;
+    font-style: italic;
+    color: rgba(232, 232, 227, 0.45);
+  }
+
+  .hero h1 .line-3 {
+    font-weight: 800;
+  }
+
+  .hero h1 .dot {
+    color: var(--yellow);
+    text-shadow: 0 0 40px rgba(223,255,0,0.35), 0 0 80px rgba(223,255,0,0.1);
+  }
+
+  .hero-sub {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--muted);
+    max-width: 520px;
+    margin-bottom: 2.5rem;
+    font-weight: 400;
+    animation: fadeUp 0.7s ease both;
+    animation-delay: 0.45s;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    animation: fadeUp 0.7s ease both;
+    animation-delay: 0.55s;
+  }
+
+  /* ========== EDITORIAL RULES ========== */
+  hr.editorial {
+    border: none;
+    height: 1px;
+    background: var(--rule);
+    margin: 0;
+  }
+
+  /* ========== FEATURES ========== */
+  .features {
+    padding: 6rem 0 2rem;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  .feature-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    padding: 5.5rem 0;
+    align-items: center;
+    transition: background 0.4s ease;
+    margin: 0 -2rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
+    border-radius: 12px;
+  }
+
+  .feature-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .feature-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1.25rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--yellow);
+    transition: color 0.3s;
+  }
+
+  .feature-text h3 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.04em;
+    margin-bottom: 1.5rem;
+  }
+
+  .feature-text p {
+    font-size: 1rem;
+    line-height: 1.75;
+    color: var(--muted);
+    max-width: 440px;
+  }
+
+  .feature-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .feature-row:hover {
+    background: rgba(255,255,255,0.015);
+  }
+
+  .feature-row:hover .feature-tag {
+    color: var(--text);
+  }
+
+  /* Alternate: swap text and visual sides */
+  .feature-row.flip .feature-text {
+    order: 2;
+    text-align: right;
+  }
+
+  .feature-row.flip .feature-text .feature-tag {
+    border-left: none;
+    border-right: 2px solid var(--yellow);
+    padding-left: 0;
+    padding-right: 0.75rem;
+    margin-left: auto;
+  }
+
+  .feature-row.flip .feature-text p {
+    margin-left: auto;
+  }
+
+  .feature-row.flip .feature-visual {
+    order: 1;
+  }
+
+  /* ========== HOW IT WORKS ========== */
+  .how-it-works {
+    padding: 5rem 0;
+  }
+
+  .how-header {
+    margin-bottom: 5rem;
+    text-align: center;
+  }
+
+  .how-header h2 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 2.5rem;
+    padding: 3rem 0;
+    border-top: 1px solid var(--rule);
+    align-items: start;
+    transition: background 0.3s ease;
+    margin: 0 -1.5rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    border-radius: 8px;
+  }
+
+  .step:last-child {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .step:hover {
+    background: rgba(255,255,255,0.015);
+  }
+
+  .step:hover .step-number {
+    -webkit-text-stroke-color: rgba(223,255,0,0.25);
+  }
+
+  .step-number {
+    font-family: var(--mono);
+    font-size: clamp(3rem, 5vw, 4.5rem);
+    font-weight: 500;
+    line-height: 1;
+    -webkit-text-stroke: 1px rgba(255,255,255,0.15);
+    color: transparent;
+    transition: -webkit-text-stroke-color 0.3s;
+  }
+
+  .step-content h4 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .step-content p {
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--muted);
+    max-width: 500px;
+  }
+
+  /* ========== TECH STACK ========== */
+  .tech-stack {
+    padding: 3.5rem 0;
+    text-align: center;
+  }
+
+  .tech-stack-inner {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--faint);
+    letter-spacing: 0.04em;
+  }
+
+  .tech-stack-inner span {
+    margin: 0 0.6rem;
+    color: rgba(255,255,255,0.12);
+  }
+
+  /* ========== CTA ========== */
+  .cta-banner {
+    padding: 5rem 0;
+  }
+
+  .cta-card {
+    position: relative;
+    background: var(--bg-card);
+    border-top: 2px solid var(--yellow);
+    border-radius: 16px;
+    padding: clamp(3.5rem, 6vw, 5.5rem) clamp(2rem, 4vw, 4rem);
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .cta-card::before {
+    content: '';
+    position: absolute;
+    top: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 120px;
+    background: radial-gradient(ellipse, rgba(223,255,0,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .cta-card h2 {
+    font-size: clamp(2.2rem, 4.5vw, 3.5rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+    margin-bottom: 1.25rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-card p {
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 2.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    z-index: 1;
+    line-height: 1.6;
+  }
+
+  .cta-form {
+    display: flex;
+    gap: 0.65rem;
+    max-width: 420px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-form input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .cta-form input::placeholder {
+    color: var(--faint);
+  }
+
+  .cta-form input:focus {
+    border-color: var(--yellow);
+  }
+
+  /* ========== FOOTER ========== */
+  footer {
+    padding: 3rem 0;
+  }
+
+  footer .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-left {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--faint);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .footer-links a {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--faint);
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover {
+    color: var(--text);
+  }
+
+  /* ========== INSTALL ========== */
+  .install {
+    padding: 5rem 0;
+  }
+
+  .install-inner {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .install-inner h2 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    margin-bottom: 2.5rem;
+  }
+
+  .install-tabs {
+    display: inline-flex;
+    gap: 0.35rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.04);
+    border-radius: 100px;
+    padding: 0.25rem;
+    border: 1px solid var(--rule);
+  }
+
+  .install-tab {
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.45rem 1.15rem;
+    border-radius: 100px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .install-tab:hover {
+    color: var(--text);
+  }
+
+  .install-tab.active {
+    background: var(--yellow);
+    color: #0c0c0c;
+  }
+
+  .install-cmd-box {
+    display: flex;
+    align-items: center;
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 1rem 1.25rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .install-cmd-box code {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text);
+    text-align: left;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+
+  .install-copy-btn {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .install-copy-btn:hover {
+    color: var(--text);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  .install-alt {
+    font-size: 0.84rem;
+    color: var(--faint);
+  }
+
+  .install-alt a {
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.2s;
+  }
+
+  .install-alt a:hover {
+    color: var(--text);
+  }
+
+  /* ========== POWERED BY PILL ========== */
+  .powered-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.85rem 0.35rem 0.65rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    margin-bottom: 2.25rem;
+    animation: fadeUp 0.7s ease both;
+    transition: border-color 0.2s, color 0.2s;
+  }
+
+  .powered-pill:hover {
+    border-color: rgba(223,255,0,0.25);
+    color: var(--text);
+  }
+
+  .powered-pill .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--yellow);
+    box-shadow: 0 0 6px rgba(223,255,0,0.4);
+    flex-shrink: 0;
+  }
+
+  .powered-pill strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* ========== ANIMATIONS ========== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 900px) {
+    .feature-row {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      padding: 3rem 0;
+    }
+
+    .feature-row.flip .feature-text {
+      order: 0;
+      text-align: left;
+    }
+
+    .feature-row.flip .feature-text .feature-tag {
+      border-right: none;
+      border-left: 2px solid var(--yellow);
+      padding-right: 0;
+      padding-left: 0.75rem;
+      margin-left: 0;
+    }
+
+    .feature-row.flip .feature-text p {
+      margin-left: 0;
+    }
+
+    .feature-row.flip .feature-visual {
+      order: 0;
+    }
+
+    .step {
+      grid-template-columns: 80px 1fr;
+      gap: 1.5rem;
+      padding: 2rem 0;
+    }
+
+    .cta-form {
+      flex-direction: column;
+    }
+
+    footer .container {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .nav-links a.hide-mobile {
+      display: none;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .hero h1 {
+      font-size: clamp(2.5rem, 11vw, 3.8rem);
+    }
+  }
+
+  .window-frame { border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  .window-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #1a1a1a; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .window-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .window-bar .dot-red { background: #ff5f57; }
+  .window-bar .dot-yellow { background: #febc2e; }
+  .window-bar .dot-green { background: #28c840; }
+  .window-bar .window-title { flex: 1; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: #777; margin-right: 54px; }
+  .window-body { background: #111; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #777; font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; }
+  .window-body .placeholder-icon { font-size: 2rem; opacity: 0.3; margin-bottom: 4px; }
+  .hero-screenshot { max-width: 100%; margin: 60px 0; }
+  .hero-screenshot .window-body { aspect-ratio: 16/9; }
+  .feature-screenshot { margin-top: 24px; }
+  .feature-screenshot .window-bar { padding: 7px 10px; }
+  .feature-screenshot .window-bar .dot { width: 7px; height: 7px; }
+  .feature-screenshot .window-body { aspect-ratio: 16/10; font-size: 0.72rem; }
+  .demo-section { text-align: center; padding: 100px 0; border-top: 1px solid rgba(255,255,255,0.08); }
+  .demo-section h2 { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 2.5rem; letter-spacing: -0.03em; margin-bottom: 40px; }
+  .demo-screenshot .window-body { aspect-ratio: 16/9; }
+  .demo-caption { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #777; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="container">
+    <a href="#" class="nav-logo">
+      <img src="../assets/clawchestra-app-icon-dithered.png" alt="">
+      <span>Clawchestra</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features" class="hide-mobile">Features</a>
+      <a href="#how" class="hide-mobile">How it works</a>
+      <a href="https://github.com/clawchestra" target="_blank">GitHub</a>
+      <a href="#cta" class="btn-pill btn-yellow">Get Access</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <img src="../../assets/clawchestra-logo-chartreuse.png" alt="" class="hero-bg-icon">
+  <div class="container">
+    <a href="https://openclaw.ai" target="_blank" class="powered-pill">
+      <span class="status-dot"></span>
+      Powered by <strong>OpenClaw</strong>
+    </a>
+    <p class="hero-label">private alpha</p>
+    <h1>
+      <span class="line line-1">Orchestrate</span>
+      <span class="line line-2">your AI</span>
+      <span class="line line-3">agents<span class="dot">.</span></span>
+    </h1>
+    <p class="hero-sub">
+      One desktop app to manage Claude Code, Codex, and every terminal-based AI agent &mdash; with real-time tracking, a kanban board, and OpenClaw chat.
+    </p>
+    <div class="hero-actions">
+      <a href="#cta" class="btn-pill btn-yellow">Request Early Access</a>
+      <a href="https://github.com/clawchestra" target="_blank" class="btn-pill btn-ghost">GitHub &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- HERO SCREENSHOT -->
+<div class="container">
+  <div class="hero-screenshot window-frame reveal">
+    <div class="window-bar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <span class="window-title">Clawchestra</span>
+    </div>
+    <div class="window-body">
+      <div class="placeholder-icon">&#9635;</div>
+      App screenshot placeholder
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="container">
+    <p class="section-label">Capabilities</p>
+    <hr class="editorial">
+
+    <div class="feature-row reveal">
+      <div class="feature-text">
+        <span class="feature-tag">Terminals</span>
+        <h3>Embedded<br>AI Terminals</h3>
+        <p>Run Claude Code and Codex side by side in managed tmux sessions with activity detection and action-required notifications. Each agent gets its own workspace &mdash; orchestrated from a single pane.</p>
+      </div>
+      <div class="feature-visual">
+        <div class="feature-screenshot window-frame" style="width:100%">
+          <div class="window-bar">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+            <span class="window-title">Clawchestra</span>
+          </div>
+          <div class="window-body">
+            <div class="placeholder-icon">&#9635;</div>
+            Terminal sessions with live activity tracking
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="editorial">
+
+    <div class="feature-row flip reveal">
+      <div class="feature-text">
+        <span class="feature-tag">Roadmap</span>
+        <h3>Kanban<br>Orchestration</h3>
+        <p>Track roadmap items across projects with drag-and-drop columns, specs, plans, and real-time git sync. Your development pipeline &mdash; visible, structured, always current.</p>
+      </div>
+      <div class="feature-visual">
+        <div class="feature-screenshot window-frame" style="width:100%">
+          <div class="window-bar">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+            <span class="window-title">Clawchestra</span>
+          </div>
+          <div class="window-body">
+            <div class="placeholder-icon">&#9635;</div>
+            Kanban board with drag-and-drop columns
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="editorial">
+
+    <div class="feature-row reveal">
+      <div class="feature-text">
+        <span class="feature-tag">Chat</span>
+        <h3>OpenClaw<br>Integration</h3>
+        <p>Chat with your projects through scoped AI conversations with context injection and provider failover. Your codebase becomes a conversation partner.</p>
+      </div>
+      <div class="feature-visual">
+        <div class="feature-screenshot window-frame" style="width:100%">
+          <div class="window-bar">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+            <span class="window-title">Clawchestra</span>
+          </div>
+          <div class="window-body">
+            <div class="placeholder-icon">&#9635;</div>
+            OpenClaw chat with context injection
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="editorial">
+  </div>
+</section>
+
+<!-- DEMO SECTION -->
+<section class="demo-section">
+  <div class="container">
+    <p class="section-label reveal">SEE IT IN ACTION</p>
+    <h2 class="reveal">One view for everything</h2>
+    <div class="demo-screenshot window-frame reveal">
+      <div class="window-bar">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="window-title">Clawchestra</span>
+      </div>
+      <div class="window-body">
+        <div class="placeholder-icon">&#9654;</div>
+        Full app demo video placeholder
+      </div>
+    </div>
+    <p class="demo-caption reveal">Drag to explore &middot; Click to play demo</p>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-it-works" id="how">
+  <div class="container">
+    <div class="how-header reveal">
+      <p class="section-label">Process</p>
+      <h2>How it works</h2>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-number">01</div>
+        <div class="step-content">
+          <h4>Install & connect</h4>
+          <p>Download the native desktop app. Point it at your project directories. Clawchestra discovers your repos and sets up managed terminal sessions.</p>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="step-number">02</div>
+        <div class="step-content">
+          <h4>Assign agents</h4>
+          <p>Spin up Claude Code, Codex, or any CLI agent in embedded terminals. Route tasks from your kanban board directly to the right agent.</p>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="step-number">03</div>
+        <div class="step-content">
+          <h4>Orchestrate & ship</h4>
+          <p>Monitor real-time activity, review diffs, and manage your roadmap &mdash; all from one window. The agents work. You orchestrate.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="install">
+  <div class="container">
+    <div class="install-inner reveal">
+      <p class="section-label">Install</p>
+      <h2>Get started in one line</h2>
+      <div class="install-tabs">
+        <button class="install-tab active" data-platform="mac">macOS</button>
+        <button class="install-tab" data-platform="win">Windows</button>
+        <button class="install-tab" data-platform="linux">Linux</button>
+      </div>
+      <div class="install-cmd-box">
+        <code id="install-cmd">brew install --cask clawchestra</code>
+        <button class="install-copy-btn" id="install-copy">Copy</button>
+      </div>
+      <p class="install-alt" id="install-alt">or download the <a href="https://github.com/clawchestra/clawchestra/releases" target="_blank">.dmg</a> directly from GitHub Releases</p>
+    </div>
+  </div>
+</section>
+
+<!-- TECH STACK -->
+<section class="tech-stack">
+  <div class="container">
+    <hr class="editorial" style="margin-bottom: 3.5rem;">
+    <p class="tech-stack-inner">
+      Tauri <span>&middot;</span> React <span>&middot;</span> TypeScript <span>&middot;</span> tmux
+    </p>
+    <hr class="editorial" style="margin-top: 3.5rem;">
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-banner" id="cta">
+  <div class="container">
+    <div class="cta-card reveal">
+      <h2>Ready to orchestrate?</h2>
+      <p>Join the private alpha. We'll send you access when your slot opens.</p>
+      <form class="cta-form" onsubmit="event.preventDefault();">
+        <input type="email" placeholder="you@email.com" required>
+        <button type="submit" class="btn-pill btn-yellow">Request Access</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <hr class="editorial" style="margin-bottom: 3rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="footer-left">&copy; 2026 Clawchestra</div>
+      <div class="footer-links">
+        <a href="https://github.com/clawchestra" target="_blank">GitHub</a>
+        <a href="#">Private Alpha</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -30px 0px' });
+
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    el.style.transitionDelay = `${i * 0.06}s`;
+    observer.observe(el);
+  });
+
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.reveal').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        el.classList.add('visible');
+      }
+    });
+  });
+
+  // Install section: tab switching & copy
+  (() => {
+    const platforms = {
+      mac: {
+        cmd: 'brew install --cask clawchestra',
+        alt: 'or download the <a href="https://github.com/clawchestra/clawchestra/releases" target="_blank">.dmg</a> directly from GitHub Releases'
+      },
+      win: {
+        cmd: 'winget install Clawchestra.Clawchestra',
+        alt: 'or download the <a href="https://github.com/clawchestra/clawchestra/releases" target="_blank">.msi</a> directly from GitHub Releases'
+      },
+      linux: {
+        cmd: 'curl -fsSL https://clawchestra.ai/install.sh | sh',
+        alt: 'or download the <a href="https://github.com/clawchestra/clawchestra/releases" target="_blank">.AppImage</a> directly from GitHub Releases'
+      }
+    };
+
+    const tabs = document.querySelectorAll('.install-tab');
+    const cmdEl = document.getElementById('install-cmd');
+    const altEl = document.getElementById('install-alt');
+    const copyBtn = document.getElementById('install-copy');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const p = platforms[tab.dataset.platform];
+        cmdEl.textContent = p.cmd;
+        altEl.innerHTML = p.alt;
+        copyBtn.textContent = 'Copy';
+      });
+    });
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(cmdEl.textContent).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>
