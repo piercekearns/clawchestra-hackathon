@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { hasTerminalSpawnGrace } from '../../lib/terminal-activity';
 import { useScopedChatSession } from '../../hooks/useScopedChatSession';
+import { resetOpenclawSessionModel } from '../../lib/tauri';
 import { MessageList } from '../chat/MessageList';
 import { ChatBar } from '../chat/ChatBar';
 import { TerminalShell } from './TerminalShell';
@@ -47,6 +48,15 @@ export function ScopedChatShell({ chat, onTerminalFocusChange, onTerminalDragAct
 
 function OpenClawChatShell({ chat }: { chat: HubChat }) {
   const session = useScopedChatSession({ chat });
+
+  const handleResetModel = useCallback(async () => {
+    try {
+      await resetOpenclawSessionModel(chat.sessionKey ?? undefined);
+      useDashboardStore.getState().setHubChatModelState(chat.id, { label: null, tooltip: null });
+    } catch (err) {
+      console.warn('[ScopedChat] resetSessionModel failed:', err);
+    }
+  }, [chat.id, chat.sessionKey]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -103,6 +113,7 @@ function OpenClawChatShell({ chat }: { chat: HubChat }) {
         onDropFiles={async () => {}}
         onDragStateChange={session.setDragActive}
         onStop={() => void session.handleStop()}
+        onResetModel={handleResetModel}
       />
       </div>
     </div>

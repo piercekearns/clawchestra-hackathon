@@ -166,6 +166,7 @@ interface ChatShellProps {
   onRetryConnection?: () => void;
   onSystemBubbleAction?: (actionId: string, payload?: Record<string, unknown>) => void;
   onStop?: () => void;
+  onResetModel?: (() => void) | null;
 }
 
 export function ChatShell({
@@ -196,6 +197,7 @@ export function ChatShell({
   onRetryConnection,
   onSystemBubbleAction,
   onStop,
+  onResetModel,
 }: ChatShellProps) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -677,6 +679,7 @@ export function ChatShell({
                     if (!active) setDragDepth(0);
                   }}
                   onStop={onStop}
+                  onResetModel={onResetModel}
                 />
               </div>
             </section>

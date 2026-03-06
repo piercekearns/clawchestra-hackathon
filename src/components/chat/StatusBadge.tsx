@@ -1,5 +1,5 @@
 import { Circle, Loader2 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useCallback, useRef, useState, useEffect } from 'react';
 import { Tooltip } from '../Tooltip';
 import { useDashboardStore } from '../../lib/store';
 import type { ChatConnectionState } from './types';
@@ -9,6 +9,7 @@ interface StatusBadgeProps {
   labelOverride?: string | null;
   usagePercent?: number | null;
   usageTooltip?: ReactNode | null;
+  onResetModel?: (() => void) | null;
 }
 
 const STATE_CONFIG: Record<ChatConnectionState, { label: string; colorClass: string; animate?: boolean }> = {
@@ -41,6 +42,7 @@ export function StatusBadge({
   labelOverride,
   usagePercent,
   usageTooltip,
+  onResetModel,
 }: StatusBadgeProps) {
   const errorReason = useDashboardStore((s) => s.wsConnectionErrorReason);
   const config = STATE_CONFIG[state];
@@ -50,6 +52,38 @@ export function StatusBadge({
   const radius = 4;
   const circumference = 2 * Math.PI * radius;
   const dash = (clampedUsage / 100) * circumference;
+
+  // Context menu for "Reset to primary model"
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      if (!onResetModel || !labelOverride) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuPos({ x: event.clientX, y: event.clientY });
+    },
+    [onResetModel, labelOverride],
+  );
+
+  useEffect(() => {
+    if (!menuPos) return;
+    const dismiss = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuPos(null);
+      }
+    };
+    const dismissKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuPos(null);
+    };
+    document.addEventListener('mousedown', dismiss);
+    document.addEventListener('keydown', dismissKey);
+    return () => {
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', dismissKey);
+    };
+  }, [menuPos]);
 
   const ringSlot = (
     <span className="relative flex h-2.5 w-2.5 flex-none items-center justify-center text-revival-accent-400">
@@ -110,13 +144,37 @@ export function StatusBadge({
     </span>
   );
 
+  const contextMenuWrapper = (content: ReactNode) => (
+    <span onContextMenu={handleContextMenu} className="relative inline-flex">
+      {content}
+      {menuPos ? (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[180px] rounded-md border border-neutral-300 bg-neutral-0 py-1 shadow-lg dark:border-neutral-600 dark:bg-neutral-800"
+          style={{ left: menuPos.x, top: menuPos.y }}
+        >
+          <button
+            type="button"
+            className="w-full px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            onClick={() => {
+              setMenuPos(null);
+              onResetModel?.();
+            }}
+          >
+            Reset to primary model
+          </button>
+        </div>
+      ) : null}
+    </span>
+  );
+
   if (state === 'error' && errorReason) {
-    return (
+    return contextMenuWrapper(
       <Tooltip text={errorReason}>
         {badgeContent}
-      </Tooltip>
+      </Tooltip>,
     );
   }
 
-  return badgeContent;
+  return contextMenuWrapper(badgeContent);
 }

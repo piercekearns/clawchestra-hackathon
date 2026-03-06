@@ -181,6 +181,10 @@ type TauriCommands = {
     };
     return: unknown;
   };
+  openclaw_reset_session_model: {
+    args: { sessionKey: string | null };
+    return: void;
+  };
   read_file: { args: { path: string }; return: string };
   write_file: { args: { path: string; content: string }; return: void };
   write_temp_file: { args: { fileName: string; bytes: number[] }; return: string };
@@ -721,6 +725,10 @@ export async function getOpenClawSessionsList(args?: {
   includeUnknown?: boolean;
 }): Promise<unknown> {
   return typedInvoke('openclaw_sessions_list', args ?? {});
+}
+
+export async function resetOpenclawSessionModel(sessionKey?: string): Promise<void> {
+  return typedInvoke('openclaw_reset_session_model', { sessionKey: sessionKey ?? null });
 }
 
 export async function getOpenclawAuthCooldowns(): Promise<AuthProfileCooldown[]> {

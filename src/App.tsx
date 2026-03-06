@@ -93,6 +93,7 @@ import {
   tmuxCapturePane,
   markRejectionResolved,
   resetOpenclawAuthCooldown,
+  resetOpenclawSessionModel,
   updateDashboardSettings,
   createRoadmapItem,
   deleteRoadmapItems,
@@ -2362,6 +2363,16 @@ export default function App() {
     }
   }, []);
 
+  const handleResetModel = useCallback(async () => {
+    try {
+      await resetOpenclawSessionModel();
+      setActiveSessionModel(null, null);
+      void refreshActiveSessionModel();
+    } catch (err) {
+      console.warn('[App] resetSessionModel failed:', err);
+    }
+  }, [setActiveSessionModel, refreshActiveSessionModel]);
+
   const sendChatMessage = async (
     payload: ChatSendPayload,
     options?: SendChatOptions,
@@ -3457,6 +3468,7 @@ export default function App() {
           onRetryConnection={retryGatewayConnection}
           onSystemBubbleAction={handleSystemBubbleAction}
           onStop={stopActiveRun}
+          onResetModel={handleResetModel}
         />
       </div>
 

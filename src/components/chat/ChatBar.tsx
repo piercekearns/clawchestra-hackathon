@@ -52,6 +52,7 @@ interface ChatBarProps {
   onDragStateChange: (active: boolean) => void;
   onComposerHeightChange?: (heightDelta: number) => void;
   onStop?: () => void;
+  onResetModel?: (() => void) | null;
 }
 
 export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function ChatBar(
@@ -82,6 +83,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
     onDragStateChange,
     onComposerHeightChange,
     onStop,
+    onResetModel,
   },
   forwardedRef,
 ) {
@@ -243,6 +245,7 @@ export const ChatBar = forwardRef<HTMLTextAreaElement, ChatBarProps>(function Ch
                 labelOverride={statusLabelOverride}
                 usagePercent={usagePercent}
                 usageTooltip={usageTooltip}
+                onResetModel={onResetModel}
               />
             </div>
             {activityLabel ? <ActivityIndicator label={activityLabel} isCompacting={isCompacting} /> : null}

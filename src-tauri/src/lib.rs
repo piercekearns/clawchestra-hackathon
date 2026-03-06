@@ -1859,6 +1859,53 @@ async fn openclaw_sessions_list(
     .map_err(|e| format!("sessions.list task panicked: {}", e))?
 }
 
+#[tauri::command]
+async fn openclaw_reset_session_model(
+    session_key: Option<String>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let normalized = normalize_session_key(session_key);
+        let sessions_path = openclaw_root_dir()?
+            .join("agents")
+            .join("main")
+            .join("sessions")
+            .join("sessions.json");
+
+        let raw = fs::read_to_string(&sessions_path)
+            .map_err(|e| format!("Failed to read sessions file: {e}"))?;
+
+        let mut store: serde_json::Map<String, Value> = serde_json::from_str(&raw)
+            .map_err(|e| format!("Failed to parse sessions file: {e}"))?;
+
+        let entry = store
+            .get_mut(&normalized)
+            .and_then(|v| v.as_object_mut())
+            .ok_or_else(|| format!("Session '{}' not found", normalized))?;
+
+        // Clear stale auth/model overrides so the gateway re-evaluates on next send
+        for field in &[
+            "authProfileOverride",
+            "authProfileOverrideSource",
+            "authProfileOverrideCompactionCount",
+            "model",
+            "modelProvider",
+            "contextTokens",
+        ] {
+            entry.remove(*field);
+        }
+
+        let updated = serde_json::to_string_pretty(&store)
+            .map_err(|e| format!("Failed to serialize sessions: {e}"))?;
+
+        fs::write(&sessions_path, updated)
+            .map_err(|e| format!("Failed to write sessions file: {e}"))?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("reset_session_model task panicked: {e}"))?
+}
+
 fn openclaw_chat_blocking(
     message: String,
     attachments: Vec<OpenClawChatAttachmentInput>,
@@ -4635,6 +4682,7 @@ pub fn run() {
             get_capabilities_md,
             openclaw_chat,
             openclaw_sessions_list,
+            openclaw_reset_session_model,
             // Git commands (commands/git.rs)
             commands::git::probe_repo,
             commands::git::get_git_status,
