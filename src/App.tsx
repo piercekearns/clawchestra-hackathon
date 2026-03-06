@@ -3398,7 +3398,6 @@ export default function App() {
             projectId={activeRoadmapProject?.id}
             isMigrated={activeRoadmapProject?.stateJsonMigrated}
             hasChat={activeRoadmapProject && selectedRoadmapItemId ? itemHasChat(hubChats, activeRoadmapProject.id, selectedRoadmapItemId) : false}
-            boardScoped
             onClose={() => setSelectedRoadmapItemId(null)}
             onStatusChange={(itemId, status) => {
               const updated = roadmapItems.map((i) =>
@@ -3477,7 +3476,6 @@ export default function App() {
           <ProjectModal
             open={Boolean(selectedProject)}
             project={selectedProject}
-            boardScoped={sidebarOpen}
             onClose={() => setSelectedProjectId(undefined)}
             actions={projectModalActions}
           />
@@ -3490,7 +3488,6 @@ export default function App() {
               existingItems={roadmapItems}
               gatewayConnected={gatewayConnected}
               initialStatus={addRoadmapItemInitialStatus as import('./lib/constants').RoadmapItemStatus | undefined}
-              boardScoped
               onClose={() => { setAddRoadmapItemOpen(false); setAddRoadmapItemInitialStatus(undefined); }}
               onComplete={async () => {
                 await refreshRoadmapFromFile('all');
@@ -3555,7 +3552,6 @@ export default function App() {
               if (!open) scanUnresolvedSyncState();
             }}
             projects={allProjects}
-            boardScoped={sidebarOpen}
             onRequestChatPrefill={(prefillText) => {
               setSyncDialogOpen(false);
               setChatDrawerOpen(true);
@@ -3573,7 +3569,6 @@ export default function App() {
         open={addDialogOpen}
         settings={dashboardSettings}
         existingProjects={allProjects}
-        boardScoped={sidebarOpen}
         initialStatus={addDialogInitialStatus as ProjectStatus | undefined}
         onClose={() => { setAddDialogOpen(false); setAddDialogInitialStatus(undefined); }}
         onComplete={async (message) => {

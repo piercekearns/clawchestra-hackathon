@@ -23,7 +23,6 @@ interface AddProjectDialogProps {
   existingProjects: ProjectViewModel[];
   onClose: () => void;
   onComplete: (message: string) => Promise<void> | void;
-  boardScoped?: boolean;
   /** Pre-select the status dropdown (e.g. from in-column quick-add) */
   initialStatus?: ProjectStatus;
 }
@@ -39,7 +38,6 @@ export function AddProjectDialog({
   existingProjects,
   onClose,
   onComplete,
-  boardScoped,
   initialStatus,
 }: AddProjectDialogProps) {
   const [mode, setMode] = useState<WizardMode>('create-new');
@@ -148,7 +146,7 @@ export function AddProjectDialog({
     }
   };
 
-  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm`;
+  const overlayClass = `fixed inset-0 z-[100] flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm`;
 
   return (
     <div className={overlayClass}>

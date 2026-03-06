@@ -28,7 +28,7 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm">
       <ModalDragZone />
       <div className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-neutral-0 p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         <div className="mb-4 flex items-center justify-between">

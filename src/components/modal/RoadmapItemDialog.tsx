@@ -21,7 +21,6 @@ interface RoadmapItemDialogProps {
   onOpenChat?: (itemId: string, itemTitle: string) => void;
   onCreateChatWithType?: (itemId: string, itemTitle: string, type: 'openclaw' | 'terminal', agentType: HubAgentType | null) => void;
   hasChat?: boolean;
-  boardScoped?: boolean;
 }
 
 /**
@@ -40,7 +39,6 @@ export function RoadmapItemDialog({
   onOpenChat,
   onCreateChatWithType,
   hasChat,
-  boardScoped,
 }: RoadmapItemDialogProps) {
   const [enrichedItem, setEnrichedItem] = useState<RoadmapItemWithDocs | null>(null);
   const [docCache, setDocCache] = useState<Record<string, string>>({});
@@ -239,9 +237,9 @@ export function RoadmapItemDialog({
 
   if (!item || !enrichedItem) return null;
 
-  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-[60] flex items-center justify-center px-4 py-6`;
+  const overlayClass = `fixed inset-0 z-[100] flex items-center justify-center px-4 py-6`;
   const backdropClass = `absolute inset-0 bg-black/40 backdrop-blur-sm`;
-  const dialogClass = `w-full ${boardScoped ? 'max-h-[calc(100%-3rem)]' : 'max-h-[90vh]'} max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 relative group z-10`;
+  const dialogClass = `w-full max-h-[90vh] max-w-6xl overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-0 p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900 relative group z-10`;
 
   return (
     <div className={overlayClass}>

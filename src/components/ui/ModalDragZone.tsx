@@ -10,7 +10,7 @@ const TITLE_BAR_HEIGHT = 46;
 export function ModalDragZone() {
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[51]"
+      className="fixed inset-x-0 top-0 z-[101]"
       style={{ height: TITLE_BAR_HEIGHT, cursor: 'grab' }}
       onMouseDown={() => {
         void getCurrentWindow().startDragging().catch(() => {});

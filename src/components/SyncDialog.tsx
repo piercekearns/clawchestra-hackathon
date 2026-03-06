@@ -386,7 +386,6 @@ interface SyncDialogProps {
   projects: ProjectViewModel[];
   onRequestChatPrefill: (text: string) => void;
   onSyncComplete: () => void;
-  boardScoped?: boolean;
 }
 
 interface SyncResult {
@@ -487,7 +486,6 @@ export function SyncDialog({
   projects,
   onRequestChatPrefill,
   onSyncComplete,
-  boardScoped,
 }: SyncDialogProps) {
   // Type-narrow to projects with confirmed gitStatus
   const dirtyProjects = useMemo(
@@ -1557,8 +1555,8 @@ export function SyncDialog({
 
   if (!open) return null;
 
-  const overlayClass = `${boardScoped ? 'absolute' : 'fixed'} inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm`;
-  const panelClass = `flex ${boardScoped ? 'max-h-[80%]' : 'max-h-[80vh]'} w-full max-w-2xl flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900`;
+  const overlayClass = `fixed inset-0 z-[100] flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm`;
+  const panelClass = `flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-neutral-200 bg-neutral-0 shadow-xl dark:border-neutral-700 dark:bg-neutral-900`;
 
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
