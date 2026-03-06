@@ -476,7 +476,7 @@ export function SecondaryDrawer({
           }
         }}
         className={isVertical
-          ? 'group absolute left-0 top-0 z-[70] h-[6px] w-full cursor-row-resize [will-change:transform]'
+          ? 'group absolute left-0 top-0 z-[70] h-[6px] w-full -translate-y-1/2 cursor-row-resize [will-change:transform]'
           : 'group absolute right-0 top-0 z-[70] h-full w-[6px] translate-x-1/2 cursor-col-resize [will-change:transform]'
         }
       >
