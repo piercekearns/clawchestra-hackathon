@@ -2266,8 +2266,11 @@
     <div class="cta-card reveal">
       <h2>Ready to orchestrate?</h2>
       <p>Join the private alpha. We'll send you access when your slot opens.</p>
-      <form class="cta-form" onsubmit="event.preventDefault();">
-        <input type="email" placeholder="you@email.com" required>
+      <form class="cta-form" action="https://formsubmit.co/piercekearns@protonmail.com" method="POST">
+        <input type="hidden" name="_subject" value="Clawchestra Early Access Request">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="hidden" name="_next" value="https://clawchestra.ai?submitted=true">
+        <input type="email" name="email" placeholder="you@email.com" required>
         <button type="submit" class="btn-pill btn-yellow">Request Access</button>
       </form>
     </div>
