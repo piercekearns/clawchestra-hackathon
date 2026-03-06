@@ -5,7 +5,7 @@
 **Status:** Spec Complete — Ready for Build
 **Created:** 2026-02-11
 **Updated:** 2026-02-11 (v5 — review fixes applied)
-**Author:** Clawdbot + Pierce
+**Author:** Clawchestra draft
 
 ---
 
@@ -1086,7 +1086,7 @@ export async function resolvePath(path: string): Promise<string> {
 #[tauri::command]
 fn get_projects_dir() -> Result<String, String> {
     // Hardcoded for MVP — personal tool
-    Ok("/Users/piercekearns/clawdbot-sandbox/projects".to_string())
+    Ok("<legacy-project-root>".to_string())
 }
 
 #[tauri::command]

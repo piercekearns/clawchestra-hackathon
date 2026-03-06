@@ -503,7 +503,7 @@ describe('gateway client', () => {
       {
         id: 'u-new',
         role: 'user',
-        content: 'User workspace path: /Users/piercekearns/clawdbot-sandbox\n\nrun /build now',
+        content: 'User workspace path: /home/tester/openclaw-workspace\n\nrun /build now',
         timestamp: 10,
       },
     ];
@@ -511,7 +511,7 @@ describe('gateway client', () => {
     const matched = __gatewayTestUtils.hasMatchingUserTurnInHistory(messages, {
       baselineIds: new Set(['u-old']),
       minTimestamp: 5,
-      expectedUserText: 'User workspace path: /Users/piercekearns/clawdbot-sandbox run /build now',
+      expectedUserText: 'User workspace path: /home/tester/openclaw-workspace run /build now',
     });
 
     expect(matched).toBe(true);

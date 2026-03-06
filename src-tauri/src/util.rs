@@ -1,7 +1,7 @@
 //! util.rs — Shared utility functions.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -22,6 +22,77 @@ pub fn is_pid_alive(pid: i32) -> bool {
     {
         let _ = pid;
         false
+    }
+}
+
+/// Resolve the current user's home directory.
+pub fn home_dir() -> Result<PathBuf, String> {
+    dirs::home_dir().ok_or_else(|| "Could not find home directory".to_string())
+}
+
+/// Resolve the platform temp directory.
+pub fn temp_dir() -> PathBuf {
+    std::env::temp_dir()
+}
+
+/// Best-effort command lookup that works across Unix shells and Windows `where`.
+pub fn lookup_command(command: &str) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        let output = Command::new("where").arg(command).output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+
+        return String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .map(PathBuf::from)
+            .filter(|path| path.exists());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            if cfg!(target_os = "macos") {
+                "/bin/zsh".to_string()
+            } else {
+                "/bin/sh".to_string()
+            }
+        });
+
+        if let Ok(output) = Command::new(&shell)
+            .args(["-lc", &format!("command -v {command}")])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Some(path) = stdout
+                    .lines()
+                    .rev()
+                    .map(str::trim)
+                    .find(|line| line.starts_with('/'))
+                {
+                    let path = PathBuf::from(path);
+                    if path.exists() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+
+        let output = Command::new("which").arg(command).output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .find(|line| line.starts_with('/'))
+            .map(PathBuf::from)
+            .filter(|path| path.exists())
     }
 }
 

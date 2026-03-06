@@ -15,7 +15,7 @@ Make the OpenClaw/chat integration modular so anyone can plug in their own OpenC
 
 ## Problem
 
-Currently the gateway connection is hardcoded — the app isn't decoupled from Pierce's OpenClaw config. A friend couldn't spin up the app and connect to their own OpenClaw.
+Currently the gateway connection is hardcoded — the app isn't decoupled from the original developer's OpenClaw config. A friend couldn't spin up the app and connect to their own OpenClaw.
 
 ## Requirements
 

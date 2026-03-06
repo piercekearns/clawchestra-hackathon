@@ -45,7 +45,7 @@ A right-side version would look like:
 ## What to Watch For
 
 - **When `flexible-layout-orientation` ships:** does the panel reordering make sidebar placement feel irrelevant, or does the asymmetry become more noticeable?
-- **User feedback:** does anyone actually ask for this, or is the confusion Pierce noticed something else?
+- **User feedback:** does anyone actually ask for this, or is the confusion the original developer noticed points to something else?
 - **The thin strip:** if the sidebar moves, does the thin strip move with it? That's the more technically complex question. Independent movement seems wrong UX-wise but may be what some users want.
 
 ## Related Items

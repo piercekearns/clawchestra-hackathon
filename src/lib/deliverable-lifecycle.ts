@@ -93,17 +93,13 @@ export function buildLifecyclePrompt(
       if (artifactState.plan === 'present') {
         return [
           ...header,
-          'Requested action: Update the existing implementation plan using Claude Code via tmux.',
+          'Requested action: Update the existing implementation plan using the best available coding-agent workflow for this environment.',
           '',
           'Steps:',
-          '1. Read the coding-agent skill (skills/coding-agent/SKILL.md) for tmux patterns',
-          `2. Create a tmux session: tmux new-session -d -s ${context.item.id}-plan -c <project-dir>`,
-          "3. Launch Claude Code: tmux send-keys -t <session> 'claude --dangerously-skip-permissions' Enter",
-          '4. Wait 6-8s for TUI init, send the command with Tab completion:',
-          `   tmux send-keys -t <session> '/plan' Tab; sleep 1; tmux send-keys -t <session> ' ${planPath}' Enter`,
-          '5. Monitor via capture-pane; surface FULL output for any decisions',
-          '6. Keep phases concrete, testable, and implementation-ready',
-          '7. Kill tmux session when complete',
+          '1. Prefer an embedded coding-agent terminal if one is available; otherwise work directly in the repo from the current environment.',
+          `2. Update the plan at ${planPath}.`,
+          '3. Keep phases concrete, testable, and implementation-ready.',
+          '4. Surface any material decisions or scope changes to the user before locking them in.',
         ].join('\n');
       }
 
@@ -113,18 +109,14 @@ export function buildLifecyclePrompt(
 
       return [
         ...header,
-        'Requested action: Create a new implementation plan using Claude Code via tmux.',
+        'Requested action: Create a new implementation plan using the best available coding-agent workflow for this environment.',
         '',
         'Steps:',
-        '1. Read the coding-agent skill (skills/coding-agent/SKILL.md) for tmux patterns',
-        `2. Create a tmux session: tmux new-session -d -s ${context.item.id}-plan -c <project-dir>`,
-        "3. Launch Claude Code: tmux send-keys -t <session> 'claude --dangerously-skip-permissions' Enter",
-        '4. Wait 6-8s for TUI init, send the command with Tab completion:',
-        `   tmux send-keys -t <session> '/plan' Tab; sleep 1; tmux send-keys -t <session> ' docs/plans/${context.item.id}-plan.md' Enter`,
-        '5. Monitor via capture-pane; surface FULL output for any decisions',
-        `6. ${specReference}`,
-        '7. Update nextAction in .clawchestra/state.json to "Plan written — ready for build" when done',
-        '8. Kill tmux session when complete',
+        '1. Prefer an embedded coding-agent terminal if one is available; otherwise work directly in the repo from the current environment.',
+        `2. Create the plan at docs/plans/${context.item.id}-plan.md.`,
+        `3. ${specReference}`,
+        '4. Surface any material decisions or scope changes to the user before locking them in.',
+        '5. Update nextAction in .clawchestra/state.json to "Plan written — ready for build" when done.',
       ].join('\n');
     }
 
@@ -132,9 +124,8 @@ export function buildLifecyclePrompt(
       const planRef = planPath ? ` The plan to review is: ${planPath}` : '';
       return [
         ...header,
-        `Requested action: Run /plan_review in Claude Code (NOT /review — /plan_review spawns sub-agents for deeper validation).${planRef}`,
-        'Steps: Launch Claude Code via tmux, send "/plan_review <path-to-plan>" as the command, wait for sub-agents to complete, then surface the FULL raw output to the user.',
-        'Outputs: Surface the recommended plan changes from the /plan_review outputs to the user to decide next steps.',
+        `Requested action: Review the implementation plan using the best available review workflow in the current coding-agent environment.${planRef}`,
+        'Outputs: Surface the recommended plan changes to the user so they can decide next steps.',
       ].join('\n');
     }
 
@@ -162,25 +153,14 @@ export function buildLifecyclePrompt(
 
       return [
         ...header,
-        'Requested action: Build this roadmap item using Claude Code via tmux.',
-        '',
-        'CRITICAL: /build is a custom command in Claude Code. When sending via tmux,',
-        'you MUST use Tab to trigger command completion before adding the argument.',
-        'Without Tab, Claude Code treats "/build ..." as a plain message, not a command.',
+        'Requested action: Build this roadmap item using the best available coding-agent workflow for this environment.',
         '',
         'Steps:',
-        '1. Read the coding-agent skill (skills/coding-agent/SKILL.md) for tmux patterns',
-        `2. Create a tmux session: tmux new-session -d -s ${context.item.id}-build -c <project-dir>`,
-        "3. Launch Claude Code: tmux send-keys -t <session> 'claude --dangerously-skip-permissions' Enter",
-        '4. Wait 6-8s for TUI init, then send the /build command using Tab completion:',
-        "   tmux send-keys -t <session> '/build' Tab",
-        '   sleep 1  # wait for autocomplete to resolve',
-        `   tmux send-keys -t <session> ' ${planPath ?? '<path-to-plan>'}' Enter`,
-        '5. Monitor via capture-pane; surface FULL output for any decisions/errors/recommendations',
-        '   /build chains /workflows:work → /workflows:review per phase. Expect sub-agents.',
-        '6. Keep .clawchestra/state.json nextAction in sync throughout the build',
-        '7. Surface non-critical recommendations for user to decide next steps',
-        '8. Kill tmux session when complete',
+        '1. Prefer an embedded coding-agent terminal if one is available; otherwise work directly in the repo from the current environment.',
+        '2. If the current coding-agent environment supports a dedicated build workflow, use it. Otherwise execute the work directly from the plan/spec.',
+        `3. Build against ${planPath ?? '<path-to-plan>'} and keep implementation aligned with the available spec/plan docs.`,
+        '4. Keep .clawchestra/state.json nextAction in sync throughout the build.',
+        '5. Surface material decisions, blockers, or non-critical recommendations to the user.',
         sourceRef,
       ].filter(Boolean).join('\n');
     }

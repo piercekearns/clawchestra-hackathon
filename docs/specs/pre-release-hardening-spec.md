@@ -55,7 +55,7 @@ This spec documents the deferred items so they aren't lost, and assigns trigger 
 
 **Effort:** Medium (many files, but all mechanical renames).
 
-**Trigger event:** Before onboarding other contributors to the codebase. Zero urgency while Pierce is the sole developer. Would be a good "rainy day" cleanup task.
+**Trigger event:** Before onboarding other contributors to the codebase. Zero urgency while the project still has a single primary developer. Would be a good "rainy day" cleanup task.
 
 ---
 

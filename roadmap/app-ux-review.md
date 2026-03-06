@@ -35,7 +35,7 @@ The modal build (6 phases) and architecture overhaul are shipped. Now it's time 
 
 ## Process
 
-Pierce will do a structured walkthrough:
+The project owner will do a structured walkthrough:
 1. Open the app, use every view
 2. Note what feels good, what feels bad, what's missing
 3. Capture as sub-items here

@@ -56,7 +56,7 @@ Out of scope:
 
 ### Work
 
-1. Extend `GitStatus` in `/Users/piercekearns/repos/pipeline-dashboard/src-tauri/src/lib.rs` with all-file dirtiness fields (for example `has_dirty_files`, `all_dirty_files`), keeping existing `dashboard_dirty`/`dirty_files` temporarily for compatibility during transition.
+1. Extend `GitStatus` in `<repo-root>/src-tauri/src/lib.rs` with all-file dirtiness fields (for example `has_dirty_files`, `all_dirty_files`), keeping existing `dashboard_dirty`/`dirty_files` temporarily for compatibility during transition.
 2. Update `get_git_status` to parse all dirty files from porcelain output once, then derive:
    - dashboard-only subset (current behavior)
    - full dirty file list (new behavior)
@@ -81,10 +81,10 @@ Out of scope:
 
 ### Work
 
-1. Extend `/Users/piercekearns/repos/pipeline-dashboard/src/lib/schema.ts` GitStatus fields to include full dirty scope.
-2. Update `/Users/piercekearns/repos/pipeline-dashboard/src/lib/tauri.ts` typings for expanded status payload.
+1. Extend `<repo-root>/src/lib/schema.ts` GitStatus fields to include full dirty scope.
+2. Update `<repo-root>/src/lib/tauri.ts` typings for expanded status payload.
 3. Refactor Sync dialog state to track selected categories and optional per-file selections.
-4. Keep dirty-project detection logic in `/Users/piercekearns/repos/pipeline-dashboard/src/App.tsx` aligned to new all-dirty signal.
+4. Keep dirty-project detection logic in `<repo-root>/src/App.tsx` aligned to new all-dirty signal.
 
 ### Exit Criteria
 
@@ -102,7 +102,7 @@ Out of scope:
 
 ### Work
 
-1. Update grouping logic in `/Users/piercekearns/repos/pipeline-dashboard/src/components/SyncDialog.tsx`:
+1. Update grouping logic in `<repo-root>/src/components/SyncDialog.tsx`:
    - Metadata: app-structural files (`PROJECT.md`, optionally `ROADMAP.md`/`CHANGELOG.md` per final taxonomy decision)
    - Documents: roadmap/spec/plan docs
    - Code: everything else
@@ -126,7 +126,7 @@ Out of scope:
 
 ### Work
 
-1. Update backend `git_commit` path validation in `/Users/piercekearns/repos/pipeline-dashboard/src-tauri/src/lib.rs` so explicit Sync commits can include non-dashboard files selected in UI.
+1. Update backend `git_commit` path validation in `<repo-root>/src-tauri/src/lib.rs` so explicit Sync commits can include non-dashboard files selected in UI.
 2. Enforce strict file safety constraints at commit boundary:
    - allow only repo-relative paths (reject absolute paths)
    - reject traversal paths (`..`)
@@ -168,7 +168,7 @@ Out of scope:
 ## Verification Plan
 
 1. Unit tests:
-   - `/Users/piercekearns/repos/pipeline-dashboard/src/lib/git-sync.test.ts` grouping and messaging coverage.
+   - `<repo-root>/src/lib/git-sync.test.ts` grouping and messaging coverage.
    - Rust tests for status parsing and commit validation.
    - Rust tests for path safety validation (`absolute`, `..`, non-dirty-file rejection).
 2. Build/test gates:

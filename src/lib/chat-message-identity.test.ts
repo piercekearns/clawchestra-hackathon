@@ -10,7 +10,7 @@ describe('chat message identity helpers', () => {
   it('unwraps context wrapped user content for identity', () => {
     const message = {
       role: 'user' as const,
-      content: 'User workspace path: /Users/piercekearns/clawdbot-sandbox\n\nUser request:\nrun /build',
+      content: 'User workspace path: /home/tester/openclaw-workspace\n\nUser request:\nrun /build',
       timestamp: 100,
     };
 

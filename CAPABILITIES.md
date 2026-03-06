@@ -57,9 +57,11 @@ Users talk to you from three places inside Clawchestra:
 
 ## Terminal Agents
 
-Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic shell) scoped to any project or roadmap item. Terminals run locally in tmux sessions — they always have full file access regardless of where you (OpenClaw) are hosted.
+Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic shell) scoped to any project or roadmap item. Terminals prefer local tmux-backed persistence, but Clawchestra now falls back to temporary direct sessions when tmux is missing or when the user is on Windows.
 
 **How to open:** Hover a project card on the main board and click the terminal icon, or hover a roadmap item card and click the terminal icon. Existing terminal sessions are also listed and accessible from the project's entry in the sidebar.
+
+If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals currently run as temporary PowerShell sessions and do not persist across drawer close or app relaunch yet.
 
 Terminal sessions show activity indicators: animated dots while active, amber badge when action is required (permission prompts), yellow badge for unread output.
 

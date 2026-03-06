@@ -45,7 +45,7 @@ After this change, `cargo check` must pass. The `target/` directory will rebuild
 
 | File | Current | New |
 |------|---------|-----|
-| `src-tauri/tauri.conf.json` `identifier` | `com.clawdbot.pipeline-dashboard` | `io.github.piercekearns.clawchestra` |
+| `src-tauri/tauri.conf.json` `identifier` | `com.clawdbot.pipeline-dashboard` | `ai.clawchestra.desktop` |
 | `src-tauri/capabilities/default.json` `description` | `"Default capability for Pipeline Dashboard"` | `"Default capability for Clawchestra"` |
 
 **Note on identifier change:** Tauri uses the identifier for the app data directory on some platforms. Changing it may affect where Tauri itself stores data (separate from our custom settings path). Test that the app still finds its data after the identifier change.
@@ -131,7 +131,7 @@ Deep Rename must be neutral with respect to Git Sync semantics.
 
 ## Data Directory Migration
 
-This is the most complex part. Pierce has **seven** data locations that reference the old name:
+This is the most complex part. There are **seven** data locations that reference the old name:
 
 ### Known data directories (macOS)
 
@@ -141,23 +141,23 @@ This is the most complex part. Pierce has **seven** data locations that referenc
 | `~/Library/Application Support/pipeline-dashboard/` | chat.db (SQLite) | Rename to `clawchestra/` |
 | `~/Library/WebKit/pipeline-dashboard/` | WebView storage (localStorage) | See below |
 | `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` | WebView storage (identifier-keyed) | See below |
-| `~/Library/WebKit/io.github.piercekearns.clawchestra/` | New identifier-keyed WebView storage | Created on first launch post-rename |
+| `~/Library/WebKit/ai.clawchestra.desktop/` | New identifier-keyed WebView storage | Created on first launch post-rename |
 | `~/Library/Preferences/com.clawdbot.pipeline-dashboard.plist` | macOS preferences | See below |
-| `~/Library/Preferences/io.github.piercekearns.clawchestra.plist` | New identifier-keyed preferences | Created on first launch post-rename |
+| `~/Library/Preferences/ai.clawchestra.desktop.plist` | New identifier-keyed preferences | Created on first launch post-rename |
 | `~/Library/Caches/pipeline-dashboard/` | App cache | Can delete (non-critical) |
 | `~/Library/Caches/com.clawdbot.pipeline-dashboard/` | Identifier-keyed cache | Can delete (non-critical) |
-| `~/Library/Caches/io.github.piercekearns.clawchestra/` | New identifier-keyed cache | Created on first launch post-rename |
+| `~/Library/Caches/ai.clawchestra.desktop/` | New identifier-keyed cache | Created on first launch post-rename |
 
 ### Critical: WebView Storage (localStorage)
 
-Zustand's `persist` middleware stores state in **localStorage** inside the Tauri WebView. The localStorage key is `clawchestra-state` (already renamed). However, the WebView's storage location on disk is determined by the **Tauri identifier** (`com.clawdbot.pipeline-dashboard` pre-rename, `io.github.piercekearns.clawchestra` post-rename).
+Zustand's `persist` middleware stores state in **localStorage** inside the Tauri WebView. The localStorage key is `clawchestra-state` (already renamed). However, the WebView's storage location on disk is determined by the **Tauri identifier** (`com.clawdbot.pipeline-dashboard` pre-rename, `ai.clawchestra.desktop` post-rename).
 
-**If we change the identifier to `io.github.piercekearns.clawchestra`**, the WebView creates a new storage directory. The old localStorage data (theme preference, collapsed columns, column order, sidebar state) is orphaned in the old WebKit directory.
+**If we change the identifier to `ai.clawchestra.desktop`**, the WebView creates a new storage directory. The old localStorage data (theme preference, collapsed columns, column order, sidebar state) is orphaned in the old WebKit directory.
 
 **Options:**
 
 1. **Don't change the identifier** — WebView storage survives, but the app identifier stays as the old name forever. Clean for now, messy long-term.
-2. **Change the identifier + migrate WebKit directories** — Rename `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` → `~/Library/WebKit/io.github.piercekearns.clawchestra/`. Risky — WebKit may validate directory names against internal state.
+2. **Change the identifier + migrate WebKit directories** — Rename `~/Library/WebKit/com.clawdbot.pipeline-dashboard/` → `~/Library/WebKit/ai.clawchestra.desktop/`. Risky — WebKit may validate directory names against internal state.
 3. **Change the identifier + accept localStorage loss** — User loses theme/sidebar/column preferences. They're trivial to reconfigure (a few clicks). This is the safest option.
 
 **Recommendation: Option 3.** The persisted state is 5 fields (theme, collapsedColumns, columnOrder, sidebarOpen, sidebarWidth) — all trivially recoverable by the user. Attempting to migrate WebKit directories risks corrupting WebView state. Cache directories can be safely deleted (non-critical).
@@ -170,7 +170,7 @@ const folderName = dirPath.split('/').pop() ?? dirPath;
 const id = canonicalSlugify(folderName); // "pipeline-dashboard" → "pipeline-dashboard"
 ```
 
-If the repo folder is renamed from `~/repos/pipeline-dashboard/` to `~/repos/clawchestra/`, the project ID changes from `pipeline-dashboard` to `clawchestra`. This affects:
+If the repo folder moves from one canonical location to another, the project ID changes from `pipeline-dashboard` to `clawchestra`. This affects:
 
 - **`selectedProjectId`** in Zustand — project won't auto-select after rename (minor, resets on next click)
 - **`collapsedColumns[boardId]`** — board-specific column state uses `roadmap:{projectId}` as key. Old state orphaned. (Mitigated by Option 3 above — localStorage is reset anyway)
@@ -266,7 +266,7 @@ How each Deep Rename change relates to First Friend Readiness:
 | Data paths → `Clawchestra` / `clawchestra` | FFR Phase 1 switches remaining `env::var("HOME")` to `dirs` | DR handles settings path + migration; FFR handles the other 7 call sites |
 | Env vars → `CLAWCHESTRA_*` | FFR Phase 1 cross-platform update scripts | DR renames; FFR adds Windows equivalents using new names |
 | `update.sh` cleanup | FFR adds `update.bat`/`update.ps1` | DR cleans macOS script; FFR adds cross-platform scripts |
-| Tauri identifier → `io.github.piercekearns.clawchestra` | FFR Phase 1 cross-platform config | May affect Tauri's own data directory — test on macOS before FFR adds platforms |
+| Tauri identifier → `ai.clawchestra.desktop` | FFR Phase 1 cross-platform config | May affect Tauri's own data directory — test on macOS before FFR adds platforms |
 | Package/crate rename | No FFR impact | Pure rename, no downstream dependency |
 | `killall "pipeline-dashboard"` in update.sh | FFR cross-platform update | Remove — binary name is already `Clawchestra`. FFR uses process name from config |
 
@@ -293,7 +293,7 @@ How each Deep Rename change relates to First Friend Readiness:
 7. **Content/docs** — roadmap parent fields, PROJECT.md, OVERVIEW.md
 
 ### Repo folder name
-The repo lives at `~/repos/pipeline-dashboard/`. Renaming the folder to `~/repos/clawchestra/` is optional and should be treated as a separate/manual migration step.
+The repo currently lives at `<repo-root>/`. Renaming the folder is optional and should be treated as a separate/manual migration step.
 
 **Decision:** Defer folder rename out of this spec's implementation scope.
 
@@ -314,7 +314,7 @@ Document it as a follow-up operational step once Deep Rename + Git Sync mileston
 | `CHANGELOG.md` entries | Historical record |
 | `REVIEW-FIXES.md` | Historical review document |
 | Git commit history | Obviously |
-| Repo folder path (`~/repos/pipeline-dashboard`) as part of this build | Deferred/manual post-migration step to avoid project ID churn during active Git Sync work |
+| Repo folder path (`<repo-root>`) as part of this build | Deferred/manual post-migration step to avoid project ID churn during active Git Sync work |
 | `roadmap.ts` migration code (`shipped` → `complete`) | Legacy migration, still needed |
 | `update.sh` OLD_APP_NAME cleanup logic | Keep until first successful update post-rename confirms `/Applications/Pipeline Dashboard.app` is gone, then remove in a follow-up |
 

@@ -46,8 +46,8 @@ The dashboard discovers projects by scanning configured folders for `PROJECT.md`
 ```json
 {
   "scanPaths": [
-    "/Users/piercekearns/repos",
-    "/Users/piercekearns/projects"
+    "~/repos",
+    "~/projects"
   ]
 }
 ```
@@ -120,7 +120,7 @@ specDoc: docs/specs/some-spec.md
 planDoc: docs/plans/some-plan.md
 
 # GitHub (enables remote integration)
-repo: piercekearns/pipeline-dashboard
+repo: owner/repo
 ---
 ```
 
@@ -287,7 +287,7 @@ This avoids manual bookkeeping. The user marks it done; the system handles archi
 
 ### Phase 2: Add `PROJECT.md` to existing repos
 
-- For each repo already in `~/repos/` (pipeline-dashboard, memestr, ClawOS, piercekearns.com, Shopify-Fabric-Theme, clawd):
+- For each repo already in `~/repos/` (pipeline-dashboard, memestr, ClawOS, personal-site, Shopify-Fabric-Theme, clawd):
   - Create `PROJECT.md` in the repo root with standardised frontmatter
   - Ensure `ROADMAP.md` is in parseable frontmatter-items format (already done for pipeline-dashboard)
   - If `ROADMAP.md` exists, also create `CHANGELOG.md` (they're always paired)

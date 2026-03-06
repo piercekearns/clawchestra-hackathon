@@ -1,554 +1,440 @@
 # First Friend Readiness
 
-> Make Clawchestra installable, configurable, and usable by someone who isn't Pierce.
+> Make Clawchestra installable, onboardable, and fully usable by a new user on macOS, Linux, and Windows.
 
 ## Summary
 
-Clawchestra is currently a single-user app designed entirely around Pierce's local macOS setup — hardcoded paths, macOS-only title bar chrome, localhost-only OpenClaw connection, lifecycle buttons that assume Claude Code and Compound Engineering are installed. This spec identifies every gap between "works on Pierce's machine" and "a friend on Linux or Windows can install it, connect their own OpenClaw instance, point it at their projects, and use it." It organises the work into a sequential onboarding funnel (Get → Launch → Connect → Discover → Customise) and distinguishes what's mandatory for the first handoff vs what can come later.
+First Friend Readiness is no longer just "make it work on a friend's machine." It is the productization pass that turns Clawchestra from an owner-shaped local tool into something another person can discover, install, launch, connect, and use without already knowing the repo, the runtime, or the hidden dependencies. The work now spans five linked surfaces: release distribution, public-alpha repo hygiene, OpenClaw connection and sync architecture, onboarding, and terminal/runtime dependency readiness.
+
+This spec is aligned to the current codebase. Clawchestra already has a settings page, remote sync settings, Add Existing/onboarding compatibility flows, agent guidance injection, an OpenClaw extension installer primitive, system-context generation, and embedded terminal infrastructure. FFR should build on those pieces instead of re-specifying them as if they do not exist.
 
 ---
 
 **Roadmap Item:** `first-friend-readiness`
-**Status:** Draft
+**Status:** Ready
 **Created:** 2026-02-19
+**Updated:** 2026-03-06
 
 ---
 
-## Table of Contents
+## 1. Success Criteria
 
-1. [End-to-End User Journey](#1-end-to-end-user-journey)
-2. [Stage 0: Get the App](#2-stage-0-get-the-app)
-3. [Stage 1: First Launch](#3-stage-1-first-launch)
-4. [Stage 2: Connect to OpenClaw](#4-stage-2-connect-to-openclaw)
-5. [Stage 3: Discover Projects](#5-stage-3-discover-projects)
-6. [Stage 4: Customise Lifecycle Actions](#6-stage-4-customise-lifecycle-actions)
-7. [Stage 5: Ongoing Use](#7-stage-5-ongoing-use)
-8. [Cross-Platform Requirements](#8-cross-platform-requirements)
-9. [What Exists Today vs What Needs Building](#9-what-exists-today-vs-what-needs-building)
-10. [Relationship to Existing Roadmap Items](#10-relationship-to-existing-roadmap-items)
-11. [Recommended Build Order](#11-recommended-build-order)
-12. [Out of Scope](#12-out-of-scope)
+FFR is successful when all of the following are true:
 
----
+1. A new user can install Clawchestra from a website-first flow on macOS, Linux, or Windows using a native artifact for their OS.
+2. A new user can also choose a documented source-build path for developer use.
+3. On first launch, Clawchestra guides the user through setup instead of silently dropping them into an incomplete state.
+4. The user can connect Clawchestra to either a local OpenClaw instance or a remote OpenClaw deployment they host differently from the project owner.
+5. The user can import or create projects without hand-authoring raw metadata files unless they explicitly choose to.
+6. The user can create and use embedded terminals as part of the default product experience.
+7. If a required terminal dependency is missing, Clawchestra either ships it or offers a one-click install/remediation path that unblocks the user immediately.
+8. The repo and shipped app no longer leak owner-specific defaults, paths, or setup assumptions into the public-alpha experience.
+9. The website is only a presentation layer over release/distribution capabilities that already exist underneath it.
 
-## 1. End-to-End User Journey
+## 2. Product Definition
 
-The friend's experience, start to finish:
+FFR covers four user types:
 
-```
-GET          → Download/build the app on Linux or Windows
-LAUNCH       → First launch, no settings file exists → onboarding wizard starts
-CONNECT      → Wizard Step 1: "Where is your OpenClaw instance?" → configure gateway
-DISCOVER     → Wizard Step 2: "Where are your projects?" → configure scan paths
-CUSTOMISE    → Wizard Step 3: "What tools do you have?" → configure lifecycle buttons
-USE          → Land on the board, projects loaded, chat connected, buttons configured
-```
-
-**Mandatory steps:** Get, Launch, Connect (chat won't work without OpenClaw), Discover (board is empty without projects).
-**Skippable steps:** Customise (lifecycle buttons can use sensible defaults or plain text prompts).
-
-Each stage has a "what could go wrong" section — these are the failure modes we need to handle gracefully.
-
----
-
-## 2. Stage 0: Get the App
-
-### Current state
-No distribution mechanism. The app is a local git repo with `bun tauri dev` for development and `npx tauri build --no-bundle` for release builds. Pierce builds from source on macOS.
-
-### What's needed
-
-**Option A: Source build (MVP for friend)**
-- Friend clones the repo (private GitHub, collaborator invite)
-- README with platform-specific build instructions (Rust toolchain, Node, Bun, Tauri prerequisites)
-- `tauri build` produces platform-native binaries (`.deb`/`.AppImage` on Linux, `.msi`/`.exe` on Windows)
-- No code signing initially — friend accepts unsigned binary
-
-**Option B: Pre-built binaries (nicer)**
-- GitHub Actions CI builds for macOS (arm64 + x64), Linux (x64), Windows (x64)
-- Binaries attached to GitHub releases
-- Friend downloads from Releases page
-
-**Decision:** Option A (source build + good README). The friend is a developer — private GitHub repo with collaborator invite + accurate platform-specific build instructions is sufficient. CI-built binaries deferred to wider distribution.
-
-### What could go wrong
-- Missing prerequisites (Rust, Node, platform-specific libs like `libwebkit2gtk` on Linux)
-- Build fails on Windows/Linux due to untested code paths
-- README is Mac-centric
-
----
-
-## 3. Stage 1: First Launch
-
-### Current state
-App creates a default settings file on first launch with Pierce-specific defaults:
-- `openclawWorkspacePath: ~/clawdbot-sandbox`
-- `scanPaths: [~/repos, ~/projects]` (if they exist)
-- `updateMode: "source-rebuild"`
-- No onboarding flow — user lands on an empty board with no guidance
-
-### What's needed
-
-**First-run detection:**
-- Settings file doesn't exist → trigger onboarding wizard instead of creating defaults
-- Settings file exists → normal launch (skip wizard)
-- "Re-run setup" option accessible from settings (sidebar) for later changes
-
-**Onboarding as full-screen takeover:**
-- On first launch, the entire app window IS the onboarding — no board, no sidebar, no chrome behind it
-- Full-screen stepper with progress indicator (Step 1 of 3, etc.)
-- Themed consistently with the app (dark/light, brand colours, logo)
-- Back/Next navigation between steps
-- Cannot be skipped — setup is mandatory (OpenClaw connection + scan paths minimum)
-- Settings file created at the end of onboarding with the user's choices
-- Final step: "You're all set" → button click → CSS transition (opacity fade + slight scale) reveals the board with projects loaded
-- "Re-run setup" accessible from settings for later changes
-
-**Empty state (if no projects found after onboarding):**
-- Board shows a friendly empty state with guidance: "No projects found. Add a folder in Settings or create a new project."
-- Chat bar shows connection status (connected/disconnected)
-
-### What could go wrong
-- User exits wizard immediately — app should still launch, just with degraded state
-- Settings file gets corrupted — need graceful recovery (delete + re-trigger wizard)
-
----
-
-## 4. Stage 2: Connect to OpenClaw
-
-### Current state
-Rust backend reads `~/.openclaw/openclaw.json` for `gateway.port` and `gateway.auth.token`, then connects to `ws://127.0.0.1:{port}`. This only works when OpenClaw is installed locally on the same machine. Session key default is currently hardcoded to `agent:main:clawchestra` (post Deep Rename), but not yet user-configurable.
-
-### What's needed
-
-**Wizard step: "Where is OpenClaw running?"**
-
-```
-┌─────────────────────────────────────────────────┐
-│  Where is your OpenClaw instance?               │
-│                                                  │
-│  ○ On this machine (local)                      │
-│  ○ On a remote server (VPS / another machine)   │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
-
-**Path A: Local**
-- Auto-detect: try reading `~/.openclaw/openclaw.json` (or platform equivalent)
-- If found: extract port + token, show "Found OpenClaw on port {port}" with a "Test Connection" button
-- If not found: show instructions to install OpenClaw (`npm i -g openclaw`, then `openclaw setup`)
-- Default WebSocket URL: `ws://127.0.0.1:{port}`
-
-**Path B: Remote — sub-selection:**
-```
-┌─────────────────────────────────────────────────┐
-│  How do you access your remote OpenClaw?        │
-│                                                  │
-│  ○ SSH tunnel (recommended for simplicity)      │
-│  ○ Tailscale (private network)                  │
-│  ○ Direct connection (I know the URL)           │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
-
-**Path B1: SSH Tunnel**
-- Show instructions: "Run this in your terminal:"
-  ```
-  ssh -N -L 18789:127.0.0.1:18789 user@your-vps
-  ```
-- Then configure as if local: `ws://127.0.0.1:18789`
-- Ask for auth token: "Run `openclaw config get gateway.auth.token` on your VPS and paste it here"
-- "Test Connection" button
-
-**Path B2: Tailscale**
-- Ask: "What's your Tailscale machine name or IP?"
-- Input field for hostname/IP
-- Auto-construct URL: **`wss://{input}:18789`** (default to `wss://`)
-- Toggle: "Plain WebSocket (ws://)?" → switches to `ws://`, shows warning (see constraint below)
-- Ask for auth token (same instruction as above)
-- "Test Connection" button
-
-**Path B3: Direct**
-- Free-form URL input: "Gateway WebSocket URL"
-- Placeholder: `wss://your-server:18789`
-- Auth token input
-- "Test Connection" button
-
-> **⚠️ WebSocket loopback constraint (OpenClaw ≥ 2026.3.2):**
-> Plain `ws://` connections are restricted to loopback addresses (`127.0.0.1`, `::1`) by default.
-> Non-loopback `ws://` URLs (Tailscale IPs, direct remote IPs) will be rejected unless:
-> 1. The connection uses `wss://` (TLS) — **recommended default for all remote paths**, or
-> 2. OpenClaw is started with an env var opt-in (e.g. `OC_WS_ALLOW_REMOTE=1` — verify flag name in OpenClaw docs)
->
-> **Impact on paths:**
-> - **B1 (SSH Tunnel):** Unaffected — tunnel terminates at `127.0.0.1`, which is loopback.
-> - **B2 (Tailscale):** Defaults to `wss://`. Plain `ws://` requires env var on the OpenClaw host.
-> - **B3 (Direct):** Defaults to `wss://`. Same env var escape hatch applies.
->
-> The onboarding wizard should warn when a user manually enters a `ws://` URL with a non-loopback host.
-
-**All paths produce the same output:** `{ wsUrl, token, sessionKey }`
-
-**Session key:**
-- Auto-generate a sensible default: `agent:main:clawchestra` (not `pipeline-dashboard`)
-- Advanced: let user override if they have a specific session key
-
-**"Test Connection" button (all paths):**
-- Attempts WebSocket connect + OpenClaw `connect` handshake
-- Shows ✅ "Connected to OpenClaw v{version}" or ❌ "Connection failed: {reason}"
-- Must succeed before proceeding (or user explicitly skips)
-
-**Settings persistence:**
-- Store `gatewayWsUrl`, `gatewayToken`, `gatewaySessionKey` in settings
-- Rust backend reads from settings instead of (or in addition to) `~/.openclaw/openclaw.json`
-- Settings UI (sidebar) allows changing these later
-
-### Deployment topology: what the user should know
-
-Where OpenClaw runs affects what it can do inside Clawchestra. The wizard should surface this clearly after a successful connection test:
-
-- **Local OpenClaw** — full experience. OpenClaw can read project files, analyse codebases, work across projects at source-code depth. AI plans and AI execution live in the same loop: OpenClaw creates roadmap items and specs, the user (or a terminal agent) builds against them, OpenClaw sees the updated state and knows what's next.
-- **Remote OpenClaw (VPS)** — app-aware assistant with project management, but no direct file access. OpenClaw still manages your roadmap, writes specs and plans, and guides workflows — Clawchestra pushes all project metadata into every conversation. Coding work runs through embedded terminal agents (Claude Code, Codex), which are always local. The planning loop still closes, it's just split: OpenClaw plans, terminals execute, the board updates.
-
-This isn't a warning — both experiences are useful. But the user should understand the tradeoff so they can make an informed choice. For the full architectural analysis and future bridge solutions, see `docs/specs/vps-openclaw-file-access-spec.md`.
-
-### What could go wrong
-- User doesn't know their auth token → clear instructions on how to find it
-- Connection fails silently → need visible error state with actionable message
-- Token expires or changes → reconnection flow, "re-enter token" prompt
-- WSS (TLS) requires different handling than WS — Tauri's WS client needs to support both
-
----
-
-## 5. Stage 3: Discover Projects
-
-### Current state
-`scanPaths` defaults to `~/repos` + `~/projects` (if they exist on the local machine). Settings dialog has a scan paths editor. Projects are discovered by scanning for `PROJECT.md` files (or markdown files with appropriate frontmatter) in those paths.
-
-### What's needed
-
-**Wizard step: "Where are your projects?"**
-
-```
-┌─────────────────────────────────────────────────┐
-│  Where do you keep your projects?               │
-│                                                  │
-│  Clawchestra looks for projects in folders you  │
-│  specify. Each project needs a PROJECT.md file  │
-│  with some metadata.                            │
-│                                                  │
-│  📁 ~/repos                           [Remove]  │
-│  📁 ~/projects                        [Remove]  │
-│                                                  │
-│  [+ Add folder]                                 │
-│                                                  │
-│  Found: 3 projects in 2 folders                 │
-│                                                  │
-│  ℹ️ Don't have PROJECT.md files yet?             │
-│  We'll help you create them in the next step.   │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
-
-**Folder picker:**
-- Uses existing `pick_folder` Tauri command
-- Shows real-time scan results as folders are added ("Found: N projects")
-- Platform-appropriate defaults: `~/repos`, `~/projects`, `~/code`, `~/dev` (scan for existence)
-
-**Project scaffolding (post-wizard or on-demand):**
-- "We found these git repos without PROJECT.md files:" → list of directories
-- "Create PROJECT.md for:" → checkbox list → generates minimal frontmatter:
-  ```yaml
-  ---
-  title: "{directory-name}"
-  status: pending
-  priority: 1
-  type: project
-  lastActivity: "{today}"
-  ---
-  ```
-- This is programmatic, no AI needed
-- Could also scaffold ROADMAP.md with empty `items: []`
-
-**Schema documentation:**
-- Within the wizard: brief explanation of what PROJECT.md is and why
-- Link to full docs (or in-app help) for the complete schema
-- The compliance block from AGENTS.md could be rendered as an in-app reference
-
-### What could go wrong
-- No projects found in any folder → show encouraging empty state, not error
-- Projects found but no PROJECT.md → scaffolding flow (above)
-- User has repos in non-standard locations → folder picker handles this
-- Windows paths (`C:\Users\...`) vs Unix paths — needs cross-platform path handling
-
----
-
-## 6. Stage 4: Customise Lifecycle Actions
-
-### Current state
-Five hardcoded lifecycle buttons on roadmap cards: Spec, Plan, Review, Deliver, Build. Prompts are generated by `deliverable-lifecycle.ts` with:
-- **Review** hardcodes "Run `/plan_review` in Claude Code" and "Launch Claude Code via tmux"
-- **Build** hardcodes "Run formal `/build` command / the `/build` skill"
-- **Spec, Plan, Deliver** are generic enough to work with any AI assistant
-
-Slash commands in chat are loaded by scanning local filesystem paths (`~/.claude/commands/`, `~/.config/opencode/skills/`, etc.).
-
-### What's needed
-
-**Tool detection (runs automatically, results shown in wizard):**
-
-The app checks which tools are available on the user's system:
-
-| Tool | Detection Method | What It Unlocks |
-|------|-----------------|-----------------|
-| Claude Code | `which claude` → exit 0 | `/plan_review`, `/build`, `/review` commands |
-| Codex | `which codex` → exit 0 | Codex-specific workflows |
-| Cursor | `which cursor` → exit 0 | Cursor integration |
-| OpenCode | `which opencode` → exit 0 | OpenCode skills/commands |
-| GitHub CLI | `which gh` → exit 0, then `gh auth status` | GitHub features (PR links, CI status) |
-| Git | `which git` → exit 0 | Git status, fetch, sync |
-
-Results displayed as a checklist:
-```
-┌─────────────────────────────────────────────────┐
-│  Tools detected on your system:                 │
-│                                                  │
-│  ✅ Git 2.44.0                                  │
-│  ✅ GitHub CLI (authenticated as @friend)       │
-│  ❌ Claude Code — not found                     │
-│  ❌ Codex — not found                           │
-│  ✅ Cursor 0.45                                 │
-│                                                  │
-│  ℹ️ Some lifecycle actions use Claude Code       │
-│  commands. Without it, those buttons will use    │
-│  plain text prompts instead.                     │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
-
-**Command discovery:**
-- Scan known paths for available slash commands (already implemented in Tauri backend)
-- Show what was found, grouped by source
-- Let user decide which to keep/disable (future — not MVP)
-
-**Configurable lifecycle buttons (part of this spec — subsumes Custom Card Actions):**
-
-The 5 lifecycle buttons (Spec, Plan, Review, Deliver, Build) currently generate prompts that reference Claude Code-specific commands (`/plan_review`, `/build`). Without those tools, the Review and Build buttons produce broken prompts. The friend must be able to configure their own buttons before using the app.
-
-**Design (per Pierce, 2026-02-19):**
-- **0 to N buttons** — user adds buttons one-by-one. If none configured, no action bar shows on hover.
-- **Max ~5-6 buttons** — constrained by card width.
-- **Left-aligned** — button 1 always in slot 1, button 2 in slot 2, etc. Predictable positioning.
-- **Per-button configuration:**
-  - Icon (from lucide library picker)
-  - Label (short name, e.g., "Build", "Review")
-  - Prompt template with variables: `{project.title}`, `{item.title}`, `{item.specDoc}`, `{item.planDoc}`, etc.
-  - Optional: slash command prefix
-- **Configuration surface:** Sidebar settings panel (Phase 5 of this spec)
-- **Tool detection informs suggestions:** "We found Claude Code — would you like to add a Build button with `/build`?" But the user decides.
-- **If no buttons configured:** Action bar hidden. Cards behave as plain kanban cards.
-
-**Replaces `deliverable-lifecycle.ts`:** The hardcoded prompt generation is removed entirely. Button definitions come from user settings. The existing 5 buttons become a "suggested preset" offered during onboarding Step 3 (tool detection) or in sidebar settings.
-
-This subsumes the Custom Card Actions roadmap item — there's no interim adaptive step. The friend gets the configurable system from day one.
-
-### What could go wrong
-- `which` doesn't exist on Windows → use `where` instead, or check `PATH` directly
-- Tool detection runs slow → do it async, show spinner, cache results
-- User has tools in non-standard paths → "Add custom tool path" option (future)
-- GitHub CLI installed but not authenticated → show warning, don't block
-
----
-
-## 7. Stage 5: Ongoing Use
-
-After onboarding, the user lands on the board with:
-- Projects loaded from their scan paths
-- Chat connected to their OpenClaw instance
-- Lifecycle buttons adapted to their available tools
-
-**Settings access:**
-- All onboarding choices editable in Settings (sidebar panel or dialog)
-- Grouped by the same categories: Connection, Projects, Tools
-- "Re-run setup wizard" button for complete reconfiguration
-
-**Ongoing needs already on the roadmap:**
-- **Git Sync** — commit/push changes from the app (already specced, P1 up-next)
-- **Roadmap Item Quick-Add** — add items via UI without editing YAML (pending)
-- **Custom Card Actions** — full lifecycle button customisation (pending)
-
----
-
-## 8. Cross-Platform Requirements
-
-The friend is on Linux or Windows. The following macOS-specific code needs platform handling:
-
-### Title bar
-- **macOS:** `titleBarStyle: "Overlay"`, `trafficLightPosition`, 78px left padding for traffic lights
-- **Linux/Windows:** Standard title bar OR custom title bar with close/minimize/maximize buttons on the right side
-- **Detection:** Tauri provides `std::env::consts::OS` in Rust, `navigator.platform` or Tauri API in JS
-- **Approach:** Conditional padding in TitleBar.tsx based on platform. Tauri config can be platform-specific.
-
-### Paths
-- **macOS/Linux:** `HOME` env var, `/` separators
-- **Windows:** `USERPROFILE` env var (or `HOMEDRIVE` + `HOMEPATH`), `\` separators
-- **Fix:** Use Rust `dirs` crate (`dirs::home_dir()`, `dirs::config_dir()`) instead of `env::var("HOME")`
-- **Affects:** `default_scan_paths()`, `default_openclaw_workspace_path()`, `get_openclaw_gateway_config()`, `settings_file_path()`
-
-### OpenClaw config location
-- **macOS/Linux:** `~/.openclaw/openclaw.json`
-- **Windows:** `%APPDATA%\openclaw\openclaw.json` (or wherever OpenClaw stores it on Windows)
-- **Fix:** Use `dirs::config_dir()` / check OpenClaw docs for Windows path
-
-### Shell commands
-- **macOS/Linux:** `run_command_with_output` uses login shell (`zsh -l -c` / `bash -l -c`)
-- **Windows:** Needs `cmd /c` or `powershell -Command` equivalent
-- **Affects:** All `run_git`, `git_fetch`, tool detection commands
-
-### Tauri config
-- `tauri.conf.json` supports per-platform overrides for window configuration
-- Traffic light position only applies to macOS
-- Window decorations behaviour differs per platform
-
-### Binary distribution
-- **macOS:** `.app` bundle (already works)
-- **Linux:** `.AppImage` or `.deb` (Tauri supports both)
-- **Windows:** `.msi` or `.exe` (Tauri supports both via WiX/NSIS)
-- No code signing for first friend (accept unsigned binary warnings)
-
-### Update mechanism (source-rebuild)
-The update button is core functionality — the friend will make code changes via chat (same workflow as Pierce). The rebuild flow must work cross-platform.
-
-**Current state (macOS-only):**
-- `run_app_update` has `#[cfg(not(target_os = "macos"))]` hard block returning error
-- `.app` bundle path detection (macOS-specific)
-- `/bin/sh ./update.sh` (works on macOS/Linux, not Windows)
-- Fallback path: `/Applications/Clawchestra.app`
-
-**What's needed:**
-- Remove macOS-only gate in `run_app_update`
-- Platform-aware binary location: `std::env::current_exe()` works on all platforms (no `.app` walk-up needed on Linux/Windows)
-- Platform-aware rebuild script:
-  - macOS/Linux: `update.sh` (exists, may need adjustments)
-  - Windows: `update.bat` or `update.ps1` (new, same build steps)
-- Both scripts: `npx tauri build --no-bundle` → copy binary to install location → restart
-- Update check (`BUILD_COMMIT` vs `git HEAD`) already cross-platform — no changes needed
-- Env vars: rename `PIPELINE_DASHBOARD_*` → `CLAWCHESTRA_*` (part of Deep Rename)
-
----
-
-## 9. What Exists Today vs What Needs Building
-
-| Capability | Current State | Needed | Effort |
-|---|---|---|---|
-| **Cross-platform build** | macOS only | Linux + Windows Tauri builds | Medium |
-| **Title bar** | macOS traffic lights hardcoded | Platform-conditional padding | Small |
-| **Path handling** | `env::var("HOME")` | `dirs` crate | Small |
-| **Shell commands** | Unix login shell | Platform-conditional shell | Small-Medium |
-| **First-run detection** | Creates default settings silently | Detect missing settings → wizard | Small |
-| **Onboarding wizard UI** | Doesn't exist | Multi-step modal flow | Medium |
-| **Gateway URL config** | Hardcoded localhost | Settings field + wizard step | Small |
-| **Remote gateway support** | None | Wizard with SSH/Tailscale/Direct paths | Medium |
-| **Connection test** | `openclaw_ping` exists | Wire into wizard UI with status feedback | Small |
-| **Scan path management** | Settings dialog has it | Move to wizard + improve UX | Small |
-| **Project scaffolding** | Doesn't exist | Generate PROJECT.md for bare repos | Small |
-| **Tool detection** | Doesn't exist | `which`/`where` checks in Rust | Small |
-| **Adaptive lifecycle prompts** | Hardcoded Claude Code references | Conditional based on detected tools | Small |
-| **Full button customisation** | Doesn't exist | Icon picker, label, prompt editor | Large (separate item) |
-| **Settings in sidebar** | Sidebar shell exists, no content | Settings panel as sidebar content | Medium |
-| **Cross-platform update** | macOS-only (`#[cfg]` block, `.app` bundle path) | Remove gate, platform binary detection, Windows update script | Small-Medium |
-| **tmux bundling** | Requires user to install tmux separately (`brew install tmux`). Terminal button disabled without it. | Bundle tmux binary inside `.app`/`.AppImage`/`.msi` (single static binary ~1.2MB). Use bundled path in `spawn()` so terminals work out of the box with no user-installed dependencies. | Small |
-| **Session key config** | Hardcoded default `agent:main:clawchestra` | Make configurable, keep `agent:main:clawchestra` as sensible default | Small |
-| **Deep rename** | Completed as prerequisite (`io.github.piercekearns.clawchestra`, renamed package/paths/session baseline) | No FFR implementation required; consume as baseline | - |
-
----
-
-## 10. Relationship to Existing Roadmap Items
-
-| Existing Item | Disposition |
+| User | What they need |
 |---|---|
-| **Git Sync** (up-next, P1) | **Prerequisite** — deliver first. Useful to Pierce now, friend needs it for GitHub repos. |
-| **Deep Rename** (up-next, P2) | **Prerequisite** — deliver second. Clean names before friend sees the app. |
-| **Configurable OpenClaw Integration** (was pending) | **Removed from roadmap** — fully subsumed by Stage 2 of this spec. |
-| **Sidebar Enhancements** (was up-next) | **Removed from roadmap** — settings panel becomes sidebar content as part of this work. |
-| **Recently Completed Lifecycle** (was up-next) | **Removed from roadmap** — collapsed into this spec as future polish. Can be re-added later. |
-| **Custom Card Actions** (was pending) | **Removed from roadmap** — fully subsumed by this spec (Stage 4 + Phase 5). |
-| **App Customisation** (pending, P1) | **Deprioritised** — not blocking shareability |
-| **Roadmap Item Quick-Add** (pending, P2) | **Deprioritised** — friend has AI, can add items via chat |
+| Friend using a local OpenClaw install | Install app, connect locally, discover projects, use chat and terminals |
+| Friend using remote OpenClaw on VPS/Tailscale/other host | Install app, configure remote chat transport and sync, understand capability tradeoffs |
+| Friend on macOS/Linux/Windows | Native install path and OS-appropriate runtime behavior |
+| Developer/power user | Optional source-build and source-rebuild workflow |
 
-**Assumed baseline after prerequisites:**
-- Tauri identifier is `io.github.piercekearns.clawchestra`
-- Session key default is `agent:main:clawchestra`
-- Internal package/path naming is `clawchestra` (no `pipeline-dashboard` runtime identifiers)
+FFR does not mean "open source forever." It means the product can survive a public-alpha GitHub phase cleanly. If the repo is public but not open-source licensed, that must be explicit in the repo posture and release docs.
 
----
+## 2.1 Known Inputs
 
-## 11. Recommended Build Order
+The following are now known and should be treated as baseline assumptions for FFR:
 
-Work is sequenced by the funnel: each stage unlocks the next.
+1. The public website domain is `clawchestra.ai`.
+2. The GitHub repo name is reserved at `piercekearns/clawchestra`.
+3. The website should be the primary install surface.
+4. Embedded terminals are part of default Clawchestra functionality.
+5. The app should move to a non-personal, stable application identifier before the first public installable build.
+6. End-user updates should be treated separately from the existing developer-oriented `source-rebuild` flow.
 
-### Phase 1: Cross-Platform Foundation
-- Replace `env::var("HOME")` with `dirs` crate throughout `lib.rs`
-- Platform-conditional shell execution in `run_command_with_output`
-- Platform-conditional title bar padding in `TitleBar.tsx`
-- Tauri config per-platform overrides (traffic light position only on macOS)
-- Cross-platform update mechanism: remove macOS gate, platform-aware binary detection, `update.sh` (macOS/Linux) + `update.bat`/`update.ps1` (Windows)
-- Verify `tauri build` produces working binaries on Linux and Windows
-- Write/update build instructions in README
+## 2.2 Working Assumptions
 
-**Unlocks:** Friend can build, launch, and update the app on their OS.
+Unless explicitly changed before implementation, FFR should proceed with these assumptions:
 
-### Phase 2: Gateway Connection Config
-- Add `gatewayWsUrl`, `gatewayToken`, `gatewaySessionKey` to `DashboardSettings`
-- Update `get_openclaw_gateway_config` to read from settings (with fallback to `~/.openclaw/openclaw.json`)
-- Update `resolveTransport` to use settings values
-- Add connection test command (returns version + status)
-- Settings UI fields for gateway config (in existing Settings dialog initially)
-- Keep default session key as `agent:main:clawchestra` while making it configurable
+1. **Stable app identifier:** `ai.clawchestra.desktop`
+2. **Primary website:** `https://clawchestra.ai`
+3. **Release backend:** GitHub Releases on `piercekearns/clawchestra`
+4. **Default end-user update model:** packaged release artifacts, not source checkout
+5. **Developer update model:** keep `source-rebuild` as an advanced/dev-only mode
+6. **Preferred release artifacts:**
+   - macOS: `.dmg`
+   - Windows: `.msi`
+   - Linux: `.AppImage` plus `.deb`
+7. **CLI/package posture:** claim namespace-level assets early where there is little or no cost and no placeholder-package downside; only publish registry packages when there is a real install surface behind them
+8. **Public-alpha repo posture:** source-visible public alpha with explicit docs; no implicit promise that the project will remain open source long-term
+9. **macOS alpha release posture:** unsigned public-alpha installers are acceptable for now, but install/trust guidance must be explicit until signing/notarization exists
 
-**Unlocks:** Friend can connect to their remote OpenClaw instance.
+## 3. Distribution Principles
 
-### Phase 3: Onboarding Wizard
-- First-run detection (settings file missing → wizard)
-- Wizard UI component (multi-step modal)
-- Step 1: OpenClaw connection (local/remote flow with sub-paths)
-- Step 2: Project discovery (scan paths + folder picker)
-- Step 3: Tool detection (display only — adaptive prompts automatic)
-- Settings file created from wizard choices
-- "Re-run setup" button in settings
+### Website-first, GitHub-backed
 
-**Unlocks:** Friend has a guided first-run experience.
+The website should be the primary installation surface. GitHub Releases should be the authoritative artifact store for first-friend and hackathon distribution.
 
-### Phase 4: Project Scaffolding
-- Detect git repos without PROJECT.md in scan paths
-- Offer to scaffold PROJECT.md + ROADMAP.md
-- Tool detection results cached
+The layering should be:
 
-**Unlocks:** Friend's existing repos appear in the app.
+1. CI builds and publishes signed or unsigned release artifacts.
+2. GitHub Releases stores those artifacts and release notes.
+3. The website detects OS and offers the best install option first.
+4. Optional CLI install flows point at the same release primitives, not a separate distribution system.
 
-### Phase 5: Settings Sidebar Panel + Configurable Lifecycle Buttons
-- Sidebar gets a Settings panel (first real sidebar content)
-- Organised by category: Connection, Projects, Tools, Actions
-- "Actions" section: add/remove lifecycle buttons (0-N, left-aligned, icon + label + prompt template)
-- Suggested presets based on detected tools ("Add standard lifecycle actions?")
-- Remove hardcoded `deliverable-lifecycle.ts` prompt generation — buttons come from settings
-- If no buttons configured, no action bar on roadmap card hover
-- Replaces or supplements the existing Settings dialog
-- "Re-run setup wizard" button
+### Distribution channels
 
-**Unlocks:** Ongoing configuration accessible from the sidebar. Lifecycle buttons work with any toolchain.
+| Channel | Role in FFR | Notes |
+|---|---|---|
+| Website download page | Primary entry point | OS detection, native artifact selection, release notes, install instructions |
+| GitHub Releases | Source of truth for artifacts | Required for public-alpha sharing and website download wiring |
+| Source build | Advanced/developer path | Explicitly documented, not the default friend path |
+| CLI install/bootstrap | In scope as a channel decision | Package names should be claimed early even if v1 ships only a thin installer/bootstrap command |
 
----
+### Paid-product distribution posture
 
-## 12. Out of Scope
+FFR should assume the future paid product is installed primarily through native, non-terminal desktop flows:
 
-These are explicitly deferred to future roadmap items:
+1. website download -> native installer/artifact
+2. direct GitHub Releases download during public alpha
+3. optional future app-store or managed-package channels if the product later needs them
 
-- **Multi-provider AI** (bring your own Anthropic/OpenAI keys directly) — requires chat infrastructure abstraction
-- **Full lifecycle button customisation** (icon picker, prompt editor, add/remove buttons) — separate "Custom Card Actions" item
-- **CRUD UI for roadmap items** (add/edit/delete via UI without AI) — nice-to-have, friend has OpenClaw
-- **Code signing** — accept unsigned binaries for first friend
-- **Auto-update mechanism** — friend rebuilds from source or downloads new release
-- **GitHub OAuth in-app** — `gh` CLI auth is sufficient
-- **Project auto-conformance** (AI agent reshapes existing projects) — friend uses scaffolding tool or manual setup
-- **Mobile support** — desktop only
+CLI/package-manager install paths are still valuable, but they should be treated as secondary convenience channels for technical users, automation, and developer workflows unless Clawchestra later ships a genuine CLI/bootstrap product that justifies them as a first-class install surface.
+
+### Bootstrap package rule
+
+FFR should not block release readiness on a CLI/bootstrap package.
+
+The rule should be:
+
+1. native website-first installers are mandatory
+2. a CLI/bootstrap package may ship in FFR if it is a real install surface that downloads, validates, or launches the correct desktop install flow
+3. if the bootstrap package would be a placeholder or low-value wrapper, it should be deferred until after native release plumbing is stable
+
+### Artifact matrix
+
+| OS | Preferred artifact | Secondary artifact | Update posture |
+|---|---|---|---|
+| macOS | `.dmg` | direct app zip if needed | End-user release-updater later; source-rebuild remains advanced/dev-only |
+| Windows | `.msi` or NSIS `.exe` | zip portable only if necessary | End-user release-updater later; no source checkout required |
+| Linux | `.AppImage` and/or `.deb` | tarball only if necessary | End-user release-updater later; distro-specific docs if needed |
+
+During the current public-alpha Phase 1, macOS should be treated as:
+
+1. unsigned installer path
+2. manual trust steps documented in release notes and README
+3. acceptable for first-friend testing, but not acceptable to describe as polished desktop distribution
+
+### Update model
+
+There are two different update stories and FFR must stop conflating them:
+
+1. **End-user update**: the user installed a release artifact and should receive future app updates from release artifacts.
+2. **Developer update**: the user cloned the source and wants the current `source-rebuild` workflow.
+
+**Recommendation:** treat release-artifact updates as the real end-user path, and keep `source-rebuild` as an advanced developer mode. The current `source-rebuild` flow is valuable, but it is not the right default for most first friends.
+
+## 4. Public-Alpha Repo And Release Hygiene
+
+FFR now includes a mandatory sanitization pass before public GitHub push or first public-alpha release.
+
+### Must be scrubbed or normalized
+
+1. Owner-specific defaults and placeholders in shipped UI and settings.
+2. Absolute local paths in docs that do not need to be public.
+3. Repo instructions that assume one developer's toolchain or directory layout.
+4. Terminal dependency hints that are macOS-only when the app claims cross-platform support.
+5. Any seeded configuration that only exists to make Clawchestra work on one machine.
+
+### Identity policy
+
+Clawchestra should choose its final non-personal application identifier before the first public build that users install.
+
+Why this matters:
+
+1. Tauri's identifier scopes app storage, WebView storage, preferences, and updater continuity.
+2. Changing the identifier after users install creates migration work and duplicate app identities.
+3. It is cheaper to choose the final identifier now than after the first shared builds are in the wild.
+
+### Repo posture for public alpha
+
+FFR should explicitly decide and document:
+
+1. Final reverse-DNS app identifier.
+2. Public-repo posture: open source license, source-available/all-rights-reserved, or another explicit legal stance.
+3. Which package names and domains need to be claimed now.
+4. Which docs are public-facing versus internal-only.
+
+## 4.2 Release Operations Reality
+
+FFR should describe the current release posture honestly:
+
+1. GitHub Releases is the artifact source of truth for public alpha.
+2. Release automation should create draft prereleases before wider sharing.
+3. macOS builds are unsigned until Apple signing/notarization is funded and configured.
+4. Windows and Linux artifacts should be described as friend-testing builds until the Phase 1 audit and tester feedback loop have run.
+5. A release playbook and a whole-codebase audit checklist are required Phase 1 artifacts, not optional notes.
+
+## 4.1 Package And Namespace Claiming Strategy
+
+Not every ecosystem has a clean "reserve this name now" concept.
+
+FFR should treat package/name claiming in three buckets:
+
+1. **Already-owned assets**
+   - domain (`clawchestra.ai`)
+   - GitHub repo (`piercekearns/clawchestra`)
+2. **Namespace assets that can be claimed cleanly now**
+   - npm user/org scope if available
+   - Homebrew tap repo naming
+   - other repo/namespace-level channels that do not require a fake shipped package
+3. **Registry entries that should wait for a real package**
+   - WinGet manifests
+   - Chocolatey community packages
+   - Homebrew formula/cask entries tied to actual release artifacts
+   - unscoped npm package names if the only reason to publish would be squatting
+
+### Working recommendation
+
+1. Claim clean namespace-level assets now where cost/risk is low.
+2. Track installer/package names now in the Phase 0 checklist.
+3. Publish a package during FFR only if it is a legitimate minimal bootstrap package with real install value.
+4. Do not publish placeholder packages solely to hold a name.
+
+### Claiming support model
+
+FFR should explicitly include claim management support rather than assuming the human will work it out ad hoc.
+
+For each claimable surface, FFR should produce and maintain:
+
+1. the proposed name
+2. whether the channel is primary, secondary, or deferred
+3. whether the claim can be executed automatically, by CLI, or only in a website UI
+4. the expected cost or billing posture
+5. the account owner of record
+6. the renewal/recovery path
+7. the current claim status
+
+The implementation workflow should be:
+
+1. Clawchestra/agent prepares the recommendation and exact steps.
+2. The agent executes what can be executed safely from the repo/runtime side.
+3. The human performs any account-bound web claims that cannot be automated here.
+4. The result is written back into a claim ledger so ownership and management stay legible later.
+
+## 5. Default Functionality And Runtime Dependencies
+
+Embedded terminals are part of default Clawchestra functionality. FFR cannot defer them to "advanced users."
+
+### Product requirement
+
+When a user clicks to create a terminal, one of two things must happen:
+
+1. The terminal opens and is usable immediately.
+2. Clawchestra presents a one-click remediation flow that installs or enables the missing dependency, then returns the user directly to terminal creation.
+
+A dead disabled state with a manual brew-only hint is not first-friend ready.
+
+### Dependency policy
+
+| Dependency | Current reality | FFR requirement |
+|---|---|---|
+| `tmux` | Required for embedded terminals today | Bundle it if feasible; otherwise provide OS-specific one-click install from the app |
+| Agent CLI (`claude`, `codex`, `opencode`, etc.) | Optional per terminal type | Detect, explain, and offer install/remediation where practical |
+| OpenClaw CLI/runtime | Required for chat/sync integration | Onboarding must either auto-detect/setup or provide guided remediation |
+
+### Lifecycle action policy
+
+The default lifecycle actions cannot assume Claude Code + tmux forever. FFR should define:
+
+1. A default preset that works for a newly installed Clawchestra instance.
+2. Behavior when Claude Code is unavailable.
+3. Behavior when tmux is unavailable.
+4. A path from defaults to later full customization.
+
+## 6. OpenClaw Architecture Alignment
+
+The old FFR spec treated "OpenClaw setup" as one thing. In the current codebase it is at least two things and must be specified that way.
+
+### 6.1 Chat transport
+
+This is how Clawchestra talks to OpenClaw for chat.
+
+Required settings surface:
+
+1. WebSocket URL (`ws://` or `wss://`)
+2. Authentication token
+3. Session key
+4. Connection test and clear failure states
+
+This must support:
+
+1. Local OpenClaw auto-detection
+2. SSH-tunnel/local-loopback remote use
+3. Direct remote `wss://` setups
+4. Explicit explanation when a remote deployment changes capability expectations
+
+### 6.2 Sync transport
+
+This is how Clawchestra syncs orchestration state with OpenClaw.
+
+Current code already distinguishes:
+
+1. Local sync via `~/.openclaw/clawchestra/db.json`
+2. Remote sync via HTTP endpoint + bearer token
+
+FFR must not re-invent that. It must finish the product layer around it:
+
+1. Wizard/setup UX
+2. Extension installation or guided remediation
+3. Health/status display
+4. Clear explanation of what works in Local vs Remote sync mode
+
+### 6.3 Extension and system-context bootstrapping
+
+Current code already has primitives for:
+
+1. Installing the Clawchestra data endpoint extension
+2. Generating extension content for manual installation
+3. Writing `~/.openclaw/clawchestra/system-context.md`
+
+FFR should incorporate those into onboarding and health UX rather than leaving them as backend-only capabilities.
+
+### 6.4 Capability transparency
+
+The onboarding flow should clearly explain the difference between:
+
+1. **Local OpenClaw**: full local loop, direct local sync, local file adjacency
+2. **Remote OpenClaw**: remote planning/chat/sync, but code execution remains local through embedded terminals
+
+This is not an error state. It is a product mode difference the user should understand.
+
+## 7. Onboarding
+
+FFR onboarding should reuse and extend current settings and project-import flows, not replace them with a greenfield wizard detached from the existing code.
+
+### First-run flow
+
+Recommended flow:
+
+1. **Welcome + access transparency**
+   Clarify what Clawchestra will and will not do.
+2. **Connect to OpenClaw**
+   Local or remote chat transport setup, plus sync-mode setup.
+3. **Install or validate required OpenClaw support**
+   Extension setup, system-context status, connection health.
+4. **Choose project roots / import projects**
+   Reuse existing scan path and Add Existing compatibility logic.
+5. **Validate terminal readiness**
+   Detect tmux and available agent CLIs. If something required is missing, offer remediation now.
+6. **Ready state**
+   Land the user on a working board with chat and terminals available.
+
+### Onboarding rules
+
+1. No silent incomplete state on first launch.
+2. No assumption that the user knows the original developer's filesystem layout.
+3. No assumption that the user knows SSH, port forwarding, or tmux beforehand.
+4. If the user must take an action, it should be presented in-app with copy/paste or one-click remediation.
+5. Existing installs should bypass onboarding automatically but be able to re-run it.
+
+## 8. Current Codebase Alignment
+
+### Already exists and should be reused
+
+1. Settings page and persisted settings surface
+2. Remote sync settings (`Local` / `Remote` / `Disabled`)
+3. Add Existing compatibility and onboarding flow
+4. Guidance injection during project add
+5. OpenClaw extension installer primitive
+6. System-context generation on startup
+7. Agent detection and terminal infrastructure
+
+### Exists but is incomplete for FFR
+
+1. Chat transport still resolves from local OpenClaw config rather than explicit runtime settings.
+2. `source-rebuild` updater is macOS-only and developer-oriented.
+3. Tauri bundle targets now cover the target OS set, but live release execution and artifact validation are still pending.
+4. Terminal persistence still prefers user-installed tmux, but the app now falls back to direct sessions and offers in-app tmux remediation instead of a dead-end disabled state.
+5. Lifecycle prompts are now tool-neutral, but packaged-installer/update UX and real cross-platform validation are still incomplete.
+
+### Explicit cross-platform reality
+
+FFR does **not** assume the current app already works correctly on Windows or Linux once packaged.
+
+The current product is still visibly macOS-shaped in a few important places:
+
+1. Title bar and window chrome assumptions
+2. Updater behavior and app replacement flow
+3. Path defaults and home-directory assumptions
+4. Shell/process assumptions in runtime tooling
+5. Terminal dependency hints and remediation copy
+
+Cross-platform adaptation is therefore part of FFR itself, not a post-FFR packaging exercise.
+
+FFR also requires a **whole-codebase cross-platform review**, not just fixes for the currently known hotspots. The known macOS-shaped areas are starting points, not the full audit boundary.
+
+### Missing for FFR
+
+1. First-run onboarding shell
+2. Cross-platform release automation
+3. Website download layer
+4. Public-alpha scrub checklist and docs
+5. End-user release update path
+6. One-click dependency remediation for terminal readiness
+7. Cross-platform runtime hardening for non-macOS installs
+
+## 9. Recommended Delivery Order
+
+### Phase 0: Identity, Repo Hygiene, And Distribution Decisions
+
+1. Lock final non-personal app identifier before first public build.
+2. Decide repo posture for public alpha.
+3. Claim package names/domains needed for website and CLI distribution.
+4. Create a release/distribution matrix and public scrub checklist.
+
+### Phase 1: Release Plumbing
+
+1. Add GitHub release automation for macOS, Linux, and Windows artifacts.
+2. Expand Tauri bundle targets per OS.
+3. Add first public install docs and release notes discipline.
+4. Keep source-build docs as an advanced path.
+5. Fix cross-platform runtime gaps so packaged installs actually behave correctly on Windows/Linux.
+
+### Phase 2: OpenClaw Transport And Sync Productization
+
+1. Separate chat transport settings from sync settings in product copy and runtime behavior.
+2. Add explicit chat connection settings and health test.
+3. Integrate extension/system-context status into setup flow.
+4. Make local vs remote capability differences legible in UI.
+
+### Phase 3: First-Run Onboarding
+
+1. Trigger onboarding on missing settings / incomplete setup.
+2. Reuse current settings and Add Existing flows inside a guided shell.
+3. Land users in a working state, not a partially configured board.
+
+### Phase 4: Terminal Readiness And Default Lifecycle Behavior
+
+1. Bundle tmux or provide one-click install/remediation.
+2. Expand tool detection across supported OSes.
+3. Make lifecycle defaults usable without assuming Claude Code everywhere.
+
+### Phase 5: Website Integration
+
+1. Build the website on top of the already-working release matrix.
+2. Use the website to route users to the right artifact or CLI bootstrap command.
+3. Keep the website as a thin visual layer over release infrastructure, not the place where release logic lives.
+
+## 10. Out Of Scope
+
+These are not required to call FFR complete:
+
+1. Multi-device sync UX polish beyond what current sync architecture already supports
+2. Deep lifecycle button customization UI beyond what is needed to avoid broken defaults
+3. Full marketplace/provider abstraction for non-OpenClaw AI backends
+4. Mobile support
+5. Final long-term commercial packaging and licensing strategy beyond public-alpha clarity

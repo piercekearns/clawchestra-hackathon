@@ -8,8 +8,8 @@ tags:
   - tauri
   - core
 icon: "\U0001F4CA"
-lastActivity: '2026-02-26'
-nextAction: 'ui-tweaks: title bar error details modal + chat bar height shell removal'
+lastActivity: '2026-03-06'
+nextAction: 'first-friend-readiness: repo-side Phase 1 hardening is done; push the repo, cut the first draft prerelease, and start Phase 2 while Windows/Linux artifact testing runs in parallel'
 ---
 
 # Clawchestra

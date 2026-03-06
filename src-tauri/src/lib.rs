@@ -32,6 +32,7 @@ use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_P
 use base64::Engine as _;
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use crate::util::{home_dir as resolve_home_dir, lookup_command, temp_dir as platform_temp_dir};
 
 /// Type alias for the shared application state, used as Tauri managed state.
 type SharedAppState = Arc<tokio::sync::Mutex<AppState>>;
@@ -144,14 +145,13 @@ fn default_scan_paths() -> Vec<String> {
         return vec![path];
     }
 
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let Ok(home) = resolve_home_dir() else {
+        return Vec::new();
+    };
     let mut paths = Vec::new();
     let preferred = [
-        Path::new(&home).join("repos").to_string_lossy().to_string(),
-        Path::new(&home)
-            .join("projects")
-            .to_string_lossy()
-            .to_string(),
+        home.join("repos").to_string_lossy().to_string(),
+        home.join("projects").to_string_lossy().to_string(),
     ];
 
     for path in preferred {
@@ -164,8 +164,7 @@ fn default_scan_paths() -> Vec<String> {
 }
 
 fn default_openclaw_workspace_path() -> Option<String> {
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    Some(format!("{home}/clawdbot-sandbox"))
+    None
 }
 
 fn default_app_source_path() -> Option<String> {
@@ -173,7 +172,11 @@ fn default_app_source_path() -> Option<String> {
 }
 
 fn default_update_mode() -> String {
-    "source-rebuild".to_string()
+    if cfg!(target_os = "macos") {
+        "source-rebuild".to_string()
+    } else {
+        "none".to_string()
+    }
 }
 
 fn default_openclaw_context_policy() -> String {
@@ -208,6 +211,18 @@ pub(crate) fn app_support_dir() -> Result<PathBuf, String> {
         .parent()
         .map(Path::to_path_buf)
         .ok_or_else(|| "Could not find app data directory".to_string())
+}
+
+fn openclaw_root_dir() -> Result<PathBuf, String> {
+    Ok(resolve_home_dir()?.join(".openclaw"))
+}
+
+fn opencode_config_dir() -> Result<PathBuf, String> {
+    if let Some(config_dir) = dirs::config_dir() {
+        return Ok(config_dir.join("opencode"));
+    }
+
+    Ok(resolve_home_dir()?.join(".config").join("opencode"))
 }
 
 fn hardening_log_path() -> Result<PathBuf, String> {
@@ -329,6 +344,9 @@ fn sanitize_settings(mut settings: DashboardSettings) -> Result<DashboardSetting
 
     if settings.update_mode != "none" && settings.update_mode != "source-rebuild" {
         settings.update_mode = default_update_mode();
+    }
+    if settings.update_mode == "source-rebuild" && !cfg!(target_os = "macos") {
+        settings.update_mode = "none".to_string();
     }
     if settings.openclaw_context_policy != "selected-project-first"
         && settings.openclaw_context_policy != "workspace-default"
@@ -825,23 +843,29 @@ fn run_startup_migration_sweep(
 /// Prevents arbitrary filesystem access via IPC commands.
 fn validate_allowed_path(path: &str) -> Result<(), String> {
     let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
 
-    // Build allowed prefixes: scan_paths + ~/.openclaw/ + /tmp + /private/tmp
+    // Build allowed prefixes: scan_paths + ~/.openclaw/ + temp dir
     let mut allowed: Vec<PathBuf> = settings
         .scan_paths
         .iter()
         .filter_map(|p| fs::canonicalize(p).ok())
         .collect();
 
-    if let Ok(openclaw) = fs::canonicalize(format!("{home}/.openclaw")) {
-        allowed.push(openclaw);
-    } else {
-        // If it doesn't exist yet, allow the lexical path
-        allowed.push(PathBuf::from(format!("{home}/.openclaw")));
+    if let Ok(openclaw_root) = openclaw_root_dir() {
+        if let Ok(openclaw) = fs::canonicalize(&openclaw_root) {
+            allowed.push(openclaw);
+        } else {
+            // If it doesn't exist yet, allow the lexical path.
+            allowed.push(openclaw_root);
+        }
     }
-    allowed.push(PathBuf::from("/tmp"));
-    allowed.push(PathBuf::from("/private/tmp"));
+
+    let temp_dir = platform_temp_dir();
+    if let Ok(temp_dir) = fs::canonicalize(&temp_dir) {
+        allowed.push(temp_dir);
+    } else {
+        allowed.push(temp_dir);
+    }
 
     if let Some(app_src) = &settings.app_source_path {
         if let Ok(p) = fs::canonicalize(app_src) {
@@ -948,6 +972,32 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn write_temp_file(file_name: String, bytes: Vec<u8>) -> Result<String, String> {
+    let sanitized_name: String = file_name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let safe_name = sanitized_name.trim_matches('-');
+    let file_name = if safe_name.is_empty() {
+        format!("clawchestra-drop-{}", unix_timestamp_secs())
+    } else {
+        safe_name.to_string()
+    };
+
+    let dir = platform_temp_dir().join("clawchestra-drop");
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let path = dir.join(format!("{}-{}", unix_timestamp_secs(), file_name));
+    fs::write(&path, bytes).map_err(|error| error.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn delete_file(path: String) -> Result<(), String> {
     validate_allowed_path(&path)?;
     with_mutation_lock("delete_file", || {
@@ -1015,8 +1065,7 @@ fn pick_folder(initial_path: Option<String>) -> Result<Option<String>, String> {
 
 #[tauri::command]
 fn get_openclaw_gateway_config() -> Result<OpenClawGatewayConfig, String> {
-    let home = env::var("HOME").map_err(|error| error.to_string())?;
-    let config_path = Path::new(&home).join(".openclaw").join("openclaw.json");
+    let config_path = openclaw_root_dir()?.join("openclaw.json");
 
     let mut port: u16 = 18789;
     let mut token: Option<String> = None;
@@ -1086,9 +1135,7 @@ fn get_openclaw_ws_device_auth(
         return Err("Invalid websocket device auth parameters".to_string());
     }
 
-    let home = env::var("HOME").map_err(|error| error.to_string())?;
-    let identity_path = Path::new(&home)
-        .join(".openclaw")
+    let identity_path = openclaw_root_dir()?
         .join("identity")
         .join("device.json");
 
@@ -1156,41 +1203,34 @@ fn run_command_with_output(command: &str, args: &[&str]) -> Result<String, Strin
 }
 
 fn find_openclaw_binary() -> Option<PathBuf> {
-    // Check common installation locations with explicit paths
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let candidates = [
-        format!("{home}/Library/pnpm/openclaw"),
-        format!("{home}/.local/bin/openclaw"),
-        format!("{home}/.cargo/bin/openclaw"),
-        format!("{home}/.npm-global/bin/openclaw"),
-        "/usr/local/bin/openclaw".to_string(),
-        "/opt/homebrew/bin/openclaw".to_string(),
-    ];
+    if let Ok(home) = resolve_home_dir() {
+        let mut candidates = vec![
+            home.join("Library").join("pnpm").join("openclaw"),
+            home.join(".local").join("bin").join("openclaw"),
+            home.join(".cargo").join("bin").join("openclaw"),
+            home.join(".npm-global").join("bin").join("openclaw"),
+        ];
 
-    for candidate in candidates {
-        let path = PathBuf::from(&candidate);
-        if path.exists() {
-            return Some(path);
+        #[cfg(windows)]
+        {
+            candidates.push(home.join("AppData").join("Roaming").join("npm").join("openclaw.cmd"));
+            candidates.push(home.join("AppData").join("Roaming").join("npm").join("openclaw.exe"));
         }
-    }
 
-    // Fallback: ask the shell to find it (login shell to get full PATH)
-    if let Ok(output) = Command::new("/bin/sh")
-        .args(["-l", "-c", "which openclaw"])
-        .output()
-    {
-        if output.status.success() {
-            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path_str.is_empty() {
-                let path = PathBuf::from(&path_str);
-                if path.exists() {
-                    return Some(path);
-                }
+        #[cfg(not(windows))]
+        {
+            candidates.push(PathBuf::from("/usr/local/bin/openclaw"));
+            candidates.push(PathBuf::from("/opt/homebrew/bin/openclaw"));
+        }
+
+        for candidate in candidates {
+            if candidate.exists() {
+                return Some(candidate);
             }
         }
     }
 
-    None
+    lookup_command("openclaw")
 }
 
 #[tauri::command]
@@ -1265,9 +1305,7 @@ struct AuthProfileCooldown {
 }
 
 fn auth_profiles_path() -> Result<PathBuf, String> {
-    let home = env::var("HOME").map_err(|e| e.to_string())?;
-    Ok(Path::new(&home)
-        .join(".openclaw")
+    Ok(openclaw_root_dir()?
         .join("agents")
         .join("main")
         .join("agent")
@@ -1401,12 +1439,49 @@ fn gateway_call(method: &str, params: &Value) -> Result<Value, String> {
     let params_json = serde_json::to_string(params)
         .map_err(|error| format!("Failed to encode params: {error}"))?;
 
-    // Build comprehensive PATH including common node locations
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let node_paths = format!(
-        "/opt/homebrew/bin:/usr/local/bin:{home}/Library/pnpm:{home}/.nvm/versions/node/v22.0.0/bin:{home}/.local/bin:/usr/bin:/bin:{}",
-        env::var("PATH").unwrap_or_default()
-    );
+    let node_paths = {
+        let existing = env::var("PATH").unwrap_or_default();
+        let mut parts: Vec<String> = Vec::new();
+
+        if let Ok(home) = resolve_home_dir() {
+            parts.push(home.join("Library").join("pnpm").to_string_lossy().to_string());
+            parts.push(home.join(".local").join("bin").to_string_lossy().to_string());
+            parts.push(home.join(".cargo").join("bin").to_string_lossy().to_string());
+            parts.push(
+                home.join(".local")
+                    .join("share")
+                    .join("pnpm")
+                    .to_string_lossy()
+                    .to_string(),
+            );
+        }
+
+        #[cfg(windows)]
+        {
+            if let Ok(app_data) = env::var("APPDATA") {
+                parts.push(Path::new(&app_data).join("npm").to_string_lossy().to_string());
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            parts.push("/opt/homebrew/bin".to_string());
+            parts.push("/usr/local/bin".to_string());
+            parts.push("/usr/bin".to_string());
+            parts.push("/bin".to_string());
+        }
+
+        if !existing.is_empty() {
+            parts.push(existing);
+        }
+
+        let separator = if cfg!(windows) { ";" } else { ":" };
+        parts
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(separator)
+    };
 
     // For large payloads, warn and fail gracefully
     // Images should be resized on frontend before sending
@@ -1720,8 +1795,11 @@ fn openclaw_chat_blocking(
 
 pub(crate) fn expand_tilde(path: &str) -> Result<PathBuf, String> {
     if let Some(rest) = path.strip_prefix("~/") {
-        let home = std::env::var("HOME").map_err(|error| error.to_string())?;
-        return Ok(Path::new(&home).join(rest));
+        return Ok(resolve_home_dir()?.join(rest));
+    }
+
+    if let Some(rest) = path.strip_prefix("~\\") {
+        return Ok(resolve_home_dir()?.join(rest));
     }
 
     Ok(PathBuf::from(path))
@@ -1806,12 +1884,13 @@ fn truncate_description(desc: &str) -> String {
 
 #[tauri::command]
 fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let home = resolve_home_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let opencode_dir = opencode_config_dir().unwrap_or_else(|_| home.join(".config").join("opencode"));
     let mut commands: Vec<SlashCommand> = Vec::new();
     let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // 1. Load from ~/.config/opencode/opencode.json
-    let opencode_config = Path::new(&home).join(".config/opencode/opencode.json");
+    // 1. Load from the opencode config directory
+    let opencode_config = opencode_dir.join("opencode.json");
     if opencode_config.exists() {
         if let Ok(content) = fs::read_to_string(&opencode_config) {
             if let Ok(config) = serde_json::from_str::<Value>(&content) {
@@ -1849,8 +1928,7 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
     }
 
     // 2. Load from ~/.claude/plugins/cache/every-marketplace/compound-engineering/*/commands/
-    let plugins_base =
-        Path::new(&home).join(".claude/plugins/cache/every-marketplace/compound-engineering");
+    let plugins_base = home.join(".claude/plugins/cache/every-marketplace/compound-engineering");
 
     if plugins_base.exists() {
         if let Ok(versions) = fs::read_dir(&plugins_base) {
@@ -1923,7 +2001,7 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
     }
 
     // 3. Load user commands from ~/.claude/commands/
-    let user_commands_dir = Path::new(&home).join(".claude/commands");
+    let user_commands_dir = home.join(".claude/commands");
     if user_commands_dir.exists() {
         if let Ok(entries) = fs::read_dir(&user_commands_dir) {
             for entry in entries.flatten() {
@@ -1952,8 +2030,8 @@ fn list_slash_commands() -> Result<Vec<SlashCommand>, String> {
         }
     }
 
-    // 4. Load skills from ~/.config/opencode/skills/
-    let skills_dir = Path::new(&home).join(".config/opencode/skills");
+    // 4. Load skills from the opencode config directory
+    let skills_dir = opencode_dir.join("skills");
     if skills_dir.exists() {
         if let Ok(entries) = fs::read_dir(&skills_dir) {
             for entry in entries.flatten() {
@@ -4142,6 +4220,7 @@ pub fn run() {
 
             // 6. Custom macOS menu — replace default Quit (which calls process::exit)
             //    with a guarded quit that checks for active terminal sessions.
+            #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
                 let quit_item = MenuItem::with_id(
@@ -4306,6 +4385,7 @@ pub fn run() {
             scan_projects,
             read_file,
             write_file,
+            write_temp_file,
             delete_file,
             remove_path,
             resolve_path,
@@ -4405,6 +4485,7 @@ pub fn run() {
             reset_openclaw_auth_cooldown,
             // Terminal commands (commands/terminal.rs)
             commands::terminal::detect_agents,
+            commands::terminal::terminal_dependency_status,
             commands::terminal::tmux_list_clawchestra_sessions,
             commands::terminal::tmux_kill_session,
             commands::terminal::tmux_kill_all_clawchestra_sessions,

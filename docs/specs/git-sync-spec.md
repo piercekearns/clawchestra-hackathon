@@ -209,7 +209,7 @@ A modal listing all projects with uncommitted dashboard changes. Each project ro
 │  ☑ Memestr                      main ✓         [Commit & Push]
 │    ┊ Metadata: ROADMAP.md — 2 items updated                  │
 │                                                              │
-│  ☑ piercekearns.com             dev ↓3 ⚠       [Commit only]
+│  ☑ personal-site             dev ↓3 ⚠       [Commit only]
 │    ┊ Metadata: PROJECT.md — priority changed                 │
 │    ┊ ⚠ Branch is behind remote — push may fail               │
 │    ┊ [Ask agent to help]                                     │

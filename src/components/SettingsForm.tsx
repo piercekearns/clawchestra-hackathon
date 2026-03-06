@@ -37,10 +37,14 @@ export function SettingsForm({
   saveNudge,
   onNotify,
 }: SettingsFormProps) {
+  const supportsSourceRebuildUpdate = typeof navigator !== 'undefined'
+    && /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
   const [scanPaths, setScanPaths] = useState<string[]>(['']);
   const [openclawWorkspacePath, setOpenclawWorkspacePath] = useState('');
   const [appSourcePath, setAppSourcePath] = useState('');
-  const [updateMode, setUpdateMode] = useState<UpdateMode>('source-rebuild');
+  const [updateMode, setUpdateMode] = useState<UpdateMode>(
+    supportsSourceRebuildUpdate ? 'source-rebuild' : 'none',
+  );
   const [openclawContextPolicy, setOpenclawContextPolicy] =
     useState<OpenClawContextPolicy>('selected-project-first');
   const [syncMode, setSyncMode] = useState<SyncMode>('Local');
@@ -134,7 +138,7 @@ export function SettingsForm({
       setScanPaths(['']);
       setOpenclawWorkspacePath('');
       setAppSourcePath('');
-      setUpdateMode('source-rebuild');
+      setUpdateMode(supportsSourceRebuildUpdate ? 'source-rebuild' : 'none');
       setOpenclawContextPolicy('selected-project-first');
       setSyncMode('Local');
       setRemoteUrl('');
@@ -143,7 +147,7 @@ export function SettingsForm({
         scanPaths: [''],
         openclawWorkspacePath: '',
         appSourcePath: '',
-        updateMode: 'source-rebuild',
+        updateMode: supportsSourceRebuildUpdate ? 'source-rebuild' : 'none',
         openclawContextPolicy: 'selected-project-first',
         syncMode: 'Local',
         remoteUrl: '',
@@ -181,7 +185,7 @@ export function SettingsForm({
     });
     setIsDirty(false);
     onDirtyChange?.(false);
-  }, [active, buildSnapshot, onDirtyChange, settings]);
+  }, [active, buildSnapshot, onDirtyChange, settings, supportsSourceRebuildUpdate]);
 
   useEffect(() => {
     if (!active) return;
@@ -285,7 +289,7 @@ export function SettingsForm({
             <Input
               value={openclawWorkspacePath}
               onChange={(event) => setOpenclawWorkspacePath(event.target.value)}
-              placeholder="~/clawdbot-sandbox"
+              placeholder="~/openclaw-workspace"
             />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Used for chat context injection. Gateway session routing still follows OpenClaw runtime config.
@@ -297,7 +301,7 @@ export function SettingsForm({
             <Input
               value={appSourcePath}
               onChange={(event) => setAppSourcePath(event.target.value)}
-              placeholder="~/repos/clawchestra"
+              placeholder="/path/to/clawchestra"
             />
           </label>
         </div>
@@ -310,9 +314,14 @@ export function SettingsForm({
               onChange={(value) => setUpdateMode(value as UpdateMode)}
               options={[
                 { value: 'none', label: 'none' },
-                { value: 'source-rebuild', label: 'source-rebuild' },
+                ...(supportsSourceRebuildUpdate
+                  ? [{ value: 'source-rebuild', label: 'source-rebuild' }]
+                  : []),
               ]}
             />
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              <code>source-rebuild</code> is the current developer-only update path and is only supported for macOS source installs right now. Packaged release installs will use GitHub Releases instead once the packaged updater exists.
+            </span>
           </label>
 
           <label className="grid gap-1 text-sm">

@@ -1,410 +1,368 @@
-# First Friend Readiness — Plan
+# First Friend Readiness - Plan
 
-> Make Clawchestra installable and usable by a new developer on macOS/Linux/Windows with guided setup.
+> Ship the release, onboarding, connection, and dependency work needed for a real first-friend public alpha.
 
 ## Summary
 
-This plan operationalizes the First Friend Readiness spec into a phased implementation sequence. It assumes Git Sync Phase 2/3 and Deep Rename baselines are in place, including identifier/session defaults. The plan focuses on reducing first-run friction, enabling remote OpenClaw connectivity, and making lifecycle actions/tooling adaptive without regressing current single-user workflows.
+This plan updates FFR to the current Clawchestra architecture and the current product goal: a new user should be able to install Clawchestra from a website-first flow, connect to OpenClaw whether it is local or remotely hosted, import projects, and use both chat and embedded terminals without owner-specific setup knowledge. The work is no longer just a cross-platform cleanup. It is a coordinated productization pass across release infrastructure, repo hygiene, OpenClaw runtime configuration, onboarding, and terminal dependency readiness.
+
+The plan assumes we will reuse what already exists: the settings page, Add Existing compatibility flow, guidance injection, remote sync settings, extension installer primitive, system-context generation, and terminal infrastructure.
 
 ---
 
 **Roadmap Item:** `first-friend-readiness`
 **Spec:** `docs/specs/first-friend-readiness-spec.md`
-**Status:** Ready
+**Status:** In Progress
 **Created:** 2026-02-19
+**Updated:** 2026-03-06
 
 ---
 
-## Delivery Strategy
+## Locked Goals
 
-1. Ship in thin vertical slices that remain usable after each phase.
-2. Keep all new behavior behind explicit settings/first-run gates until verified.
-3. Prefer additive migration paths over destructive rewrites.
-4. Preserve existing Pierce workflows as default compatibility mode.
+1. Website-first install flow backed by real release artifacts.
+2. Native install support for macOS, Linux, and Windows.
+3. Local and remote OpenClaw support.
+4. Embedded terminals are part of default functionality, not an optional advanced mode.
+5. Public-alpha repo/release hygiene is part of FFR, not a follow-up.
+6. The website consumes release/distribution primitives; it does not invent them.
 
----
+## Known Inputs
 
-## Preconditions
+1. Website domain is `clawchestra.ai`.
+2. GitHub repo is `piercekearns/clawchestra`.
+3. Website-first distribution is required.
+4. Embedded terminals are mandatory default functionality.
+5. The app identifier should become non-personal and stable before the first public installable build.
+6. `source-rebuild` is understood as a developer workflow, not the default friend workflow.
 
-1. Deep Rename baseline is accepted:
-   - identifier: `io.github.piercekearns.clawchestra`
-   - default session key: `agent:main:clawchestra`
-2. Git Sync dependency gates are satisfied:
-   - Phase 2 (scope expansion) merged and stable:
-     - all-file dirty detection + Metadata/Documents/Code grouping
-     - trigger-based local-only Kanban structural auto-commit boundaries
-   - Phase 3 (branch management) at least API/flow-stable for branch-aware sync orchestration
-3. Existing chat reliability fixes stay in place (no regressions in active/idle/streaming state).
+## Decision Notes
 
----
+The following should be treated as locked or nearly locked by this plan:
 
-## Phase 1 — Cross-Platform Foundation
+1. **Application identifier:** lock to `ai.clawchestra.desktop`.
+2. **End-user update posture:** default to release-artifact updates for end users; keep `source-rebuild` as a developer path.
+3. **Artifact defaults:** macOS `.dmg`, Windows `.msi`, Linux `.AppImage` plus `.deb`.
+4. **Package-name strategy:** actively claim namespace-level assets early where clean and cheap; avoid publishing fake placeholder packages solely to reserve names.
+5. **Terminal readiness:** if tmux cannot be bundled, the app must offer one-click remediation from the terminal creation flow.
+6. **Public repo posture:** public source-visible alpha with explicit docs and no implicit promise that the project remains open source long-term.
+7. **Website/release topology:** `clawchestra.ai` fronts GitHub Releases on `piercekearns/clawchestra`.
+8. **Bootstrap package rule:** do not block FFR on a CLI/bootstrap package; ship one only if it provides real install value and is not a placeholder wrapper.
+9. **macOS alpha posture:** Phase 1 uses unsigned macOS public-alpha builds with explicit trust guidance; notarization is deferred.
+
+## Claiming Support Model
+
+Claiming and ownership management are part of FFR delivery, not side chores left to memory.
+
+For every package/domain/channel claim, FFR should produce:
+
+1. proposed name
+2. target channel
+3. whether it should be claimed now or deferred
+4. whether the claim can be executed here or requires a user-owned web account
+5. expected cost/billing posture
+6. owner/account of record
+7. renewal/recovery notes
+8. current status
+
+Execution model:
+
+1. The agent prepares the recommendation and exact claiming steps.
+2. The agent executes what can be done from the repo/CLI side.
+3. The user performs account-bound web claims when required.
+4. The result is recorded in a claim ledger with management notes so future maintenance is obvious.
+
+## Execution Sequence
+
+FFR should be delivered in this order:
+
+1. **Phase 0:** lock public-alpha hygiene and distribution/claiming foundations.
+2. **Phase 1:** make release artifacts and cross-platform runtime behavior credible.
+3. **Phase 2:** align OpenClaw chat transport and sync setup with current architecture.
+4. **Phase 3:** build the onboarding shell on top of the existing settings/import machinery.
+5. **Phase 4:** finish terminal dependency readiness and one-click remediation.
+6. **Phase 5:** connect the website to the release/distribution system already built underneath.
+
+This order matters because the website and onboarding should sit on top of real release and runtime primitives, not mask missing productization work underneath.
+
+## Phase 0 - Public-Alpha Hardening And Release Decisions
 
 ### Goals
 
-1. Remove platform assumptions that block non-macOS friend onboarding.
-2. Make update/build path behavior deterministic across macOS/Linux/Windows.
+1. Remove owner-specific assumptions from the public-facing product surface.
+2. Lock the release/distribution decisions that later phases depend on.
 
 ### Work
 
-1. Replace remaining `env::var("HOME")` path logic in Rust with `dirs`-based paths where applicable.
-2. Add platform-conditional shell handling in `run_command_with_output`.
-3. Make title-bar/platform chrome handling conditional (macOS-only traffic-light assumptions removed elsewhere).
-4. Update cross-platform update flow:
-   - keep `update.sh` for macOS/Linux
-   - add Windows update script path (`.bat` or `.ps1`)
-   - remove hard macOS gate in update command flow
-5. Update docs/README build instructions for first-friend setup.
+1. Choose final non-personal Tauri identifier.
+2. Audit shipped defaults and placeholders:
+   - workspace path defaults
+   - scan path placeholders
+   - app source placeholders
+   - terminal dependency hints
+3. Audit docs/tests for public-repo path leakage and move internal-only material if needed.
+4. Define public repo posture:
+   - license or explicit non-open-source notice
+   - README/release docs expectations
+5. Claim or reserve package/domain names needed for:
+   - website
+   - GitHub Releases naming
+   - optional CLI bootstrap channel
+6. Claim namespace-level assets now where appropriate:
+   - npm user/org scope
+   - Homebrew tap repo
+   - other clean namespace channels
+7. Track registry package names that should wait for real artifacts rather than placeholder publication.
+8. Write the release/distribution matrix that the website will later consume.
+9. Create and maintain a claim ledger covering:
+   - name
+   - channel
+   - claim timing
+   - cost
+   - owner
+   - recovery/renewal notes
+   - status
+10. Guide or execute claims channel by channel, then record what was actually claimed and how it is managed.
 
-### Cross-Platform Updater Contract (Required)
+### Exit Criteria
 
-1. Shared contract:
-   - input: current install path + app source path
-   - output: updated app at same install target + restart attempt + log artifact path
-2. macOS contract:
-   - `.app` replacement preserves LaunchServices behavior
-   - old lock path migration handled safely
-3. Linux contract:
-   - binary/appimage replacement strategy documented and deterministic
-4. Windows contract:
-   - script selects safe stop/replace/restart flow
-   - PowerShell execution policy failure has actionable error output
-5. Failure behavior (all OS):
-   - if update fails, app remains runnable from pre-update build
-   - user gets deterministic failure reason and log location
+1. No shipped UI defaults assume one developer's filesystem layout.
+2. Final app identifier is chosen before any public installable build ships.
+3. Public repo posture is explicit.
+4. Package/domain ownership decisions are recorded.
+5. Public scrub checklist exists and passes.
+6. Namespace claims that can be made cleanly now are either completed or explicitly waived.
+7. A claim ledger exists with ownership, cost, and management notes for every relevant channel.
+
+## Phase 1 - Release Plumbing
+
+### Goals
+
+1. Produce installable artifacts for macOS, Linux, and Windows.
+2. Make GitHub Releases the canonical source of truth for first-friend distribution.
+3. Remove the most important macOS-only runtime assumptions before treating non-macOS builds as valid.
+
+### Work
+
+1. Expand Tauri bundle targets by OS.
+2. Add CI/release automation for:
+   - macOS artifact(s)
+   - Linux artifact(s)
+   - Windows artifact(s)
+3. Define artifact naming and release note structure.
+4. Add root install documentation:
+   - website-first path
+   - GitHub Releases fallback path
+   - advanced source-build path
+   - explicit note that native installers are the primary paid-product install surface and CLI/package managers are secondary unless a real bootstrap product ships
+5. If a thin CLI/bootstrap command is implemented in FFR, ensure it installs or launches a real release flow rather than existing only to hold a package name.
+6. Perform cross-platform runtime hardening:
+   - title bar / window chrome behavior
+   - path and home-directory assumptions
+   - shell/process execution assumptions
+   - updater behavior split between dev `source-rebuild` and end-user installs
+   - terminal dependency remediation copy and flows on each OS
+7. Run a whole-codebase cross-platform audit so non-macOS validity is based on broad review, not only on the currently-known hotspot list.
+8. Maintain a concrete audit artifact for the whole-codebase review:
+   - `docs/plans/first-friend-readiness-phase-1-audit-checklist.md`
+9. Maintain a concrete release operations artifact for public-alpha shipping:
+   - `docs/plans/first-friend-readiness-release-playbook.md`
 
 ### Implementation Map
 
-1. Rust backend:
-   - `src-tauri/src/lib.rs`
-     - `run_command_with_output`
-     - `run_app_update`
-     - path helpers currently using `env::var("HOME")`
-2. Update scripts:
-   - `update.sh`
-   - new `update.bat` or `update.ps1` under repo root
-3. UI/platform config:
+1. `src-tauri/tauri.conf.json`
+2. repo release automation (`.github/`)
+3. root `README.md`
+4. website/download manifest or equivalent release metadata source
+5. platform-sensitive runtime code in:
    - `src/components/TitleBar.tsx`
-   - `src-tauri/tauri.conf.json`
-4. Documentation:
-   - `README.md` (or equivalent onboarding/install doc)
+   - `src-tauri/src/lib.rs`
+   - `src-tauri/src/commands/update.rs`
+   - `src-tauri/src/commands/terminal.rs`
+6. broad audit targets across the full app:
+   - `src/`
+   - `src-tauri/`
+   - onboarding/settings/sync/chat/terminal flows end-to-end
 
 ### Exit Criteria
 
-1. `cargo check` and `pnpm build` pass on local baseline.
-2. Update command no longer hard-fails purely due to OS check.
-3. Build/run instructions are complete for macOS/Linux/Windows.
-4. No regression in current macOS update flow.
-5. Updater contract validated with one passing smoke run per target OS.
+1. A release can be cut without manual OS-by-OS heroics.
+2. GitHub Releases contains usable artifacts for all target OSes.
+3. A new user has a documented install path without cloning the repo.
+4. Source-build remains available as an advanced/developer option.
+5. Windows/Linux packaged installs are not being treated as valid until the core runtime UX behaves correctly, not just until artifacts exist.
+6. A whole-codebase cross-platform audit has been completed and recorded before first friend builds are handed off for non-macOS testing.
 
----
-
-## Phase 2 — OpenClaw Gateway Configuration
+## Phase 2 - OpenClaw Transport And Sync Alignment
 
 ### Goals
 
-1. Make OpenClaw transport/session runtime-configurable from app settings.
-2. Support local and remote gateway setups with explicit connection testing.
+1. Separate chat transport settings from sync settings in both runtime behavior and UI copy.
+2. Make local and remote OpenClaw setups first-class and testable.
 
 ### Work
 
-1. Extend settings model with:
-   - `gatewayWsUrl`
-   - `gatewayToken`
-   - `gatewaySessionKey` (default `agent:main:clawchestra`)
-2. Update gateway config resolution in Rust and frontend to read settings first, then fallback.
-3. Add explicit connection test command + UI status feedback.
-4. Add validation rules for ws/wss URL and token presence.
-5. Define token handling policy:
-   - no token echo in UI except masked form
-   - no plaintext token in logs/error bubbles
-   - token redaction in transport/debug logging
-6. Add settings schema/version migration for gateway fields:
-   - old settings file loads safely with defaults
-   - unknown/legacy fields round-trip without destructive loss
-7. Resolve existing inert settings UX gap:
-   - clearly separate prompt-context settings (`openclawWorkspacePath`, `openclawContextPolicy`) from transport/session routing settings
-   - ensure runtime routing uses gateway fields (not legacy prompt-context fields)
+1. Add explicit chat transport settings:
+   - websocket URL
+   - token
+   - session key
+2. Update default transport resolution so chat does not rely only on local `~/.openclaw/openclaw.json`.
+3. Keep existing sync settings model, but productize it:
+   - Local / Remote / Disabled semantics
+   - remote URL and bearer token UX
+4. Add connection and health testing for:
+   - chat transport
+   - sync transport
+5. Integrate extension/system-context status into setup and troubleshooting flows.
+6. Redact secrets in logs, error states, and debug output.
 
 ### Implementation Map
 
-1. Settings model and persistence:
-   - `src-tauri/src/lib.rs` (`DashboardSettings`, sanitize/load/update)
-   - `src/lib/settings.ts`
-2. Gateway transport resolution:
-   - `src/lib/gateway.ts` (`resolveTransport`, default transport selection)
-   - `src/lib/tauri.ts` bridge calls
-3. Commands/APIs:
-   - reuse or extend `openclaw_ping` and config commands in `src-tauri/src/lib.rs`
-4. Settings UI:
-   - `src/components/SettingsDialog.tsx` (interim)
-   - later sidebar settings panel (Phase 5)
-5. Settings migration/versioning:
-   - versioned settings shape in Rust + TS
-   - migration tests for backward compatibility
+1. `src-tauri/src/lib.rs`
+2. `src/lib/settings.ts`
+3. `src/components/SettingsForm.tsx`
+4. `src/lib/gateway.ts`
+5. `src-tauri/src/sync.rs`
 
 ### Exit Criteria
 
-1. Friend can configure remote gateway without editing local files.
-2. Connection test reports actionable failure reason.
-3. Existing local OpenClaw workflows still work with fallback behavior.
-4. Invalid gateway settings do not break app startup.
-5. Token is redacted everywhere except explicit edit input.
-6. Legacy settings files migrate without manual intervention.
-7. Prompt-context settings are not misrepresented as transport routing controls.
+1. A remote OpenClaw user can configure chat and sync without editing local files by hand.
+2. Local OpenClaw continues to work with sensible auto-detection.
+3. Connection failures are actionable.
+4. Settings UI no longer implies that prompt-context controls are the same as transport controls.
 
----
-
-## Phase 3 — First-Run Onboarding Wizard
-
-> **IMPORTANT — Architecture Direction dependency:** The architecture-direction spec
-> (`docs/specs/architecture-direction-spec.md`) defines extensive onboarding requirements
-> that were descoped from the architecture-direction plan (v2) into this FFR deliverable.
-> This phase MUST be deepened to cover all of the following before implementation.
-> Source sections: spec Sections 6, 12, 15, Q1-Q3, and decisions #28, #30-#35.
+## Phase 3 - Onboarding Shell
 
 ### Goals
 
-1. Replace silent default setup with guided onboarding.
-2. Ensure first launch always produces a valid, user-owned configuration.
+1. Replace silent first launch with guided setup.
+2. Reuse existing settings and project-import machinery instead of rebuilding it.
 
 ### Work
 
-1. Add first-run detection (missing settings => wizard).
-2. Build multi-step onboarding:
-   - Step 1: OpenClaw connection path (local/remote)
-   - Step 2: Scan paths/project discovery
-   - Step 3: Tool detection + lifecycle action guidance
-3. Persist settings from onboarding and hand off to dashboard.
-4. Add “Re-run setup” action in settings.
-
-### Architecture Direction requirements to absorb when deepening this phase
-
-The following are fully specified in the architecture-direction spec and must be incorporated
-into this phase at deepening time. They are listed here to prevent scope loss.
-
-**OpenClaw setup wizard (spec Section 6, Q2, Q3):**
-- “Where is your OpenClaw?” branch: “On this machine” / “On a remote server”
-- 3-tier remote setup: (1) OpenClaw self-setup via AI — user sees “Setting up data sync... done”, (2) one-command fallback shown in wizard — not in a README, (3) local-mode via port forwarding explained in plain language
-- Local OpenClaw: Clawchestra writes `~/.openclaw/extensions/data-endpoint.ts` directly during onboarding — user does nothing
-- Remote OpenClaw: plain-language connection details (URL, token) with copy-paste commands
-- All setup instructions live in the wizard, never in a README (spec decision #33)
-
-**Access rights transparency (spec Section 6):**
-- Explicit “WILL do / WILL NOT do” screen during onboarding
-- WILL: chat with AI agent, read/write project orchestration data in `~/.openclaw/clawchestra/`
-- WILL NOT: access files outside that directory, send data to external services, modify OpenClaw core config, act without confirmation during setup
-
-**Branch injection during project add (spec Section 12, decisions #28, #34):**
-- When user adds a GitHub-connected project (during onboarding OR later), trigger branch injection
-- Front-load injection behind other wizard steps (decision #28): start in background, present next questions while injection runs, show subtle progress indicator
-- Injection uses git CLI only — does not require OpenClaw to be connected yet
-- Wizard order: Connect OpenClaw → Discover Projects → Inject Guidance (but injection works even without OpenClaw)
-- Progress must be visible, not silent (decision #34): “Setting up agent guidance... 8/15 branches”
-
-**Non-developer skill bar (spec decision #30):**
-- Bar: “someone who has OpenClaw running but has zero developer skills beyond that can get through onboarding”
-- No step should require understanding SSH, port forwarding, or filesystems
-- Every user action is a single copy-paste command at most
-- Wizard explains WHY each step is needed, not just WHAT to do
-
-**OpenClaw system prompt injection (spec Section 6):**
-- After connecting, inject `~/.openclaw/clawchestra/system-context.md` teaching OpenClaw about Clawchestra, the DB location, schema rules, and the connected client
-- This happens during onboarding so OpenClaw is immediately useful for project chat
-
-**Design principle (spec Section 15):**
-- By the time onboarding finishes, user has a working AI agent connection — so even if something needs debugging later, they can ask their AI for help
+1. Add first-run/incomplete-setup detection.
+2. Create an onboarding shell that orchestrates:
+   - welcome/access transparency
+   - OpenClaw connection and sync setup
+   - extension/system-context readiness
+   - scan path selection
+   - Add Existing/import flow reuse
+   - terminal dependency readiness
+3. Add re-run onboarding entry point from settings.
+4. Ensure existing installs bypass onboarding unless re-run is requested.
 
 ### Implementation Map
 
-1. First-run state source:
-   - `src-tauri/src/lib.rs` settings existence/read path
-2. Frontend orchestration:
-   - `src/App.tsx`
-   - `src/components/chat/ChatShell.tsx` only where onboarding gates chat affordances
-3. New UI:
-   - `src/components/` onboarding module(s)
-4. Settings integration:
-   - `src/lib/store.ts` initialization flow
-   - `src/lib/tauri.ts` settings commands
+1. `src/App.tsx`
+2. onboarding UI module(s) under `src/components/`
+3. `src/components/SettingsPage.tsx` / `src/components/SettingsForm.tsx`
+4. `src/lib/project-flows.ts`
+5. `src/components/AddProjectDialog.tsx`
 
 ### Exit Criteria
 
-1. Fresh install reaches usable state without manual file edits.
-2. User can re-run setup post-install.
-3. Failed setup states provide clear recovery path.
-4. Existing installs bypass onboarding automatically.
-5. Non-developer user can complete onboarding without terminal knowledge.
-6. Access rights are explicitly communicated before OpenClaw connection is established.
-7. Branch injection runs and reports progress during project add flow.
+1. Fresh install lands in a guided setup flow.
+2. Onboarding ends in a usable board state, not a half-configured state.
+3. Existing installs are not regressed.
+4. Add Existing compatibility, migration, and guidance injection are preserved.
 
----
-
-## Phase 4 — Project Scaffolding
-
-> **Architecture Direction dependency:** Post-migration, projects use `CLAWCHESTRA.md`
-> (not `PROJECT.md`) and `.clawchestra/state.json` (not `ROADMAP.md`). Scaffolding
-> must reflect the new file structure. See architecture-direction plan v2, Phase 3.
+## Phase 4 - Terminal Readiness And Default Lifecycle Behavior
 
 ### Goals
 
-1. Help friends import existing repos that lack dashboard metadata.
-2. Reduce manual prep needed before board becomes useful.
+1. Make embedded terminals actually first-friend ready.
+2. Remove dead-end runtime dependency failures from the default product loop.
 
 ### Work
 
-1. Detect git repos in scan paths without `CLAWCHESTRA.md` (or legacy `PROJECT.md`).
-2. Offer scaffold flow for `CLAWCHESTRA.md`. `.clawchestra/state.json` is auto-created by the state.json infrastructure (architecture-direction Phase 2) — no manual scaffolding needed.
-3. Ensure generated files follow schema and priority rules.
-4. Optionally scaffold `.clawchestra/schema.json` (JSON Schema for agent self-validation, from architecture-direction Phase 1.5).
+1. Decide tmux strategy:
+   - bundle tmux per OS, or
+   - one-click install/remediation from within the app
+2. Expand tool detection to supported OSes and supported CLIs.
+3. Update terminal creation UX so missing dependencies route to remediation, not a dead disabled state.
+4. Adjust default lifecycle behavior so it does not assume Claude Code everywhere.
+5. Preserve a strong default preset while leaving room for later customization work.
 
 ### Implementation Map
 
-1. Discovery and flow logic:
-   - `src/lib/project-flows.ts`
-   - `src/lib/projects.ts`
-2. Backend folder helpers:
-   - `src-tauri/src/lib.rs` (`pick_folder`, scan helpers)
-3. Schema generation:
-   - reuse existing project/roadmap conventions from `AGENTS.md`
+1. `src-tauri/src/commands/terminal.rs`
+2. `src/components/hub/TypePickerMenu.tsx`
+3. `src/components/hub/TerminalShell.tsx`
+4. `src/lib/deliverable-lifecycle.ts`
 
 ### Exit Criteria
 
-1. Repos can be onboarded from UI without raw markdown hand-editing.
-2. Generated files are schema-compliant and recognized immediately.
-3. Priority uniqueness rules are preserved when scaffolding roadmap items.
-4. Scaffolding produces `CLAWCHESTRA.md` (not `PROJECT.md`).
+1. User can create a terminal immediately or remediate with one click.
+2. Cross-platform dependency guidance is OS-appropriate.
+3. Lifecycle defaults no longer hard-fail for non-Claude/tmux users.
+4. Terminals remain part of the default Clawchestra product promise.
 
----
-
-## Phase 5A — Settings Sidebar MVP
+## Phase 5 - Website Integration
 
 ### Goals
 
-1. Move critical settings into persistent in-app sidebar content.
-2. Reach parity with current SettingsDialog behavior in a stable sidebar surface.
+1. Present the release system through a simple website flow.
+2. Keep website work thin and dependent on already-functional release primitives.
 
 ### Work
 
-1. Add sidebar settings surface with sections:
-   - Connection
-   - Projects
-   - Tools
-2. Migrate existing settings controls into sidebar while preserving current command paths.
-3. Keep lifecycle actions at current default behavior in this phase (no advanced customization yet).
-
-### Implementation Map
-
-1. Sidebar/settings shell:
-   - `src/components/sidebar/Sidebar.tsx` (current sidebar container)
-   - `src/components/SettingsDialog.tsx` (migration or shared form primitives)
-2. Settings persistence:
-   - `src/lib/settings.ts`
-   - `src-tauri/src/lib.rs` settings serialization/sanitization
+1. Build the website download surface around the real artifact matrix.
+2. Detect OS and offer the preferred artifact first.
+3. Link release notes and fallback install instructions.
+4. If CLI bootstrap ships, expose it here as a secondary path.
 
 ### Exit Criteria
 
-1. Sidebar can fully replace SettingsDialog for core configuration.
-2. Existing Pierce workflow remains unchanged.
-3. No chat/gateway regression from settings-surface migration.
-
----
-
-## Phase 5B — Lifecycle Action Configuration (Advanced)
-
-### Goals
-
-1. Make lifecycle actions adaptable to available tools and user preferences.
-2. Keep action execution safe and predictable.
-
-### Work
-
-1. Implement lifecycle actions configuration model:
-   - enable/disable actions
-   - order and label
-   - prompt template source
-2. Replace hardcoded lifecycle prompt assumptions with configuration-driven behavior.
-3. Add presets and reset-to-default behavior.
-
-### Implementation Map
-
-1. Lifecycle config source:
-   - `src/lib/deliverable-lifecycle.ts`
-   - `src/components/LifecycleActionBar.tsx`
-2. Settings integration:
-   - sidebar settings actions section from Phase 5A
-
-### Exit Criteria
-
-1. Friend can configure lifecycle actions without editing code.
-2. No action buttons displayed when none are configured.
-3. Lifecycle prefill behavior still routes through editable chat prefill (never auto-send).
-4. Existing default preset remains one-click recoverable.
-
----
+1. Website is a routing layer over working releases.
+2. Users can install from the website without understanding the repo.
+3. Website copy matches the actual release/update behavior.
 
 ## Validation Matrix
 
-1. Platform: macOS, Linux, Windows smoke validation.
-2. Gateway modes: local, SSH tunnel, direct remote.
-3. First run: empty machine, preconfigured machine, malformed settings recovery.
-4. Project discovery: repos with metadata, repos without metadata.
-5. Lifecycle: default preset, custom preset, disabled actions.
-6. Security: token redaction in logs/UI/error states.
-7. Settings migration: older settings files load and persist correctly.
+1. Platform validation:
+   - macOS install, launch, connect, terminal creation
+   - Linux install, launch, connect, terminal creation
+   - Windows install, launch, connect, terminal creation
+2. OpenClaw modes:
+   - local chat + local sync
+   - remote chat + remote sync
+   - remote chat with local-only code execution through terminals
+3. Onboarding states:
+   - fresh install
+   - corrupt settings recovery
+   - existing install re-run onboarding
+4. Project import:
+   - clean canonical project
+   - legacy project requiring migration
+   - repo without metadata
+5. Dependency readiness:
+   - tmux present
+   - tmux missing
+   - agent CLI present/absent combinations
+6. Public-alpha hygiene:
+   - no owner-shaped defaults in shipped UI
+   - no accidental sensitive/personalized release notes or install docs
 
 ## Test Gates
 
-1. Unit/integration:
-   - `pnpm test`
-   - targeted gateway/settings/onboarding tests
-2. Type/build:
+1. Type/build:
    - `pnpm build`
+   - `npx tsc --noEmit`
    - `cargo check`
-3. End-to-end smoke:
-   - first-run onboarding happy path
-   - remote gateway config + test
-   - scaffold flow creating visible project entry
-4. Regression:
-   - existing chat send/stream/recovery behavior
-   - local-only Kanban structural auto-commit semantics
-   - update button flow on macOS
-   - no duplicate user-message rendering or stale active-turn states in chat
-   - no regression in settings round-trip across Rust/TS schemas
+2. App validation:
+   - onboarding happy path
+   - local OpenClaw setup
+   - remote OpenClaw setup
+   - Add Existing/import flow
+   - terminal dependency remediation
+3. Release validation:
+   - CI produces expected artifacts
+   - artifacts install on target OSes
+   - release notes and website links point to valid assets
 
-## Phase Boundaries (Go/No-Go)
+## Phase Boundaries
 
-1. Do not start Phase 3 before Phase 2 connection test path is stable.
-2. Do not start Phase 5A before onboarding stores/reads settings reliably.
-3. Do not start Phase 5B before 5A ships and remains stable for one validation cycle.
-4. If a phase misses exit criteria, pause and harden before proceeding.
-
-## Key Design Decisions (Locked)
-
-1. Keep legacy `openclawWorkspacePath` / `openclawContextPolicy` behavior as prompt-context controls unless explicitly migrated by a separate scoped change.
-2. Gateway transport/session routing must use explicit gateway fields (`gatewayWsUrl`, `gatewayToken`, `gatewaySessionKey`) once Phase 2 lands.
-3. First-run wizard writes via existing `update_dashboard_settings` command path (single source of truth).
-4. Transport/session routing settings are distinct from prompt-context settings in both UI copy and runtime behavior.
-5. Settings model is versioned and backward-compatible.
-
----
-
-## Risks and Mitigations
-
-1. Risk: onboarding complexity increases regressions in existing flows.
-Mitigation: gate onboarding by first-run detection and keep fallback settings path.
-
-2. Risk: remote gateway setup fails silently.
-Mitigation: explicit connection-test API with user-visible error states.
-
-3. Risk: cross-platform updater behavior diverges.
-Mitigation: per-OS scripts with shared contract and common verification checklist.
-
-4. Risk: settings model drift between Rust and TypeScript.
-Mitigation: keep a single schema contract and add validation tests for round-trip serialization.
-
-5. Risk: onboarding introduces duplicate or stale config paths.
-Mitigation: onboarding writes through the same `update_dashboard_settings` pathway used by settings UI.
-
-6. Risk: gateway token leaks in logs or UI.
-Mitigation: enforce redaction/masking policy and add explicit token-leak regression tests.
+1. Do not start website implementation before release plumbing exists.
+2. Do not ship onboarding before chat transport and sync settings are coherent.
+3. Do not call FFR complete while embedded terminals still dead-end on missing tmux.
+4. Do not ship a public installable build before the identifier and scrub checklist are resolved.

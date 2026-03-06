@@ -176,7 +176,7 @@ Collapsible header showing work done for a response.
 ▾ Thought 42s · 3 tools
 ┌─────────────────────────────────────────┐
 │ 💭 Thinking                             │
-│ Pierce wants the git status. I'll run   │
+│ The user wants the git status. I'll run   │
 │ the command to check...                 │
 ├─────────────────────────────────────────┤
 │ ▸ exec: git status (✓ 0.02s)            │

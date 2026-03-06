@@ -31,7 +31,7 @@ Enumerate every colour token currently used in the terminal layer:
 - Header bar (if present)
 
 ### 2 — Visual Mockup (produce this before touching any code)
-The mockup should be reviewable by Pierce before any implementation begins. It should show:
+The mockup should be reviewable by the project owner before any implementation begins. It should show:
 - **Before:** screenshot or colour swatch grid of the current xterm default palette in the terminal pane
 - **After:** proposed palette matched to app design system, rendered as swatches with hex values:
   - Background → app's `neutral-950` (dark) / `neutral-50` (light)

@@ -10,7 +10,7 @@ This document captures what happened and the practical guardrails to prevent rep
 
 ---
 
-**Session File:** `/Users/piercekearns/.openclaw/agents/main/sessions/7d4c90ef-da5d-4a4c-b9c8-134944ae8bb7.jsonl`  
+**Session File:** `~/.openclaw/agents/main/sessions/7d4c90ef-da5d-4a4c-b9c8-134944ae8bb7.jsonl`  
 **Window Reviewed:** `2026-02-20T01:18:39Z` to `2026-02-20T02:37:23Z`  
 **Model:** `anthropic/claude-opus-4-6`  
 **Thinking Level:** `high`  

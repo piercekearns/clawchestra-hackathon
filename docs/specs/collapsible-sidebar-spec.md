@@ -337,7 +337,7 @@ These are explicitly **not** built in Phase 1. The sidebar content is TBD — th
 
 ## Ideas for Sidebar Content (Future)
 
-> **⚠️ These are ideas only — not committed for any build phase.** They represent potential uses for the sidebar once the shell exists. Pierce will decide what goes in there after the core is built and tested.
+> **⚠️ These are ideas only — not committed for any build phase.** They represent potential uses for the sidebar once the shell exists. The project owner will decide what goes in there after the core is built and tested.
 
 ### Settings Panel
 

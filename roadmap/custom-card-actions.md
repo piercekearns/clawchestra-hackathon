@@ -2,7 +2,7 @@
 
 Replace the hardcoded 5-button lifecycle bar on roadmap cards with user-configured actions.
 
-## Design Decisions (from Pierce, 2026-02-19)
+## Design Decisions (project owner input, 2026-02-19)
 
 - **0 to N buttons** — not fixed at 5. User adds buttons one-by-one. If none configured, no buttons show on hover.
 - **Max ~5-6 buttons** — constrained by card width. Exact max determined by minimum button width at card min-width.

@@ -591,7 +591,7 @@ New Tauri command: `install_openclaw_extension(openclaw_path: String) -> Result<
 When OpenClaw is on the same machine (`openclaw_sync_mode: "local"`):
 - Skip the HTTP endpoint entirely
 - Read/write directly to `~/.openclaw/clawchestra/db.json`
-- This is the default for Pierce's current setup
+- This is the default for the current single-machine setup
 
 ### Verification gate
 

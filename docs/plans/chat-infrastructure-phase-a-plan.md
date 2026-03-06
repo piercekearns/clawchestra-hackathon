@@ -2,7 +2,7 @@
 
 ## Context
 
-The dashboard shares chat sessions with webchat/Telegram (`agent:main:main`), the default scan path references a legacy directory (`~/clawdbot-sandbox/projects`), and the WebSocket connection has no reconnection logic (previous attempt reverted in `36fbc72`). Phase A fixes all three and adds a state machine for connection resilience.
+The dashboard shares chat sessions with webchat/Telegram (`agent:main:main`), the default scan path references a legacy directory (`~/openclaw-workspace/projects`), and the WebSocket connection has no reconnection logic (previous attempt reverted in `36fbc72`). Phase A fixes all three and adds a state machine for connection resilience.
 
 **Spec:** `docs/specs/chat-infrastructure-phase-a-spec.md`
 

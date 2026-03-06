@@ -478,7 +478,7 @@ if (Object.keys(repoUpdates).length > 0 && project.repoFilePath) {
 
 ## Fix 19: OVERVIEW.md still says "Next.js"
 **Priority:** Documentation (2/3 — old unfixed from v3 review)
-**Location:** `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/OVERVIEW.md`
+**Location:** `<legacy-project-root>/OVERVIEW.md`
 **Issue:** Says "A Tauri-wrapped Next.js app" but spec uses Vite + React. Stale phase descriptions too.
 **Fix:** Update OVERVIEW.md to say "Tauri + Vite + React app" and align phase descriptions with SPEC.md.
 

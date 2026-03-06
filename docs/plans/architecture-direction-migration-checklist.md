@@ -226,7 +226,7 @@ NotStarted -> Importing -> Imported -> StateJsonCreated -> GitignoreUpdated -> S
 
 **At Step 2 (Import):**
 - If ROADMAP.md has zero parseable items: STOP. Log error. Do not proceed. This likely means the YAML parser failed entirely.
-- If any item has `status: shipped`: auto-convert to `complete` (per existing `sanitizeRoadmapItem` logic at `/Users/piercekearns/repos/clawchestra/src/lib/roadmap.ts` line 20).
+- If any item has `status: shipped`: auto-convert to `complete` (per existing `sanitizeRoadmapItem` logic at `<repo-root>/src/lib/roadmap.ts` line 20).
 - If CHANGELOG.md exists but has no YAML frontmatter (like the current Clawchestra CHANGELOG.md which is markdown-only): Treat as zero entries. Do not fail.
 
 **At Step 4 (Gitignore):**
@@ -403,7 +403,7 @@ echo "GIT_DIRTY_FILES: $(git status --porcelain | wc -l | tr -d ' ')"
 
 ### 4.4 Clawchestra-Specific Verification for ROADMAP.md of This Repo
 
-The Clawchestra project's own ROADMAP.md (at `/Users/piercekearns/repos/clawchestra/ROADMAP.md`) has 19 items. After migration, verify all 19 appear in the database:
+The Clawchestra project's own ROADMAP.md (at `<repo-root>/ROADMAP.md`) has 19 items. After migration, verify all 19 appear in the database:
 
 | Item ID | Status | Must Be In DB |
 |---------|--------|---------------|
@@ -889,4 +889,4 @@ After migration completes, review the migration log at `.clawchestra/migration.l
 
 ---
 
-*This checklist covers the Phase 4 migration only. Phases 1-3 and 5-9 have their own verification gates defined in `/Users/piercekearns/repos/clawchestra/docs/plans/architecture-direction-plan.md`.*
+*This checklist covers the Phase 4 migration only. Phases 1-3 and 5-9 have their own verification gates defined in `<repo-root>/docs/plans/architecture-direction-plan.md`.*

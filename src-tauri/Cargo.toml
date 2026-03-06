@@ -2,7 +2,7 @@
 name = "clawchestra"
 version = "0.1.0"
 description = "Clawchestra"
-authors = ["Pierce Kearns"]
+authors = ["Clawchestra"]
 edition = "2021"
 
 [lib]

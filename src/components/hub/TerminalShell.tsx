@@ -1,15 +1,202 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { writeFile } from '@tauri-apps/plugin-fs';
 import { spawn, type IPty } from 'tauri-pty';
 import '@xterm/xterm/css/xterm.css';
+import { Loader2 } from 'lucide-react';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { getAgentCommand, tmuxSessionName } from '../../lib/terminal-utils';
 import { detectActionRequired } from '../../lib/terminal-activity';
+import { Button } from '../ui/button';
+import {
+  detectAgents,
+  getTerminalDependencyStatus,
+  type TerminalDependencyStatus,
+  writeTempFile,
+} from '../../lib/tauri';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif']);
+
+type RuntimeMode = 'tmux' | 'direct' | 'install';
+
+type RuntimeNotice = {
+  tone: 'info' | 'warning';
+  title: string;
+  body: string;
+  allowInstall: boolean;
+};
+
+type LaunchPlan = {
+  mode: RuntimeMode;
+  persistent: boolean;
+  command: string | null;
+  args: string[];
+  notice: RuntimeNotice | null;
+  writeLines: string[];
+};
+
+function escapePosixShell(value: string): string {
+  return value.replace(/'/g, "'\\''");
+}
+
+function formatPosixAgentCommand(command: string): string {
+  if (command.endsWith(' tui')) {
+    const binary = command.slice(0, -4).trim();
+    return `exec '${escapePosixShell(binary)}' tui`;
+  }
+
+  return `exec '${escapePosixShell(command.trim())}'`;
+}
+
+function formatWindowsAgentCommand(command: string): string {
+  if (command.endsWith(' tui')) {
+    const binary = command.slice(0, -4).trim().replace(/"/g, '`"');
+    return `& "${binary}" tui`;
+  }
+
+  return `& "${command.trim().replace(/"/g, '`"')}"`;
+}
+
+function buildTmuxShellCommand(tmux: string, sessionName: string, agentCommand: string | null): string {
+  const tmuxSessionSanitized = sessionName.replace(/:/g, '_');
+  const captureCmd = `${tmux} -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
+  const hasSessionCheck = `${tmux} -L clawchestra has-session -t '${tmuxSessionSanitized}' 2>/dev/null && IS_REATTACH=1 || IS_REATTACH=0`;
+  const tmuxBase = [
+    `${tmux} -u -f /dev/null -L clawchestra`,
+    `new-session -A -s '${sessionName}'`,
+    `\\; set status off`,
+    '\\; set history-limit 50000',
+    "\\; set -ga terminal-overrides ',xterm-256color:smcup@:rmcup@'",
+  ].join(' ');
+
+  if (agentCommand) {
+    const escapedCmd = escapePosixShell(agentCommand);
+    return [
+      captureCmd,
+      hasSessionCheck,
+      `if [ "$IS_REATTACH" = "0" ]; then exec ${tmuxBase} \\; send-keys '${escapedCmd}' Enter; else exec ${tmuxBase}; fi`,
+    ].join('; ');
+  }
+
+  return `${captureCmd}; exec ${tmuxBase}`;
+}
+
+function buildTerminalLaunchPlan(args: {
+  platform: string;
+  sessionName: string;
+  agentCommand: string | null;
+  tmuxPath: string | null;
+  projectDirPath: string | undefined;
+  dependencyStatus: TerminalDependencyStatus | null;
+  modeOverride: 'auto' | 'install-tmux';
+}): LaunchPlan {
+  const {
+    platform,
+    sessionName,
+    agentCommand,
+    tmuxPath,
+    projectDirPath,
+    dependencyStatus,
+    modeOverride,
+  } = args;
+
+  if (modeOverride === 'install-tmux') {
+    if (!dependencyStatus?.installerCommand) {
+      return {
+        mode: 'install',
+        persistent: false,
+        command: null,
+        args: [],
+        notice: {
+          tone: 'warning',
+          title: 'Automatic tmux install unavailable',
+          body: dependencyStatus?.installerNote
+            ?? 'Clawchestra could not find a supported package manager for a one-click tmux install.',
+          allowInstall: false,
+        },
+        writeLines: ['[Terminal remediation] No automatic tmux install path is available on this platform.'],
+      };
+    }
+
+    const installCommand = `${dependencyStatus.installerCommand}; status=$?; printf '\\n[Clawchestra] tmux install exited with code %s.\\n' "$status"; exit $status`;
+    return {
+      mode: 'install',
+      persistent: false,
+      command: 'sh',
+      args: ['-lc', installCommand],
+      notice: {
+        tone: 'info',
+        title: dependencyStatus.installerLabel ?? 'Installing tmux',
+        body: 'This runs inside a temporary shell. If your package manager prompts for confirmation or a password, respond here.',
+        allowInstall: false,
+      },
+      writeLines: [],
+    };
+  }
+
+  if (!projectDirPath) {
+    return {
+      mode: 'direct',
+      persistent: false,
+      command: null,
+      args: [],
+      notice: {
+        tone: 'warning',
+        title: 'Project path missing',
+        body: 'Clawchestra cannot open this terminal in the correct working directory until the project path is restored.',
+        allowInstall: false,
+      },
+      writeLines: ['[Terminal unavailable] Project path is missing, so Clawchestra cannot open the shell in the correct working directory.'],
+    };
+  }
+
+  if (platform === 'windows') {
+    const powershell = 'powershell.exe';
+  return {
+    mode: 'direct',
+    persistent: false,
+    command: powershell,
+    args: agentCommand
+        ? ['-NoLogo', '-NoExit', '-Command', formatWindowsAgentCommand(agentCommand)]
+        : ['-NoLogo'],
+      notice: {
+        tone: 'info',
+        title: 'Temporary Windows terminal',
+        body: 'Windows currently runs direct PowerShell sessions. They work for friend testing, but they do not persist when you close the drawer or relaunch the app yet.',
+        allowInstall: false,
+      },
+      writeLines: [],
+    };
+  }
+
+  if (tmuxPath) {
+    return {
+      mode: 'tmux',
+      persistent: true,
+      command: 'sh',
+      args: ['-c', buildTmuxShellCommand(tmuxPath, sessionName, agentCommand)],
+      notice: null,
+      writeLines: [],
+    };
+  }
+
+  return {
+    mode: 'direct',
+    persistent: false,
+    command: agentCommand ? 'sh' : 'sh',
+    args: agentCommand
+      ? ['-lc', formatPosixAgentCommand(agentCommand)]
+      : [],
+    notice: {
+      tone: 'warning',
+      title: 'tmux missing: running a temporary session',
+      body: `${dependencyStatus?.installerNote ?? 'tmux is required for persistent embedded terminals.'} This session will stop when you close the drawer or switch away.`,
+      allowInstall: Boolean(dependencyStatus?.installerCommand),
+    },
+    writeLines: [],
+  };
+}
 
 interface TerminalShellProps {
   chat: HubChat;
@@ -30,12 +217,25 @@ export function TerminalShell({ chat, onFocusChange, onDragActiveChange }: Termi
 }
 
 function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubChat; onFocusChange?: (focused: boolean) => void; onDragActiveChange?: (active: boolean) => void }) {
+  const platform = useMemo(() => {
+    if (typeof navigator === 'undefined') return 'unknown';
+    const raw = `${navigator.platform} ${navigator.userAgent}`.toLowerCase();
+    if (raw.includes('win')) return 'windows';
+    if (raw.includes('mac') || raw.includes('iphone') || raw.includes('ipad')) return 'macos';
+    if (raw.includes('linux')) return 'linux';
+    return 'unknown';
+  }, []);
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const ptyRef = useRef<IPty | null>(null);
+  const runtimeModeRef = useRef<RuntimeMode>('tmux');
   const mountedRef = useRef(false);
   const [dragActive, setDragActive] = useState(false);
+  const [modeOverride, setModeOverride] = useState<'auto' | 'install-tmux'>('auto');
+  const [runtimeNotice, setRuntimeNotice] = useState<RuntimeNotice | null>(null);
+  const [dependencyStatus, setDependencyStatus] = useState<TerminalDependencyStatus | null>(null);
+  const [launchNonce, setLaunchNonce] = useState(0);
 
   const projects = useDashboardStore((s) => s.projects);
   const detectedAgents = useDashboardStore((s) => s.detectedAgents);
@@ -54,6 +254,20 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     };
     return find(projects);
   }, [chat.projectId, projects]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getTerminalDependencyStatus()
+      .then((status) => {
+        if (!cancelled) setDependencyStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setDependencyStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detectedAgents]);
 
   useEffect(() => {
     // Prevent double-init in StrictMode
@@ -113,62 +327,43 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
 
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
     const agentCommand = getAgentCommand(chat.agentType, detectedAgents);
+    const tmux = dependencyStatus?.tmuxPath
+      ?? detectedAgents.find((a) => a.agentType === 'tmux' && a.available)?.path
+      ?? null;
+    const launchPlan = buildTerminalLaunchPlan({
+      platform,
+      sessionName,
+      agentCommand,
+      tmuxPath: tmux,
+      projectDirPath,
+      dependencyStatus,
+      modeOverride,
+    });
 
-    // Resolve tmux's absolute path from detect_agents so it works when
-    // launched from Dock/Spotlight where PATH lacks /opt/homebrew/bin.
-    const tmux = detectedAgents?.find(a => a.agentType === 'tmux' && a.available)?.path ?? 'tmux';
+    runtimeModeRef.current = launchPlan.mode;
+    setRuntimeNotice(launchPlan.notice);
 
-    // Spawn PTY with tmux via a shell wrapper.
-    //
-    // Phase 1: capture-pane dumps existing scrollback (with ANSI escapes)
-    //   into xterm.js's buffer so the user can scroll up after an app restart.
-    // Phase 2: has-session checks if the tmux session already exists.
-    // Phase 3: exec tmux replaces the outer shell with the tmux client.
-    //   For NEW sessions with an agent, tmux `send-keys` types the launch
-    //   command into the shell. For existing sessions (reattach), nothing
-    //   extra is sent — the agent is already running.
-    //
-    // Note: tmux sanitizes colons to underscores in session names, so all
-    //   `-t` targets must use the sanitized form.
-    //
-    // Use `name` for TERM (proper PTY option), keep env minimal — tauri-pty
-    // merges with parent env so PATH/HOME/etc. are inherited.
-    // COLORTERM=truecolor tells TUI apps (Claude Code) that 24-bit color is supported.
-    const tmuxSessionSanitized = sessionName.replace(/:/g, '_');
-    const captureCmd = `${tmux} -L clawchestra capture-pane -t '${tmuxSessionSanitized}' -p -e -S -5000 2>/dev/null`;
-    const hasSessionCheck = `${tmux} -L clawchestra has-session -t '${tmuxSessionSanitized}' 2>/dev/null && IS_REATTACH=1 || IS_REATTACH=0`;
-    const tmuxBase = [
-      `${tmux} -u -f /dev/null -L clawchestra`,
-      `new-session -A -s '${sessionName}'`,
-      `\\; set status off`,
-      // Bump history-limit from the default 2000 to 50 000 so long Claude Code
-      // sessions preserve more scrollback for capture-pane on reattach.
-      `\\; set history-limit 50000`,
-      // Disable alternate screen on the outer terminal (xterm.js) so all tmux
-      // output goes to the normal buffer with scrollback. Without this, tmux
-      // uses the alternate screen which has no scrollback — wheel events get
-      // converted to up/down arrows instead of scrolling.
-      `\\; set -ga terminal-overrides ',xterm-256color:smcup@:rmcup@'`,
-    ].join(' ');
-
-    // Build the full shell command. For agents, conditionally add send-keys
-    // only for new sessions (IS_REATTACH=0) so we don't retype into an
-    // already-running agent on reattach.
-    let shellCmd: string;
-    if (agentCommand) {
-      // Escape single quotes in the command path for the shell
-      const escapedCmd = agentCommand.replace(/'/g, "'\\''");
-      shellCmd = [
-        captureCmd,
-        hasSessionCheck,
-        `if [ "$IS_REATTACH" = "0" ]; then exec ${tmuxBase} \\; send-keys '${escapedCmd}' Enter; else exec ${tmuxBase}; fi`,
-      ].join('; ');
-    } else {
-      shellCmd = `${captureCmd}; exec ${tmuxBase}`;
+    for (const line of launchPlan.writeLines) {
+      term.writeln(`\r\n${line}`);
     }
+
+    if (!launchPlan.command) {
+      return () => {
+        mountedRef.current = false;
+        const store = useDashboardStore.getState();
+        const updated = new Set(store.activeTerminalChatIds);
+        updated.delete(chat.id);
+        store.setActiveTerminalChatIds(updated);
+        store.updateTerminalActivity(chat.id, { isActive: false, actionRequired: false });
+        term.dispose();
+        termRef.current = null;
+        fitAddonRef.current = null;
+      };
+    }
+
     let pty: IPty;
     try {
-      pty = spawn('sh', ['-c', shellCmd], {
+      pty = spawn(launchPlan.command, launchPlan.args, {
         name: 'xterm-256color',
         cols: term.cols,
         rows: term.rows,
@@ -177,7 +372,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       });
     } catch (e) {
       term.writeln(`\r\n[Error] Failed to spawn terminal: ${e}`);
-      return;
+      return () => {
+        mountedRef.current = false;
+        term.dispose();
+        termRef.current = null;
+        fitAddonRef.current = null;
+      };
     }
 
     ptyRef.current = pty;
@@ -353,6 +553,19 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       updated.delete(chat.id);
       store.setActiveTerminalChatIds(updated);
       store.updateTerminalActivity(chat.id, { isActive: false, actionRequired: false });
+
+      if (runtimeModeRef.current === 'install') {
+        void detectAgents()
+          .then((agents) => {
+            useDashboardStore.getState().setDetectedAgents(agents);
+          })
+          .catch(() => {});
+        void getTerminalDependencyStatus()
+          .then((status) => setDependencyStatus(status))
+          .catch(() => {});
+        setModeOverride('auto');
+        setLaunchNonce((current) => current + 1);
+      }
     });
 
     // Pass through app keyboard shortcuts while terminal has focus
@@ -431,12 +644,19 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       } catch {
         // Already dead
       }
+      if (runtimeModeRef.current !== 'tmux') {
+        const store = useDashboardStore.getState();
+        const updated = new Set(store.activeTerminalChatIds);
+        updated.delete(chat.id);
+        store.setActiveTerminalChatIds(updated);
+        store.updateTerminalActivity(chat.id, { isActive: false, actionRequired: false });
+      }
       ptyRef.current = null;
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chat.id, chat.projectId, chat.agentType, dependencyStatus, detectedAgents, launchNonce, modeOverride, platform, projectDirPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drag-and-drop handlers — stopPropagation on ALL drag events prevents the
   // window-level ChatShell handler from catching drags over the terminal.
@@ -468,8 +688,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
         const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
         if (!IMAGE_EXTENSIONS.has(ext)) continue;
         void file.arrayBuffer().then((buf) => {
-          const filePath = `/tmp/clawchestra-drop-${Date.now()}.${ext}`;
-          void writeFile(filePath, new Uint8Array(buf)).then(() => pty.write(filePath));
+          const bytes = Array.from(new Uint8Array(buf));
+          void writeTempFile(file.name || `clawchestra-drop-${Date.now()}.${ext}`, bytes)
+            .then((filePath) => pty.write(filePath))
+            .catch((err) => console.error('Failed to save dropped image:', err));
         }).catch((err) => console.error('Failed to save dropped image:', err));
       }
     };
@@ -490,6 +712,47 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       ref={wrapperRef}
       className="relative flex flex-1 flex-col min-h-0 px-4 pt-3 pb-4 md:px-6 md:pb-6"
     >
+      {runtimeNotice && (
+        <div className="pointer-events-auto absolute left-4 right-4 top-3 z-20 md:left-6 md:right-6">
+          <div className={`max-w-2xl rounded-xl border px-4 py-3 shadow-lg backdrop-blur ${
+            runtimeNotice.tone === 'warning'
+              ? 'border-amber-300/70 bg-amber-50/95 text-amber-950 dark:border-amber-700 dark:bg-amber-950/85 dark:text-amber-100'
+              : 'border-sky-300/70 bg-sky-50/95 text-sky-950 dark:border-sky-700 dark:bg-sky-950/85 dark:text-sky-100'
+          }`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{runtimeNotice.title}</p>
+                <p className="mt-1 text-xs leading-5 opacity-90">{runtimeNotice.body}</p>
+              </div>
+              {modeOverride === 'install-tmux' ? (
+                <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {runtimeNotice.allowInstall && modeOverride !== 'install-tmux' ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setModeOverride('install-tmux');
+                    setLaunchNonce((current) => current + 1);
+                  }}
+                >
+                  {dependencyStatus?.installerLabel ?? 'Install tmux'}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setLaunchNonce((current) => current + 1)}
+              >
+                Retry terminal
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {dragActive && (
         <div className="pointer-events-none absolute inset-0 z-10 border-2 border-dashed border-revival-accent-400 bg-revival-accent-200/10 dark:bg-revival-accent-900/20" />
       )}

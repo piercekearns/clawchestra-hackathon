@@ -53,7 +53,7 @@ Individual roadmap item docs live in `roadmap/` folder.
 | ClawOS | ✅ Minimal | ❌ Markdown bullets | ~8 active | ~35 completed | ❌ Missing |
 | memestr | ✅ Minimal | ❌ Markdown bullets | ~15 active | ~17 completed | ❌ Missing |
 | Shopify-Fabric-Theme | ✅ Minimal | ❌ Markdown bullets | ~34 active | ~40 completed | ❌ Missing |
-| piercekearns.com | ✅ Minimal | ❌ Markdown bullets | 0 active | ~8 completed | ❌ Missing |
+| personal-site | ✅ Minimal | ❌ Markdown bullets | 0 active | ~8 completed | ❌ Missing |
 | clawd | ✅ Minimal | N/A (no roadmap) | N/A | N/A | ❌ Missing |
 
 ---
@@ -66,7 +66,7 @@ For each repo, enrich the existing PROJECT.md with data from catalog stubs and t
 
 **Current state:** Has title, status, priority, type, tags, icon, lastActivity, nextAction.
 **Enrichment needed:**
-- Add `repo: piercekearns/pipeline-dashboard` (if public)
+- Add `repo: owner/repo` (if public)
 - Update `nextAction` to reflect current state (data retrofit)
 - Add markdown body with brief project description
 
@@ -93,7 +93,7 @@ For each repo, enrich the existing PROJECT.md with data from catalog stubs and t
 - Add `nextAction` from catalog or current roadmap P1 #1
 - Add markdown body with project description
 
-### 1.5 piercekearns.com/PROJECT.md
+### 1.5 personal-site/PROJECT.md
 
 **Current state:** Has title, status, type, tags, icon, lastActivity. Missing nextAction.
 **Enrichment needed:**
@@ -509,7 +509,7 @@ items:
 
 **Item count verification:** 34 active YAML items + 7+ CHANGELOG entries + full 800-line markdown body.
 
-### 2.4 piercekearns.com/ROADMAP.md
+### 2.4 personal-site/ROADMAP.md
 
 **Conversion strategy:**
 - 0 active items. YAML `items:` array is empty.
@@ -551,14 +551,14 @@ entries:
 ### 3.1 ClawOS/CHANGELOG.md — Create with 8 entries from completed phases
 ### 3.2 memestr/CHANGELOG.md — Create with 17+ entries from completed phases and section
 ### 3.3 Shopify-Fabric-Theme/CHANGELOG.md — Create with 7+ entries from completed archive
-### 3.4 piercekearns.com/CHANGELOG.md — Create with 8 entries (all completed items)
+### 3.4 personal-site/CHANGELOG.md — Create with 8 entries (all completed items)
 ### 3.5 clawd/CHANGELOG.md — Skip (no roadmap, nothing to migrate)
 
 ---
 
 ## Phase 4: Enrich Idea PROJECT.md Files
 
-The 15 idea projects in `~/clawdbot-sandbox/projects/` already have minimal PROJECT.md files. Enrich them with data from their corresponding catalog stubs where available.
+The 15 idea projects in `~/openclaw-workspace/projects/` already have minimal PROJECT.md files. Enrich them with data from their corresponding catalog stubs where available.
 
 **Catalog stubs to pull from:**
 - `catalog/projects/ideas/bitchat-research.md` → bitchat/
@@ -600,7 +600,7 @@ After all data work, verify:
 
 | File | Action |
 |------|--------|
-| `~/repos/pipeline-dashboard/PROJECT.md` | Enrich (add repo, update nextAction) |
+| `<repo-root>/PROJECT.md` | Enrich (add repo, update nextAction) |
 | `~/repos/ClawOS/PROJECT.md` | Enrich (minor) |
 | `~/repos/ClawOS/ROADMAP.md` | Convert to YAML frontmatter |
 | `~/repos/ClawOS/CHANGELOG.md` | Create |
@@ -610,8 +610,8 @@ After all data work, verify:
 | `~/repos/Shopify-Fabric-Theme/PROJECT.md` | Enrich (add repo, nextAction) |
 | `~/repos/Shopify-Fabric-Theme/ROADMAP.md` | Convert to YAML frontmatter |
 | `~/repos/Shopify-Fabric-Theme/CHANGELOG.md` | Create |
-| `~/repos/piercekearns.com/PROJECT.md` | Enrich (minor) |
-| `~/repos/piercekearns.com/ROADMAP.md` | Convert to YAML frontmatter |
-| `~/repos/piercekearns.com/CHANGELOG.md` | Create |
+| `~/repos/personal-site/PROJECT.md` | Enrich (minor) |
+| `~/repos/personal-site/ROADMAP.md` | Convert to YAML frontmatter |
+| `~/repos/personal-site/CHANGELOG.md` | Create |
 | `~/repos/clawd/PROJECT.md` | Enrich (minor) |
-| 15x `~/clawdbot-sandbox/projects/*/PROJECT.md` | Enrich with catalog data |
+| 15x `~/openclaw-workspace/projects/*/PROJECT.md` | Enrich with catalog data |

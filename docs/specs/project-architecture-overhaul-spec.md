@@ -173,7 +173,7 @@ Update to reflect current reality:
 | ClawOS | ❌ | ✅ | ❌ markdown | ❌ |
 | memestr | ❌ | ✅ | ❌ markdown | ❌ |
 | Shopify-Fabric-Theme | ❌ | ✅ | ❌ markdown | ❌ |
-| piercekearns.com | ❌ | ✅ | ❌ markdown | ❌ |
+| personal-site | ❌ | ✅ | ❌ markdown | ❌ |
 | clawd | ❌ | ❌ | N/A | ❌ |
 
 **Catalog entries (25 .md files):**
@@ -195,7 +195,7 @@ For each repo in `~/repos/`, create `PROJECT.md` with frontmatter migrated from 
 | `ClawOS` | `catalog/projects/nostr/clawos/CONTEXT.md` | Has IDEAS.md too — keep as content |
 | `memestr` | `catalog/projects/nostr/memestr.md` | Live on DigitalOcean |
 | `Shopify-Fabric-Theme` | `catalog/projects/revival/REVIVAL.md` | Revival Fightwear store |
-| `piercekearns.com` | No catalog entry found | Personal site, needs fresh PROJECT.md |
+| `personal-site` | No catalog entry found | Personal site, needs fresh PROJECT.md |
 | `clawd` | `catalog/projects/nostr/clawd.md` or similar | OpenClaw/Clawd bot |
 
 For each:
@@ -211,7 +211,7 @@ For each:
 - `ClawOS/ROADMAP.md`
 - `memestr/ROADMAP.md`
 - `Shopify-Fabric-Theme/ROADMAP.md`
-- `piercekearns.com/ROADMAP.md`
+- `personal-site/ROADMAP.md`
 
 For each:
 1. Read existing markdown content, extract item names/statuses
@@ -295,7 +295,7 @@ After all data work:
 ### 4.1 Settings Schema
 
 - Add `scanPaths: string[]` to settings
-- Default: `["/Users/piercekearns/repos", "/Users/piercekearns/projects"]`
+- Default: `["~/repos", "~/projects"]`
 - Keep `catalogRoot` temporarily for migration, mark deprecated
 - Update `sanitize_settings()` in Rust backend
 

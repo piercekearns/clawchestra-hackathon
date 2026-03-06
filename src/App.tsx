@@ -916,6 +916,13 @@ export default function App() {
           }
         }
 
+        if (store.hubDrawerOpen && store.hubActiveChatId) {
+          const visibleChat = hubChats.find((c) => c.id === store.hubActiveChatId);
+          if (visibleChat?.type === 'terminal' && !visibleChat.archived) {
+            activeChatIds.add(visibleChat.id);
+          }
+        }
+
         store.setActiveTerminalChatIds(activeChatIds);
       } catch {
         // tmux discovery is best-effort

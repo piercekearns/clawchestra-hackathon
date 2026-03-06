@@ -185,7 +185,7 @@ No undo window. No optimistic UI. No watcher suppression flag. The filesystem wr
 ### A.6 Backfill Existing Completed Items
 
 One-time task during Phase A implementation:
-- Audit `~/repos/pipeline-dashboard/ROADMAP.md` for items with `status: complete`
+- Audit `<repo-root>/ROADMAP.md` for items with `status: complete`
 - Migrate them to CHANGELOG.md using the new `migrateCompletedItem()` function
 - Verify CHANGELOG.md has the expected entries after backfill
 
@@ -334,7 +334,7 @@ For each repo in `~/repos/`:
 | `ClawOS` | `catalog/projects/nostr/clawos/CONTEXT.md` | Has IDEAS.md — keep as content |
 | `memestr` | `catalog/projects/nostr/memestr.md` | Live on DigitalOcean |
 | `Shopify-Fabric-Theme` | `catalog/projects/revival/REVIVAL.md` | Revival Fightwear store |
-| `piercekearns.com` | No catalog entry | Needs fresh PROJECT.md |
+| `personal-site` | No catalog entry | Needs fresh PROJECT.md |
 | `clawd` | `catalog/projects/nostr/clawd.md` | OpenClaw/Clawd bot |
 
 For each:
@@ -349,7 +349,7 @@ For each:
 - `ClawOS/ROADMAP.md`
 - `memestr/ROADMAP.md`
 - `Shopify-Fabric-Theme/ROADMAP.md`
-- `piercekearns.com/ROADMAP.md`
+- `personal-site/ROADMAP.md`
 
 For each:
 1. Read existing markdown content, identify items and their statuses
@@ -410,7 +410,7 @@ After all data work, run a quick validation:
 **Files:** `src/lib/settings.ts`, `src-tauri/src/lib.rs`
 
 - Add `scanPaths: string[]` to `DashboardSettings`
-- Default: `["/Users/piercekearns/repos", "/Users/piercekearns/projects"]`
+- Default: `["~/repos", "~/projects"]`
 - `scanPaths` replaces `catalogRoot`, `workspaceRoots`, AND `approvedExternalPaths`
 - Write operations permitted within any scan path
 - **One-step migration:** Update `sanitize_settings()` in Rust — if `scanPaths` is empty/missing, populate from `workspaceRoots` (if present) or fall back to defaults. Remove `catalogRoot`, `workspaceRoots`, `approvedExternalPaths` from the settings struct. No deprecated fields.

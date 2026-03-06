@@ -23,7 +23,7 @@ function extractErrorMessage(error: unknown): string {
 }
 
 function extractUpdateLogPath(updateStartMessage: string): string | null {
-  const match = /log:\s*(\/tmp\/clawchestra-update-\d+\.log)/.exec(updateStartMessage);
+  const match = /log:\s*([^\s)]+clawchestra-update-\d+\.log)/.exec(updateStartMessage);
   return match?.[1] ?? null;
 }
 

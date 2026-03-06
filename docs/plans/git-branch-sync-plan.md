@@ -65,7 +65,7 @@ Out of scope:
 
 ### Work
 
-1. Extend Tauri backend (`/Users/piercekearns/repos/pipeline-dashboard/src-tauri/src/lib.rs`) with branch-list/status command returning:
+1. Extend Tauri backend (`<repo-root>/src-tauri/src/lib.rs`) with branch-list/status command returning:
    - branch name
    - upstream presence
    - ahead/behind/diverged flags
@@ -93,7 +93,7 @@ Out of scope:
 
 ### Work
 
-1. Extend `/Users/piercekearns/repos/pipeline-dashboard/src/components/SyncDialog.tsx` with:
+1. Extend `<repo-root>/src/components/SyncDialog.tsx` with:
    - `Also sync to` branch selector
    - branch status badges (`✓`, `↑`, `↓`, `⚠`, `(local)`)
    - per-branch push toggle only when upstream exists

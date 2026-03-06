@@ -257,7 +257,7 @@ export default function (api) {
 
 ### How Clawchestra uses it
 
-**Local (same machine):** Direct filesystem access to `~/.openclaw/clawchestra/db.json`. Zero overhead. This is what Pierce uses now and what a friend with local OpenClaw would use.
+**Local (same machine):** Direct filesystem access to `~/.openclaw/clawchestra/db.json`. Zero overhead. This is the current single-machine setup and what a friend with local OpenClaw would use.
 
 **Remote (VPS or different machine):**
 ```
@@ -324,7 +324,7 @@ When Clawchestra integrates with OpenClaw, it injects context into OpenClaw's sy
 Each Clawchestra instance generates a UUID at first launch. This UUID is:
 - Stored locally in Clawchestra's settings
 - Sent with every request to OpenClaw (in headers or request body)
-- Registered in OpenClaw's context: "Client `abc-123` is Pierce's MacBook desktop, client `def-456` is Pierce's iPhone"
+- Registered in OpenClaw's context: "Client `abc-123` is Desktop A, client `def-456` is Mobile B"
 
 ### Same session across devices
 
@@ -343,7 +343,7 @@ Database location: ~/.openclaw/clawchestra/db.json
 Database format: JSON (see schema below)
 
 Known clients:
-- abc-123: Pierce's MacBook (desktop, macOS)
+- abc-123: Desktop A (desktop, macOS)
 - [more as they register]
 
 When a Clawchestra client asks about project state, roadmap items, or kanban
@@ -620,7 +620,7 @@ The gitignored `state.json` is always on disk regardless of branch. It could con
 
 ## 13. Multi-Platform Roadmap
 
-### Platform priority (Pierce's stated order)
+### Platform priority (stated project order)
 
 1. **Desktop (macOS, Linux, Windows)** — nail this first
 2. **Mobile (iOS first, Android second)** — separate apps, some reusable logic
@@ -754,7 +754,7 @@ Architecture Direction runs to completion first, then First Friend Readiness. No
 | 23 | Some architecture changes block first-friend-readiness | **Confirmed** | state.json, CLAUDE.md injection, rename, OpenClaw training — pre-friend |
 | 24 | Multi-device sync deferred | **Confirmed** | Post-first-friend; triggered by second device |
 | 25 | Mobile/web apps deferred | **Confirmed** | Desktop first; each platform triggers architecture upgrades |
-| 26 | Desktop: iOS first, Android second, web last | **Confirmed** | Per Pierce's stated priority |
+| 26 | Desktop: iOS first, Android second, web last | **Confirmed** | Per the stated project priority |
 | 27 | Branch injection retry mechanism in project settings | **New — confirmed** | Skipped branches are tracked; user can retry anytime; persistent notification for missing branches |
 | 28 | Front-load injection behind other onboarding steps | **New — confirmed** | Start injection in background, present next questions; makes 30-90s feel shorter |
 | 29 | New branches inherit via standard git branching | **Confirmed** | `git checkout -b` copies current HEAD including CLAUDE.md; covers 99% of cases |
@@ -779,7 +779,7 @@ Architecture Direction runs to completion first, then First Friend Readiness. No
 
 Branch injection happens whenever a project is added — during onboarding OR later via settings. Runs after user confirmation. Front-loaded behind other onboarding steps. Retry available in project settings.
 
-**Progress visibility (per Pierce feedback):** The injection process must NOT be invisible. The user should know a process is running. UX:
+**Progress visibility:** The injection process must NOT be invisible. The user should know a process is running. UX:
 - Show a visible progress indicator while injection runs (e.g., "Setting up agent guidance... 8/15 branches")
 - If ALL branches succeed: confirm completion and auto-dismiss (e.g., "Agent guidance added to all 15 branches" → fades after 3 seconds)
 - If SOME branches fail: the confirmation stays visible and interactive — user can see which branches failed, why, and retry them. Don't auto-dismiss failures.
@@ -844,7 +844,7 @@ This table maps real-world milestones to the architecture changes they trigger. 
 |-----------|---------------------|--------|-----------|
 | **First friend tests (local OpenClaw)** | state.json, CLAUDE.md injection, rename, OpenClaw training | Medium | Yes — do before handoff |
 | **First friend tests (VPS OpenClaw)** | Data endpoint extension, remote connection setup | Small | Depends on friend's setup |
-| **Pierce uses second desktop** | Per-field timestamps in sync payload | Small | No — LWW works until this happens |
+| **Second desktop is added** | Per-field timestamps in sync payload | Small | No — LWW works until this happens |
 | **Mobile app development begins** | Data endpoint (if not built), remote sync, per-device UI settings | Medium | Yes — blocks mobile |
 | **Second user added to same kanban** | Operation-based sync, conflict UI | Large | Yes — blocks multi-user |
 | **Autonomous bots run frequently on same machine** | File locking on state.json | Small | Partially — already relevant |

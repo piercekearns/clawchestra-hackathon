@@ -227,10 +227,10 @@ Deliverable:
 
 ## References and Internal Context
 
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/docs/CHAT-DRAWER-SPEC.md`
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/roadmap/chat-drawer-ui.md`
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/src/App.tsx`
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/src/components/OpenClawComposer.tsx`
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/src/lib/gateway.ts`
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/src/lib/store.ts`
-- `/Users/piercekearns/clawdbot-sandbox/projects/pipeline-dashboard/src-tauri/src/lib.rs`
+- `<legacy-project-root>/docs/CHAT-DRAWER-SPEC.md`
+- `<legacy-project-root>/roadmap/chat-drawer-ui.md`
+- `<legacy-project-root>/src/App.tsx`
+- `<legacy-project-root>/src/components/OpenClawComposer.tsx`
+- `<legacy-project-root>/src/lib/gateway.ts`
+- `<legacy-project-root>/src/lib/store.ts`
+- `<legacy-project-root>/src-tauri/src/lib.rs`

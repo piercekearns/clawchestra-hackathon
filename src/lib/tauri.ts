@@ -152,6 +152,7 @@ type TauriCommands = {
   };
   read_file: { args: { path: string }; return: string };
   write_file: { args: { path: string; content: string }; return: void };
+  write_temp_file: { args: { fileName: string; bytes: number[] }; return: string };
   delete_file: { args: { path: string }; return: void };
   remove_path: { args: { path: string }; return: void };
   resolve_path: { args: { path: string }; return: string };
@@ -497,6 +498,10 @@ type TauriCommands = {
     args: { sessionName: string; lines: number };
     return: string;
   };
+  terminal_dependency_status: {
+    args: Record<string, never>;
+    return: TerminalDependencyStatus;
+  };
   confirm_quit: {
     args: Record<string, never>;
     return: void;
@@ -617,6 +622,10 @@ export async function readFile(path: string): Promise<string> {
 
 export async function writeFile(path: string, content: string): Promise<void> {
   return typedInvoke('write_file', { path, content });
+}
+
+export async function writeTempFile(fileName: string, bytes: number[]): Promise<string> {
+  return typedInvoke('write_temp_file', { fileName, bytes });
 }
 
 export async function deleteFile(path: string): Promise<void> {
@@ -1166,6 +1175,15 @@ export interface DetectedAgent {
   available: boolean;
 }
 
+export interface TerminalDependencyStatus {
+  platform: string;
+  tmuxAvailable: boolean;
+  tmuxPath: string | null;
+  installerLabel: string | null;
+  installerCommand: string | null;
+  installerNote: string;
+}
+
 export async function detectAgents(): Promise<DetectedAgent[]> {
   return typedInvoke('detect_agents');
 }
@@ -1184,6 +1202,10 @@ export async function tmuxKillAllClawchestraSessions(): Promise<void> {
 
 export async function tmuxCapturePane(sessionName: string, lines: number = 50): Promise<string> {
   return typedInvoke('tmux_capture_pane', { sessionName, lines });
+}
+
+export async function getTerminalDependencyStatus(): Promise<TerminalDependencyStatus> {
+  return typedInvoke('terminal_dependency_status');
 }
 
 export async function confirmQuit(): Promise<void> {

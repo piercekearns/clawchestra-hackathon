@@ -492,7 +492,7 @@ if (state === 'compacted' || state === 'compacting' || state === 'compaction_com
 - Behavior is intermittent (not every turn), but frequent enough to disrupt normal chat workflow.
 
 **Investigation evidence (2026-02-23):**
-- Local runtime DB examined: `/Users/piercekearns/Library/Application Support/Clawchestra/chat.db`
+- Local runtime DB examined: `~/Library/Application Support/Clawchestra/chat.db`
 - Confirmed user-turn gap with no assistant/system event between two user prompts:
   - User message at `2026-02-23 11:01:30`
   - Next user “Are you stuck?” at `2026-02-23 11:14:39`

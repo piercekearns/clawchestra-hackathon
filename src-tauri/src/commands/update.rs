@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 use crate::commands::git::{categorize_dirty_file, run_git, FileCategory};
-use crate::util::is_pid_alive;
+use crate::util::{is_pid_alive, temp_dir as platform_temp_dir};
 use crate::{
     default_settings, load_dashboard_settings, BUILD_COMMIT,
 };
@@ -60,7 +60,7 @@ fn get_current_git_head(repo_root: &str) -> Option<String> {
 }
 
 pub(crate) fn read_update_lock_state() -> UpdateLockState {
-    let lock_dir = Path::new("/tmp/clawchestra-update.lock");
+    let lock_dir = platform_temp_dir().join("clawchestra-update.lock");
     if !lock_dir.exists() {
         return UpdateLockState {
             lock_present: false,
@@ -70,7 +70,7 @@ pub(crate) fn read_update_lock_state() -> UpdateLockState {
         };
     }
 
-    let age_secs = fs::metadata(lock_dir)
+    let age_secs = fs::metadata(&lock_dir)
         .ok()
         .and_then(|meta| meta.modified().ok())
         .and_then(|modified| modified.elapsed().ok())
@@ -104,6 +104,15 @@ pub(crate) fn get_app_update_lock_state() -> Result<UpdateLockState, String> {
 
 #[tauri::command]
 pub(crate) fn check_for_update() -> Result<UpdateStatus, String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        return Ok(UpdateStatus {
+            update_available: false,
+            build_commit: BUILD_COMMIT.to_string(),
+            current_commit: None,
+        });
+    }
+
     let settings = load_dashboard_settings().unwrap_or_else(|_| default_settings());
     if settings.update_mode != "source-rebuild" {
         return Ok(UpdateStatus {
@@ -206,7 +215,8 @@ pub(crate) async fn run_app_update(
     let _ = app_handle.save_window_state(StateFlags::all());
 
     let log_path = format!(
-        "/tmp/clawchestra-update-{}.log",
+        "{}/clawchestra-update-{}.log",
+        platform_temp_dir().to_string_lossy(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())

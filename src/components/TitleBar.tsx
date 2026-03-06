@@ -13,6 +13,8 @@ interface TitleBarProps {
 }
 
 export function TitleBar({ settingsMode = false }: TitleBarProps) {
+  const isMacOS = typeof navigator !== 'undefined'
+    && /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
   const setSidebarOpen = useDashboardStore((s) => s.setSidebarOpen);
   const layoutOrientation = useDashboardStore((s) => s.layoutOrientation);
@@ -47,8 +49,8 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
       onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
     >
       <div className="flex items-center gap-2">
-        {/* Left padding for macOS traffic lights (trafficLightPosition: x=22) */}
-        <div className="w-[78px] shrink-0" />
+        {/* Reserve space for native traffic lights on macOS only. */}
+        {isMacOS ? <div className="w-[78px] shrink-0" /> : null}
 
         {/* Sidebar toggle */}
         <Tooltip text={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'} position="below">

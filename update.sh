@@ -10,7 +10,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="Clawchestra"
 INSTALL_PATH="${CLAWCHESTRA_INSTALL_PATH:-/Applications/$APP_NAME.app}"
 RESTART_AFTER_BUILD="${CLAWCHESTRA_RESTART_AFTER_BUILD:-1}"
-LOCK_DIR="/tmp/clawchestra-update.lock"
+TMP_ROOT="${TMPDIR:-/tmp}"
+LOCK_DIR="$TMP_ROOT/clawchestra-update.lock"
 LOCK_PID_FILE="$LOCK_DIR/pid"
 BUILD_DIR="$SCRIPT_DIR"
 TMP_WORKTREE=""
@@ -77,7 +78,7 @@ prepare_clean_worktree() {
     return 1
   fi
 
-  TMP_WORKTREE="$(mktemp -d /tmp/clawchestra-update-worktree.XXXXXX)"
+  TMP_WORKTREE="$(mktemp -d "$TMP_ROOT/clawchestra-update-worktree.XXXXXX")"
   echo "ℹ️ Retrying from clean HEAD worktree: $TMP_WORKTREE"
 
   if git -C "$SCRIPT_DIR" worktree add --detach "$TMP_WORKTREE" HEAD >/dev/null; then

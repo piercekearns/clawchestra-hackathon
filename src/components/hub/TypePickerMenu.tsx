@@ -110,64 +110,60 @@ export function TypePickerMenu({
               <MessageSquare className="h-3.5 w-3.5" />
               OpenClaw Chat
             </button>
-            {tmuxAvailable ? (
-              <div
-                className="relative"
-                onMouseEnter={() => setTerminalSubmenu(true)}
-                onMouseLeave={() => setTerminalSubmenu(false)}
-              >
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                >
-                  <Terminal className="h-3.5 w-3.5" />
-                  <span>Terminal</span>
-                  <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
-                </button>
-                {terminalSubmenu && (
-                  <div className="absolute left-full top-0 z-[200] pl-1">
-                    <div className="w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
-                      {codingAgents.map((agent) => (
-                        <button
-                          key={agent.agentType}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAgentSelect(agent.agentType as HubAgentType);
-                          }}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                        >
-                          <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
-                          {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAgentSelect('generic');
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                      >
-                        <Terminal className="h-3.5 w-3.5 text-neutral-400" />
-                        Shell
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
+            <div
+              className="relative"
+              onMouseEnter={() => setTerminalSubmenu(true)}
+              onMouseLeave={() => setTerminalSubmenu(false)}
+            >
               <button
                 type="button"
-                disabled
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-400 dark:text-neutral-600 cursor-not-allowed"
-                title="Requires tmux (brew install tmux)"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 <Terminal className="h-3.5 w-3.5" />
                 <span>Terminal</span>
-                <span className="ml-auto text-[10px]">No tmux</span>
+                {!tmuxAvailable ? (
+                  <span className="ml-auto text-[10px] text-amber-600 dark:text-amber-400">Install tmux</span>
+                ) : (
+                  <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
+                )}
               </button>
-            )}
+              {terminalSubmenu && (
+                <div className="absolute left-full top-0 z-[200] pl-1">
+                  <div className="w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                    {!tmuxAvailable ? (
+                      <div className="px-3 py-1.5 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
+                        tmux is missing. Clawchestra will open a temporary terminal and offer in-app remediation.
+                      </div>
+                    ) : null}
+                    {codingAgents.map((agent) => (
+                      <button
+                        key={agent.agentType}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAgentSelect(agent.agentType as HubAgentType);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
+                        {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAgentSelect('generic');
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    >
+                      <Terminal className="h-3.5 w-3.5 text-neutral-400" />
+                      Shell
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </>,
         document.body,

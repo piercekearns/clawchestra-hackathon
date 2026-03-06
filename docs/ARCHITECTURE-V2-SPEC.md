@@ -33,12 +33,12 @@ Non-goal for this document: app rename and brand changes. Keep rename as a separ
 |---------|---------|---------|
 | `catalogRoot` | Where project catalog entries (markdown records) live | `~/Library/Application Support/Pipeline Dashboard/catalog` |
 | `workspaceRoots[]` | Allowed locations for creating/selecting project folders | `["~/repos"]` |
-| `openclawWorkspacePath` | OpenClaw's operating context (for chat commands, optional) | `~/clawdbot-sandbox` |
-| `appSourcePath` | Where Pipeline Dashboard source lives (for source-based self-update) | `~/repos/pipeline-dashboard` |
+| `openclawWorkspacePath` | OpenClaw's operating context (for chat commands, optional) | `~/openclaw-workspace` |
+| `appSourcePath` | Where Pipeline Dashboard source lives (for source-based self-update) | `<repo-root>` |
 
 ### 1.2 Why This Model
 
-**Current state:** Everything is hardcoded to `/Users/piercekearns/clawdbot-sandbox/projects`. App lives inside the sandbox. Paths are baked into `lib.rs` and `update.sh`.
+**Current state:** Everything is hardcoded to `<legacy-project-root>`. App lives inside the sandbox. Paths are baked into `lib.rs` and `update.sh`.
 
 **Problems:**
 - Can't move app without breaking update feature
@@ -259,12 +259,12 @@ catalogVersion: 1
 
 # Location
 # Required when trackingMode=linked
-localPath: /Users/piercekearns/repos/pipeline-dashboard  # Absolute canonical path
+localPath: <repo-root>  # Absolute canonical path
 
 # Optional
 priority: 1  # If omitted, coordinator assigns max+1 in target column
 tags: [tauri, react, dashboard]
-repo: piercekearns/pipeline-dashboard     # GitHub slug
+repo: owner/repo     # GitHub slug
 icon: "🚀"
 lastActivity: "2026-02-11"
 parent: pipeline-dashboard                # Optional relationship
@@ -870,7 +870,7 @@ ID derivation rule:
 ### 6.1 Current State
 
 ```
-~/clawdbot-sandbox/
+~/openclaw-workspace/
 ├── projects/
 │   ├── pipeline-dashboard/     ← App source lives here
 │   │   ├── src/
@@ -887,7 +887,7 @@ ID derivation rule:
 ### 6.2 Target State
 
 ```
-~/repos/pipeline-dashboard/          ← App source (standalone)
+<repo-root>/          ← App source (standalone)
 ├── src/
 ├── src-tauri/
 ├── docs/
@@ -897,13 +897,13 @@ ID derivation rule:
 ├── settings.json
 └── catalog/
     ├── projects/
-    │   ├── pipeline-dashboard.md   ← Points to ~/repos/pipeline-dashboard
+    │   ├── pipeline-dashboard.md   ← Points to <repo-root>
     │   ├── clawos.md               ← Points to ~/ClawOS
     │   └── ...
     └── templates/
         └── ...
 
-~/clawdbot-sandbox/                  ← OpenClaw workspace (unchanged)
+~/openclaw-workspace/                  ← OpenClaw workspace (unchanged)
 ├── projects/                        ← Can still be a workspace root
 └── ...
 ```
@@ -916,7 +916,7 @@ ID derivation rule:
 
 1. **Create new app repo**
    ```bash
-   git clone <current-remote-or-local> ~/repos/pipeline-dashboard
+   git clone <current-remote-or-local> <repo-root>
    # Preserves tracked history/remotes; local-only artifacts (stashes, hooks, worktree metadata) are not preserved
    ```
 
@@ -924,15 +924,15 @@ ID derivation rule:
    - Create settings file with paths
    - Set `appSourcePath` to new location
    - Add `~/repos` to `workspaceRoots` as default
-   - Legacy roots (for example `~/clawdbot-sandbox/projects`) are transitional and optional
-   - Broader roots (for example `~/clawdbot-sandbox`) require explicit user approval in settings
+   - Legacy roots (for example `~/openclaw-workspace/projects`) are transitional and optional
+   - Broader roots (for example `~/openclaw-workspace`) require explicit user approval in settings
 
 3. **Migrate catalog entries**
    - For each existing project in old location:
      - Create catalog entry in new `catalogRoot`
      - If project folder moved, set `localPath` to new location
      - Else set `localPath` to existing location
-   - Special case: `pipeline-dashboard` entry must point to `~/repos/pipeline-dashboard` after app move
+   - Special case: `pipeline-dashboard` entry must point to `<repo-root>` after app move
    - Initialize `catalogVersion: 1` for all migrated entries
    - Projects don't move, just the tracking
    - Apply deterministic migration conflict policy:
@@ -945,7 +945,7 @@ ID derivation rule:
 4. **Update hardcoded paths**
    - `lib.rs`: Read from settings instead of hardcoded
    - `update.sh`: Use `appSourcePath` from settings
-   - Remove all `/Users/piercekearns/...` references
+   - Remove all owner-specific absolute path references
 
 5. **Test**
    - All projects still appear

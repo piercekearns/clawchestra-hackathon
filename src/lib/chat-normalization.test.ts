@@ -9,7 +9,7 @@ import {
 describe('chat normalization helpers', () => {
   it('unwraps context wrapper that uses explicit user request marker', () => {
     const wrapped =
-      'User workspace path: /Users/piercekearns/clawdbot-sandbox\n\nUser request:\nPlease run /build for this plan.';
+      'User workspace path: /home/tester/openclaw-workspace\n\nUser request:\nPlease run /build for this plan.';
     expect(unwrapGatewayContextWrappedUserContent(wrapped)).toBe(
       'Please run /build for this plan.',
     );
@@ -25,7 +25,7 @@ describe('chat normalization helpers', () => {
 
   it('unwraps canonical context wrapper with blank line', () => {
     const wrapped =
-      'User workspace path: /Users/piercekearns/clawdbot-sandbox\n\nPlease run /build for this plan.';
+      'User workspace path: /home/tester/openclaw-workspace\n\nPlease run /build for this plan.';
     expect(unwrapGatewayContextWrappedUserContent(wrapped)).toBe(
       'Please run /build for this plan.',
     );
@@ -33,7 +33,7 @@ describe('chat normalization helpers', () => {
 
   it('unwraps flattened single-line workspace wrapper', () => {
     const wrapped =
-      'User workspace path: /Users/piercekearns/clawdbot-sandbox Please run /build for this plan.';
+      'User workspace path: /home/tester/openclaw-workspace Please run /build for this plan.';
     expect(unwrapGatewayContextWrappedUserContent(wrapped)).toBe(
       'Please run /build for this plan.',
     );
@@ -41,7 +41,7 @@ describe('chat normalization helpers', () => {
 
   it('normalizes content using unwrapped text when available', () => {
     const wrapped =
-      'User workspace path: /Users/piercekearns/clawdbot-sandbox\n\nPlease run /build for this plan.';
+      'User workspace path: /home/tester/openclaw-workspace\n\nPlease run /build for this plan.';
     expect(normalizeChatContentWithContextUnwrap(wrapped)).toBe(
       'Please run /build for this plan.',
     );
@@ -57,7 +57,7 @@ describe('chat normalization helpers', () => {
       '}',
       '```',
       '',
-      '[Thu 2026-02-19 05:15 GMT] User workspace path: /Users/piercekearns/clawdbot-sandbox User request: What version are we on?',
+      '[Thu 2026-02-19 05:15 GMT] User workspace path: /home/tester/openclaw-workspace User request: What version are we on?',
       '[message_id: abc-123]',
     ].join('\n');
     expect(unwrapGatewayContextWrappedUserContent(wrapped)).toBe(
@@ -75,7 +75,7 @@ describe('chat normalization helpers', () => {
       '}',
       '```',
       '',
-      'User workspace path: /Users/piercekearns/clawdbot-sandbox User request: run tests',
+      'User workspace path: /home/tester/openclaw-workspace User request: run tests',
     ].join('\n');
     expect(unwrapGatewayContextWrappedUserContent(wrapped)).toBe('run tests');
   });
@@ -92,7 +92,7 @@ describe('stripOpenClawEnvelope', () => {
       '}',
       '```',
       '',
-      '[Thu 2026-02-19 05:15 GMT] User workspace path: /Users/piercekearns/clawdbot-sandbox User request: What version are we on?',
+      '[Thu 2026-02-19 05:15 GMT] User workspace path: /home/tester/openclaw-workspace User request: What version are we on?',
       '[message_id: abc-123]',
     ].join('\n');
     expect(stripOpenClawEnvelope(raw)).toBe('What version are we on?');
@@ -115,7 +115,7 @@ describe('stripOpenClawEnvelope', () => {
 
   it('strips timestamp + workspace wrapper without conversation info', () => {
     const raw =
-      '[Thu 2026-02-19 05:15 GMT] User workspace path: /Users/piercekearns/clawdbot-sandbox User request: run tests';
+      '[Thu 2026-02-19 05:15 GMT] User workspace path: /home/tester/openclaw-workspace User request: run tests';
     expect(stripOpenClawEnvelope(raw)).toBe('run tests');
   });
 

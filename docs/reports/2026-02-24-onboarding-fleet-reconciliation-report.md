@@ -8,7 +8,7 @@ A full tracked-project audit and repair pass was executed on **2026-02-24** agai
 
 ---
 
-**Source DB:** `/Users/piercekearns/.openclaw/clawchestra/db.json`
+**Source DB:** `~/.openclaw/clawchestra/db.json`
 **Tracked projects audited:** `5`
 **Repairs applied:** `0`
 **Flagged for remediation:** `0`
@@ -20,11 +20,11 @@ A full tracked-project audit and repair pass was executed on **2026-02-24** agai
 
 | Project ID | Path | Before Step | Actions | After Step | Warnings | Invariants Pass |
 | --- | --- | --- | --- | --- | --- | --- |
-| `piercekearns-com` | `/Users/piercekearns/repos/piercekearns.com` | `Complete` | `none` | `Complete` | `none` | `true` |
-| `memestr` | `/Users/piercekearns/repos/memestr` | `Complete` | `none` | `Complete` | `none` | `true` |
-| `clawos` | `/Users/piercekearns/repos/ClawOS` | `Complete` | `none` | `Complete` | `none` | `true` |
-| `clawchestra` | `/Users/piercekearns/repos/clawchestra` | `Complete` | `none` | `Complete` | `none` | `true` |
-| `shopify-fabric-theme` | `/Users/piercekearns/repos/Shopify-Fabric-Theme` | `Complete` | `none` | `Complete` | `none` | `true` |
+| `personal-site` | `~/repos/personal-site` | `Complete` | `none` | `Complete` | `none` | `true` |
+| `memestr` | `~/repos/memestr` | `Complete` | `none` | `Complete` | `none` | `true` |
+| `clawos` | `~/repos/ClawOS` | `Complete` | `none` | `Complete` | `none` | `true` |
+| `clawchestra` | `<repo-root>` | `Complete` | `none` | `Complete` | `none` | `true` |
+| `shopify-fabric-theme` | `~/repos/Shopify-Fabric-Theme` | `Complete` | `none` | `Complete` | `none` | `true` |
 
 ## Canonical Invariants Verified
 

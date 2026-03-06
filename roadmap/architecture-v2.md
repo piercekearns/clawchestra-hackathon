@@ -27,8 +27,8 @@ This deliverable is complete for MVP scope (Phases 1-5):
 - [x] **Phase 5**: migration runner, hardcoded-path removal, settings-based cutover hooks
 
 Finalized operator cutover state:
-- `appSourcePath` points to `/Users/piercekearns/repos/clawchestra`
-- `workspaceRoots` is repos-only (`/Users/piercekearns/repos`)
+- `appSourcePath` points to `<repo-root>`
+- `workspaceRoots` is repos-only (`~/repos`)
 - legacy sandbox app copy retired from `clawdbot-sandbox/projects`
 
 ## What Is Deferred

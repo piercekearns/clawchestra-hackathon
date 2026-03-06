@@ -25,7 +25,7 @@ This plan executes the internal rename as a controlled migration, not a broad te
 ### Work
 
 1. Confirm session key baseline: `agent:main:clawchestra`.
-2. Confirm final Tauri identifier target: `io.github.piercekearns.clawchestra`.
+2. Confirm final Tauri identifier target: `ai.clawchestra.desktop`.
 3. Confirm repo folder rename is out of scope for this implementation.
 4. Confirm migration policy:
    - migrate settings/chat directories idempotently
@@ -54,7 +54,7 @@ This plan executes the internal rename as a controlled migration, not a broad te
    - `src-tauri/Cargo.toml` package/lib names + description
    - `src-tauri/src/main.rs` lib entry rename
 2. Update Tauri identity/config strings:
-   - `src-tauri/tauri.conf.json` identifier (`io.github.piercekearns.clawchestra`)
+   - `src-tauri/tauri.conf.json` identifier (`ai.clawchestra.desktop`)
    - capability descriptions
 3. Update session key constants in:
    - `src-tauri/src/lib.rs`

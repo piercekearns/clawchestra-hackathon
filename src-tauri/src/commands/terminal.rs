@@ -1,3 +1,4 @@
+use crate::util::lookup_command;
 use serde::Serialize;
 use std::process::{Command, Stdio};
 
@@ -10,11 +11,49 @@ pub(crate) struct DetectedAgent {
     pub available: bool,
 }
 
-/// Resolve the user's login shell (defaults to /bin/zsh on macOS).
-fn user_shell() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TerminalDependencyStatus {
+    pub platform: String,
+    pub tmux_available: bool,
+    pub tmux_path: Option<String>,
+    pub installer_label: Option<String>,
+    pub installer_command: Option<String>,
+    pub installer_note: String,
 }
 
+#[cfg(not(target_os = "windows"))]
+/// Resolve the user's login shell (defaults to /bin/zsh on macOS, /bin/sh elsewhere).
+fn user_shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| {
+        if cfg!(target_os = "macos") {
+            "/bin/zsh".to_string()
+        } else {
+            "/bin/sh".to_string()
+        }
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn login_which(cmd: &str) -> Option<String> {
+    let output = Command::new("where")
+        .arg(cmd)
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
 /// Run `which <cmd>` inside the user's login shell to resolve its absolute path.
 ///
 /// Tries two strategies:
@@ -97,6 +136,109 @@ pub(crate) fn detect_agents() -> Vec<DetectedAgent> {
             }
         })
         .collect()
+}
+
+#[tauri::command]
+pub(crate) fn terminal_dependency_status() -> TerminalDependencyStatus {
+    let platform = std::env::consts::OS.to_string();
+    let tmux_path = login_which("tmux");
+    let tmux_available = tmux_path.is_some();
+
+    let (installer_label, installer_command, installer_note) = match platform.as_str() {
+        "macos" => {
+            if let Some(brew) = lookup_command("brew") {
+                let brew = brew.to_string_lossy().to_string();
+                (
+                    Some("Install tmux with Homebrew".to_string()),
+                    Some(format!("\"{brew}\" install tmux")),
+                    "tmux-backed terminals keep sessions alive when you close the drawer or relaunch the app.".to_string(),
+                )
+            } else {
+                (
+                    None,
+                    None,
+                    "tmux is missing and Homebrew was not found, so Clawchestra cannot do a one-click tmux install on this Mac yet.".to_string(),
+                )
+            }
+        }
+        "linux" => {
+            let sudo_prefix = lookup_command("sudo")
+                .map(|path| format!("\"{}\" ", path.to_string_lossy()))
+                .unwrap_or_default();
+
+            let linux_installer = if let Some(apt_get) = lookup_command("apt-get") {
+                let apt_get = apt_get.to_string_lossy().to_string();
+                Some((
+                    "Install tmux with apt".to_string(),
+                    format!("{sudo_prefix}\"{apt_get}\" update && {sudo_prefix}\"{apt_get}\" install -y tmux"),
+                ))
+            } else if let Some(dnf) = lookup_command("dnf") {
+                let dnf = dnf.to_string_lossy().to_string();
+                Some((
+                    "Install tmux with dnf".to_string(),
+                    format!("{sudo_prefix}\"{dnf}\" install -y tmux"),
+                ))
+            } else if let Some(yum) = lookup_command("yum") {
+                let yum = yum.to_string_lossy().to_string();
+                Some((
+                    "Install tmux with yum".to_string(),
+                    format!("{sudo_prefix}\"{yum}\" install -y tmux"),
+                ))
+            } else if let Some(pacman) = lookup_command("pacman") {
+                let pacman = pacman.to_string_lossy().to_string();
+                Some((
+                    "Install tmux with pacman".to_string(),
+                    format!("{sudo_prefix}\"{pacman}\" -Sy --noconfirm tmux"),
+                ))
+            } else if let Some(zypper) = lookup_command("zypper") {
+                let zypper = zypper.to_string_lossy().to_string();
+                Some((
+                    "Install tmux with zypper".to_string(),
+                    format!("{sudo_prefix}\"{zypper}\" install -y tmux"),
+                ))
+            } else if let Some(apk) = lookup_command("apk") {
+                let apk = apk.to_string_lossy().to_string();
+                Some((
+                    "Install tmux with apk".to_string(),
+                    format!("{sudo_prefix}\"{apk}\" add tmux"),
+                ))
+            } else {
+                None
+            };
+
+            match linux_installer {
+                Some((label, command)) => (
+                    Some(label),
+                    Some(command),
+                    "tmux-backed terminals keep sessions alive when you close the drawer or relaunch the app.".to_string(),
+                ),
+                None => (
+                    None,
+                    None,
+                    "tmux is missing and Clawchestra could not detect a supported package manager for one-click remediation.".to_string(),
+                ),
+            }
+        }
+        "windows" => (
+            None,
+            None,
+            "Windows terminals currently fall back to direct PowerShell sessions. tmux-backed persistence is not wired on Windows yet.".to_string(),
+        ),
+        _ => (
+            None,
+            None,
+            "Clawchestra could not determine a supported tmux remediation path for this platform.".to_string(),
+        ),
+    };
+
+    TerminalDependencyStatus {
+        platform,
+        tmux_available,
+        tmux_path,
+        installer_label,
+        installer_command,
+        installer_note,
+    }
 }
 
 /// List tmux sessions belonging to Clawchestra.

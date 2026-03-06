@@ -20,7 +20,7 @@ describe('deliverable lifecycle helpers', () => {
     expect(prompt).toContain('no Claude Code needed for specs');
   });
 
-  it('builds update plan prompt with Tab completion', () => {
+  it('builds update plan prompt without tmux-specific assumptions', () => {
     const prompt = buildLifecyclePrompt('plan', {
       project: { id: 'project-1', title: 'Project One', dirPath: '/workspace/project-one' },
       item: {
@@ -31,27 +31,24 @@ describe('deliverable lifecycle helpers', () => {
     });
 
     expect(prompt).toContain('Plan doc: docs/plans/item-1-plan.md');
-    expect(prompt).toContain('Update the existing implementation plan using Claude Code via tmux');
-    expect(prompt).toContain('coding-agent skill');
-    expect(prompt).toContain('tmux new-session');
-    expect(prompt).toContain("'/plan' Tab");
-    expect(prompt).toContain('docs/plans/item-1-plan.md');
+    expect(prompt).toContain('Update the existing implementation plan using the best available coding-agent workflow');
+    expect(prompt).toContain('Prefer an embedded coding-agent terminal if one is available');
+    expect(prompt).toContain('Update the plan at docs/plans/item-1-plan.md.');
   });
 
-  it('builds create plan prompt with Tab completion when plan is missing', () => {
+  it('builds create plan prompt without tmux-specific assumptions when plan is missing', () => {
     const prompt = buildLifecyclePrompt('plan', {
       project: { id: 'project-1', title: 'Project One' },
       item: { id: 'feature-x', title: 'Feature X', docs: { spec: 'docs/specs/feature-x-spec.md' } },
     });
 
-    expect(prompt).toContain('Create a new implementation plan using Claude Code via tmux');
-    expect(prompt).toContain('tmux new-session -d -s feature-x-plan');
-    expect(prompt).toContain("'/plan' Tab");
+    expect(prompt).toContain('Create a new implementation plan using the best available coding-agent workflow');
+    expect(prompt).toContain('Prefer an embedded coding-agent terminal if one is available');
     expect(prompt).toContain('docs/plans/feature-x-plan.md');
     expect(prompt).toContain('spec at docs/specs/feature-x-spec.md');
   });
 
-  it('builds review prompt referencing plan_review skill', () => {
+  it('builds review prompt without hardcoded Claude Code instructions', () => {
     const prompt = buildLifecyclePrompt('review', {
       project: { id: 'project-1', title: 'Project One' },
       item: {
@@ -61,12 +58,11 @@ describe('deliverable lifecycle helpers', () => {
       },
     });
 
-    expect(prompt).toContain('Run /plan_review in Claude Code');
-    expect(prompt).toContain('NOT /review');
+    expect(prompt).toContain('Review the implementation plan using the best available review workflow');
     expect(prompt).toContain('Surface the recommended plan changes');
   });
 
-  it('builds build prompt with Tab completion and sub-agent info', () => {
+  it('builds build prompt without tmux-specific assumptions', () => {
     const prompt = buildLifecyclePrompt('build', {
       project: { id: 'project-1', title: 'Project One' },
       item: {
@@ -76,15 +72,10 @@ describe('deliverable lifecycle helpers', () => {
       },
     });
 
-    expect(prompt).toContain('Build this roadmap item using Claude Code via tmux');
-    expect(prompt).toContain('MUST use Tab to trigger command completion');
-    expect(prompt).toContain('coding-agent skill');
-    expect(prompt).toContain('tmux new-session -d -s git-sync-build');
-    expect(prompt).toContain('claude --dangerously-skip-permissions');
-    expect(prompt).toContain("'/build' Tab");
-    expect(prompt).toContain("' docs/plans/git-sync-plan.md' Enter");
-    expect(prompt).toContain('/workflows:work');
-    expect(prompt).toContain('Surface non-critical recommendations');
-    expect(prompt).toContain('Kill tmux session when complete');
+    expect(prompt).toContain('Build this roadmap item using the best available coding-agent workflow');
+    expect(prompt).toContain('Prefer an embedded coding-agent terminal if one is available');
+    expect(prompt).toContain('supports a dedicated build workflow');
+    expect(prompt).toContain('docs/plans/git-sync-plan.md');
+    expect(prompt).toContain('Surface material decisions, blockers, or non-critical recommendations');
   });
 });
