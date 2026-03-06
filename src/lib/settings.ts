@@ -8,6 +8,7 @@ export type OpenClawChatTransportMode = 'Local' | 'Remote' | 'Disabled' | 'Unkno
 export interface DashboardSettings {
   settingsVersion: number;
   migrationVersion: number;
+  onboardingCompleted: boolean;
   scanPaths: string[];
   openclawWorkspacePath: string | null;
   appSourcePath: string | null;

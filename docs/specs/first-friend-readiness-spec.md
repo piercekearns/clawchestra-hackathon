@@ -333,6 +333,28 @@ Recommended flow:
 6. **Ready state**
    Land the user on a working board with chat and terminals available.
 
+### Remote OpenClaw support gap
+
+Phase 3 now covers local OpenClaw support actions inside the app:
+
+1. installing the local extension
+2. refreshing `system-context.md`
+3. copying extension content for manual install
+
+But remote OpenClaw extension installation is still unresolved as a product decision. Clawchestra does not yet have an agreed remote install mechanism such as:
+
+1. SSH/SFTP upload
+2. a trusted remote OpenClaw-side install command
+3. another explicit remote admin channel
+
+Until one of those is chosen and built, remote users can be guided clearly, but they may still need to perform a manual install step on the remote host.
+
+FFR Phase 4 should close this gap with the following product posture:
+
+1. **Recommended path:** show one command to run on the remote OpenClaw host
+2. **Fallback:** copy extension content for manual installation
+3. **Verification:** test the remote endpoint from Clawchestra immediately after setup
+
 ### Onboarding rules
 
 1. No silent incomplete state on first launch.
@@ -415,21 +437,37 @@ Status note (2026-03-06): built and validated locally; closeout captured in `doc
 
 ### Phase 3: First-Run Onboarding
 
+Status note (2026-03-06): built and validated locally; closeout captured in `docs/reports/2026-03-06-first-friend-readiness-phase-3-closeout.md`.
+
 1. Trigger onboarding on missing settings / incomplete setup.
 2. Reuse current settings and Add Existing flows inside a guided shell.
 3. Land users in a working state, not a partially configured board.
 
 ### Phase 4: Terminal Readiness And Default Lifecycle Behavior
 
+Status note (2026-03-06): built and validated locally; closeout captured in `docs/reports/2026-03-06-first-friend-readiness-phase-4-closeout.md`.
+
 1. Bundle tmux or provide one-click install/remediation.
 2. Expand tool detection across supported OSes.
 3. Make lifecycle defaults usable without assuming Claude Code everywhere.
+4. Finish remote OpenClaw support productization with a guided remote-install path plus endpoint verification.
 
 ### Phase 5: Website Integration
+
+Status note (2026-03-06): built and validated locally; closeout captured in `docs/reports/2026-03-06-first-friend-readiness-phase-5-closeout.md`.
 
 1. Build the website on top of the already-working release matrix.
 2. Use the website to route users to the right artifact or CLI bootstrap command.
 3. Keep the website as a thin visual layer over release infrastructure, not the place where release logic lives.
+4. Keep the ownership boundary clear: FFR covers install/download correctness, while `clawchestra-ai-website` covers the broader public site, narrative, and visual system.
+5. If both items are active together, shared download/install work should be implemented once and accepted against both items.
+
+### Phase 6: Windows Parity And Final Verification
+
+1. Treat true Windows terminal persistence as a remaining FFR gap for honest Windows support.
+2. Use the supporting research brief at `docs/specs/windows-terminal-persistence-spec.md` to choose the architecture before implementation.
+3. Run real Windows/Linux friend-testing before FFR is called complete.
+4. Only call FFR complete once the remaining platform-parity and testing gaps are resolved or explicitly narrowed.
 
 ## 10. Out Of Scope
 

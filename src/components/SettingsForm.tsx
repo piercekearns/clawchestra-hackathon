@@ -15,9 +15,11 @@ import { testSyncConnection, type TransportCheckResult } from '../lib/sync';
 import {
   clearOpenclawBearerToken,
   clearOpenclawChatToken,
+  ensureSyncIdentity,
   exportDebugInfo,
   getExtensionContent,
   getOpenClawSupportStatus,
+  installOpenclawExtension,
   isTauriRuntime,
   type OpenClawSupportStatus,
   peekOpenclawBearerToken,
@@ -25,6 +27,7 @@ import {
   setOpenclawBearerToken,
   setOpenclawChatToken,
 } from '../lib/tauri';
+import { buildRemoteOpenclawInstallScript } from '../lib/openclaw-support';
 
 interface SettingsFormProps {
   active: boolean;
@@ -98,10 +101,14 @@ export function SettingsForm({
   const [copied, setCopied] = useState(false);
   const [extensionCopied, setExtensionCopied] = useState(false);
   const [debugCopied, setDebugCopied] = useState(false);
+  const [remoteInstallCopied, setRemoteInstallCopied] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [chatCheck, setChatCheck] = useState<CheckState>(IDLE_CHECK_STATE);
   const [syncCheck, setSyncCheck] = useState<CheckState>(IDLE_CHECK_STATE);
   const [openclawSupportStatus, setOpenclawSupportStatus] = useState<OpenClawSupportStatus | null>(null);
+  const [supportRefreshing, setSupportRefreshing] = useState(false);
+  const [extensionInstalling, setExtensionInstalling] = useState(false);
+  const [systemContextWriting, setSystemContextWriting] = useState(false);
   const baselineRef = useRef<{
     scanPaths: string[];
     openclawWorkspacePath: string;
@@ -333,17 +340,25 @@ export function SettingsForm({
     if (!active || !isTauriRuntime()) return;
 
     let cancelled = false;
-    void getOpenClawSupportStatus()
-      .then((status) => {
+    const loadSupportStatus = async () => {
+      setSupportRefreshing(true);
+      try {
+        const status = await getOpenClawSupportStatus();
         if (!cancelled) {
           setOpenclawSupportStatus(status);
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setOpenclawSupportStatus(null);
         }
-      });
+      } finally {
+        if (!cancelled) {
+          setSupportRefreshing(false);
+        }
+      }
+    };
+
+    void loadSupportStatus();
 
     return () => {
       cancelled = true;
@@ -404,6 +419,31 @@ export function SettingsForm({
         kind: 'error',
         message: error instanceof Error ? error.message : 'Sync transport test failed.',
       });
+    }
+  };
+
+  const copyRemoteInstallCommand = async () => {
+    try {
+      const bearerToken = remoteBearerToken.trim() || (await peekOpenclawBearerToken()) || '';
+      if (!bearerToken) {
+        throw new Error('Save or enter a remote bearer token before copying the remote install command.');
+      }
+
+      const extensionContent = await getExtensionContent();
+      const script = buildRemoteOpenclawInstallScript({
+        bearerToken,
+        extensionContent,
+      });
+      const copiedOk = await copyText(script);
+      if (!copiedOk) {
+        throw new Error('Clipboard write failed');
+      }
+      setRemoteInstallCopied(true);
+      onNotify?.('success', 'Remote install command copied');
+      setTimeout(() => setRemoteInstallCopied(false), 1500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to copy remote install command';
+      onNotify?.('error', message);
     }
   };
 
@@ -764,7 +804,7 @@ export function SettingsForm({
             <span className="text-neutral-500 dark:text-neutral-400">Extension</span>
             <div className="grid gap-2 text-xs text-neutral-500 dark:text-neutral-400">
               <span>
-                Clawchestra can generate the OpenClaw sync extension content, but the extension is not auto-installed yet.
+                Clawchestra can install the local OpenClaw extension when the runtime lives on this machine. Remote OpenClaw hosts still use the copied extension content/manual path for now.
               </span>
               {openclawSupportStatus && (
                 <div className="grid gap-1 rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700">
@@ -782,30 +822,126 @@ export function SettingsForm({
                   </span>
                 </div>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-fit"
-                onClick={async () => {
-                  try {
-                    const content = await getExtensionContent();
-                    const copiedOk = await copyText(content);
-                    if (!copiedOk) {
-                      throw new Error('Clipboard write failed');
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={extensionInstalling || !openclawSupportStatus?.openclawRootExists}
+                  onClick={async () => {
+                    if (!openclawSupportStatus?.openclawRootExists) return;
+                    setExtensionInstalling(true);
+                    try {
+                      await installOpenclawExtension(openclawSupportStatus.openclawRootPath);
+                      setOpenclawSupportStatus(await getOpenClawSupportStatus());
+                      onNotify?.('success', 'OpenClaw extension installed');
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Failed to install extension';
+                      onNotify?.('error', message);
+                    } finally {
+                      setExtensionInstalling(false);
                     }
-                    setExtensionCopied(true);
-                    onNotify?.('success', 'Extension content copied');
-                    setTimeout(() => setExtensionCopied(false), 1500);
-                  } catch (error) {
-                    const message = error instanceof Error ? error.message : 'Failed to copy extension content';
-                    onNotify?.('error', message);
-                  }
-                }}
-              >
-                <ClipboardCopy className="mr-1 h-3 w-3" />
-                {extensionCopied ? 'Copied' : 'Copy extension content'}
-              </Button>
+                  }}
+                >
+                  {extensionInstalling ? 'Installing...' : 'Install local extension'}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={systemContextWriting}
+                  onClick={async () => {
+                    setSystemContextWriting(true);
+                    try {
+                      await ensureSyncIdentity();
+                      setOpenclawSupportStatus(await getOpenClawSupportStatus());
+                      onNotify?.('success', 'System context refreshed');
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Failed to refresh system context';
+                      onNotify?.('error', message);
+                    } finally {
+                      setSystemContextWriting(false);
+                    }
+                  }}
+                >
+                  {systemContextWriting ? 'Refreshing...' : 'Write system context'}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={supportRefreshing}
+                  onClick={async () => {
+                    setSupportRefreshing(true);
+                    try {
+                      setOpenclawSupportStatus(await getOpenClawSupportStatus());
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Failed to refresh support status';
+                      onNotify?.('error', message);
+                    } finally {
+                      setSupportRefreshing(false);
+                    }
+                  }}
+                >
+                  {supportRefreshing ? 'Refreshing...' : 'Refresh status'}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={syncMode !== 'Remote'}
+                  onClick={() => void copyRemoteInstallCommand()}
+                >
+                  <ClipboardCopy className="mr-1 h-3 w-3" />
+                  {remoteInstallCopied ? 'Copied' : 'Copy remote install command'}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  onClick={async () => {
+                    try {
+                      const content = await getExtensionContent();
+                      const copiedOk = await copyText(content);
+                      if (!copiedOk) {
+                        throw new Error('Clipboard write failed');
+                      }
+                      setExtensionCopied(true);
+                      onNotify?.('success', 'Extension content copied');
+                      setTimeout(() => setExtensionCopied(false), 1500);
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Failed to copy extension content';
+                      onNotify?.('error', message);
+                    }
+                  }}
+                >
+                  <ClipboardCopy className="mr-1 h-3 w-3" />
+                  {extensionCopied ? 'Copied' : 'Copy extension content'}
+                </Button>
+              </div>
+              {syncMode === 'Remote' ? (
+                <div className="rounded-lg border border-neutral-200 px-3 py-2 text-[11px] leading-5 dark:border-neutral-700">
+                  Recommended remote path:
+                  {' '}
+                  save your remote URL and bearer token, copy the remote install command, run it on the machine where OpenClaw is hosted, restart OpenClaw if needed, then click
+                  {' '}
+                  <span className="font-medium">Test sync connection</span>
+                  {' '}
+                  and
+                  {' '}
+                  <span className="font-medium">Test chat connection</span>
+                  .
+                </div>
+              ) : null}
             </div>
           </div>
 

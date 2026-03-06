@@ -236,6 +236,8 @@ This order matters because the website and onboarding should sit on top of real 
 
 ## Phase 3 - Onboarding Shell
 
+**Status note (2026-03-06):** Built and validated locally. See `docs/reports/2026-03-06-first-friend-readiness-phase-3-closeout.md`.
+
 ### Goals
 
 1. Replace silent first launch with guided setup.
@@ -269,12 +271,21 @@ This order matters because the website and onboarding should sit on top of real 
 3. Existing installs are not regressed.
 4. Add Existing compatibility, migration, and guidance injection are preserved.
 
+### Phase 3 carry-forward
+
+1. Local OpenClaw support installation is now in-app, but remote OpenClaw extension installation is still manual/copy-based.
+2. That remaining gap is part of FFR's remote onboarding bar and must be resolved before calling FFR complete.
+3. Phase 4 should absorb this as part of first-friend runtime/setup productization so remote users have a supported path, not just raw copied content.
+
 ## Phase 4 - Terminal Readiness And Default Lifecycle Behavior
+
+**Status note (2026-03-06):** Built and validated locally. See `docs/reports/2026-03-06-first-friend-readiness-phase-4-closeout.md`.
 
 ### Goals
 
 1. Make embedded terminals actually first-friend ready.
 2. Remove dead-end runtime dependency failures from the default product loop.
+3. Finish the remaining remote OpenClaw setup productization required for first-friend onboarding.
 
 ### Work
 
@@ -285,6 +296,10 @@ This order matters because the website and onboarding should sit on top of real 
 3. Update terminal creation UX so missing dependencies route to remediation, not a dead disabled state.
 4. Adjust default lifecycle behavior so it does not assume Claude Code everywhere.
 5. Preserve a strong default preset while leaving room for later customization work.
+6. Productize remote OpenClaw support installation:
+   - prefer a single command the user runs on the remote OpenClaw host
+   - keep manual extension-content install as fallback
+   - verify the remote endpoint after setup from inside Clawchestra
 
 ### Implementation Map
 
@@ -292,6 +307,7 @@ This order matters because the website and onboarding should sit on top of real 
 2. `src/components/hub/TypePickerMenu.tsx`
 3. `src/components/hub/TerminalShell.tsx`
 4. `src/lib/deliverable-lifecycle.ts`
+5. onboarding/settings support surfaces that present the remote-install method
 
 ### Exit Criteria
 
@@ -299,13 +315,17 @@ This order matters because the website and onboarding should sit on top of real 
 2. Cross-platform dependency guidance is OS-appropriate.
 3. Lifecycle defaults no longer hard-fail for non-Claude/tmux users.
 4. Terminals remain part of the default Clawchestra product promise.
+5. Remote OpenClaw users have an explicit supported setup path beyond raw manual file editing.
 
 ## Phase 5 - Website Integration
+
+**Status note (2026-03-06):** Built and validated locally. See `docs/reports/2026-03-06-first-friend-readiness-phase-5-closeout.md`.
 
 ### Goals
 
 1. Present the release system through a simple website flow.
 2. Keep website work thin and dependent on already-functional release primitives.
+3. Keep FFR website work scoped to install/distribution correctness, not the whole marketing site.
 
 ### Work
 
@@ -313,12 +333,58 @@ This order matters because the website and onboarding should sit on top of real 
 2. Detect OS and offer the preferred artifact first.
 3. Link release notes and fallback install instructions.
 4. If CLI bootstrap ships, expose it here as a secondary path.
+5. Reuse the eventual `clawchestra-ai-website` implementation for shared website components/pages rather than building a separate install surface.
+6. Treat broader storytelling, waitlist, and marketing pages as owned by `clawchestra-ai-website`, not by FFR.
 
 ### Exit Criteria
 
 1. Website is a routing layer over working releases.
 2. Users can install from the website without understanding the repo.
 3. Website copy matches the actual release/update behavior.
+4. The overlap with `clawchestra-ai-website` is explicit: FFR owns release/download correctness, while the website item owns broader site narrative and design.
+
+### Relationship To `clawchestra-ai-website`
+
+These two items should dovetail, not duplicate.
+
+1. `first-friend-readiness` owns the install/download truth:
+   - release artifacts
+   - OS detection/routing
+   - install instructions
+   - update posture
+   - download surface correctness
+2. `clawchestra-ai-website` owns the broader public site:
+   - marketing narrative
+   - visual system
+   - waitlist/private-alpha posture
+   - non-install pages
+3. If the production website build starts while FFR Phase 5 is active, the shared download/install work should be implemented once inside the website codebase and accepted against both items.
+4. FFR should not depend on a fully realized marketing site to close its install/distribution requirements, but the final public website must consume the same release/download primitives FFR establishes.
+
+## Phase 6 - Windows Parity And Final FFR Verification
+
+### Goals
+
+1. Close the remaining gap between "usable on Windows" and "honestly ready on Windows."
+2. Run the final cross-platform friend-testing and closeout pass before calling FFR complete.
+
+### Work
+
+1. Research Windows terminal persistence from primary sources and the supporting brief at `docs/specs/windows-terminal-persistence-spec.md`.
+2. Choose the Windows persistence architecture and write the implementation plan inside FFR.
+3. Implement the chosen Windows persistence approach.
+4. Run real-machine friend-testing for Windows and Linux installs, onboarding, chat, sync, and terminals.
+5. Fix any blockers surfaced by that testing.
+6. Do the final FFR completion pass only after those platform findings are resolved or explicitly narrowed in scope.
+
+### Exit Criteria
+
+1. Website/download flow exists and points to real artifacts.
+2. Windows support claim is honest:
+   - either Windows terminal persistence is materially comparable to macOS/Linux
+   - or the Windows support claim is explicitly narrowed
+3. Real Windows/Linux friend-testing has been run and findings triaged.
+4. FFR completion language matches the actual shipped platform bar.
 
 ## Validation Matrix
 
@@ -369,3 +435,4 @@ This order matters because the website and onboarding should sit on top of real 
 2. Do not ship onboarding before chat transport and sync settings are coherent.
 3. Do not call FFR complete while embedded terminals still dead-end on missing tmux.
 4. Do not ship a public installable build before the identifier and scrub checklist are resolved.
+5. Do not call FFR complete while remote OpenClaw onboarding still requires unclear/manual extension installation without an explicit supported path.

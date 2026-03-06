@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en" data-state="loading">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clawchestra Alpha Install</title>
+    <meta
+      name="description"
+      content="Install surface for Clawchestra alpha downloads. Routes users to the latest OS-specific release artifacts from GitHub Releases."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="https://github.com/piercekearns/clawchestra" target="_blank" rel="noreferrer">
+          <span class="brand-mark">🦞</span>
+          <span class="brand-wordmark">
+            <strong>Clawchestra</strong>
+            <span>alpha install surface</span>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <a class="link-pill" href="https://github.com/piercekearns/clawchestra/releases" target="_blank" rel="noreferrer">GitHub Releases</a>
+          <a class="link-pill" href="https://github.com/piercekearns/clawchestra" target="_blank" rel="noreferrer">Source-visible repo</a>
+        </div>
+      </header>
+
+      <section class="hero">
+        <article class="hero-copy">
+          <div class="kicker">
+            <span>friend-first alpha</span>
+            <span class="pill"><strong data-platform-chip>detecting</strong></span>
+          </div>
+          <h1>Install the build. <span class="hero-emphasis">Not the story.</span></h1>
+          <p>
+            This page is the thin FFR website layer over Clawchestra’s real release pipeline. It does one job: detect the user’s platform, route them to the right artifact, and show the actual state of the latest release without pretending the broader marketing site already exists.
+          </p>
+          <div class="status-row">
+            <div class="status-pill"><span>release</span><strong data-release-tag>loading</strong></div>
+            <div class="status-pill"><span>published</span><strong data-release-date>loading</strong></div>
+            <div class="status-pill"><span>track</span><strong data-release-flavor>loading</strong></div>
+          </div>
+          <div class="hero-actions">
+            <a class="install-button" data-primary-install href="https://github.com/piercekearns/clawchestra/releases" target="_blank" rel="noreferrer">
+              <span data-primary-label>Loading latest artifact</span>
+              <small data-primary-meta>Fetching GitHub release metadata…</small>
+            </a>
+            <a class="text-link" data-release-url href="https://github.com/piercekearns/clawchestra/releases" target="_blank" rel="noreferrer">Open release notes</a>
+          </div>
+        </article>
+
+        <aside class="install-card">
+          <div class="install-card-header">
+            <div>
+              <h2>Install posture</h2>
+              <p>FFR owns the download truth. The broader website comes later.</p>
+            </div>
+            <span class="pill">alpha</span>
+          </div>
+          <div class="install-grid">
+            <div class="install-slot">
+              <strong>Detected platform</strong>
+              <code data-platform-label>Checking browser signals…</code>
+            </div>
+            <div class="install-slot">
+              <strong>macOS</strong>
+              <p>Unsigned `.dmg` builds currently require manual trust steps.</p>
+            </div>
+            <div class="install-slot">
+              <strong>Windows</strong>
+              <p>`.msi` is available for friend-testing. Runtime parity is still being hardened.</p>
+            </div>
+            <div class="install-slot">
+              <strong>Linux</strong>
+              <p>`.AppImage` and `.deb` are both published when the release pipeline succeeds.</p>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="site-grid">
+        <article class="panel panel-wide">
+          <header>
+            <div>
+              <h2>Artifact matrix</h2>
+              <p>The page prefers a platform match first, but every published asset stays visible.</p>
+            </div>
+            <a class="text-link" data-release-url-secondary href="https://github.com/piercekearns/clawchestra/releases" target="_blank" rel="noreferrer">See full release</a>
+          </header>
+          <div class="asset-columns">
+            <section>
+              <div class="asset-platform">macOS</div>
+              <ul class="asset-list" data-assets-macos>
+                <li class="asset-empty">Loading assets…</li>
+              </ul>
+            </section>
+            <section>
+              <div class="asset-platform">Windows</div>
+              <ul class="asset-list" data-assets-windows>
+                <li class="asset-empty">Loading assets…</li>
+              </ul>
+            </section>
+            <section>
+              <div class="asset-platform">Linux</div>
+              <ul class="asset-list" data-assets-linux>
+                <li class="asset-empty">Loading assets…</li>
+              </ul>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel state-only state-loading">
+          <header>
+            <div>
+              <h2>Loading release signal</h2>
+              <p>Querying GitHub Releases for the current artifact set.</p>
+            </div>
+          </header>
+          <p>The install surface waits for the release API before deciding what to recommend.</p>
+        </article>
+
+        <article class="panel state-only state-error">
+          <header>
+            <div>
+              <h2>Release feed unavailable</h2>
+              <p>GitHub API metadata did not load cleanly.</p>
+            </div>
+          </header>
+          <div class="error-banner" data-error-message>Falling back to the GitHub Releases page.</div>
+        </article>
+
+        <article class="panel panel-wide state-only state-ready">
+          <header class="notes-header">
+            <div>
+              <h2>Release notes</h2>
+              <p>The latest draft/prerelease body is shown directly so the website cannot drift from the release source of truth.</p>
+            </div>
+            <span data-release-source>live from GitHub Releases</span>
+          </header>
+          <div class="notes-body" data-release-notes></div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <span>Install surface lives in <code>website/</code> and is intended to be deployed to GitHub Pages or mounted behind <code>clawchestra.ai</code>.</span>
+        <span>Need the broader product story? That stays in the separate <code>clawchestra-ai-website</code> roadmap item.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

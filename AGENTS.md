@@ -209,13 +209,13 @@ The merge engine processes the deletions and removes the items from db.json. The
 | Operation | How Agent Does It |
 |-----------|-------------------|
 | **Trigger refresh** | Tell user to click Refresh (or file change triggers watcher) |
-| **Open settings** | User clicks Settings in sidebar → board becomes Settings page; use Back to return |
-| **Update paths / OpenClaw transport settings** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings`. Settings now separates chat transport (`Local` / `Remote` / `Disabled`) from sync transport (`Local` / `Remote` / `Disabled`) and exposes in-app connection tests for both. |
+| **Open settings** | User clicks Settings in sidebar → board becomes Settings page; use Back to return. Settings also exposes a `Run onboarding again` entry point. |
+| **Update paths / OpenClaw transport settings** | Use Settings dialog or Tauri commands `get_dashboard_settings` + `update_dashboard_settings`. Settings now separates chat transport (`Local` / `Remote` / `Disabled`) from sync transport (`Local` / `Remote` / `Disabled`), exposes in-app connection tests for both, provides local OpenClaw support actions (install extension, write system context, refresh support state, copy extension content), and can copy a one-command remote OpenClaw install script for remote sync setups. |
 | **Trigger update** | Commit code changes; user clicks Update button |
 | **Run multi-branch Git Sync** | Use Sync dialog: select file categories, optional `Pull first` when behind, optional `Also sync to` branches, then commit on source and cherry-pick to targets. Push/pull controls are hidden for `(local)` branches without upstream. On conflicts, generate/edit an AI proposal in-dialog, explicitly approve apply, then continue sync; manual fallback prompts remain available. |
 | **Local-only Kanban structure changes** | Project/roadmap status or priority moves made via board drag/drop auto-commit metadata (`CLAWCHESTRA.md` / `.clawchestra/state.json`) for local-only git repos (no remote). Deep/content edits still use Git Sync. |
 | **Use lifecycle actions on roadmap cards** | Hover a roadmap kanban card, click one of five icons (Spec, Plan, Review, Deliver, Build); app opens chat drawer with an editable prefilled prompt (never auto-sends) |
-| **Open embedded terminal sessions** | Hover a project or roadmap card and click the terminal icon. Clawchestra prefers tmux-backed persistent terminals; if `tmux` is missing on macOS/Linux it offers in-app remediation from the terminal surface, and on Windows it falls back to temporary direct PowerShell sessions. Coding-agent terminals honor shell-defined commands (aliases/functions) when detected, otherwise they launch the resolved executable path directly. |
+| **Open embedded terminal sessions** | Hover a project or roadmap card and click the terminal icon. Clawchestra prefers tmux-backed persistent terminals; if `tmux` is missing on macOS/Linux it offers in-app remediation from the terminal surface, and on Windows it falls back to temporary direct PowerShell sessions. The terminal picker surfaces detected coding-agent CLIs plus a generic shell fallback, rather than assuming one agent is always installed. Coding-agent terminals honor shell-defined commands (aliases/functions) when detected, otherwise they launch the resolved executable path directly. |
 | **Run onboarding reconciliation audit** | Use Tauri command `run_onboarding_reconciliation` to audit+repair tracked projects toward canonical onboarding invariants and return a per-project matrix (`before`, `actions`, `after`, `warnings`, invariant pass/fail) |
 | **Adjust Kanban column visibility** | Use column header controls: up/down toggles card-list visibility; `chevrons-right-left` minimizes/restores the whole column. Both persist per board. |
 | **Search/filter** | Not available via agent — UI only |
@@ -263,6 +263,7 @@ These documents appear in the UI when users click roadmap items. If the first th
 .clawchestra/state.json — JSON: project + roadmapItems (source of truth)
 CLAWCHESTRA.md          — Human documentation (frontmatter + markdown)
 docs/                   — Spec and plan documents for roadmap items
+website/                — Static website install/download surface (GitHub Pages / clawchestra.ai layer)
 src/                    — React frontend (TypeScript, Tailwind, shadcn/ui)
 src-tauri/              — Rust backend (Tauri v2)
 ```
@@ -434,6 +435,7 @@ OpenClaw connection setup is settings-backed:
 - **Local chat** resolves from the local OpenClaw runtime config.
 - **Remote chat** uses explicit websocket settings plus a keychain token.
 - **Sync transport** is configured separately and can also be `Local`, `Remote`, or `Disabled`.
+- Fresh installs land in a guided onboarding shell that reuses Settings + Add Project flows, and Settings can re-run onboarding later without resetting project data.
 
 Current chat UX is drawer-based:
 - Collapsed bottom `ChatBar` for status + input
@@ -503,6 +505,7 @@ Primary frontend chat implementation lives in `src/components/chat/`.
 
 - `pnpm build` — frontend only (fast, for TS/React changes)
 - `npx tauri build --no-bundle` — full release build (frontend + Rust, no DMG)
+- `website/` is a static surface; deploy via the `Pages` GitHub Actions workflow rather than Tauri/Vite app build steps
 - **Never use `tauri build` without `--no-bundle`** — DMG bundler can install to /Applications
 - **Never `open` the built binary** — user updates via in-app Update button
 - The app embeds its git commit at build time; Update button appears when HEAD differs

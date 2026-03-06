@@ -34,6 +34,8 @@ The planned release posture is:
 3. native installers as the primary end-user path
 4. source-build as a developer-only path
 
+The repo now includes the thin Phase 5 install surface in `website/`. It is designed to deploy through GitHub Pages or sit behind `clawchestra.ai`, and it reads the latest GitHub release metadata at runtime so the website cannot drift from the real artifact list.
+
 The Phase 1 release scaffold now assumes this artifact matrix:
 
 | OS | Primary artifact | Notes |
@@ -47,11 +49,24 @@ Embedded terminal posture in the current alpha:
 1. macOS and Linux terminals prefer persistent tmux-backed sessions
 2. if `tmux` is missing, Clawchestra now offers in-app remediation from the terminal surface and can still fall back to a temporary direct shell
 3. Windows terminals currently run as temporary PowerShell sessions while tmux-backed persistence remains under Phase 1 hardening
+4. the terminal picker now shows detected coding-agent CLIs explicitly and falls back to a generic shell when none are installed
+
+Remote OpenClaw posture in the current alpha:
+
+1. local OpenClaw support can be installed directly from Settings
+2. remote sync setups can now copy a one-command install script to run on the OpenClaw host
+3. manual extension-content install remains the fallback path
 
 Current release operations docs:
 
 1. `docs/plans/first-friend-readiness-release-playbook.md`
 2. `docs/plans/first-friend-readiness-phase-1-audit-checklist.md`
+
+Current onboarding posture in the alpha:
+
+1. fresh installs now land in a guided onboarding shell
+2. onboarding reuses the existing settings and project wizard flows
+3. Settings can re-run onboarding later without deleting tracked project state
 
 ## Contact
 

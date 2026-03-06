@@ -25,6 +25,7 @@ The goal is to avoid premature full builds while still moving quickly: produce h
 2. Strong visual direction is already preferred (dither texture, lobster motif, revival yellow + black contrast).
 3. Domain ownership is confirmed (`clawchestra.ai`).
 4. Website item is pending and blocked by reconnaissance + launch/distribution prerequisites.
+5. FFR Phase 5 now has a thin static install/download surface in `website/` that should be reused rather than replaced when the broader site is built.
 
 ### What was missing before this brief
 
@@ -82,6 +83,23 @@ Operational implication:
 
 1. Friend install path is private GitHub collaborator access + source-build docs.
 2. Public users get product story + proof + waitlist CTA.
+
+## 3a. Relationship To First Friend Readiness
+
+The website item and FFR Phase 5 overlap, but they should not be collapsed into one vague bucket.
+
+1. `first-friend-readiness` owns install/distribution correctness:
+   - release artifacts
+   - OS-aware routing
+   - install instructions
+   - update/download truth
+2. `clawchestra-ai-website` owns the broader public site:
+   - marketing narrative
+   - visual design direction
+   - waitlist/private-alpha posture
+   - non-install storytelling surfaces
+3. If the production website is implemented while FFR Phase 5 is active, shared download/install work should be built once and accepted against both items.
+4. This item should not outrun FFR reality by claiming download/install flows that the release system cannot yet support.
 
 ---
 

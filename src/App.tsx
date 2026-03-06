@@ -19,6 +19,7 @@ import { QuickAccessPopover } from './components/hub/QuickAccessPopover';
 import { openOrCreateProjectChat, openOrCreateItemChat, createProjectChatWithType, createItemChatWithType, projectHasThread, itemHasChat, migrateTerminalChatTitles } from './lib/hub-actions';
 import { TypePickerMenu } from './components/hub/TypePickerMenu';
 import { SettingsPage } from './components/SettingsPage';
+import { OnboardingShell } from './components/OnboardingShell';
 import { SyncDialog } from './components/SyncDialog';
 import { getSyncStatusForDisplay, performSyncOnClose, performSyncOnLaunch } from './lib/sync';
 import { ChatShell, createQueueId } from './components/chat';
@@ -111,6 +112,7 @@ import { readExecutionState, isFailedSyncStep } from './lib/git-sync-utils';
 import { parseTmuxSessionName, tmuxSessionName } from './lib/terminal-utils';
 import { simpleHash, detectActionRequired, hasTerminalSpawnGrace } from './lib/terminal-activity';
 import { listen } from '@tauri-apps/api/event';
+import { Button } from './components/ui/button';
 
 interface Toast {
   id: number;
@@ -313,6 +315,8 @@ export default function App() {
   const [settingsPageOpen, setSettingsPageOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaveNudge, setSettingsSaveNudge] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [onboardingMode, setOnboardingMode] = useState<'first-run' | 'rerun' | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -385,7 +389,10 @@ export default function App() {
 
   // Dynamic window minimum size based on layout orientation and open panels
   useEffect(() => {
-    if (!isTauriRuntime()) return;
+    if (!isTauriRuntime()) {
+      setSettingsLoaded(true);
+      return;
+    }
     const sideW = sidebarOpen ? 220 : 44;
     const drawerVisible = hubDrawerOpen && !!hubActiveChatId;
     let minW: number;
@@ -1152,17 +1159,28 @@ export default function App() {
       try {
         const settings = await getDashboardSettings();
         setDashboardSettings(settings);
+        setOnboardingMode(settings.onboardingCompleted ? null : 'first-run');
       } catch (error) {
         addError({
           type: 'parse_failure',
           file: 'settings',
           error: error instanceof Error ? error.message : 'Failed to load settings',
         });
+      } finally {
+        setSettingsLoaded(true);
       }
     };
 
     void loadSettings();
   }, [addError]);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    if (!dashboardSettings) return;
+    if (!dashboardSettings.onboardingCompleted && onboardingMode === null) {
+      setOnboardingMode('first-run');
+    }
+  }, [dashboardSettings, onboardingMode, settingsLoaded]);
 
   // Sync-on-launch for configured mode (Local/Remote) once per app session.
   useEffect(() => {
@@ -1848,6 +1866,44 @@ export default function App() {
   const handleSettingsDirtyChange = useCallback((dirty: boolean) => {
     setSettingsDirty(dirty);
   }, []);
+
+  const saveDashboardSettings = useCallback(async (settings: DashboardSettings) => {
+    const saved = await updateDashboardSettings(settings);
+    setDashboardSettings(saved);
+    await loadProjects();
+    return saved;
+  }, [loadProjects]);
+
+  const handleOpenOnboarding = useCallback((mode: 'first-run' | 'rerun' = 'rerun') => {
+    setSettingsSaveNudge(false);
+    setSettingsDirty(false);
+    setSettingsPageOpen(false);
+    setOnboardingMode(mode);
+    useDashboardStore.getState().setSidebarOpen(true);
+  }, []);
+
+  const handleCloseOnboarding = useCallback(() => {
+    if (onboardingMode !== 'rerun') return;
+    setOnboardingMode(null);
+    setSettingsPageOpen(true);
+  }, [onboardingMode]);
+
+  const handleCompleteOnboarding = useCallback(async () => {
+    if (!dashboardSettings) {
+      throw new Error('Settings are unavailable');
+    }
+
+    const saved = await saveDashboardSettings({
+      ...dashboardSettings,
+      onboardingCompleted: true,
+    });
+    setDashboardSettings(saved);
+    setOnboardingMode(null);
+    setSettingsPageOpen(false);
+    setSettingsDirty(false);
+    setSettingsSaveNudge(false);
+    pushToast('success', 'Onboarding finished');
+  }, [dashboardSettings, pushToast, saveDashboardSettings]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -2648,7 +2704,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
-      <TitleBar settingsMode={settingsPageOpen} />
+      <TitleBar settingsMode={settingsPageOpen || Boolean(onboardingMode)} />
       <div className="flex min-h-0 flex-1">
         {showThinSidebar && (
           <ThinSidebar
@@ -2684,8 +2740,31 @@ export default function App() {
             onOpenLinkedProject={handleOpenLinkedProject}
           />
         )}
-        <div className={`relative flex min-w-0 flex-1 flex-col ${layoutOrientation === 'vertical' ? 'min-h-[200px] overflow-hidden' : ''} ${settingsPageOpen ? '' : 'p-4 md:p-6'}`}>
-        {settingsPageOpen ? (
+        <div className={`relative flex min-w-0 flex-1 flex-col ${layoutOrientation === 'vertical' ? 'min-h-[200px] overflow-hidden' : ''} ${settingsPageOpen || onboardingMode ? '' : 'p-4 md:p-6'}`}>
+        {onboardingMode ? (
+          <main className="mb-4 min-h-0 flex-1 overflow-y-auto">
+            <OnboardingShell
+              mode={onboardingMode}
+              settings={dashboardSettings}
+              existingProjects={allProjects}
+              settingsDirty={settingsDirty}
+              onSettingsDirtyChange={handleSettingsDirtyChange}
+              onSaveSettings={async (settings) => {
+                try {
+                  await saveDashboardSettings(settings);
+                  pushToast('success', 'Settings saved');
+                } catch (error) {
+                  pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
+                  throw error;
+                }
+              }}
+              onOpenProjectWizard={handleAddProjectOpen}
+              onComplete={handleCompleteOnboarding}
+              onClose={onboardingMode === 'rerun' ? handleCloseOnboarding : undefined}
+              onNotify={(kind, message) => pushToast(kind, message)}
+            />
+          </main>
+        ) : settingsPageOpen ? (
           <main className="mb-4 min-h-0 flex-1">
             <div className="h-full min-h-0 overflow-y-auto">
               <SettingsPage
@@ -2693,12 +2772,20 @@ export default function App() {
                 settings={dashboardSettings}
                 saveNudge={settingsSaveNudge}
                 onDirtyChange={handleSettingsDirtyChange}
+                headerActions={settingsLoaded ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenOnboarding('rerun')}
+                  >
+                    Run onboarding again
+                  </Button>
+                ) : undefined}
                 onNotify={(kind, message) => pushToast(kind, message)}
                 onSave={async (settings) => {
                   try {
-                    const saved = await updateDashboardSettings(settings);
-                    setDashboardSettings(saved);
-                    await loadProjects();
+                    await saveDashboardSettings(settings);
                     pushToast('success', 'Settings saved');
                   } catch (error) {
                     pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
@@ -3348,7 +3435,7 @@ export default function App() {
         />
       </div>
 
-      {!settingsPageOpen && (
+      {!settingsPageOpen && !onboardingMode && (
         <>
           <ProjectModal
             open={Boolean(selectedProject)}
@@ -3356,24 +3443,6 @@ export default function App() {
             boardScoped={sidebarOpen}
             onClose={() => setSelectedProjectId(undefined)}
             actions={projectModalActions}
-          />
-
-          <AddProjectDialog
-            open={addDialogOpen}
-            settings={dashboardSettings}
-            existingProjects={allProjects}
-            boardScoped={sidebarOpen}
-            initialStatus={addDialogInitialStatus as ProjectStatus | undefined}
-            onClose={() => { setAddDialogOpen(false); setAddDialogInitialStatus(undefined); }}
-            onComplete={async (message) => {
-              try {
-                await loadProjects();
-                pushToast('success', message);
-              } catch (error) {
-                pushToast('error', error instanceof Error ? error.message : 'Reload failed');
-                throw error;
-              }
-            }}
           />
 
           {activeRoadmapProject && (
@@ -3462,6 +3531,24 @@ export default function App() {
           />
         </>
       )}
+
+      <AddProjectDialog
+        open={addDialogOpen}
+        settings={dashboardSettings}
+        existingProjects={allProjects}
+        boardScoped={sidebarOpen}
+        initialStatus={addDialogInitialStatus as ProjectStatus | undefined}
+        onClose={() => { setAddDialogOpen(false); setAddDialogInitialStatus(undefined); }}
+        onComplete={async (message) => {
+          try {
+            await loadProjects();
+            pushToast('success', message);
+          } catch (error) {
+            pushToast('error', error instanceof Error ? error.message : 'Reload failed');
+            throw error;
+          }
+        }}
+      />
         </div>
         {/* Vertical: drawer renders below board */}
         {layoutOrientation === 'vertical' && hubDrawerOpen && hubActiveChatId && (

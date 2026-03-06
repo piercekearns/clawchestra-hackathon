@@ -61,7 +61,7 @@ Users can open embedded terminal sessions (Claude Code, Codex, OpenCode, generic
 
 **How to open:** Hover a project card on the main board and click the terminal icon, or hover a roadmap item card and click the terminal icon. Existing terminal sessions are also listed and accessible from the project's entry in the sidebar.
 
-If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals currently run as temporary PowerShell sessions and do not persist across drawer close or app relaunch yet. When a coding-agent command is shell-defined (for example via an alias or shell function), Clawchestra launches it through the matching shell; otherwise it launches the resolved executable path directly.
+If tmux is missing on macOS or Linux, Clawchestra offers in-app tmux remediation from the terminal surface instead of a dead disabled state. On Windows, terminals currently run as temporary PowerShell sessions and do not persist across drawer close or app relaunch yet. The terminal picker now shows available and missing coding-agent CLIs explicitly, recommends the only detected agent when there is just one, and falls back cleanly to a generic shell when no dedicated coding agent is installed. When a coding-agent command is shell-defined (for example via an alias or shell function), Clawchestra launches it through the matching shell; otherwise it launches the resolved executable path directly.
 
 Terminal sessions show activity indicators: animated dots while active, amber badge when action is required (permission prompts), yellow badge for unread output.
 
@@ -73,6 +73,7 @@ Projects with git repos can commit, push, pull, and manage branches through Claw
 
 Clawchestra separates **chat transport** from **sync transport** in Settings.
 
+- Fresh installs land in a guided onboarding shell that walks through welcome/access transparency, settings-backed OpenClaw setup, project import/creation, and terminal readiness. Users can re-run onboarding later from Settings.
 - **Chat transport** can be `Local`, `Remote`, or `Disabled`.
 - `Local` chat resolves websocket details from the local OpenClaw runtime.
 - `Remote` chat uses an explicit websocket URL, optional session key override, and a chat token stored in the OS keychain.
@@ -80,6 +81,14 @@ Clawchestra separates **chat transport** from **sync transport** in Settings.
 - `Remote` sync uses an HTTP base URL and a bearer token stored in the OS keychain.
 - Settings includes **Test chat connection** and **Test sync connection** actions that validate the current form values.
 - Settings also shows OpenClaw support status for local troubleshooting: CLI detected/missing, OpenClaw root, Clawchestra data directory, and `system-context.md`.
+- Settings can install the local OpenClaw extension, refresh/write `system-context.md`, refresh support status, and copy extension content for manual/remote setup.
+- For remote sync setups, Settings can now generate a single copyable install command to run on the remote OpenClaw host, with manual extension-content install kept as fallback.
+
+## Distribution Surface
+
+- Clawchestra's alpha install surface is website-first, with GitHub Releases as the artifact source of truth.
+- The repo now includes a thin static website in `website/` that detects OS, reads the latest GitHub release metadata, and routes users to the correct installer/download artifact.
+- This is intentionally separate from the desktop app UI; it is an external install/download layer, not an in-app screen.
 
 ## Activity Awareness
 

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, MessageSquare, Plus, Terminal } from 'lucide-react';
 import type { HubAgentType } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
 import { AgentIcon } from './AgentIcon';
+import { getTerminalDependencyStatus, type TerminalDependencyStatus } from '../../lib/tauri';
 
 interface TypePickerMenuProps {
   onAddChat: () => void;
@@ -26,6 +27,7 @@ export function TypePickerMenu({
   const [open, setOpen] = useState(false);
   const [terminalSubmenu, setTerminalSubmenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [dependencyStatus, setDependencyStatus] = useState<TerminalDependencyStatus | null>(null);
 
   useEffect(() => {
     if (externalMenuPos) {
@@ -37,7 +39,29 @@ export function TypePickerMenu({
 
   const detectedAgents = useDashboardStore((s) => s.detectedAgents);
   const tmuxAvailable = detectedAgents.some((a) => a.agentType === 'tmux' && a.available);
-  const codingAgents = detectedAgents.filter((a) => a.agentType !== 'tmux' && a.available);
+  const codingAgents = detectedAgents.filter((a) => a.agentType !== 'tmux');
+  const availableCodingAgents = codingAgents.filter((a) => a.available);
+  const unavailableCodingAgents = codingAgents.filter((a) => !a.available);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getTerminalDependencyStatus()
+      .then((status) => {
+        if (!cancelled) setDependencyStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setDependencyStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detectedAgents]);
+
+  const terminalStatusPill = useMemo(() => {
+    if (tmuxAvailable) return null;
+    if (dependencyStatus?.platform === 'windows') return 'Temporary';
+    return dependencyStatus?.installerCommand ? 'Install tmux' : 'Temporary';
+  }, [dependencyStatus?.installerCommand, dependencyStatus?.platform, tmuxAvailable]);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -121,8 +145,8 @@ export function TypePickerMenu({
               >
                 <Terminal className="h-3.5 w-3.5" />
                 <span>Terminal</span>
-                {!tmuxAvailable ? (
-                  <span className="ml-auto text-[10px] text-amber-600 dark:text-amber-400">Install tmux</span>
+                {terminalStatusPill ? (
+                  <span className="ml-auto text-[10px] text-amber-600 dark:text-amber-400">{terminalStatusPill}</span>
                 ) : (
                   <ChevronRight className="ml-auto h-3 w-3 text-neutral-400" />
                 )}
@@ -132,10 +156,14 @@ export function TypePickerMenu({
                   <div className="w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
                     {!tmuxAvailable ? (
                       <div className="px-3 py-1.5 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
-                        tmux is missing. Clawchestra will open a temporary terminal and offer in-app remediation.
+                        {dependencyStatus?.platform === 'windows'
+                          ? 'Windows uses a temporary PowerShell fallback for now. Persistence is still being productized.'
+                          : dependencyStatus?.installerCommand
+                            ? 'tmux is missing. Clawchestra will open a temporary terminal and offer in-app remediation.'
+                            : 'tmux is missing. Clawchestra will open a temporary terminal; automatic remediation is not available on this platform yet.'}
                       </div>
                     ) : null}
-                    {codingAgents.map((agent) => (
+                    {availableCodingAgents.map((agent, index) => (
                       <button
                         key={agent.agentType}
                         type="button"
@@ -146,8 +174,24 @@ export function TypePickerMenu({
                         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                       >
                         <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
-                        {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
+                        <span className="truncate">
+                          {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
+                          {availableCodingAgents.length === 1 && index === 0 ? ' (Recommended)' : ''}
+                        </span>
                       </button>
+                    ))}
+                    {unavailableCodingAgents.map((agent) => (
+                      <div
+                        key={agent.agentType}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-400 dark:text-neutral-500"
+                      >
+                        <AgentIcon agentType={agent.agentType} className="h-3.5 w-3.5 text-neutral-400" />
+                        <span className="truncate">
+                          {AGENT_LABELS[agent.agentType as HubAgentType] ?? agent.command}
+                          {' '}
+                          not found
+                        </span>
+                      </div>
                     ))}
                     <button
                       type="button"
@@ -158,7 +202,7 @@ export function TypePickerMenu({
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                     >
                       <Terminal className="h-3.5 w-3.5 text-neutral-400" />
-                      Shell
+                      {availableCodingAgents.length === 0 ? 'Shell (Recommended)' : 'Shell'}
                     </button>
                   </div>
                 </div>

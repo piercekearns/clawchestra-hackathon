@@ -124,6 +124,8 @@ struct DashboardSettings {
     settings_version: u32,
     #[serde(default = "default_migration_version")]
     migration_version: u32,
+    #[serde(default = "default_onboarding_completed")]
+    onboarding_completed: bool,
     #[serde(default = "default_scan_paths")]
     scan_paths: Vec<String>,
     #[serde(default = "default_openclaw_workspace_path")]
@@ -181,6 +183,10 @@ fn default_settings_version() -> u32 {
 
 fn default_migration_version() -> u32 {
     1 // New installs start at v1 (no migration needed)
+}
+
+fn default_onboarding_completed() -> bool {
+    true
 }
 
 fn default_scan_paths() -> Vec<String> {
@@ -432,6 +438,7 @@ pub(crate) fn default_settings() -> DashboardSettings {
     let settings = DashboardSettings {
         settings_version: default_settings_version(),
         migration_version: 1,
+        onboarding_completed: false,
         scan_paths: default_scan_paths(),
         openclaw_workspace_path: default_openclaw_workspace_path(),
         app_source_path: default_app_source_path(),
@@ -451,6 +458,7 @@ pub(crate) fn default_settings() -> DashboardSettings {
     sanitize_settings(settings).unwrap_or_else(|_| DashboardSettings {
         settings_version: 1,
         migration_version: 1,
+        onboarding_completed: false,
         scan_paths: vec![],
         openclaw_workspace_path: None,
         app_source_path: default_app_source_path(),

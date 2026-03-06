@@ -9,7 +9,7 @@ tags:
   - core
 icon: "\U0001F4CA"
 lastActivity: '2026-03-06'
-nextAction: 'first-friend-readiness: Phase 2 built and validated locally; review the new transport/sync setup and then start Phase 3 onboarding shell work'
+nextAction: 'first-friend-readiness: Phase 5 built locally — awaiting verification; next close FFR with the final Windows parity and real-machine verification phase'
 ---
 
 # Clawchestra
