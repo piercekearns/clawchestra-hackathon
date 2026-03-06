@@ -6,7 +6,7 @@
 
 This report closes the local engineering portion of Phase 1 as far as it can be completed from the current machine. The release scaffold exists, the app now builds locally with `npx tauri build --no-bundle`, tmux fallback/remediation is in place, macOS-only window chrome has been split out of the cross-platform base config, and the repository is now pushed to GitHub.
 
-Phase 1 is complete enough to start Phase 2. The remaining work is no longer local implementation cleanup. It is release-execution and real-machine validation follow-through: the first live GitHub draft prerelease now exists, and real Windows/Linux artifact testing is deferred to the FFR verification pass once testers are available.
+Phase 1 is complete enough to start Phase 2. The remaining work is no longer local implementation cleanup. The first live GitHub draft prerelease now exists with published macOS, Linux, and Windows artifacts. Real Windows/Linux install testing is deferred to the FFR verification pass once testers are available.
 
 ---
 
@@ -53,15 +53,11 @@ That issue is now resolved by moving to `ai.clawchestra.desktop`.
 
 These are the only remaining known follow-up items from Phase 1:
 
-1. **Monitor the first real draft prerelease**
-   - The repo is now pushed to GitHub and the first real draft prerelease has been created from GitHub Actions.
-   - Remaining Windows/Linux asset completion is release follow-through, not a Phase 2 blocker.
-2. **Validate the first draft release on real Windows and Linux machines**
+1. **Validate the first draft release on real Windows and Linux machines**
    - The current environment cannot prove real non-macOS launch behavior.
    - Friend-testing remains necessary and is explicitly deferred to FFR verification rather than treated as a pre-Phase-2 gate.
 
 ## Recommended Next Move
 
-1. Let the first `app-v...` draft prerelease finish publishing its remaining assets.
-2. Test the resulting Windows and Linux artifacts on real machines during FFR verification when testers are available.
-3. Start Phase 2 in parallel.
+1. Test the published Windows and Linux artifacts on real machines during FFR verification when testers are available.
+2. Start Phase 2 in parallel.

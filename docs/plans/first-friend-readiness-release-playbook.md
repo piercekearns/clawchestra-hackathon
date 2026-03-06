@@ -84,8 +84,7 @@ Before the first real release run, verify:
 
 As of 2026-03-06, the remaining follow-up steps for the public-alpha workflow are:
 
-1. let the current draft prerelease finish publishing its remaining Windows/Linux assets
-2. validate the produced artifacts on real Windows and Linux machines during FFR verification/friend-testing
+1. validate the published macOS, Windows, and Linux artifacts during FFR verification/friend-testing
 
 ## Not Yet In Scope
 
