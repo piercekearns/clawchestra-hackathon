@@ -1454,6 +1454,49 @@
     border-color: var(--yellow);
   }
 
+  /* ========== POWERED BY OPENCLAW ========== */
+  .openclaw-section {
+    padding: 5rem 0;
+  }
+
+  .openclaw-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    margin-top: 2.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .openclaw-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .openclaw-card {
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 1.75rem;
+    background: var(--bg-card);
+  }
+
+  .openclaw-card-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .openclaw-card h3 {
+    font-size: 1.05rem;
+    font-weight: 650;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .openclaw-card p {
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
   /* ========== FAQ ========== */
   .faq-section {
     padding: 4rem 0 5rem;
@@ -1697,6 +1740,7 @@
     <div class="nav-links">
       <a href="#features" class="hide-mobile">Features</a>
       <a href="#demo" class="hide-mobile">Demo</a>
+      <a href="#openclaw" class="hide-mobile">OpenClaw</a>
       <a href="#install" class="hide-mobile">Install</a>
       <a href="#faq" class="hide-mobile">FAQ</a>
       <a href="https://github.com/piercekearns/clawchestra-hackathon" target="_blank">GitHub</a>
@@ -2073,6 +2117,38 @@
         </video>
       </div>
     </div>
+    <hr class="editorial" style="margin-top: 5rem;">
+  </div>
+</section>
+
+<!-- POWERED BY OPENCLAW -->
+<section class="openclaw-section" id="openclaw">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Powered by OpenClaw</p>
+      <h2>OpenClaw isn't a plugin — it lives in the app</h2>
+    </div>
+
+    <div class="openclaw-grid reveal">
+      <div class="openclaw-card">
+        <div class="openclaw-card-icon">🦞</div>
+        <h3>AI agent across every surface</h3>
+        <p>OpenClaw is embedded directly into the Kanban board, roadmap item creation, and project workspaces. Ask it to create items, write specs, reorganise priorities, or kick off agent sessions — all from wherever you already are. It's not a sidebar you switch to; it's woven into every interaction.</p>
+      </div>
+
+      <div class="openclaw-card">
+        <div class="openclaw-card-icon">🧠</div>
+        <h3>Context-aware — it knows the app</h3>
+        <p>Clawchestra injects its own capability map into OpenClaw at runtime, so your AI instance understands the app's features, views, and workflows. OpenClaw can guide you through Clawchestra because it knows how Clawchestra works — it becomes your personal Claw guide from the first conversation.</p>
+      </div>
+
+      <div class="openclaw-card">
+        <div class="openclaw-card-icon">🔄</div>
+        <h3>Personal cloud sync</h3>
+        <p>All project state — roadmap items, specs, plans, priorities — lives as plain JSON files that OpenClaw syncs across every device. Edit on your laptop, see it on your desktop. An agent running on a VPS pushes changes that appear on your board instantly. No database, no vendor lock-in — just files, synced everywhere.</p>
+      </div>
+    </div>
+
     <hr class="editorial" style="margin-top: 5rem;">
   </div>
 </section>

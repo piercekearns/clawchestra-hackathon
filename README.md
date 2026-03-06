@@ -30,26 +30,34 @@ Most project tools track work. Most agent tools run agents. Clawchestra puts bot
 | AI | OpenClaw (local or remote) with multi-provider routing |
 | State | JSON-based project state with file-system watcher + atomic writes |
 
-### State as synced JSON
+---
 
-All project and roadmap state lives as plain JSON files (`.clawchestra/state.json` per project). OpenClaw syncs these files across every device you're signed into — it becomes your personal cloud. Because the state is just files:
+## Powered by OpenClaw
 
-- **Every agent can read and write it** — Claude Code, Codex, or any tool that can read JSON has full access to your roadmap, specs, and plans.
+OpenClaw isn't a plugin or an integration — it lives inside the app. Clawchestra uses OpenClaw in three distinct ways:
+
+### 1. AI agent across every surface
+
+OpenClaw is embedded directly into the Kanban board, roadmap item creation, and project workspaces. It's not a single chat window you switch to — it's woven into every surface:
+
+- **Board** — ask OpenClaw to create items, reorganise priorities, or move cards between columns, right from the board itself.
+- **Roadmap item creation** — describe what you need in natural language and OpenClaw generates the item, writes the spec, and places it on the board.
+- **Workspace chats** — scoped conversations tied to specific projects or roadmap items, with full context about what you're working on.
+- **Agent terminals** — launch Claude Code, Codex, or any CLI agent in managed terminal sessions, pre-scoped to the roadmap item you're building.
+
+### 2. Context-aware — it knows the app
+
+Clawchestra injects its own capability map (`CAPABILITIES.md`) into OpenClaw at runtime. This means your OpenClaw instance understands Clawchestra's features, views, and workflows — it can guide you through the app because it knows how the app works. From the first conversation, OpenClaw acts as your personal Claw guide.
+
+### 3. Personal cloud sync
+
+All project state — roadmap items, specs, plans, priorities — lives as plain JSON files (`.clawchestra/state.json` per project) that OpenClaw syncs across every device you're signed into. OpenClaw becomes your personal cloud:
+
+- **Every agent can read and write it** — Claude Code, Codex, or any tool that can read JSON has full access to your roadmap.
 - **Every project gets it for free** — drop a `.clawchestra/` directory into any repo and it's a Clawchestra project.
-- **Every device stays in sync** — edit on your laptop, see it on your desktop. An agent running on a VPS pushes changes that appear on your local board instantly.
+- **Every device stays in sync** — edit on your laptop, see it on your desktop. An agent on a VPS pushes changes that appear on your board instantly.
 
-There's no database, no proprietary API, no vendor lock-in. Your project state is portable, version-controllable, and readable by humans and machines alike.
-
-### Agent-native by design
-
-Clawchestra is built around the idea that AI isn't a sidebar — it's a first-class participant. Every feature has both a UI surface and an AI surface:
-
-- Cards can be created by clicking "Add" or by telling OpenClaw what you need
-- Items can be moved by dragging or by asking OpenClaw to reorganise
-- Specs can be written in the editor or generated from a chat conversation
-- Terminals can be launched from the board or opened by OpenClaw to start work
-
-The AI sees the same state the user sees, and can act on it.
+No database, no proprietary API, no vendor lock-in. Your project state is portable, version-controllable, and readable by humans and machines alike.
 
 ---
 
