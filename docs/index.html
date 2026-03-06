@@ -267,7 +267,19 @@
     margin: 0;
   }
 
-  /* ========== SECTION LABEL ========== */
+  /* ========== SECTION HEADERS ========== */
+  .section-header {
+    text-align: center;
+  }
+
+  .section-header h2 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    margin-top: 0.5rem;
+  }
+
   .section-label {
     font-family: var(--mono);
     font-size: 0.72rem;
@@ -300,13 +312,6 @@
     margin-bottom: 3rem;
   }
 
-  .kanban-features .section-header h2 {
-    font-size: clamp(2rem, 4vw, 3.2rem);
-    font-weight: 650;
-    letter-spacing: -0.035em;
-    line-height: 1.1;
-    margin-top: 0.5rem;
-  }
 
   /* Kanban board wrapper */
   .kanban-board-wrap {
@@ -1514,6 +1519,11 @@
     line-height: 1.1;
     margin-top: 0.5rem;
     margin-bottom: 3rem;
+    text-align: center;
+  }
+
+  .faq-inner .section-label {
+    text-align: center;
   }
 
   .faq-list {
