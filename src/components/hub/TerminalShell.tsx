@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { spawn, type IPty } from 'tauri-pty';
 import '@xterm/xterm/css/xterm.css';
 import { Loader2 } from 'lucide-react';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import type { HubChat } from '../../lib/hub-types';
 import { useDashboardStore } from '../../lib/store';
 import { buildTerminalLaunchPlan, type RuntimeMode, type RuntimeNotice } from '../../lib/terminal-launch';
@@ -599,69 +600,40 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     onDragActiveChange?.(active);
   }, [onDragActiveChange]);
 
-  // Drag-and-drop: listen at the DOCUMENT level in capture phase.
-  // xterm.js's canvas can swallow element-level drag events on macOS WKWebView,
-  // so we intercept at the top and use hit-testing against wrapperRef bounds.
+  // Drag-and-drop: use Tauri native drag-drop event.
+  // HTML5 drag events don't fire in Tauri v2's WKWebView on macOS.
+  // Tauri gives us file paths directly — write them into the PTY for the agent.
   const wrapperRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const isOverTerminal = (e: DragEvent) => {
-      const el = wrapperRef.current;
-      if (!el) return false;
-      const rect = el.getBoundingClientRect();
-      return e.clientX >= rect.left && e.clientX <= rect.right
-          && e.clientY >= rect.top && e.clientY <= rect.bottom;
-    };
-
-    const enter = (e: DragEvent) => {
-      if (!isOverTerminal(e)) return;
-      e.stopPropagation(); e.preventDefault(); setDrag(true);
-    };
-    const over = (e: DragEvent) => {
-      if (!isOverTerminal(e)) return;
-      e.stopPropagation(); e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-      setDrag(true);
-    };
-    const leave = (e: DragEvent) => {
-      if (!isOverTerminal(e)) { setDrag(false); return; }
-      e.stopPropagation(); setDrag(false);
-    };
-    const drop = (e: DragEvent) => {
-      if (!isOverTerminal(e)) return;
-      e.stopPropagation();
-      e.preventDefault();
-      setDrag(false);
-      const pty = ptyRef.current;
-      const files = Array.from(e.dataTransfer?.files ?? []);
-      for (const file of files) {
-        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-        if (!IMAGE_EXTENSIONS.has(ext)) continue;
-        void file.arrayBuffer().then((buf) => {
-          const bytes = Array.from(new Uint8Array(buf));
-          void writeTempFile(file.name || `clawchestra-drop-${Date.now()}.${ext}`, bytes)
-            .then((filePath) => {
-              if (pty) {
-                pty.write(filePath);
-                return;
-              }
-              if (runtimeModeRef.current === 'persistent-direct') {
-                return writePersistentTerminalSession(chat.id, filePath);
-              }
-              return undefined;
-            })
-            .catch((err) => console.error('Failed to save dropped image:', err));
-        }).catch((err) => console.error('Failed to save dropped image:', err));
-      }
-    };
-    document.addEventListener('dragenter', enter, true);
-    document.addEventListener('dragover', over, true);
-    document.addEventListener('dragleave', leave, true);
-    document.addEventListener('drop', drop, true);
+    let unlisten: (() => void) | null = null;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const { type } = event.payload;
+        if (type === 'enter') {
+          setDrag(true);
+        } else if (type === 'leave') {
+          setDrag(false);
+        } else if (type === 'drop') {
+          setDrag(false);
+          const paths = event.payload.paths.filter((p: string) => {
+            const ext = p.split('.').pop()?.toLowerCase() ?? '';
+            return IMAGE_EXTENSIONS.has(ext);
+          });
+          for (const filePath of paths) {
+            const pty = ptyRef.current;
+            if (pty) {
+              pty.write(filePath);
+            } else if (runtimeModeRef.current === 'persistent-direct') {
+              void writePersistentTerminalSession(chat.id, filePath);
+            }
+          }
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
     return () => {
-      document.removeEventListener('dragenter', enter, true);
-      document.removeEventListener('dragover', over, true);
-      document.removeEventListener('dragleave', leave, true);
-      document.removeEventListener('drop', drop, true);
+      unlisten?.();
     };
   }, [setDrag]);
 

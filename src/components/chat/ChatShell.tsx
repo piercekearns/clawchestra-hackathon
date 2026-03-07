@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { readFile as readBinaryFile } from '@tauri-apps/plugin-fs';
 import type { ChatMessage } from '../../lib/gateway';
 import { useDashboardStore } from '../../lib/store';
 import { ChatBar } from './ChatBar';
@@ -25,11 +27,6 @@ const MAX_DRAWER_HEIGHT_PERCENT = 0.95;
 const DEFAULT_DRAWER_HEIGHT_PERCENT = 0.75; // Default open height (was 0.6)
 const MIN_DRAWER_HEIGHT_PX = 120; // Minimum before auto-close triggers
 const AUTO_CLOSE_THRESHOLD_PERCENT = 0.12; // Drag below this to auto-close
-
-function hasFilePayload(dataTransfer: DataTransfer | null): boolean {
-  if (!dataTransfer) return false;
-  return Array.from(dataTransfer.types ?? []).includes('Files');
-}
 
 function guessMimeType(fileName: string): string {
   const lower = fileName.toLowerCase();
@@ -329,48 +326,57 @@ export function ChatShell({
     setAttachmentNotice(nextNotice);
   };
 
+  // Tauri native drag-drop: converts file paths to File objects for appendImages
   useEffect(() => {
-    const onWindowDragEnter = (event: DragEvent) => {
-      if (!hasFilePayload(event.dataTransfer)) return;
-      event.preventDefault();
-      setDragDepth((value) => value + 1);
-      setDragActive(true);
-    };
-
-    const onWindowDragOver = (event: DragEvent) => {
-      if (!hasFilePayload(event.dataTransfer)) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-      setDragActive(true);
-    };
-
-    const onWindowDragLeave = (event: DragEvent) => {
-      if (!hasFilePayload(event.dataTransfer)) return;
-      event.preventDefault();
-      setDragDepth((value) => {
-        const next = Math.max(0, value - 1);
-        if (next === 0) setDragActive(false);
-        return next;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const { type } = event.payload;
+        if (type === 'enter') {
+          setDragDepth(1);
+          setDragActive(true);
+        } else if (type === 'leave') {
+          setDragDepth(0);
+          setDragActive(false);
+        } else if (type === 'drop') {
+          setDragDepth(0);
+          setDragActive(false);
+          const paths = event.payload.paths.filter((p: string) =>
+            IMAGE_NAME_PATTERN.test(p),
+          );
+          if (paths.length === 0) return;
+          void Promise.all(
+            paths.map(async (filePath: string) => {
+              const data = await readBinaryFile(filePath);
+              const name = filePath.split('/').pop() ?? 'image.png';
+              const ext = name.split('.').pop()?.toLowerCase() ?? 'png';
+              const mime = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+              return new File([data], name, { type: mime });
+            }),
+          ).then((files) => appendImages(files));
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
       });
-    };
-
-    const onWindowDrop = (event: DragEvent) => {
-      if (!hasFilePayload(event.dataTransfer)) return;
-      event.preventDefault();
-      setDragDepth(0);
-      setDragActive(false);
-      void appendImages(Array.from(event.dataTransfer?.files ?? []));
-    };
-
-    window.addEventListener('dragenter', onWindowDragEnter);
-    window.addEventListener('dragover', onWindowDragOver);
-    window.addEventListener('dragleave', onWindowDragLeave);
-    window.addEventListener('drop', onWindowDrop);
-
     return () => {
-      window.removeEventListener('dragenter', onWindowDragEnter);
+      unlisten?.();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // HTML5 drag events fallback (for non-Tauri environments / testing)
+  useEffect(() => {
+    const onWindowDragOver = (event: DragEvent) => {
+      // Prevent default browser behavior of opening dropped files
+      event.preventDefault();
+    };
+    const onWindowDrop = (event: DragEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('dragover', onWindowDragOver);
+    window.addEventListener('drop', onWindowDrop);
+    return () => {
       window.removeEventListener('dragover', onWindowDragOver);
-      window.removeEventListener('dragleave', onWindowDragLeave);
       window.removeEventListener('drop', onWindowDrop);
     };
   }, []);
