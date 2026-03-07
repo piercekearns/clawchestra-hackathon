@@ -19,7 +19,7 @@
         "minHeight": 600,
         "resizable": true,
         "decorations": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "withGlobalTauri": true,
