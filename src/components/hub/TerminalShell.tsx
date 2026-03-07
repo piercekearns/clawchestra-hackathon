@@ -606,15 +606,27 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
   const wrapperRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let unlisten: (() => void) | null = null;
+    const isOverTerminal = (pos: { x: number; y: number }) => {
+      const el = wrapperRef.current;
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      const x = pos.x / scale;
+      const y = pos.y / scale;
+      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    };
+
     void getCurrentWebview()
       .onDragDropEvent((event) => {
         const { type } = event.payload;
-        if (type === 'enter') {
-          setDrag(true);
+        if (type === 'enter' || type === 'over') {
+          setDrag(isOverTerminal(event.payload.position));
         } else if (type === 'leave') {
           setDrag(false);
         } else if (type === 'drop') {
+          const wasOver = isOverTerminal(event.payload.position);
           setDrag(false);
+          if (!wasOver) return;
           const paths = event.payload.paths.filter((p: string) => {
             const ext = p.split('.').pop()?.toLowerCase() ?? '';
             return IMAGE_EXTENSIONS.has(ext);
