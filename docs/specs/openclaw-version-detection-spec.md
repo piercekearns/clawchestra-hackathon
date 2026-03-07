@@ -89,6 +89,62 @@ OpenClaw 2026.3.2 added a mandatory `auth` field to `registerHttpRoute`. Without
 
 These failures argue for a **connection health panel** — a small, normally-hidden status area that expands when the connection is unhealthy, showing the specific failure reason and an actionable fix. This is more important than version nudges for first-friend readiness.
 
+## Phase 4: OpenClaw Upgrade Impact Assessment & Auto-Monitoring
+
+This is the highest-value addition to this spec. Every OpenClaw version upgrade has historically broken something in Clawchestra's bridge layer. This needs to be systematic, not reactive.
+
+### Problem
+
+When OpenClaw ships a new version:
+- Users may update OpenClaw independently of Clawchestra
+- Breaking changes in RPC contracts, auth flows, or extension APIs silently break Clawchestra
+- The developer (and eventually the user) has no way to assess the impact before or after upgrading
+- Each upgrade cycle has produced 2nd/3rd-order breakage (e.g. gateway path changes breaking LaunchAgent, device trust invalidation, silent API field additions)
+
+### Design: Automated Impact Assessment Pipeline
+
+#### 4a. OpenClaw Release Detection
+- Monitor the OpenClaw release feed (GitHub releases API, npm registry, or a dedicated endpoint)
+- When a new version is detected that differs from the current connected version OR from the last-assessed version, trigger the assessment pipeline
+- This should run automatically (background check on app launch or periodic poll)
+
+#### 4b. Changelog + Breaking Change Extraction
+- Fetch the release notes / changelog for the new version
+- Parse for breaking changes, new required fields, deprecated APIs, auth changes
+- Cross-reference against Clawchestra's known OpenClaw API surface (RPC calls, WebSocket contracts, extension registration, auth flows)
+- Produce a structured impact report: what Clawchestra code touches each changed API
+
+#### 4c. Auto-Roadmap Item Creation
+- When the assessment identifies potential breakage or required changes, automatically create (or append to) a high-priority roadmap item in the Clawchestra project
+- Item should be `status: up-next` with high priority (top of column)
+- Title: "OpenClaw vX.Y.Z Compatibility"
+- `nextAction` should summarize the specific breaking changes and affected Clawchestra code paths
+- If a previous compatibility item exists and hasn't been addressed yet, append the new version's changes to it rather than creating a duplicate
+- This ensures the developer sees the compatibility work as soon as they open Clawchestra
+
+#### 4d. User-Facing Version Mismatch Warning
+- If a user connects with an OpenClaw version that Clawchestra hasn't been verified against, show a warning in the connection health panel
+- "You're running OpenClaw vX.Y.Z. Clawchestra has been tested with vA.B.C. Some features may not work correctly."
+- Link to the compatibility roadmap item or release notes if available
+
+#### 4e. Compatibility Matrix
+- Maintain a simple compatibility matrix (could be a JSON file in the repo):
+  ```json
+  {
+    "testedVersions": ["2026.2.26", "2026.3.2"],
+    "minimumVersion": "2026.2.22",
+    "knownBreaking": {
+      "2026.3.2": ["registerHttpRoute requires auth field", "device trust invalidated on gateway reinstall"]
+    }
+  }
+  ```
+- This matrix is checked at connect time to drive the user-facing warnings
+- Updated as part of each compatibility assessment
+
+### Why This Matters
+
+Clawchestra cannot ship to users who update OpenClaw independently if every update breaks the bridge. The assessment pipeline turns a reactive fire-drill into a proactive, trackable process. The auto-roadmap-item creation ensures compatibility work is visible and prioritized, not lost in a changelog the developer might not read in time.
+
 ## Open Questions
 
 1. Does the `connect` RPC response already include a server version field? Need to inspect against .22 and .26.
@@ -97,3 +153,6 @@ These failures argue for a **connection health panel** — a small, normally-hid
 4. How granular should feature gating be — per-version or per-capability?
 5. What error codes/messages does the connect handshake return for device-auth failures? Need to inspect the WebSocket response to know what to match on.
 6. Can we detect the `registerHttpRoute` silent failure from the Clawchestra side, or do we need OpenClaw to return an acknowledgement?
+7. What is the best source for OpenClaw release detection — GitHub API, npm registry, or a dedicated endpoint?
+8. Should the compatibility matrix live in the repo (static, updated per release) or be fetched from a remote endpoint (dynamic)?
+9. How much of the impact assessment can be automated vs. requiring manual review?

@@ -37,6 +37,20 @@ Pick one of:
 - **Ignore empty/whitespace selections.**
 - **Long selection handling:** truncate in the UI (still store full text), or enforce a max length.
 
+## Key Surfaces (beyond chat drawer)
+
+The selection tooltip should work **everywhere text is selectable** in the app, including:
+
+| Surface | Example use case |
+|---------|-----------------|
+| **Roadmap card modals** | Highlight part of a spec or plan, ask OpenClaw to explain or critique it |
+| **Spec / plan documents** | Select a section of a rendered markdown doc, ask "how should we implement this?" |
+| **Settings page** | Highlight an error message, ask "what does this mean?" |
+| **Chat messages** | Highlight a previous AI response, ask a follow-up about that specific part |
+| **Terminal output** | Select error output, ask "what went wrong?" (if terminal text selection is feasible) |
+
+This makes "Ask OpenClaw" a universal interaction pattern — the user can get AI help from any readable surface without manually copying text into a chat input.
+
 ## Non‑Goals
 
 - Global search.

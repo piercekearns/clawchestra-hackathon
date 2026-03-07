@@ -31,15 +31,33 @@ Clawchestra should surface unread chat activity when the app isn’t actively fo
 
 ### When to Notify
 - A new **assistant reply** arrives **while the app is not focused** (window not active / user is in another app).
-- The chat drawer is closed and a response preview toast appears.
+- A new **action-required terminal event** occurs (e.g. Claude Code waiting for input) while the app is not focused.
+- The relevant surface (chat drawer, terminal tab) is **not currently in view** — even if the app is focused, a notification for a background surface the user isn't looking at is still valuable.
+
+### When NOT to Notify
+- The app is focused AND the user is actively viewing the surface where the event occurred (e.g. chat drawer is open and visible when the reply arrives).
+- The app is focused AND the user is actively interacting with the app (typing, clicking). In this case, the existing in-app indicators (preview toast, unread dots) are sufficient.
+- Never spam notifications for rapid-fire streaming responses — coalesce into a single notification per conversation turn.
+
+### Notification Scope by Surface
+| Event source | Notify when... |
+|-------------|---------------|
+| Chat reply (any thread) | App unfocused OR chat drawer closed/different thread visible |
+| Terminal action-required | App unfocused OR terminal tab not visible |
+| Terminal session died | App unfocused OR terminal tab not visible |
 
 ### When to Clear
-- User opens the chat drawer.
-- App regains focus and the user interacts (click/keypress).
-- Optional: dismissing the preview toast clears the badge.
+- User opens/views the specific surface that generated the notification.
+- Clicking the OS notification should bring the app to focus AND navigate to the relevant surface (open the chat drawer to that thread, switch to that terminal tab).
+- App dock/taskbar badge clears when all unread events have been viewed.
 
 ### In‑App Signals (existing)
-- Continue to show the preview toast bubble; OS notifications complement it.
+- Continue to show the preview toast bubble and unread dots; OS notifications complement these for when the user isn't looking at the app.
+
+### Reference: How similar tools handle this
+- **Claude Code / Codex CLI:** Terminal bell character triggers OS notification when terminal is not focused
+- **Slack / Discord:** Notifications only for messages in channels/DMs not currently in view, suppressed when app is active and channel is visible
+- The "not currently viewing this surface" pattern is the right model — notify for things happening outside the user's current viewport
 
 ## Platform Behavior (planned)
 
