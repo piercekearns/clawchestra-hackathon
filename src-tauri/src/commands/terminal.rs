@@ -82,7 +82,7 @@ struct PowerShellCommandInfo {
     path: Option<String>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PersistentTerminalSnapshot {
     pub data: String,
@@ -1168,7 +1168,7 @@ fn spawn_windows_persistent_session(
     for (key, value) in env {
         cmd.env(OsString::from(key), OsString::from(value));
     }
-    let child = pair
+    let mut child = pair
         .slave
         .spawn_command(cmd)
         .map_err(|error| error.to_string())?;
