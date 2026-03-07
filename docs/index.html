@@ -2174,7 +2174,7 @@
         <button class="install-tab" data-platform="linux">Linux</button>
       </div>
       <div class="install-download" id="install-download">
-        <a href="https://github.com/piercekearns/clawchestra-hackathon/releases/latest" target="_blank" class="install-download-btn" id="install-btn">
+        <a href="https://github.com/piercekearns/clawchestra-hackathon/releases/download/main/Clawchestra_0.1.0_aarch64.dmg" target="_blank" class="install-download-btn" id="install-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span id="install-btn-label">Download for macOS</span>
         </a>
@@ -2439,13 +2439,15 @@
 
   // ========== Install section: tab switching ==========
   (() => {
+    const base = 'https://github.com/piercekearns/clawchestra-hackathon/releases/download/main';
     const platforms = {
-      mac:   { label: 'Download for macOS',   hint: '.dmg - Apple Silicon + Intel' },
-      win:   { label: 'Download for Windows', hint: '.msi installer' },
-      linux: { label: 'Download for Linux',   hint: '.AppImage + .deb' }
+      mac:   { label: 'Download for macOS',   hint: '.dmg - Apple Silicon + Intel', url: base + '/Clawchestra_0.1.0_aarch64.dmg' },
+      win:   { label: 'Download for Windows', hint: '.msi installer',               url: base + '/Clawchestra_0.1.0_x64_en-US.msi' },
+      linux: { label: 'Download for Linux',   hint: '.AppImage + .deb',             url: base + '/Clawchestra_0.1.0_amd64.AppImage' }
     };
 
     const tabs = document.querySelectorAll('.install-tab');
+    const btnEl = document.getElementById('install-btn');
     const btnLabel = document.getElementById('install-btn-label');
     const hintEl = document.getElementById('install-hint');
 
@@ -2456,6 +2458,7 @@
         const p = platforms[tab.dataset.platform];
         btnLabel.textContent = p.label;
         hintEl.textContent = p.hint;
+        btnEl.href = p.url;
       });
     });
   })();
