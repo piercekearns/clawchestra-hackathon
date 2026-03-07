@@ -82,7 +82,8 @@ struct PowerShellCommandInfo {
     path: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
+#[cfg_attr(target_os = "windows", derive(serde::Deserialize))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PersistentTerminalSnapshot {
     pub data: String,
