@@ -620,9 +620,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       .onDragDropEvent((event) => {
         const { type } = event.payload;
         if (type === 'enter' || type === 'over') {
-          setDrag(isOverTerminal(event.payload.position));
+          const over = isOverTerminal(event.payload.position);
+          setDrag(over);
+          (window as unknown as Record<string, unknown>).__terminalDragClaim = over;
         } else if (type === 'leave') {
           setDrag(false);
+          (window as unknown as Record<string, unknown>).__terminalDragClaim = false;
         } else if (type === 'drop') {
           const wasOver = isOverTerminal(event.payload.position);
           setDrag(false);
