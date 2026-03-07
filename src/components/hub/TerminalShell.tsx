@@ -66,6 +66,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
   const projects = useDashboardStore((s) => s.projects);
   const detectedAgents = useDashboardStore((s) => s.detectedAgents);
 
+  // Snapshot agents/deps at mount time so other terminals spawning don't
+  // cause this terminal to remount (detectedAgents is a new array ref on
+  // every setDetectedAgents call).
+  const initialAgentsRef = useRef(detectedAgents);
+  const initialDepsRef = useRef<TerminalDependencyStatus | null>(null);
+
   // Resolve project dirPath from the store's project tree
   const projectDirPath = useMemo(() => {
     const find = (ps: typeof projects): string | undefined => {
@@ -85,7 +91,10 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     let cancelled = false;
     void getTerminalDependencyStatus()
       .then((status) => {
-        if (!cancelled) setDependencyStatus(status);
+        if (!cancelled) {
+          setDependencyStatus(status);
+          initialDepsRef.current = status;
+        }
       })
       .catch(() => {
         if (!cancelled) setDependencyStatus(null);
@@ -93,7 +102,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     return () => {
       cancelled = true;
     };
-  }, [detectedAgents]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Prevent double-init in StrictMode
@@ -152,9 +161,12 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
     fitAddonRef.current = fitAddon;
 
     const sessionName = tmuxSessionName(chat.projectId, chat.id);
-    const agentLaunch = getAgentLaunchSpec(chat.agentType, detectedAgents);
-    const tmux = dependencyStatus?.tmuxPath
-      ?? detectedAgents.find((a) => a.agentType === 'tmux' && a.available)?.path
+    // Use snapshot refs so spawning other terminals doesn't trigger remount
+    const agents = initialAgentsRef.current;
+    const deps = initialDepsRef.current ?? dependencyStatus;
+    const agentLaunch = getAgentLaunchSpec(chat.agentType, agents);
+    const tmux = deps?.tmuxPath
+      ?? agents.find((a) => a.agentType === 'tmux' && a.available)?.path
       ?? null;
     const launchPlan = buildTerminalLaunchPlan({
       platform,
@@ -164,7 +176,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       agentShellPath: agentLaunch.shellPath,
       tmuxPath: tmux,
       projectDirPath,
-      dependencyStatus,
+      dependencyStatus: deps,
       modeOverride,
     });
 
@@ -362,11 +374,15 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       if (runtimeModeRef.current === 'install') {
         void detectAgents()
           .then((agents) => {
+            initialAgentsRef.current = agents;
             useDashboardStore.getState().setDetectedAgents(agents);
           })
           .catch(() => {});
         void getTerminalDependencyStatus()
-          .then((status) => setDependencyStatus(status))
+          .then((status) => {
+            initialDepsRef.current = status;
+            setDependencyStatus(status);
+          })
           .catch(() => {});
         setModeOverride('auto');
         setLaunchNonce((current) => current + 1);
@@ -572,7 +588,7 @@ function LiveTerminal({ chat, onFocusChange, onDragActiveChange }: { chat: HubCh
       termRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [chat.id, chat.projectId, chat.agentType, dependencyStatus, detectedAgents, launchNonce, modeOverride, platform, projectDirPath]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chat.id, chat.projectId, chat.agentType, launchNonce, modeOverride, platform, projectDirPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drag-and-drop handlers — stopPropagation on ALL drag events prevents the
   // window-level ChatShell handler from catching drags over the terminal.
