@@ -8,8 +8,8 @@ tags:
   - tauri
   - core
 icon: "\U0001F4CA"
-lastActivity: '2026-03-06'
-nextAction: 'first-friend-readiness: Detached-host Windows persistence is built locally; next run real Windows/Linux friend-testing, triage findings, and close out FFR honestly'
+lastActivity: '2026-03-07'
+nextAction: 'Cross-Platform & Onboarding Validation: run real Windows and Linux friend-testing, triage findings, and fix critical issues'
 ---
 
 # Clawchestra
