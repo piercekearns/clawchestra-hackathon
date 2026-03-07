@@ -10,9 +10,10 @@ import logoDark from '../assets/logo-dark.png';
 
 interface TitleBarProps {
   settingsMode?: boolean;
+  hideControls?: boolean;
 }
 
-export function TitleBar({ settingsMode = false }: TitleBarProps) {
+export function TitleBar({ settingsMode = false, hideControls = false }: TitleBarProps) {
   const isMacOS = typeof navigator !== 'undefined'
     && /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
   const sidebarOpen = useDashboardStore((s) => s.sidebarOpen);
@@ -52,38 +53,42 @@ export function TitleBar({ settingsMode = false }: TitleBarProps) {
         {/* Reserve space for native traffic lights on macOS only. */}
         {isMacOS ? <div className="w-[78px] shrink-0" /> : null}
 
-        {/* Sidebar toggle */}
-        <Tooltip text={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'} position="below">
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            disabled={sidebarLocked}
-            className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${sidebarLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
-            onMouseDown={(e) => e.stopPropagation()}
-            aria-expanded={sidebarOpen}
-            aria-controls="sidebar"
-            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          >
-            <ToggleIcon className="h-4 w-4" />
-          </button>
-        </Tooltip>
+        {!hideControls && (
+          <>
+            {/* Sidebar toggle */}
+            <Tooltip text={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'} position="below">
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                disabled={sidebarLocked}
+                className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 ${sidebarLocked ? 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+                onMouseDown={(e) => e.stopPropagation()}
+                aria-expanded={sidebarOpen}
+                aria-controls="sidebar"
+                aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+              >
+                <ToggleIcon className="h-4 w-4" />
+              </button>
+            </Tooltip>
 
-        {/* Orientation toggle */}
-        <Tooltip text={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'} position="below">
-          <button
-            type="button"
-            onClick={() => setLayoutOrientation(layoutOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-            aria-label={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}
-          >
-            {layoutOrientation === 'horizontal' ? (
-              <Rows2 className="h-4 w-4" />
-            ) : (
-              <Columns2 className="h-4 w-4" />
-            )}
-          </button>
-        </Tooltip>
+            {/* Orientation toggle */}
+            <Tooltip text={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'} position="below">
+              <button
+                type="button"
+                onClick={() => setLayoutOrientation(layoutOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label={layoutOrientation === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}
+              >
+                {layoutOrientation === 'horizontal' ? (
+                  <Rows2 className="h-4 w-4" />
+                ) : (
+                  <Columns2 className="h-4 w-4" />
+                )}
+              </button>
+            </Tooltip>
+          </>
+        )}
       </div>
 
       {/* Centered logo + title group */}

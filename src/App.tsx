@@ -2748,9 +2748,9 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-page text-neutral-900 dark:text-neutral-100">
-      <TitleBar settingsMode={settingsPageOpen || Boolean(onboardingMode)} />
+      <TitleBar settingsMode={settingsPageOpen || Boolean(onboardingMode)} hideControls={Boolean(onboardingMode)} />
       <div className="flex min-h-0 flex-1">
-        {showThinSidebar && (
+        {!onboardingMode && showThinSidebar && (
           <ThinSidebar
             onSearch={handleSearchOpen}
             onAddProject={handleAddProjectOpen}
@@ -2763,6 +2763,7 @@ export default function App() {
             hubUnreadCount={hubUnreadCount}
           />
         )}
+        {!onboardingMode && (
         <Sidebar
           mode={resolvedSidebarMode}
           onOpenSettings={handleSettingsOpen}
@@ -2771,9 +2772,10 @@ export default function App() {
           actions={sidebarActions}
           onToast={pushToast}
         />
+        )}
         <div className={`flex min-h-0 min-w-0 flex-1 ${layoutOrientation === 'vertical' ? 'flex-col overflow-hidden' : 'flex-row'}`}>
         {/* Horizontal: drawer renders left of board */}
-        {layoutOrientation === 'horizontal' && hubDrawerOpen && hubActiveChatId && (
+        {!onboardingMode && layoutOrientation === 'horizontal' && hubDrawerOpen && hubActiveChatId && (
           <SecondaryDrawer
             chatId={hubActiveChatId}
             width={hubDrawerWidth}
@@ -2786,26 +2788,18 @@ export default function App() {
         )}
         <div className={`relative flex min-w-0 flex-1 flex-col ${layoutOrientation === 'vertical' ? 'min-h-[200px] overflow-hidden' : ''} ${settingsPageOpen || onboardingMode ? '' : 'p-4 md:p-6'}`}>
         {onboardingMode ? (
-          <main className="mb-4 min-h-0 flex-1 overflow-y-auto">
+          <main className="min-h-0 flex-1 overflow-hidden">
             <OnboardingShell
               mode={onboardingMode}
               settings={dashboardSettings}
               existingProjects={allProjects}
-              settingsDirty={settingsDirty}
-              onSettingsDirtyChange={handleSettingsDirtyChange}
-              onSaveSettings={async (settings) => {
-                try {
-                  await saveDashboardSettings(settings);
-                  pushToast('success', 'Settings saved');
-                } catch (error) {
-                  pushToast('error', error instanceof Error ? error.message : 'Failed to save settings');
-                  throw error;
-                }
-              }}
               onOpenProjectWizard={handleAddProjectOpen}
+              onSaveSettings={async (patch) => {
+                if (!dashboardSettings) return;
+                await saveDashboardSettings({ ...dashboardSettings, ...patch });
+              }}
               onComplete={handleCompleteOnboarding}
               onClose={onboardingMode === 'rerun' ? handleCloseOnboarding : undefined}
-              onNotify={(kind, message) => pushToast(kind, message)}
             />
           </main>
         ) : settingsPageOpen ? (
@@ -3446,7 +3440,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={settingsPageOpen ? 'hidden' : ''}>
+      <div className={settingsPageOpen || onboardingMode ? 'hidden' : ''}>
         <ChatShell
           messages={chatMessages}
           gatewayConnected={gatewayConnected}

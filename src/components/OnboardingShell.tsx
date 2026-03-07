@@ -1,480 +1,592 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle2, FolderPlus, LifeBuoy, PlugZap, Rocket, TerminalSquare } from 'lucide-react';
-import { SettingsForm } from './SettingsForm';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRight, Check, CircleAlert, FolderPlus, Loader2, RefreshCw, Wifi } from 'lucide-react';
 import { Button } from './ui/button';
-import type { DashboardSettings } from '../lib/settings';
+import { Input } from './ui/input';
 import type { ProjectViewModel } from '../lib/schema';
-import { detectAgents, getTerminalDependencyStatus, type DetectedAgent, type TerminalDependencyStatus } from '../lib/tauri';
-import { AGENT_LABELS } from '../lib/terminal-utils';
+import type { OpenClawChatTransportMode, DashboardSettings } from '../lib/settings';
+import {
+  getOpenClawSupportStatus,
+  resolveOpenClawGatewayConfigPreview,
+  setOpenclawChatToken,
+} from '../lib/tauri';
+import { checkGatewayConnection } from '../lib/gateway';
 
 interface OnboardingShellProps {
   mode: 'first-run' | 'rerun';
   settings: DashboardSettings | null;
   existingProjects: ProjectViewModel[];
-  settingsDirty: boolean;
-  onSettingsDirtyChange: (dirty: boolean) => void;
-  onSaveSettings: (settings: DashboardSettings) => Promise<void>;
   onOpenProjectWizard: () => void;
+  onSaveSettings: (patch: Partial<DashboardSettings>) => Promise<void>;
   onComplete: () => Promise<void>;
   onClose?: () => void;
-  onNotify?: (kind: 'success' | 'error', message: string) => void;
 }
 
-type OnboardingStepId = 'welcome' | 'connection' | 'projects' | 'terminals' | 'ready';
+type StepId = 'welcome' | 'connect' | 'project' | 'ready';
 
-type StepDefinition = {
-  id: OnboardingStepId;
-  title: string;
-  subtitle: string;
-  icon: typeof Rocket;
-};
+const STEPS: StepId[] = ['welcome', 'connect', 'project', 'ready'];
 
-const STEPS: StepDefinition[] = [
-  {
-    id: 'welcome',
-    title: 'Welcome',
-    subtitle: 'What Clawchestra needs and what it will not do',
-    icon: Rocket,
-  },
-  {
-    id: 'connection',
-    title: 'Connect OpenClaw',
-    subtitle: 'Save chat, sync, scan-path, and support settings',
-    icon: PlugZap,
-  },
-  {
-    id: 'projects',
-    title: 'Add a project',
-    subtitle: 'Reuse the existing project wizard for create or import',
-    icon: FolderPlus,
-  },
-  {
-    id: 'terminals',
-    title: 'Terminal readiness',
-    subtitle: 'Check tmux/persistence behavior on this machine',
-    icon: TerminalSquare,
-  },
-  {
-    id: 'ready',
-    title: 'Ready',
-    subtitle: 'Finish onboarding and land in the board',
-    icon: CheckCircle2,
-  },
-];
+type ConnectionStatus =
+  | 'detecting'
+  | 'connected'
+  | 'not-running'
+  | 'not-installed'
+  | 'remote-needed'
+  | 'remote-testing'
+  | 'remote-success'
+  | 'remote-failed'
+  | 'error';
 
-function StepRail({ currentStep }: { currentStep: OnboardingStepId }) {
-  const currentIndex = STEPS.findIndex((step) => step.id === currentStep);
-
-  return (
-    <div className="grid gap-2">
-      {STEPS.map((step, index) => {
-        const Icon = step.icon;
-        const active = step.id === currentStep;
-        const complete = index < currentIndex;
-        return (
-          <div
-            key={step.id}
-            className={`rounded-2xl border px-4 py-3 ${
-              active
-                ? 'border-revival-accent-400 bg-revival-accent-400/10'
-                : complete
-                  ? 'border-emerald-500/30 bg-emerald-500/10'
-                  : 'border-neutral-200 bg-neutral-0 dark:border-neutral-800 dark:bg-neutral-950/40'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className={`mt-0.5 rounded-full p-2 ${active ? 'bg-revival-accent-400 text-neutral-950' : complete ? 'bg-emerald-500 text-white' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-300'}`}>
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{step.title}</div>
-                <div className="text-xs text-neutral-500 dark:text-neutral-400">{step.subtitle}</div>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+/** Revival-accent success card — matches chat bubbles and sync success cards */
+const SUCCESS_CARD = 'rounded-2xl border border-revival-accent-400/40 bg-revival-accent-100 dark:bg-revival-accent-900/30 px-5 py-3';
 
 export function OnboardingShell({
   mode,
   settings,
   existingProjects,
-  settingsDirty,
-  onSettingsDirtyChange,
-  onSaveSettings,
   onOpenProjectWizard,
+  onSaveSettings,
   onComplete,
   onClose,
-  onNotify,
 }: OnboardingShellProps) {
-  const [currentStep, setCurrentStep] = useState<OnboardingStepId>('welcome');
-  const [projectStepAcknowledged, setProjectStepAcknowledged] = useState(false);
-  const [connectionSavedAt, setConnectionSavedAt] = useState<number | null>(null);
-  const [terminalStatus, setTerminalStatus] = useState<TerminalDependencyStatus | null>(null);
-  const [terminalStatusLoading, setTerminalStatusLoading] = useState(true);
-  const [detectedAgents, setDetectedAgents] = useState<DetectedAgent[]>([]);
+  const [currentStep, setCurrentStep] = useState<StepId>('welcome');
   const [completing, setCompleting] = useState(false);
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
 
-  const currentIndex = STEPS.findIndex((step) => step.id === currentStep);
+  // OpenClaw connection state
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('detecting');
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const [remoteUrl, setRemoteUrl] = useState('');
+  const [remoteToken, setRemoteToken] = useState('');
+  const hasTriedDetect = useRef(false);
+
+  const currentIndex = STEPS.indexOf(currentStep);
   const hasProjects = existingProjects.length > 0;
-  const canLeaveProjectStep = hasProjects || projectStepAcknowledged;
-  const canAdvance =
-    currentStep === 'projects'
-      ? canLeaveProjectStep
-      : currentStep === 'connection'
-        ? Boolean(settings) && !settingsDirty
-        : true;
 
+  // Animate welcome in
   useEffect(() => {
-    if (!hasProjects) return;
-    setProjectStepAcknowledged(true);
-  }, [hasProjects]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setTerminalStatusLoading(true);
-    void Promise.all([
-      getTerminalDependencyStatus().catch(() => null),
-      detectAgents().catch(() => [] as DetectedAgent[]),
-    ])
-      .then(([status, agents]) => {
-        if (!cancelled) {
-          setTerminalStatus(status);
-          setDetectedAgents(agents);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setTerminalStatusLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    const timer = setTimeout(() => setWelcomeVisible(true), 100);
+    return () => clearTimeout(timer);
   }, []);
 
-  const readySummary = useMemo(
-    () => [
-      {
-        label: 'Onboarding mode',
-        value: mode === 'first-run' ? 'First launch' : 'Re-run',
-      },
-      {
-        label: 'Chat transport',
-        value: settings?.openclawChatTransportMode ?? 'Unknown',
-      },
-      {
-        label: 'Sync transport',
-        value: settings?.openclawSyncMode ?? 'Unknown',
-      },
-      {
-        label: 'Scan paths',
-        value: settings?.scanPaths.length ? settings.scanPaths.join(', ') : 'None configured yet',
-      },
-      {
-        label: 'Projects',
-        value: hasProjects ? `${existingProjects.length} tracked` : 'No projects tracked yet',
-      },
-      {
-        label: 'Terminal mode',
-        value: terminalStatus?.tmuxAvailable
-          ? 'Persistent tmux-backed terminals available'
-          : terminalStatus?.platform === 'windows'
-            ? 'Persistent Windows terminal host available'
-            : 'Clawchestra will offer tmux remediation when you create a terminal',
-      },
-    ],
-    [existingProjects.length, hasProjects, mode, settings, terminalStatus],
-  );
-  const codingAgents = useMemo(
-    () => detectedAgents.filter((agent) => agent.agentType !== 'tmux'),
-    [detectedAgents],
-  );
-  const availableCodingAgents = useMemo(
-    () => codingAgents.filter((agent) => agent.available),
-    [codingAgents],
-  );
-  const missingCodingAgents = useMemo(
-    () => codingAgents.filter((agent) => !agent.available),
-    [codingAgents],
-  );
+  // Auto-detect OpenClaw when entering the connect step
+  const detectOpenClaw = useCallback(async () => {
+    setConnectionStatus('detecting');
+    setConnectionMessage('Looking for OpenClaw on this machine...');
 
-  const nextStep = () => {
-    if (!canAdvance) return;
+    try {
+      const status = await getOpenClawSupportStatus();
+
+      if (!status.openclawRootExists) {
+        setConnectionStatus('not-installed');
+        setConnectionMessage('');
+        return;
+      }
+
+      // OpenClaw directory exists — try to connect
+      setConnectionMessage('Found OpenClaw. Testing connection...');
+
+      const connected = await checkGatewayConnection();
+      if (connected) {
+        setConnectionStatus('connected');
+        setConnectionMessage('Connected to OpenClaw on this machine.');
+        await onSaveSettings({
+          openclawChatTransportMode: 'Local' as OpenClawChatTransportMode,
+        });
+      } else {
+        setConnectionStatus('not-running');
+        setConnectionMessage('');
+      }
+    } catch {
+      setConnectionStatus('error');
+      setConnectionMessage('Something went wrong while checking for OpenClaw.');
+    }
+  }, [onSaveSettings]);
+
+  useEffect(() => {
+    if (currentStep === 'connect' && !hasTriedDetect.current) {
+      hasTriedDetect.current = true;
+      void detectOpenClaw();
+    }
+  }, [currentStep, detectOpenClaw]);
+
+  const testRemoteConnection = useCallback(async () => {
+    const url = remoteUrl.trim();
+    if (!url) return;
+
+    setConnectionStatus('remote-testing');
+    setConnectionMessage('Testing connection...');
+
+    try {
+      const tokenValue = remoteToken.trim() || null;
+      if (tokenValue) {
+        await setOpenclawChatToken(tokenValue);
+      }
+
+      const preview = await resolveOpenClawGatewayConfigPreview({
+        mode: 'Remote',
+        wsUrl: url,
+        sessionKey: null,
+        token: tokenValue,
+      });
+
+      const connected = await checkGatewayConnection({
+        transport: {
+          mode: 'tauri-ws',
+          wsUrl: preview.wsUrl,
+          token: preview.token,
+          sessionKey: preview.sessionKey,
+        },
+      });
+
+      if (connected) {
+        setConnectionStatus('remote-success');
+        setConnectionMessage('Connected to your remote OpenClaw server.');
+        await onSaveSettings({
+          openclawChatTransportMode: 'Remote' as OpenClawChatTransportMode,
+          openclawChatWsUrl: url,
+        });
+      } else {
+        setConnectionStatus('remote-failed');
+        setConnectionMessage(
+          'Could not connect. Check that OpenClaw is running and the URL is correct.',
+        );
+      }
+    } catch (err) {
+      setConnectionStatus('remote-failed');
+      setConnectionMessage(
+        err instanceof Error ? err.message : 'Connection test failed.',
+      );
+    }
+  }, [remoteUrl, remoteToken, onSaveSettings]);
+
+  const goNext = useCallback(() => {
     const next = STEPS[currentIndex + 1];
-    if (next) setCurrentStep(next.id);
-  };
+    if (next) setCurrentStep(next);
+  }, [currentIndex]);
 
-  const previousStep = () => {
-    const previous = STEPS[currentIndex - 1];
-    if (previous) setCurrentStep(previous.id);
-  };
+  const goToStep = useCallback((index: number) => {
+    // Only allow going to completed steps (back navigation)
+    if (index < currentIndex) {
+      setCurrentStep(STEPS[index]);
+    }
+  }, [currentIndex]);
 
-  const shellTitle = mode === 'first-run' ? 'Get Clawchestra ready' : 'Run onboarding again';
-  const shellSubtitle =
-    mode === 'first-run'
-      ? 'This guides a new install through connection, project setup, and terminal readiness.'
-      : 'Use the same first-run flow to recheck OpenClaw, projects, and terminal setup.';
+  const handleFinish = useCallback(async () => {
+    setCompleting(true);
+    try {
+      await onComplete();
+    } finally {
+      setCompleting(false);
+    }
+  }, [onComplete]);
+
+  const canAdvanceConnect =
+    connectionStatus === 'connected' ||
+    connectionStatus === 'remote-success';
 
   return (
-    <div className="min-h-full w-full px-8 py-6">
-      <div className="mx-auto flex w-full max-w-7xl gap-6 xl:gap-8">
-        <aside className="hidden w-80 shrink-0 xl:block">
-          <div className="sticky top-0 grid gap-4">
-            <div className="rounded-3xl border border-neutral-200 bg-neutral-0 p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/70">
-              <div className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">First friend readiness</div>
-              <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">{shellTitle}</h1>
-              <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{shellSubtitle}</p>
-            </div>
-            <StepRail currentStep={currentStep} />
+    <div className="flex h-full flex-col">
+      {/* Progress bar below title bar */}
+      <div className="flex gap-1.5 px-6 pt-4">
+        {STEPS.map((step, i) => (
+          <div
+            key={step}
+            className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800"
+          >
+            <div
+              className={`h-full rounded-full transition-all duration-500 ease-out ${
+                i <= currentIndex
+                  ? 'w-full bg-revival-accent-400/40'
+                  : 'w-0'
+              }`}
+            />
           </div>
-        </aside>
+        ))}
+      </div>
 
-        <main className="min-w-0 flex-1">
-          <div className="rounded-3xl border border-neutral-200 bg-neutral-0 p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/70">
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">
-                  Step {currentIndex + 1} of {STEPS.length}
-                </div>
-                <h2 className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">{STEPS[currentIndex]?.title}</h2>
-                <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{STEPS[currentIndex]?.subtitle}</p>
-              </div>
-              {mode === 'rerun' && onClose ? (
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Close
-                </Button>
-              ) : null}
+      {/* Skip button for rerun mode */}
+      {mode === 'rerun' && onClose && (
+        <div className="flex justify-end px-6 pt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm text-neutral-500 transition-colors hover:text-neutral-300"
+          >
+            Skip
+          </button>
+        </div>
+      )}
+
+      {/* Step content */}
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6">
+        {currentStep === 'welcome' && (
+          <div
+            className={`flex max-w-lg flex-col items-center text-center transition-all duration-700 ease-out ${
+              welcomeVisible
+                ? 'translate-y-0 opacity-100'
+                : 'translate-y-4 opacity-0'
+            }`}
+          >
+            <h1 className="text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+              Welcome to Clawchestra
+            </h1>
+            <p className="mt-4 text-lg leading-relaxed text-neutral-500 dark:text-neutral-400">
+              Your projects, your AI tools, one place.
+              {mode === 'first-run'
+                ? " Let's get you set up in under a minute."
+                : ' Run through setup again to check your connection or add projects.'}
+            </p>
+            <Button
+              type="button"
+              className="mt-10 h-12 px-8 text-base"
+              onClick={goNext}
+            >
+              Get started
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
+        )}
+
+        {currentStep === 'connect' && (
+          <div className="flex max-w-lg flex-col items-center text-center">
+            <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl bg-revival-accent-400/10">
+              <Wifi className="h-10 w-10 text-revival-accent-400" />
             </div>
+            <h1 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+              Connect to OpenClaw
+            </h1>
+            <p className="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+              Clawchestra uses OpenClaw as its AI backend. Let's make sure they can talk to each other.
+            </p>
 
-            {currentStep === 'welcome' ? (
-              <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-                <div className="grid gap-4">
-                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                    <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">What Clawchestra needs</h3>
-                    <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-neutral-600 dark:text-neutral-300">
-                      <li>Where to scan for projects.</li>
-                      <li>How to reach OpenClaw for chat and sync.</li>
-                      <li>Whether local OpenClaw support files need installing or refreshing.</li>
-                      <li>Whether this machine can provide persistent embedded terminals.</li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                    <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Access transparency</h3>
-                    <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-neutral-600 dark:text-neutral-300">
-                      <li>Chat transport uses either your local OpenClaw runtime or the remote websocket URL you provide.</li>
-                      <li>Sync transport is configured separately and can stay disabled if you do not want sync yet.</li>
-                      <li>Clawchestra only installs the OpenClaw extension locally when you tell it to.</li>
-                      <li>Terminal remediation is handled inside the app when terminals need tmux on macOS or Linux.</li>
-                    </ul>
-                  </div>
+            <div className="mt-8 w-full max-w-md">
+              {/* Detecting */}
+              {connectionStatus === 'detecting' && (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-6 py-5 dark:border-neutral-800 dark:bg-neutral-900/50">
+                  <Loader2 className="h-6 w-6 animate-spin text-revival-accent-400" />
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">{connectionMessage}</p>
                 </div>
+              )}
 
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-950 p-5 text-neutral-100 dark:border-neutral-700">
-                  <div className="flex items-center gap-2 text-sm font-medium text-revival-accent-400">
-                    <LifeBuoy className="h-4 w-4" />
-                    Outcome of this flow
+              {/* Connected (local) */}
+              {connectionStatus === 'connected' && (
+                <div className={`flex flex-col items-center gap-3 ${SUCCESS_CARD}`}>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-revival-accent-400/20">
+                    <Check className="h-5 w-5 text-revival-accent-400" />
                   </div>
-                  <div className="mt-4 grid gap-3 text-sm text-neutral-300">
-                    <p>You should end with a saved transport setup, at least one known project path, and a clear understanding of how terminals and OpenClaw support behave on this machine.</p>
-                    <p>If you are re-running onboarding, nothing here deletes project state. It only updates settings and lets you re-enter the existing project wizard.</p>
+                  <p className="text-sm text-neutral-900 dark:text-neutral-100">{connectionMessage}</p>
+                </div>
+              )}
+
+              {/* Remote success */}
+              {connectionStatus === 'remote-success' && (
+                <div className={`flex flex-col items-center gap-3 ${SUCCESS_CARD}`}>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-revival-accent-400/20">
+                    <Check className="h-5 w-5 text-revival-accent-400" />
                   </div>
+                  <p className="text-sm text-neutral-900 dark:text-neutral-100">{connectionMessage}</p>
                 </div>
-              </div>
-            ) : null}
+              )}
 
-            {currentStep === 'connection' ? (
-              <div className="grid gap-4">
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/70 dark:text-neutral-300">
-                  Save any changes you make here before continuing. This is the same settings surface you can revisit later, including transport tests and local OpenClaw support actions.
-                </div>
-                <SettingsForm
-                  active
-                  settings={settings}
-                  onSave={onSaveSettings}
-                  onSaved={() => setConnectionSavedAt(Date.now())}
-                  onDirtyChange={onSettingsDirtyChange}
-                  onNotify={onNotify}
-                />
-                <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {settingsDirty
-                    ? 'Save changes to continue to the next onboarding step.'
-                    : connectionSavedAt
-                      ? `Settings saved during onboarding at ${new Date(connectionSavedAt).toLocaleTimeString()}.`
-                      : 'No unsaved settings changes right now.'}
-                </div>
-              </div>
-            ) : null}
-
-            {currentStep === 'projects' ? (
-              <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
-                <div className="grid gap-4">
-                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                    <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Use the existing project wizard</h3>
-                    <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-                      This step reuses the same Create New / Add Existing flow the app already uses, including scan-path checks, state preservation, migration, and guidance injection.
+              {/* Not installed */}
+              {connectionStatus === 'not-installed' && (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-6 py-5 text-left dark:border-neutral-800 dark:bg-neutral-900/50">
+                    <p className="text-sm text-neutral-700 dark:text-neutral-300">
+                      OpenClaw wasn't found on this machine. Where is your OpenClaw running?
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button type="button" onClick={onOpenProjectWizard}>
-                        <FolderPlus className="mr-2 h-4 w-4" />
-                        Open project wizard
-                      </Button>
-                      {!hasProjects ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setProjectStepAcknowledged(true)}
-                        >
-                          I will add a project later
-                        </Button>
-                      ) : null}
-                    </div>
                   </div>
+                  <div className="grid gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 justify-start px-5 text-left text-sm"
+                      onClick={() => setConnectionStatus('remote-needed')}
+                    >
+                      <Wifi className="mr-3 h-4 w-4 shrink-0 text-revival-accent-400" />
+                      It's on a remote server
+                    </Button>
+                    <a
+                      href="https://github.com/nichochar/open-claw"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex h-12 items-center rounded-md border border-neutral-300 bg-transparent px-5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    >
+                      <ArrowRight className="mr-3 h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" />
+                      I need to set up OpenClaw first
+                    </a>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="mt-1 text-sm text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-600 dark:hover:text-neutral-400"
+                  >
+                    Skip for now
+                  </button>
                 </div>
+              )}
 
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                  <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Current board state</h3>
-                  {hasProjects ? (
-                    <div className="mt-3 grid gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                      <p>{existingProjects.length} project{existingProjects.length === 1 ? '' : 's'} currently tracked.</p>
-                      <ul className="list-disc space-y-1 pl-5">
-                        {existingProjects.slice(0, 6).map((project) => (
-                          <li key={project.id}>{project.title}</li>
-                        ))}
-                      </ul>
-                      {existingProjects.length > 6 ? <p>And {existingProjects.length - 6} more.</p> : null}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-300">
-                      No projects are tracked yet. You can still finish onboarding, but the board will stay empty until you add or import one.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
-            {currentStep === 'terminals' ? (
-              <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                  <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Terminal readiness on this machine</h3>
-                  {terminalStatusLoading ? (
-                    <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-300">Checking terminal dependencies...</p>
-                  ) : terminalStatus ? (
-                    <div className="mt-3 grid gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                      <p>Platform: {terminalStatus.platform}</p>
-                      <p>
-                        tmux: {terminalStatus.tmuxAvailable ? `available (${terminalStatus.tmuxPath ?? 'detected'})` : 'not detected'}
-                      </p>
-                      <p>{terminalStatus.installerNote}</p>
-                      {terminalStatus.installerCommand ? (
-                        <div className="rounded-xl border border-neutral-200 bg-neutral-0 px-3 py-2 font-mono text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200">
-                          {terminalStatus.installerCommand}
-                        </div>
-                      ) : null}
-                      <div className="mt-2 rounded-xl border border-neutral-200 bg-neutral-0 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-950">
-                        <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">Available coding agents</div>
-                        {availableCodingAgents.length > 0 ? (
-                          <div className="mt-2 text-sm">
-                            {availableCodingAgents.map((agent) => AGENT_LABELS[agent.agentType as keyof typeof AGENT_LABELS] ?? agent.command).join(', ')}
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-sm">No dedicated coding agent CLI detected yet. Shell terminals still work.</div>
-                        )}
-                        {missingCodingAgents.length > 0 ? (
-                          <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                            Not detected:
-                            {' '}
-                            {missingCodingAgents.map((agent) => AGENT_LABELS[agent.agentType as keyof typeof AGENT_LABELS] ?? agent.command).join(', ')}
-                          </div>
-                        ) : null}
+              {/* Not running (installed but can't connect) */}
+              {connectionStatus === 'not-running' && (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-6 py-5">
+                    <div className="flex items-start gap-3">
+                      <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                      <div className="text-left text-sm text-amber-700 dark:text-amber-300/90">
+                        <p>OpenClaw is installed but doesn't seem to be running.</p>
+                        <p className="mt-2 text-neutral-500 dark:text-neutral-400">
+                          Start OpenClaw, then tap retry. Or connect to a remote server instead.
+                        </p>
                       </div>
                     </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-300">Terminal readiness could not be determined from the desktop bridge.</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Button
+                      type="button"
+                      className="h-11"
+                      onClick={() => {
+                        hasTriedDetect.current = false;
+                        void detectOpenClaw();
+                      }}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11"
+                      onClick={() => setConnectionStatus('remote-needed')}
+                    >
+                      Connect to a remote server instead
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="mt-1 text-sm text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-600 dark:hover:text-neutral-400"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              )}
+
+              {/* Remote config form */}
+              {(connectionStatus === 'remote-needed' ||
+                connectionStatus === 'remote-testing' ||
+                connectionStatus === 'remote-failed') && (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-6 py-5 text-left dark:border-neutral-800 dark:bg-neutral-900/50">
+                    <p className="mb-4 text-sm text-neutral-700 dark:text-neutral-300">
+                      Enter your OpenClaw server details.
+                    </p>
+                    <div className="grid gap-3">
+                      <label className="grid gap-1.5 text-sm">
+                        <span className="text-neutral-500 dark:text-neutral-400">Server URL</span>
+                        <Input
+                          value={remoteUrl}
+                          onChange={(e) => setRemoteUrl(e.target.value)}
+                          placeholder="ws://192.168.1.100:18789"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm">
+                        <span className="text-neutral-500 dark:text-neutral-400">
+                          Token{' '}
+                          <span className="text-neutral-400 dark:text-neutral-600">(if required)</span>
+                        </span>
+                        <Input
+                          type="password"
+                          value={remoteToken}
+                          onChange={(e) => setRemoteToken(e.target.value)}
+                          placeholder="Leave blank if none"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {connectionStatus === 'remote-failed' && (
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-left text-sm text-red-600 dark:text-red-400">
+                      {connectionMessage}
+                    </div>
                   )}
-                </div>
 
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                  <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">What happens later</h3>
-                    <div className="mt-3 grid gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                      <p>On macOS and Linux, missing tmux no longer hard-blocks the feature. Clawchestra offers an in-app remediation path when you create a terminal.</p>
-                    <p>On Windows, terminal sessions now use a local background host so they can survive drawer close and Clawchestra relaunch.</p>
-                    <p>This step is informational. You do not need to install tmux here to finish onboarding.</p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {currentStep === 'ready' ? (
-              <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                  <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Ready to leave onboarding</h3>
-                  <div className="mt-3 grid gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                    <p>Finishing onboarding marks this install as setup-complete. You can re-run the flow later from Settings.</p>
-                    {!hasProjects ? (
-                      <p>The board will stay empty until you add or import a project.</p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-900/70">
-                  <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Summary</h3>
-                  <dl className="mt-3 grid gap-2 text-sm">
-                    {readySummary.map((entry) => (
-                      <div key={entry.label} className="grid gap-1 rounded-xl border border-neutral-200 bg-neutral-0 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-950">
-                        <dt className="text-xs uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">{entry.label}</dt>
-                        <dd className="text-neutral-700 dark:text-neutral-200">{entry.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-8 flex items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-              <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                {currentStep === 'projects' && !canLeaveProjectStep
-                  ? 'Add a project or explicitly defer it before continuing.'
-                  : null}
-              </div>
-              <div className="flex items-center gap-2">
-                {currentIndex > 0 ? (
-                  <Button type="button" variant="outline" onClick={previousStep}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back
-                  </Button>
-                ) : null}
-
-                {currentStep === 'ready' ? (
                   <Button
                     type="button"
-                    disabled={completing}
-                    onClick={async () => {
-                      setCompleting(true);
-                      try {
-                        await onComplete();
-                      } finally {
-                        setCompleting(false);
-                      }
+                    className="h-11"
+                    disabled={
+                      !remoteUrl.trim() ||
+                      connectionStatus === 'remote-testing'
+                    }
+                    onClick={() => void testRemoteConnection()}
+                  >
+                    {connectionStatus === 'remote-testing' ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Testing...
+                      </>
+                    ) : (
+                      'Test connection'
+                    )}
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => setConnectionStatus('not-installed')}
+                    className="text-sm text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-600 dark:hover:text-neutral-400"
+                  >
+                    Back
+                  </button>
+                </div>
+              )}
+
+              {/* Error state */}
+              {connectionStatus === 'error' && (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-5">
+                    <p className="text-sm text-red-600 dark:text-red-400">{connectionMessage}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      hasTriedDetect.current = false;
+                      void detectOpenClaw();
                     }}
                   >
-                    {completing ? 'Finishing...' : 'Finish onboarding'}
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Try again
                   </Button>
-                ) : (
-                  <Button type="button" disabled={!canAdvance} onClick={nextStep}>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="text-sm text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-600 dark:hover:text-neutral-400"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Continue button (only when connected) */}
+            {canAdvanceConnect && (
+              <Button
+                type="button"
+                className="mt-8 h-12 px-8 text-base"
+                onClick={goNext}
+              >
+                Continue
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {currentStep === 'project' && (
+          <div className="flex max-w-lg flex-col items-center text-center">
+            <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl bg-revival-accent-400/10">
+              <FolderPlus className="h-10 w-10 text-revival-accent-400" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+              {hasProjects ? 'Projects added' : 'Add your first project'}
+            </h1>
+            <p className="mt-4 text-lg leading-relaxed text-neutral-500 dark:text-neutral-400">
+              {hasProjects
+                ? 'Looking good. You can always add more from inside the app.'
+                : 'Point Clawchestra at an existing project folder and it will set up your board automatically.'}
+            </p>
+
+            {hasProjects && (
+              <div className={`mt-6 ${SUCCESS_CARD}`}>
+                <p className="text-sm text-neutral-900 dark:text-neutral-100">
+                  {existingProjects.length} project{existingProjects.length === 1 ? '' : 's'} tracked
+                </p>
+              </div>
+            )}
+
+            <div className="mt-8 flex flex-col items-center gap-3">
+              {hasProjects ? (
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 px-6"
+                    onClick={onOpenProjectWizard}
+                  >
+                    <FolderPlus className="mr-2 h-4 w-4" />
+                    Add another project
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-11 px-6"
+                    onClick={goNext}
+                  >
                     Continue
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
-                )}
-              </div>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    className="h-12 px-8 text-base"
+                    onClick={onOpenProjectWizard}
+                  >
+                    <FolderPlus className="mr-2 h-5 w-5" />
+                    Add a project
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="text-sm text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+                  >
+                    Skip — you can add or create projects from the sidebar any time
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        </main>
+        )}
+
+        {currentStep === 'ready' && (
+          <div className="flex max-w-lg flex-col items-center text-center">
+            <h1 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+              You're all set
+            </h1>
+            <p className="mt-4 text-lg leading-relaxed text-neutral-500 dark:text-neutral-400">
+              {hasProjects
+                ? "Your board is ready. You can always add more projects or tweak settings later."
+                : "You can add projects any time from the sidebar. Settings are in there too."}
+            </p>
+            <Button
+              type="button"
+              className="mt-10 h-12 px-8 text-base"
+              disabled={completing}
+              onClick={handleFinish}
+            >
+              {completing ? 'Opening Clawchestra...' : 'Open Clawchestra'}
+              {!completing && <ArrowRight className="ml-2 h-5 w-5" />}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Step indicator dots — clickable for back navigation */}
+      <div className="flex justify-center gap-2 pb-8 pt-4">
+        {STEPS.map((step, i) => (
+          <button
+            key={step}
+            type="button"
+            onClick={() => goToStep(i)}
+            disabled={i >= currentIndex}
+            className={`h-2 rounded-full transition-all duration-300 ${
+              i === currentIndex
+                ? 'w-6 bg-revival-accent-400'
+                : i < currentIndex
+                  ? 'w-2 cursor-pointer bg-revival-accent-400/40 hover:bg-revival-accent-400/70'
+                  : 'w-2 cursor-default bg-neutral-300 dark:bg-neutral-700'
+            }`}
+            aria-label={`Go to step ${i + 1}`}
+          />
+        ))}
       </div>
     </div>
   );

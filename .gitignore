@@ -5,6 +5,7 @@ dist/
 *.log
 src-tauri/target/
 src-tauri/gen/
+src-tauri/tauri.conf.json.backup
 tsconfig.tsbuildinfo
 .clawchestra/
 

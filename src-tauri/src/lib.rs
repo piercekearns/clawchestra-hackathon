@@ -4427,6 +4427,15 @@ pub fn run() {
         .manage(sync_handle.clone())
         .manage(quit_confirmed.clone())
         .setup(move |app| {
+            // If onboarding hasn't been completed, override the window-state plugin's
+            // restored size with a reasonable default so the app doesn't open at 800x600.
+            if !settings.onboarding_completed {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_size(tauri::LogicalSize::new(1100.0, 750.0));
+                    let _ = win.center();
+                }
+            }
+
             migrate_data_directories();
             run_migrations();
 
