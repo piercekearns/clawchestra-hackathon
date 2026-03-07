@@ -1275,49 +1275,50 @@
     color: #0c0c0c;
   }
 
-  .install-cmd-box {
+  .install-download {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    background: #111;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 1rem 1.25rem;
-    gap: 0.75rem;
+    gap: 1rem;
     margin-bottom: 1rem;
   }
 
-  .install-cmd-box code {
-    flex: 1;
-    font-family: var(--mono);
-    font-size: 0.85rem;
-    color: var(--text);
-    text-align: left;
-    white-space: nowrap;
-    overflow-x: auto;
+  .install-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 0.85rem 2rem;
+    border-radius: 100px;
+    background: var(--yellow);
+    color: #0c0c0c;
+    text-decoration: none;
+    transition: transform 0.15s, box-shadow 0.2s;
   }
 
-  .install-copy-btn {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    font-weight: 500;
-    padding: 0.35rem 0.75rem;
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    transition: color 0.2s, border-color 0.2s;
-    flex-shrink: 0;
+  .install-download-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(223,255,0,0.25);
   }
 
-  .install-copy-btn:hover {
-    color: var(--text);
-    border-color: rgba(255,255,255,0.25);
+  .install-download-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .install-file-hint {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--faint);
+    letter-spacing: 0.02em;
   }
 
   .install-alt {
     font-size: 0.84rem;
     color: var(--faint);
+    margin-top: 0.5rem;
   }
 
   .install-alt a {
@@ -1702,10 +1703,6 @@
       display: none;
     }
 
-    .install-cmd-box {
-      flex-direction: column;
-      align-items: stretch;
-    }
   }
 
   @media (max-width: 600px) {
@@ -2170,17 +2167,20 @@
   <div class="container">
     <div class="install-inner reveal">
       <p class="section-label">Install</p>
-      <h2>Get started in one line</h2>
+      <h2>Download Clawchestra</h2>
       <div class="install-tabs">
         <button class="install-tab active" data-platform="mac">macOS</button>
         <button class="install-tab" data-platform="win">Windows</button>
         <button class="install-tab" data-platform="linux">Linux</button>
       </div>
-      <div class="install-cmd-box">
-        <code id="install-cmd">brew install --cask clawchestra</code>
-        <button class="install-copy-btn" id="install-copy">Copy</button>
+      <div class="install-download" id="install-download">
+        <a href="https://github.com/piercekearns/clawchestra-hackathon/releases/latest" target="_blank" class="install-download-btn" id="install-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span id="install-btn-label">Download for macOS</span>
+        </a>
+        <span class="install-file-hint" id="install-hint">.dmg - Apple Silicon + Intel</span>
       </div>
-      <p class="install-alt" id="install-alt">or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.dmg</a> directly from GitHub Releases</p>
+      <p class="install-alt">All builds available on <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">GitHub Releases</a></p>
     </div>
   </div>
 </section>
@@ -2437,43 +2437,25 @@
     wrap.classList.add('scrolled-end');
   }
 
-  // ========== Install section: tab switching & copy ==========
+  // ========== Install section: tab switching ==========
   (() => {
     const platforms = {
-      mac: {
-        cmd: 'brew install --cask clawchestra',
-        alt: 'or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.dmg</a> directly from GitHub Releases'
-      },
-      win: {
-        cmd: 'winget install Clawchestra.Clawchestra',
-        alt: 'or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.msi</a> directly from GitHub Releases'
-      },
-      linux: {
-        cmd: 'curl -fsSL https://clawchestra.ai/install.sh | sh',
-        alt: 'or download the <a href="https://github.com/piercekearns/clawchestra-hackathon/releases" target="_blank">.AppImage</a> directly from GitHub Releases'
-      }
+      mac:   { label: 'Download for macOS',   hint: '.dmg - Apple Silicon + Intel' },
+      win:   { label: 'Download for Windows', hint: '.msi installer' },
+      linux: { label: 'Download for Linux',   hint: '.AppImage + .deb' }
     };
 
     const tabs = document.querySelectorAll('.install-tab');
-    const cmdEl = document.getElementById('install-cmd');
-    const altEl = document.getElementById('install-alt');
-    const copyBtn = document.getElementById('install-copy');
+    const btnLabel = document.getElementById('install-btn-label');
+    const hintEl = document.getElementById('install-hint');
 
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         const p = platforms[tab.dataset.platform];
-        cmdEl.textContent = p.cmd;
-        altEl.innerHTML = p.alt;
-        copyBtn.textContent = 'Copy';
-      });
-    });
-
-    copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(cmdEl.textContent).then(() => {
-        copyBtn.textContent = 'Copied!';
-        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+        btnLabel.textContent = p.label;
+        hintEl.textContent = p.hint;
       });
     });
   })();
