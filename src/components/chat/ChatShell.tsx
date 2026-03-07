@@ -329,30 +329,23 @@ export function ChatShell({
   // Tauri native drag-drop: converts file paths to File objects for appendImages
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    const isOverChatBar = (pos: { x: number; y: number }) => {
-      const el = composerContainerRef.current;
-      if (!el) return false;
-      const rect = el.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
-      const x = pos.x / scale;
-      const y = pos.y / scale;
-      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-    };
-
+    // Chat is the default drop target — glow whenever an image is dragged
+    // over the window. The terminal's handler uses position hit-testing to
+    // only glow when directly over the terminal pane, so there's no conflict.
     void getCurrentWebview()
       .onDragDropEvent((event) => {
         const { type } = event.payload;
-        if (type === 'enter' || type === 'over') {
-          const over = isOverChatBar(event.payload.position);
-          setDragActive(over);
-          setDragDepth(over ? 1 : 0);
+        if (type === 'enter') {
+          setDragDepth(1);
+          setDragActive(true);
+        } else if (type === 'over') {
+          setDragActive(true);
         } else if (type === 'leave') {
           setDragDepth(0);
           setDragActive(false);
         } else if (type === 'drop') {
           setDragDepth(0);
           setDragActive(false);
-          // Accept drops anywhere — the glow is just visual
           const paths = event.payload.paths.filter((p: string) =>
             IMAGE_NAME_PATTERN.test(p),
           );
