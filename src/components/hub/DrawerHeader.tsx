@@ -18,13 +18,17 @@ interface DrawerHeaderProps {
   onOpenLinkedProject?: (projectId: string, projectTitle: string) => void;
   /** Callback to restart a dead terminal session (remounts TerminalShell). */
   onRestart?: () => void;
+  /** Archive the current tab (with terminal kill + confirmation handled by parent). */
+  onArchiveTab?: () => void;
+  /** Archive the entire row (all tabs — with terminal kill + confirmation handled by parent). */
+  onArchiveRow?: () => void;
   canCycleUp?: boolean;
   canCycleDown?: boolean;
   onCycleUp?: () => void;
   onCycleDown?: () => void;
 }
 
-export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart, canCycleUp, canCycleDown, onCycleUp, onCycleDown }: DrawerHeaderProps) {
+export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, onOpenLinkedItem, onOpenLinkedProject, onRestart, onArchiveTab, onArchiveRow, canCycleUp, canCycleDown, onCycleUp, onCycleDown }: DrawerHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
@@ -55,22 +59,9 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
     }
   };
 
-  const handleArchive = async () => {
+  const handleArchiveTab = () => {
     setMenuOpen(false);
-    try {
-      await hubChatUpdate(chat.id, { archived: true });
-      await refreshHubChats();
-      if (onToast) {
-        onToast('success', `"${chat.title}" archived`, {
-          label: 'Undo',
-          onClick: () => {
-            void hubChatUpdate(chat.id, { archived: false }).then(() => refreshHubChats());
-          },
-        });
-      }
-    } catch (err) {
-      console.error('[DrawerHeader] Archive failed:', err);
-    }
+    onArchiveTab?.();
   };
 
   const handleRenameStart = () => {
@@ -173,7 +164,7 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
                   label={chat.pinned ? 'Unpin' : 'Pin'}
                   onClick={() => void handleTogglePin()}
                 />
-                <MenuButton icon={Archive} label="Archive" onClick={() => void handleArchive()} />
+                <MenuButton icon={Archive} label="Archive" onClick={handleArchiveTab} />
               </div>
             </>
           )}
@@ -220,7 +211,7 @@ export function DrawerHeader({ chat, projectTitle, rowTitle, onClose, onToast, o
         </span>
         <button
           type="button"
-          onClick={() => void handleArchive()}
+          onClick={() => onArchiveRow?.()}
           className="rounded-full border border-[#DFFF00]/30 px-2 py-0.5 text-[11px] text-neutral-500 transition-colors hover:bg-[#DFFF00]/10 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
         >
           Archive chat

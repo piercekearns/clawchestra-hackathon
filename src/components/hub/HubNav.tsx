@@ -14,7 +14,8 @@ import {
 } from '@dnd-kit/sortable';
 import { FolderPlus, MessageSquare } from 'lucide-react';
 import { useDashboardStore } from '../../lib/store';
-import { hubChatCreate, hubChatUpdate, hubChatDelete } from '../../lib/tauri';
+import { hubChatCreate, hubChatUpdate, hubChatDelete, tmuxKillSession } from '../../lib/tauri';
+import { tmuxSessionName } from '../../lib/terminal-utils';
 import type { HubChat, HubThread, HubAgentType } from '../../lib/hub-types';
 import { buildRows } from '../../lib/hub-utils';
 import { AGENT_LABELS } from '../../lib/terminal-utils';
@@ -39,6 +40,7 @@ export function HubNav({ onToast }: HubNavProps) {
   const renameCustomFolder = useDashboardStore((s) => s.renameCustomFolder);
   const deleteCustomFolder = useDashboardStore((s) => s.deleteCustomFolder);
   const refreshHubChats = useDashboardStore((s) => s.refreshHubChats);
+  const activeTerminals = useDashboardStore((s) => s.activeTerminalChatIds);
 
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
 
@@ -154,8 +156,16 @@ export function HubNav({ onToast }: HubNavProps) {
     await refreshHubChats();
   };
 
-  /** Archive multiple chats at once (row-level action). */
+  /** Archive multiple chats at once (row-level action). Kills active terminal sessions first. */
   const handleArchiveChats = async (chatIds: string[]) => {
+    // Kill active terminal sessions before archiving
+    for (const id of chatIds) {
+      const c = hubChats.find((h) => h.id === id);
+      if (c?.type === 'terminal' && activeTerminals.has(id)) {
+        const session = tmuxSessionName(c.projectId, c.id);
+        void tmuxKillSession(session).catch(() => {});
+      }
+    }
     for (const id of chatIds) {
       await hubChatUpdate(id, { archived: true });
     }

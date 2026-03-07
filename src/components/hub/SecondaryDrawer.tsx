@@ -54,6 +54,7 @@ export function SecondaryDrawer({
   const [terminalDragActive, setTerminalDragActive] = useState(false);
   const [terminalRestartKey, setTerminalRestartKey] = useState(0);
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<{ type: 'tab' | 'row'; chatIds: string[]; activeCount: number } | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   // Track the last active tab per row (keyed by "projectId:itemId") for cycling back
   const lastActiveTabPerRow = useRef(new Map<string, string>());
@@ -252,6 +253,89 @@ export function SecondaryDrawer({
     [hubChats, activeTerminals, executeCloseTab],
   );
 
+  /** Navigate to an adjacent row, or close the drawer if none remain. */
+  const navigateAway = useCallback(() => {
+    const adjacentRow = currentRowIndex > 0
+      ? threadRows[currentRowIndex - 1]
+      : threadRows[currentRowIndex + 1];
+    if (adjacentRow && adjacentRow.tabs.length > 0) {
+      const rowKey = `${adjacentRow.projectId}:${adjacentRow.itemId ?? '__project__'}`;
+      const lastId = lastActiveTabPerRow.current.get(rowKey);
+      const lastTab = lastId ? adjacentRow.tabs.find((t) => t.id === lastId) : undefined;
+      const bestTab = lastTab ?? adjacentRow.tabs[0];
+      setHubActiveChatId(bestTab.id);
+    } else {
+      onClose();
+    }
+  }, [currentRowIndex, threadRows, setHubActiveChatId, onClose]);
+
+  /** Execute archive for a set of chat IDs — kills active terminals, archives, navigates away. */
+  const executeArchive = useCallback(
+    async (chatIds: string[], label: string) => {
+      // Kill any active terminal sessions
+      for (const id of chatIds) {
+        const c = hubChats.find((h) => h.id === id);
+        if (c?.type === 'terminal' && activeTerminals.has(id)) {
+          const session = tmuxSessionName(c.projectId, c.id);
+          void tmuxKillSession(session).catch(() => {});
+        }
+      }
+      // Archive all
+      for (const id of chatIds) {
+        await hubChatUpdate(id, { archived: true });
+      }
+      await refreshHubChats();
+      // Navigate away
+      if (chatIds.includes(chatId)) {
+        const remaining = rowTabs.filter((t) => !chatIds.includes(t.id));
+        if (remaining.length > 0) {
+          const best = remaining.reduce((a, b) =>
+            a.lastActivity > b.lastActivity ? a : b,
+          );
+          setHubActiveChatId(best.id);
+        } else {
+          navigateAway();
+        }
+      }
+      pushDrawerToast('success', label, {
+        label: 'Undo',
+        onClick: () => {
+          void (async () => {
+            for (const id of chatIds) {
+              await hubChatUpdate(id, { archived: false });
+            }
+            await refreshHubChats();
+          })();
+        },
+      });
+    },
+    [chatId, rowTabs, hubChats, activeTerminals, setHubActiveChatId, refreshHubChats, navigateAway, pushDrawerToast],
+  );
+
+  /** Archive the current tab — with confirmation if it has an active terminal. */
+  const handleArchiveTab = useCallback(() => {
+    if (!chat) return;
+    const isActive = chat.type === 'terminal' && activeTerminals.has(chat.id);
+    if (isActive) {
+      setPendingArchive({ type: 'tab', chatIds: [chat.id], activeCount: 1 });
+    } else {
+      void executeArchive([chat.id], `"${chat.title}" archived`);
+    }
+  }, [chat, activeTerminals, executeArchive]);
+
+  /** Archive the entire row — with confirmation if any tabs have active terminals. */
+  const handleArchiveRow = useCallback(() => {
+    if (rowTabs.length === 0) return;
+    const ids = rowTabs.map((t) => t.id);
+    const activeCount = rowTabs.filter((t) => t.type === 'terminal' && activeTerminals.has(t.id)).length;
+    if (activeCount > 0) {
+      setPendingArchive({ type: 'row', chatIds: ids, activeCount });
+    } else {
+      const label = ids.length === 1 ? `"${rowTabs[0].title}" archived` : `${ids.length} chats archived`;
+      void executeArchive(ids, label);
+    }
+  }, [rowTabs, activeTerminals, executeArchive]);
+
   const handleAddChat = useCallback(async () => {
     if (!chat) return;
     const title = `New Chat ${new Date().toLocaleDateString()}`;
@@ -368,6 +452,8 @@ export function SecondaryDrawer({
             onOpenLinkedItem={onOpenLinkedItem}
             onOpenLinkedProject={onOpenLinkedProject}
             onRestart={chat.type === 'terminal' ? handleRestart : undefined}
+            onArchiveTab={handleArchiveTab}
+            onArchiveRow={handleArchiveRow}
             canCycleUp={canGoUp}
             canCycleDown={canGoDown}
             onCycleUp={canGoUp ? () => handleCycleRow('up') : undefined}
@@ -435,6 +521,37 @@ export function SecondaryDrawer({
                 className="shrink-0 rounded-md bg-red-500 px-2.5 py-1 font-medium text-white transition-colors hover:bg-red-600"
               >
                 End session
+              </button>
+            </div>
+          )}
+          {pendingArchive && (
+            <div className="flex items-center gap-2 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs dark:bg-amber-400/5">
+              <span className="min-w-0 flex-1 text-neutral-700 dark:text-neutral-300">
+                {pendingArchive.activeCount === 1
+                  ? 'This will end 1 active terminal session.'
+                  : `This will end ${pendingArchive.activeCount} active terminal sessions.`}
+                {' '}Archive?
+              </span>
+              <button
+                type="button"
+                onClick={() => setPendingArchive(null)}
+                className="shrink-0 rounded-md border border-neutral-200 px-2.5 py-1 font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { chatIds } = pendingArchive;
+                  const label = chatIds.length === 1
+                    ? `"${hubChats.find((c) => c.id === chatIds[0])?.title ?? 'Chat'}" archived`
+                    : `${chatIds.length} chats archived`;
+                  setPendingArchive(null);
+                  void executeArchive(chatIds, label);
+                }}
+                className="shrink-0 rounded-md bg-red-500 px-2.5 py-1 font-medium text-white transition-colors hover:bg-red-600"
+              >
+                End &amp; archive
               </button>
             </div>
           )}
